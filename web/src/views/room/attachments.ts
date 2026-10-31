@@ -157,7 +157,7 @@ export function createAttachments(opts: {
         : h("a", { class: "att-src", href: `/c/${from}`, title: `From the collection “${b.name}”` }, [
             collectionIcon(),
             h("span", {}, b.name),
-            b.public ? null : h("span", { "aria-label": "private" }, "🔒"),
+            b.public ? null : h("span", { class: "ic i-lock", title: "Private" }, h("span", { class: "visually-hidden" }, " (private)")),
           ]));
     return h("span", { class: "att-cell" }, [tile, badge, save]);
   }

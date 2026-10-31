@@ -320,7 +320,7 @@ describe("room view", () => {
       await vi.waitFor(() => expect(ids().at(-1)).toBe(m.id));
       expect(list().scrollTop).toBe(0);
       expect(pill().hidden).toBe(false);
-      expect(pill().textContent).toBe("↓ New messages");
+      expect(pill().textContent).toBe("New messages");
       pill().click();
       expect(atBottom()).toBe(true);
       expect(pill().hidden).toBe(true);

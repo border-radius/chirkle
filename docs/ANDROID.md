@@ -1198,3 +1198,12 @@ voice-message waveform (there are no voice messages) and the redesigned sheets, 
 their current look in the new colours.
 
 Tests: `UiFeaturesTest`, `UiLinkedTest`, `UiCollectionsTest` use the headings' "+" buttons and the merged heading.
+
+## 37. QA pass 25 (2026-10-31)
+
+QA pass 25 (docs/QA.md) tested the redesign on the web and in the app. Found in both: **BUG-191**, Inter's contextual
+alternates (`calt`) drew people's text as something else, "32x1n" as "32×1n", "->" and "<-" as arrows, in room and
+user names, messages and the composer. The app's typography (`core/ui/Theme.kt`) now sets `fontFeatureSettings =
+NO_CALT` (`"'calt' 0"`) on every style, as the web's `tokens.css` does (`UiPortsTest`). The other bugs of the pass
+were in the web's own CSS and menus; the app's quotes put the author on a line of their own, so a short quote doesn't
+clip it (BUG-186).

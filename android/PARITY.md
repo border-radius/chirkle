@@ -38,7 +38,7 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | `mobile` | — | Not applicable: the web's narrow layout |
 | `media` | `UiPortsTest`: a room's images in the grid, one opened in the viewer; an empty room says so | Partial: paging, video posters (on the emulator only) |
 | `switcher` | `UiPortsTest`: Jump to finds a room by a word and opens it; `JumpTest`: the web's matching and ranking cases; `ServicesTest`: the last-open times are forgotten with the session (QA BUG-152) | Covered |
-| `theme` | `UiPortsTest`: Appearance set to Dark is kept; the 2026-10-31 redesign's colours in both (ANDROID.md §36) | Covered |
+| `theme` | `UiPortsTest`: Appearance set to Dark is kept; the 2026-10-31 redesign's colours in both (ANDROID.md §36); Inter without contextual alternates, as the web (QA BUG-191, ANDROID.md §37) | Covered |
 | `collections` | `UiCollectionsTest`: make one from the room list, save from a tile, a badge to a public one, subscribe, "1 new" live and seen, attach from the picker with its badge, save and unsave in the viewer; `CollectionsTest`: badges follow a collection made public, renamed, private and deleted, live; a follow made while the subscription is on its way shows (QA BUG-170) | Partial: uploading (the photo picker can't be driven on Robolectric), axe |
 | `pwa` | — | Not applicable: the app is the installed app (§3) |
 | `linked` (two servers; also `tests/component/views/room/linked.test.ts`, `rooms.test.ts`) | `UiLinkedTest`: a shared room's top bar and access screen, New message by address; `LinkedTest` (also a DM that takes no messages, QA BUG-178); `ChirkleApiTest`: a shared room and a stand-in decode, an address refused with its reason. Between servers: `tests/integration/federation.test.ts` | Covered |

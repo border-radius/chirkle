@@ -37,6 +37,23 @@ describe("createActionMenu", () => {
     expect(run).toHaveBeenCalledOnce();
   });
 
+  it("QA BUG-190: an item run from the keyboard leaves the focus on the toggle, not the page; a mouse click leaves it alone", () => {
+    menu.update([{ label: "A", run: () => {} }]);
+    button("A").focus();
+    button("A").click();
+    expect(document.activeElement).toBe(summary());
+    menu.el.open = true;
+    (document.activeElement as HTMLElement).blur();
+    button("A").click();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("QA BUG-189: a setting is a switch (role=switch, aria-checked), valid outside a role=menu", () => {
+    menu.update([{ label: "Notify", checked: true, run: () => {} }]);
+    expect(button("Notify").getAttribute("role")).toBe("switch");
+    expect(button("Notify").getAttribute("aria-checked")).toBe("true");
+  });
+
   it("a confirm item asks first and focuses Cancel; Cancel returns to the items and focuses the toggle", () => {
     const run = vi.fn();
     menu.update([{ label: "Archive", confirm: { text: "Sure?", action: "Yes, archive" }, run }]);

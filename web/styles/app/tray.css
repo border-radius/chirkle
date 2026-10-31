@@ -59,10 +59,12 @@
   display: none;
 }
 
+/* overflow-x: Firefox with classic scrollbars otherwise makes room for a horizontal one, taller than a row. */
 .composer textarea {
   flex: 1;
   min-width: 0;
   max-height: 10rem;
+  overflow-x: hidden;
   padding: 0.4rem 0.25rem;
   border: 0;
   background: none;

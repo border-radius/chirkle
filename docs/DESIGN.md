@@ -383,8 +383,9 @@ name, linking to the profile) with a Settings button (a guest gets Log in and Si
    archived"). Inside, a **Hidden** part, each row with an "Unhide" button, and an **Archived** part (read-only rooms,
    still browsable; the creator gets "Unarchive"). Until 2026-10-31 these were two sections.
 
-A room hidden by the user that is also archived appears only under Archived. A row's ⋯ menu (or its only action, as a
-button) shows while pointing at the row or focusing it. The new-room form opens in place under Rooms: a "#" name field,
+A room hidden by the user that is also archived appears only under Archived, with "Unhide". A hidden or archived
+row's button shows while pointing at the row or focusing it. Rows have no menu: Hide, Archive and Close conversation are
+in the room's own menu (until 2026-10-31 each row also had a ⋯ menu). The new-room form opens in place under Rooms: a "#" name field,
 a segmented Public / Private / Open air choice with a hint, Cancel and Create room.
 
 The Rooms, Direct messages and Collections headings are buttons (`aria-expanded`) that fold their section. A folded section still lists its unread rooms (collections with new items) and the open one, so nothing new is missed. Unfolded, the rooms and DMs with unread messages are listed first (each group in its usual order), so they are at the top either way (2026-10-23). Which sections are folded is kept in this browser (`localStorage`, `chat.folded`).
@@ -396,7 +397,7 @@ menu (⋯). **The menu** has icons, in groups split by lines:
 - **Room access…** (the creator) or **Members (n)** (a member of a private room).
 - **Hide room** (or **Unhide**), for everyone.
 - **Archive room** (or **Unarchive**), for the creator only, behind an inline confirm.
-- **Notify of every message** (§34.5), a switch (`menuitemcheckbox`) rather than two labels.
+- **Notify of every message** (§34.5), a switch (`role="switch"`, QA BUG-189) rather than two labels.
 - **Jump to beginning**.
 
 An archived room shows a banner, "This room is archived. History is read-only.", and replaces the composer with that banner.

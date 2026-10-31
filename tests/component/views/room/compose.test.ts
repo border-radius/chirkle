@@ -546,7 +546,7 @@ describe("room view", () => {
       expect(pill().hidden).toBe(true);
       layout.scrollTo(0);
       expect(pill().hidden).toBe(false);
-      expect(pill().textContent).toBe("↓ Jump to latest");
+      expect(pill().textContent).toBe("Jump to latest");
       expect(pill().classList.contains("jump")).toBe(true);
       pill().click();
       expect(atBottom()).toBe(true);
@@ -561,7 +561,7 @@ describe("room view", () => {
       const all = await seedMessages(room.id, me.user.id, 200);
       await mount(room, { msgId: all[20]!.id });
       expect(pill().hidden).toBe(false);
-      expect(pill().textContent).toBe("↓ Jump to latest");
+      expect(pill().textContent).toBe("Jump to latest");
       pill().click();
       await vi.waitFor(() => expect(ids().at(-1)).toBe(all.at(-1)!.id));
       expect(atBottom()).toBe(true);

@@ -47,13 +47,8 @@ describe("rooms view (§7.1)", () => {
     [...section(s).querySelectorAll("[data-room-id] a")].map((a) => a.querySelector("span:not(.avatar)")?.textContent ?? a.textContent);
   const button = (scope: Element, label: string) =>
     [...scope.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label) ?? null;
-  const menu = (room: Room) => row(room)!.querySelector<HTMLDetailsElement>("details")!;
-  /** A row action: in its ⋯ menu, or (the only one, in Hidden & archived) a button on the row. */
-  const action = (room: Room, label: string) => {
-    const m = row(room)!.querySelector<HTMLDetailsElement>("details");
-    if (m) m.open = true;
-    return button(row(room)!, label);
-  };
+  /** A row's button: only hidden and archived rows have one (Unhide, Unarchive); the rest is in the room's menu. */
+  const action = (room: Room, label: string) => button(row(room)!, label);
   const room = (name = `room-${uniq()}`) => me.api.createRoom(name);
 
   describe("rendering", () => {
@@ -204,27 +199,21 @@ describe("rooms view (§7.1)", () => {
   });
 
   describe("hide and unhide (§5.4)", () => {
-    it("Hide moves a room to Hidden; Unhide moves it back", async () => {
+    it("rows in Rooms have no menu or buttons: Hide, Archive and the rest are in the room's own menu", async () => {
       const r = await room();
       await mount();
-      action(r, "Hide")!.click();
-      await vi.waitFor(() => expect(sectionOf(r)).toBe("hidden"));
-      expect((await me.api.listHidden()).map((h) => h.room)).toContain(r.id);
+      expect(row(r)!.querySelector("details, button")).toBeNull();
+    });
+
+    it("a hidden room is listed under Hidden; its Unhide moves it back", async () => {
+      const r = await room();
+      await me.api.hideRoom(r.id);
+      await mount();
+      expect(sectionOf(r)).toBe("hidden");
 
       action(r, "Unhide")!.click();
       await vi.waitFor(() => expect(sectionOf(r)).toBe("rooms"));
       expect((await me.api.listHidden()).map((h) => h.room)).not.toContain(r.id);
-    });
-
-    it("choosing an action closes the menu (it doesn't reappear open in the new section)", async () => {
-      const r = await room();
-      await mount();
-      action(r, "Hide")!.click();
-      await vi.waitFor(() => expect(sectionOf(r)).toBe("hidden"));
-      expect(menu(r).open).toBe(false);
-      action(r, "Unhide")!.click();
-      await vi.waitFor(() => expect(sectionOf(r)).toBe("rooms"));
-      expect(menu(r).open).toBe(false);
     });
 
     it("a hide from another tab (realtime) updates the sections", async () => {
@@ -268,32 +257,16 @@ describe("rooms view (§7.1)", () => {
   });
 
   describe("archive and unarchive", () => {
-    it("only the creator sees Archive", async () => {
+    it("only the creator gets Unarchive", async () => {
       const other = await signedUp("Other");
       const theirs = await other.api.createRoom(`theirs-${uniq()}`);
+      await other.api.setArchived(theirs.id, true);
       const mine = await room();
+      await me.api.setArchived(mine.id, true);
       await mount();
-      expect(action(mine, "Archive")).not.toBeNull();
-      expect(action(theirs, "Archive")).toBeNull();
-      expect(action(theirs, "Hide")).not.toBeNull();
-    });
-
-    it("Archive asks for confirmation; only Confirm archives", async () => {
-      const r = await room();
-      const ctl = instrument(me.api);
-      await mount();
-      action(r, "Archive")!.click();
-      expect(row(r)!.textContent).toContain("read-only for everyone");
-      expect(ctl.calls("setArchived")).toBe(0);
-
-      button(row(r)!, "Cancel")!.click();
-      expect(ctl.calls("setArchived")).toBe(0);
-      expect(button(row(r)!, "Archive room")).toBeNull();
-
-      action(r, "Archive")!.click();
-      button(row(r)!, "Archive room")!.click();
-      await vi.waitFor(() => expect(sectionOf(r)).toBe("archived"));
-      expect(ctl.calls("setArchived")).toBe(1);
+      await vi.waitFor(() => expect(sectionOf(theirs)).toBe("archived"));
+      expect(action(mine, "Unarchive")).not.toBeNull();
+      expect(row(theirs)!.querySelector("button")).toBeNull();
     });
 
     it("Unarchive moves it back", async () => {
@@ -317,47 +290,23 @@ describe("rooms view (§7.1)", () => {
 
     it("a failed action shows an error and leaves the room where it was", async () => {
       const r = await room();
-      instrument(me.api).failNext("hideRoom", new ApiError("Failed to fetch", 0));
+      await me.api.hideRoom(r.id);
+      instrument(me.api).failNext("unhideRoom", new ApiError("Failed to fetch", 0));
       await mount();
-      action(r, "Hide")!.click();
-      await vi.waitFor(() => expect(root.querySelector('[role="alert"]')!.textContent).toContain("Couldn't hide"));
+      action(r, "Unhide")!.click();
+      await vi.waitFor(() => expect(root.querySelector('[role="alert"]')!.textContent).toContain("Couldn't unhide"));
       expect(root.querySelector('[role="alert"]')!.textContent).toContain("Check your connection");
-      expect(sectionOf(r)).toBe("rooms");
+      expect(sectionOf(r)).toBe("hidden");
     });
 
     it("QA BUG-39: a failed action says why, e.g. rate limiting, not always the connection", async () => {
       const r = await room();
-      instrument(me.api).failNext("hideRoom", new ApiError("Too Many Requests.", 429));
+      await me.api.hideRoom(r.id);
+      instrument(me.api).failNext("unhideRoom", new ApiError("Too Many Requests.", 429));
       await mount();
-      action(r, "Hide")!.click();
+      action(r, "Unhide")!.click();
       await vi.waitFor(() => expect(root.querySelector('[role="alert"]')!.textContent).toContain("Too many attempts"));
       expect(root.querySelector('[role="alert"]')!.textContent).not.toContain("connection");
-    });
-  });
-
-  describe("keyboard (Phase 6)", () => {
-    const active = () => document.activeElement as HTMLElement | null;
-    const key = (el: Element, k: string) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
-
-    it("Escape closes a row menu and returns focus to its toggle", async () => {
-      const r = await room();
-      await mount();
-      action(r, "Hide")!.focus();
-      key(active()!, "Escape");
-      expect(menu(r).open).toBe(false);
-      expect(active()).toBe(menu(r).querySelector("summary"));
-    });
-
-    it("the archive confirm focuses Cancel; Escape cancels and returns focus to the toggle", async () => {
-      const r = await room();
-      const ctl = instrument(me.api);
-      await mount();
-      action(r, "Archive")!.click();
-      expect(active()).toBe(button(row(r)!, "Cancel"));
-      key(active()!, "Escape");
-      expect(button(row(r)!, "Archive room")).toBeNull();
-      expect(active()).toBe(menu(r).querySelector("summary"));
-      expect(ctl.calls("setArchived")).toBe(0);
     });
   });
 
@@ -522,14 +471,14 @@ describe("rooms view (§7.1)", () => {
       expect(names("dms")).toContain(bob.user.name);
     });
 
-    it("Close conversation hides the DM from the list", async () => {
+    it("a conversation closed (from its room) leaves the list", async () => {
       const bob = await signedUp(`Bob ${uniq()}`);
       const dm = await me.api.openDm(bob.user.id);
       await mount();
       await vi.waitFor(() => expect(sectionOf(dm)).toBe("dms"));
-      action(dm, "Close conversation")!.click();
+      expect(row(dm)!.querySelector("details, button")).toBeNull();
+      await me.api.hideRoom(dm.id);
       await vi.waitFor(() => expect(row(dm)).toBeNull());
-      expect(store.get().hidden.has(dm.id)).toBe(true);
     });
 
     it("BUG-30: picking someone you already have an open DM with goes straight there, without a request", async () => {

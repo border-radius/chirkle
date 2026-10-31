@@ -1,5 +1,5 @@
 // Room list (§7.1, §16.5): the site's name and "Jump to" (§32) on top, Rooms / Direct messages / Collections (§31) /
-// Hidden & archived sections, new-room form, user search, per-room actions, unread badges (§18.4) and new items in
+// Hidden & archived sections, new-room form, user search, Unhide / Unarchive buttons, unread badges (§18.4) and new items in
 // collections you follow, private and Open Air markers (§23.1), and who you are (or the way in) at the foot. A guest
 // gets only the Open Air rooms, to read (§23.3).
 // The data comes from the store, kept live by sync.ts; this view only renders it and issues commands.
@@ -16,7 +16,7 @@ import { createScope, type Scope } from "../scope.ts";
 import { roomSections, unreadCount } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import { collectionIcon } from "../ui/icon.ts";
-import { type ActionMenu, createActionMenu, type MenuItem } from "../ui/menu.ts";
+import type { MenuItem } from "../ui/menu.ts";
 import { createUserSearch, SearchError, type UserSearch } from "../ui/user-search.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
 
@@ -56,10 +56,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
 
   // UI state that must survive re-renders.
   let moreOpen = false;
-  /** Row menus by room id + name, kept across renders so their open/confirm state and focus survive. */
-  const menus = new Map<string, ActionMenu>();
-  /** Room rows by room id, with what they were drawn from (roomRow) and their menu's key. */
-  const rows = new Map<string, { sig: unknown[]; el: HTMLElement; menu: string | null }>();
+  /** Room rows by room id, with what they were drawn from (roomRow). */
+  const rows = new Map<string, { sig: unknown[]; el: HTMLElement }>();
   /** The sections, built on mount (skeleton). */
   let parts: ReturnType<typeof skeleton>;
   /** The last failed action, shown until the next action or a successful one. */
@@ -231,66 +229,37 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     if (scope.active) renderAlert();
   }
 
-  const hide = (r: Room) => act("hide", r, () => actions.hide(r.id));
   const unhide = (r: Room) => act("unhide", r, () => actions.unhide(r.id));
   const setArchived = (r: Room, archived: boolean) => act(archived ? "archive" : "unarchive", r, () => actions.setArchived(r.id, archived));
 
   // ---- rendering ----
 
-  function menuItems(r: Room, section: Section): MenuItem[] {
-    const mine = r.created_by === store.get().user?.id;
-    const items: MenuItem[] = [];
-    if (guest()) return items; // reading only
-    if (section === "dms") return [{ label: "Close conversation", run: () => void act("close", r, () => actions.hide(r.id)) }];
-    if (section === "rooms") items.push({ label: "Hide", run: () => void hide(r) });
+  /**
+   * A hidden or archived room's button: Unhide, else Unarchive for its owner. Everything else (Hide, Archive, Close
+   * conversation) is in the room's own menu; the list has no per-row menus.
+   */
+  function rowAction(r: Room, section: Section): MenuItem | null {
+    if (guest() || section === "rooms" || section === "dms") return null;
     // An archived room you had hidden is listed under Archived; it can still be unhidden from there.
-    if (section === "hidden" || (section === "archived" && store.get().hidden.has(r.id)))
-      items.push({ label: "Unhide", run: () => void unhide(r) });
-    if (mine && section !== "archived") {
-      items.push({
-        label: "Archive",
-        confirm: { text: `Archive “${r.name}”? It becomes read-only for everyone.`, action: "Archive room" },
-        run: () => void setArchived(r, true),
-      });
-    }
-    if (mine && section === "archived") items.push({ label: "Unarchive", run: () => void setArchived(r, false) });
-    return items;
-  }
-
-  function rowMenu(r: Room, items: MenuItem[]): { key: string; el: HTMLElement } | null {
-    if (!items.length) return null;
-    const name = r.kind === "dm" ? title(r) : r.name;
-    const key = `${r.id}|${name}`;
-    let menu = menus.get(key);
-    if (!menu) {
-      menu = createActionMenu({ label: `Actions for ${name}`, signal: scope.signal });
-      menus.set(key, menu);
-    }
-    menu.update(items);
-    return { key, el: menu.el };
+    if (section === "hidden" || store.get().hidden.has(r.id)) return { label: "Unhide", run: () => void unhide(r) };
+    if (r.created_by === store.get().user?.id) return { label: "Unarchive", run: () => void setArchived(r, false) };
+    return null;
   }
 
   /**
    * A room's row. Rows are kept and reused while everything they show is the same (rooms are replaced, never mutated,
    * in the store): a message in some room changes one badge, not all the rows (§18.4).
    */
-  function roomRow(r: Room, section: Section, live: Set<string>): HTMLElement {
+  function roomRow(r: Room, section: Section): HTMLElement {
     const s = store.get();
     const current = s.activeRoomId === r.id;
     const n = unreadCount(s, r);
-    // What the row and its menu items depend on (menuItems reads the user and, when archived, hidden).
+    // What the row and its button depend on (rowAction reads the user and, when archived, hidden).
     const sig = [r, section, n, current, s.user, section === "archived" && s.hidden.has(r.id)];
     const hit = rows.get(r.id);
-    if (hit?.sig.every((v, i) => v === sig[i])) {
-      if (hit.menu) live.add(hit.menu);
-      return hit.el;
-    }
+    if (hit?.sig.every((v, i) => v === sig[i])) return hit.el;
     const other = r.kind === "dm" ? otherMember(r, s.user) : undefined;
-    const items = menuItems(r, section);
-    // Hidden and archived rooms with one thing to do get it as a button (Unhide, Unarchive) rather than a menu.
-    const one = section !== "rooms" && section !== "dms" && items.length === 1 && !items[0]!.confirm ? items[0]! : null;
-    const menu = one ? null : rowMenu(r, items);
-    if (menu) live.add(menu.key);
+    const one = rowAction(r, section);
     const label = [
       other ? avatar(other, 24, api.avatarUrl) : null,
       h("span", {}, other ? other.name : r.kind === "dm" ? title(r) : r.name),
@@ -305,9 +274,9 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             { type: "button", class: "row-action", "aria-label": `${one.label} ${r.name}`, on: { click: one.run }, signal: scope.signal },
             one.label,
           )
-        : menu?.el,
+        : null,
     ]);
-    rows.set(r.id, { sig, el, menu: menu?.key ?? null });
+    rows.set(r.id, { sig, el });
     return el;
   }
 
@@ -420,8 +389,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const s = store.get();
     const { rooms, dms, hidden, archived } = roomSections(s);
     const loading = s.roomsStatus === "idle" || s.roomsStatus === "loading";
-    const live = new Set<string>();
-    // Rows whose room changed are rebuilt; the focused control (a menu button, which is kept) gets its focus back below.
+    // Rows whose room changed are rebuilt; the focused control, when it is kept, gets its focus back below.
     const focused = nav.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
     shell.setAttribute("aria-busy", String(loading));
     const p = parts;
@@ -430,7 +398,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     p.newRoomToggle.setAttribute("aria-expanded", String(creating));
     reconcile(
       p.rooms,
-      shown("rooms", rooms, keep).map((r) => roomRow(r, "rooms", live)),
+      shown("rooms", rooms, keep).map((r) => roomRow(r, "rooms")),
     );
     // Rooms you hid (or that were archived) are still there, under their own sections (QA BUG-44).
     p.empty.textContent =
@@ -445,7 +413,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     p.newDm.setAttribute("aria-expanded", String(!!search));
     reconcile(
       p.dms,
-      shown("dms", dms, keep).map((r) => roomRow(r, "dms", live)),
+      shown("dms", dms, keep).map((r) => roomRow(r, "dms")),
     );
     reconcile(
       p.direct,
@@ -467,7 +435,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     ] as const)
       reconcile(
         m[section].list,
-        list.map((r) => roomRow(r, section, live)),
+        list.map((r) => roomRow(r, section)),
       );
     reconcile(
       m.body,
@@ -481,12 +449,11 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     for (const b of nav.querySelectorAll<HTMLElement>("[data-fold]"))
       b.setAttribute("aria-expanded", String(!folded.has(b.dataset.fold as string)));
     if (focused?.isConnected && document.activeElement !== focused) focused.focus();
-    forget(live);
+    forget();
   }
 
-  /** Drop the menus and rows of rooms no longer listed. */
-  function forget(live: Set<string>) {
-    for (const key of menus.keys()) if (!live.has(key)) menus.delete(key);
+  /** Drop the rows of rooms no longer listed. */
+  function forget() {
     for (const [id, row] of rows) if (!nav.contains(row.el)) rows.delete(id);
   }
 
@@ -495,23 +462,22 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const s = store.get();
     const { rooms } = roomSections(s);
     const loading = s.roomsStatus === "idle" || s.roomsStatus === "loading";
-    const live = new Set<string>();
     shell.setAttribute("aria-busy", String(loading));
     nav.replaceChildren(
       h("div", { class: "room-section", dataset: { section: "rooms" } }, [
-        h("div", { class: "section-head" }, h("h2", {}, "Open Air rooms")),
+        h("div", { class: "section-head" }, h("h2", { class: "section-title" }, "Open Air rooms")),
         rooms.length
           ? h(
               "ul",
               {},
-              rooms.map((r) => roomRow(r, "rooms", live)),
+              rooms.map((r) => roomRow(r, "rooms")),
             )
           : s.roomsStatus === "ready"
             ? h("p", { class: "empty" }, "No Open Air rooms yet. Log in to see the others.")
             : null,
       ]),
     );
-    forget(live);
+    forget();
   }
 
   function newRoomForm(): typeof newRoom {
@@ -617,7 +583,6 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     mount(el) {
       root = el;
       scope = createScope();
-      menus.clear();
       rows.clear();
       search = null;
       creating = false;

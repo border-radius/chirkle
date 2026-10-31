@@ -48,6 +48,20 @@ class UiPortsTest {
         68, 65, 84, 120, -38, 99, -8, -1, -1, 63, 0, 5, -2, 2, -2, -89, 53, -127, -124, 0, 0, 0, 0, 73, 69, 78, 68, -82, 66, 96, -126,
     )
 
+    @Test fun `Inter draws people's text as typed, without contextual alternates (QA BUG-191)`() {
+        // With them, "32x1n" showed as "32×1n" and "->" as an arrow, in names, messages and the composer.
+        val styles = mutableListOf<androidx.compose.ui.text.TextStyle>()
+        compose.setContent {
+            chirkle.android.ui.ChirkleTheme {
+                val t = androidx.compose.material3.MaterialTheme.typography
+                styles += listOf(t.displayLarge, t.headlineSmall, t.titleLarge, t.titleSmall, t.bodyLarge, t.bodyMedium, t.bodySmall, t.labelLarge, t.labelSmall)
+            }
+        }
+        compose.waitForIdle()
+        assertTrue(styles.isNotEmpty())
+        for (style in styles) assertEquals(chirkle.android.ui.NO_CALT, style.fontFeatureSettings)
+    }
+
     @Test fun `opening a room with unread messages reads only what is on screen, scrolling down reads the rest (§18 3)`() {
         val alice = newUser()
         val bob = newUser()

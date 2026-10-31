@@ -2059,3 +2059,127 @@ other requests sign out first); the emulator case is the one it fixed.
   event is dropped by `Realtime.dispatch`.
 - **Suites:** all green; `attachments.spec.ts` "the image viewer…" timed out once in the full run (its new-tab wait,
   with the emulator running) and passed 3/3 alone.
+
+# QA pass 25 — server, web and Android after the redesign
+
+Exploratory testing on 2026-10-31, aimed first at the "Chirkle Sidebar Redesign" (DESIGN.md §7.1, §7.8; ANDROID.md
+§36) that landed the same day: the web at 1280 and 390 px in both themes, signed in and as a guest, with axe on the
+room, its menus, Settings, Jump to and Hidden & archived; the app's room list, room and action sheet on Robolectric
+screenshots in both themes. Then the rest: live messages, replies, edits and reactions with Bob scripted, hiding and
+unhiding, search, Room access, the media grid, collections, the font assets' headers, and a concurrent write test of
+the server (120 sends, 15 reactions on one message, 30 edits and 30 deletes at once, read marks: no 5xx, nothing lost).
+Every automated suite before and after the fixes (static checks, unit and component, integration, 77 Chromium e2e
+specs, the app's unit and Robolectric tests). Numbering continues from BUG-183.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-184 | Low | Room (web) | "Jump to latest" and "New messages" showed two arrows: the redesign's icon and the "↓" still in the text | Fixed |
+| BUG-185 | Low | Settings (web) | The notification card's description stood above its "Notifications" heading | Fixed |
+| BUG-186 | Low | Replies (web) | A quote of a short message clipped its author ("Alice M…" for "while offline 1") | Fixed |
+| BUG-187 | Low | Editing (web) | Editing the newest message left "Enter to save · Esc to cancel" hidden under the composer | Fixed |
+| BUG-188 | Low | Room list (web) | A guest's "Open Air rooms" heading kept the old large heading, not the redesign's section heading | Fixed |
+| BUG-189 | Low | Accessibility (web) | "Notify of every message" was a `menuitemcheckbox` outside any menu (axe: aria-required-parent, critical) | Fixed |
+| BUG-190 | Low | Accessibility (web) | An item chosen from a "⋯" menu by keyboard (Hide, Unhide, Archive…) dropped the focus to the top of the page | Fixed |
+| BUG-191 | Medium | Font (web, Android) | Inter's contextual alternates changed people's text as drawn: "qa23-mvu32x1n" showed as "qa23-mvu32×1n", "a->b" as "a→b" | Fixed |
+| BUG-192 | Low | Collections (web) | A private collection was marked with a 🔒 emoji (an empty box without an emoji font) where the rest of the app has the lock icon | Fixed |
+
+## BUG-184 — Two arrows (Low)
+
+**Steps:** scroll up in a room. **Actual:** the button read "↓ ↓ Jump to latest": the redesign gave it an arrow icon
+(`ic i-down`) and kept the arrow in its text. **Fix:** the text without it (`renderPill` in `views/room.ts`; the
+component tests' expected texts).
+
+## BUG-185 — The hint above its heading (Low)
+
+**Steps:** open Settings. **Actual:** the Notifications card began with "For DMs, replies to you…", then the heading.
+The legend is floated (so it lays out with the rest), which makes it a flex item, and the hint's `order: -1` put the
+hint before it. **Fix:** the legend `order: -2` (`profile.css`).
+
+## BUG-186 — The clipped author (Low)
+
+**Steps:** Bob replies to Alice's "while offline 1". **Actual:** the quote read "Alice M… while offline 1". The
+author's `max-width: 40%` was a percentage of the quote, which is only as wide as its content: with a short text, 40%
+of it is less than the name. **Fix:** the author gives way much less than the text (`flex-shrink: 0.15`) and is held
+to 20em (`replies.css`). Seen in Chromium: every quote's author whole.
+
+## BUG-187 — The hint under the composer (Low)
+
+**Steps:** at the bottom of a room, press ↑ to edit your last message. **Actual:** the edit box showed, its "Enter to
+save · Esc to cancel" line 28 px below the list's bottom: focusing the box scrolls only the box into view. **Fix:** the
+whole message is scrolled into view when editing starts (`startEdit`'s focus in `messages.ts`).
+
+## BUG-188 — The guest's heading (Low)
+
+**Steps:** open the app signed out. **Actual:** "Open Air rooms" in a large bold heading out of line with the rows; the
+signed-in sections' headings are small, dim fold buttons, and the guest's heading (which doesn't fold) had none of
+their style. **Fix:** `.section-title`, set like the others without the chevron (`rooms.ts`, `room-list.css`).
+
+## BUG-189 — A menu item outside a menu (Low)
+
+**Steps:** open a room's "⋯" menu; run axe. **Actual:** aria-required-parent (critical): the redesign made "Notify of
+every message" a `menuitemcheckbox`, but the menu is a disclosure of buttons, not a `role=menu`. **Fix:** a
+`role="switch"` button with `aria-checked` (`ui/menu.ts`; `menu.test.ts`). axe clean with the menu open.
+
+## BUG-190 — Focus lost after a menu action (Low)
+
+**Steps:** with the keyboard, open a hidden room's "⋯" and choose Unhide (or Hide room in the header menu). **Actual:**
+the focus went to the page's start. Closing the menu redraws its items, so the focused button is gone before the
+action runs. **Fix:** the focus goes back to the menu's toggle first, and the room list puts it back when the row moves
+(`runItem` in `ui/menu.ts`; `menu.test.ts`).
+
+## BUG-191 — Inter's alternates (Medium)
+
+**Steps:** a room named "qa23-mvu32x1n", a user "user-38x0c69", a message "a->b <- 3x". **Actual:** drawn as
+"qa23-mvu32×1n", "user-38×0c69", "a→b ← 3x" on the web and in the app: Inter's contextual alternates (`calt`) turn an
+"x" between digits into a multiplication sign and "->" into an arrow. People's names and messages must show as typed
+(and as they copy). **Fix:** `font-feature-settings: "calt" 0` on `:root` (`tokens.css`; `tests/unit/build/fonts.test.ts`
+checks nothing turns it back on), and `fontFeatureSettings = NO_CALT` on every style of the app's typography
+(`Theme.kt`; `UiPortsTest`; ANDROID.md §37). Seen on both: "32x1n" with a plain x.
+
+## BUG-192 — The lock emoji (Low)
+
+**Steps:** open a private collection; attach from one. **Actual:** "🔒 Private" in the collection's line, " 🔒" in the
+save dialog and on an attachment's badge, an emoji (an empty box where there is no emoji font, as in the screenshots of
+this pass) where the room list and everything else since the redesign use the lock icon. **Fix:** "Private" in words
+on the collection page and in the save dialog (the collections chunk is at its budget), the lock icon on the badge
+(`attachments.ts`, `collections.css`).
+
+## Checked and fine
+
+- **Server:** concurrent sends, reactions (twelve "on" and three "off" at once leave exactly three people), edits,
+  deletes and read marks; the self-hosted fonts are served as `font/woff2`, immutable, and a missing one is a 404 with
+  `no-store`. The unread route's fields come in any order (a Go map), not a bug.
+- **Web:** the redesigned sidebar, Hidden & archived (count, unhide, the row's menu), the room menu, Room access, search,
+  the media grid, the attach menu, live edits and reactions, the to-me card (wrapping at 390 px), Settings, sign-up;
+  axe clean on Settings, Jump to, the room with Hidden & archived open and a row menu open, and the dark theme.
+- **Android:** the room list (pill, sections and their "+", Hidden & archived open with both parts), the room (to-me
+  cards, quotes, reactions, the NEW line, the composer) and the action sheet, light and dark. The app's quotes put the
+  author on its own line, so BUG-186 isn't there.
+- **Suites after the fixes:** 751 unit and component, 448 integration, the app's unit and Robolectric tests, static checks and
+  the build all green; e2e 76/77: `attachments.spec.ts` "the image viewer…" timed out on its last step, Ctrl+click opening
+  the image in a new tab (as in pass 24), and failed 3 of 9 runs alone, always there: the new tab not reported, or left on
+  about:blank. Driving the same Ctrl+click over CDP couldn't tell a missing tab from one reported late, so it stays a
+  suspected harness flake, not a product bug; worth a look on a real browser.
+- **Not tested this pass:** the emulator (not started; the screens were seen on Robolectric) and linked instances.
+
+# User report 2026-10-31 — Firefox
+
+Reported by the user from Firefox after the redesign. Reproduced in Playwright's Firefox (and the same in Chromium)
+except where noted.
+
+| ID | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-193 | Low | Room (web) | The composer's top line sat 1px above the sidebar foot's: 68px row + its 1px border against a 68px foot | Fixed |
+| BUG-194 | Low | Replies (web) | A quote over a reply that starts a group began 6px left of the message's text | Fixed |
+| BUG-195 | Medium | Jump to (web) | With many rooms and nothing typed, the list squeezed the field to a sliver at the top of the dialog | Fixed |
+| BUG-196 | Low | Room list (web) | Each row's ⋯ menu looked out of place; everything in it is in the room's own menu | Removed |
+
+**BUG-193:** `.composer-row` is 67px (padding 13px on top), so with the border it is 68px like `.side-foot`. The user saw
+a bigger difference, which didn't happen here with any default font size, minimum font size or device pixel ratio.
+Firefox with classic (non-overlay) scrollbars can make a one-row textarea taller to leave room for a horizontal scrollbar,
+so the composer's textarea now has `overflow-x: hidden`. Headless Firefox always uses overlay scrollbars, so that part
+is untested. **BUG-194:** the curve is 26px wide (20px on phones, with a −26px margin), so the curve plus the gap make
+up the quote's offset. **BUG-195:** the field is `flex: none` and the dialog fits under its 140px top margin.
+**BUG-196:** rows in Rooms and Direct messages have no menu; hidden and archived rows keep their one button (Unhide,
+else Unarchive for the owner). The "two arrows" on "Jump to latest" is BUG-184, already fixed; an older build or the
+service worker's cached copy still shows it until the page reloads.

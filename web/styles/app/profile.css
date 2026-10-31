@@ -194,7 +194,9 @@ label.button.disabled {
   padding-bottom: 0;
 }
 
+/* Floated, the legend is a flex item: first, before the hint moved up under it (QA BUG-185). */
 .profile-notify legend {
+  order: -2;
   margin-bottom: 3px;
 }
 

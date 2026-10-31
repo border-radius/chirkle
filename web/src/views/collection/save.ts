@@ -93,7 +93,7 @@ export async function openSave(o: SaveOptions): Promise<void> {
             box,
             " ",
             c.name,
-            h("span", { class: "coll-meta" }, c.public ? " · Public: anyone can see it" : " 🔒"),
+            h("span", { class: "coll-meta" }, c.public ? " · Public: anyone can see it" : " · Private"),
             busy.has(c.id) ? h("span", { class: "coll-spin", "aria-hidden": "true" }) : null,
           ]),
         );

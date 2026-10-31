@@ -630,8 +630,11 @@ export function createMessageList(opts: {
     if (focusAfter) {
       const target = find(focusAfter.id, focusAfter.selector);
       target?.focus();
-      if (focusAfter.caretToEnd && target instanceof HTMLTextAreaElement)
+      if (focusAfter.caretToEnd && target instanceof HTMLTextAreaElement) {
         target.setSelectionRange(target.value.length, target.value.length);
+        // The whole message, its "Enter to save" line too: focus only scrolls the box into view (QA BUG-187).
+        target.closest("li")?.scrollIntoView?.({ block: "nearest" });
+      }
       focusAfter = null;
     }
   }

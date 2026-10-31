@@ -222,7 +222,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   function renderHead() {
     if (signal.aborted) return;
     heading.replaceChildren(icon(h), " ", info.name);
-    metaLine.textContent = [mine ? "Yours" : ownerName && `By ${ownerName}`, info.public ? "Public" : "🔒 Private", count(info.items)]
+    metaLine.textContent = [mine ? "Yours" : ownerName && `By ${ownerName}`, info.public ? "Public" : "Private", count(info.items)]
       .filter(Boolean)
       .join(" · ");
     const following = lists(o).subs.some((c) => c.id === id);

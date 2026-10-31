@@ -18,11 +18,13 @@
   text-align: left;
 }
 
+/* From the avatar's middle to the message's text: the curve and the gap make up the quote's -32px, so its author
+   lines up with the text below. */
 .reply-quote::before {
   content: "";
   flex: none;
   align-self: flex-end;
-  width: 20px;
+  width: 26px;
   height: 10px;
   margin-bottom: -4px;
   border: solid var(--border);
@@ -49,9 +51,12 @@
   }
 }
 
+/* The text gives way first; the author only a little, and never for a short quote (QA BUG-186: a percentage of the
+   quote, which is as wide as its content, clipped the author of a short one). */
 .reply-author {
-  flex: none;
-  max-width: 40%;
+  flex: 0 0.15 auto;
+  min-width: 0;
+  max-width: 20em;
   overflow: hidden;
   color: var(--muted);
   font-weight: 600;

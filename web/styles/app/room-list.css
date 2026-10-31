@@ -40,6 +40,17 @@
   cursor: pointer;
 }
 
+/* A heading that doesn't fold (a guest's Open Air rooms): set like the others, without the chevron (QA BUG-188). */
+.room-section .section-title {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .room-section > summary::-webkit-details-marker {
   display: none;
 }
@@ -180,22 +191,14 @@
   text-align: center;
 }
 
-/* A row's ⋯ (and Unhide, Unarchive) shows while pointing at the row or using it from the keyboard. */
-.room-section li > .menu > summary,
-.row-action {
-  margin-right: 4px;
-}
-
+/* A hidden or archived row's Unhide / Unarchive shows while pointing at the row or using it from the keyboard. */
 @media (hover: hover) {
-  .room-section li > .menu:not([open]) > summary,
   .room-section li > .row-action {
     position: absolute;
     right: 0;
     opacity: 0;
   }
 
-  .room-section li:hover > .menu > summary,
-  .room-section li:focus-within > .menu > summary,
   .room-section li:hover > .row-action,
   .room-section li:focus-within > .row-action {
     position: static;
@@ -205,6 +208,7 @@
 
 .row-action {
   flex: none;
+  margin-right: 4px;
   height: 26px;
   padding: 0 9px;
   border: 0;

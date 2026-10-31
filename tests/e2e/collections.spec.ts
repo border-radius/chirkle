@@ -340,7 +340,7 @@ test("collections: the owner uploads images straight into one, with the button, 
   ]);
   await expect(a.locator(".coll-grid .media-tile")).toHaveCount(2);
   await expect(a.locator(".coll-notice")).toHaveText(/Couldn't upload doc\.pdf: not an image or video/);
-  await expect(a.locator(".coll-head .coll-meta")).toHaveText("Yours · 🔒 Private · 2 items");
+  await expect(a.locator(".coll-head .coll-meta")).toHaveText("Yours · Private · 2 items");
 
   // Dropped on the page.
   const drop = await a.evaluateHandle(

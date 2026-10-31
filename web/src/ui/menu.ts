@@ -91,17 +91,23 @@ export function createActionMenu(opts: {
       {
         type: "button",
         ...(cls ? { class: cls } : {}),
-        ...(item?.checked === undefined ? {} : { role: "menuitemcheckbox", "aria-checked": String(item.checked) }),
+        // A switch, not a menuitemcheckbox: the items are buttons in a disclosure, not a role=menu (QA BUG-189).
+        ...(item?.checked === undefined ? {} : { role: "switch", "aria-checked": String(item.checked) }),
         on: { click: onClick },
         signal,
       },
       label,
     );
   const find = (label: string | null) => items.find((i) => i.label === label);
-  /** Close, then run the item's *current* callback (items may have been updated since the button was built). */
+  /**
+   * Close, then run the item's *current* callback (items may have been updated since the button was built). Closing
+   * redraws the items, so the focus they had goes back to the toggle, not to the page (QA BUG-190).
+   */
   const runItem = (label: string) => {
     const item = find(label);
+    const focused = el.contains(document.activeElement);
     close();
+    if (focused) summary.focus();
     item?.run();
   };
 

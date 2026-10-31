@@ -477,7 +477,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     const away = s.phase === "ready" && (s.win.hasNewer || !isNearBottom(list));
     pill.hidden = s.pill === null && !away;
     pill.classList.toggle("jump", s.pill === null);
-    pill.textContent = s.pill === "history" ? "New messages · Jump to latest" : s.pill === "below" ? "↓ New messages" : "↓ Jump to latest";
+    pill.textContent = s.pill === "history" ? "New messages · Jump to latest" : s.pill === "below" ? "New messages" : "Jump to latest";
   }
 
   /**

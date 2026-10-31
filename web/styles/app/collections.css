@@ -54,6 +54,11 @@
   white-space: nowrap;
 }
 
+.att-src > .i-lock::before {
+  width: 12px;
+  height: 12px;
+}
+
 a.att-src:hover {
   background: var(--accent);
 }

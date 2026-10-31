@@ -88,6 +88,16 @@
     left: 5px;
   }
 
+  /* The smaller avatar's middle is 26px left of the text (replies.css). */
+  .msg.group-start > .reply-quote {
+    max-width: calc(100% + 26px);
+    margin-left: -26px;
+  }
+
+  .reply-quote::before {
+    width: 20px;
+  }
+
   .day,
   .new-line {
     margin-inline: 16px;

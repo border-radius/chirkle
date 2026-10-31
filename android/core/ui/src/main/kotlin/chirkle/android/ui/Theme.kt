@@ -156,10 +156,13 @@ private fun inter(weight: Int) = Font(R.font.inter, FontWeight(weight), variatio
 @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
 val Inter = FontFamily(inter(400), inter(500), inter(600), inter(700))
 
-/** Inter throughout (Nunito until 2026-10-31). Headings bold, labels semibold, large text a little tighter, no extra spacing (as on the web). */
+/**
+ * Inter throughout (Nunito until 2026-10-31). Headings bold, labels semibold, large text a little tighter, no extra spacing (as on the web).
+ * Without Inter's contextual alternates, which draw people's text as something else ("32x1n" as "32×1n", "->" as an arrow; QA BUG-191).
+ */
 private val ChirkleTypography = Typography().run {
     fun TextStyle.i(w: FontWeight? = null) =
-        copy(fontFamily = Inter, fontWeight = w ?: fontWeight, letterSpacing = if (fontSize.value >= 18) (-0.01f * fontSize.value).sp else 0.sp)
+        copy(fontFamily = Inter, fontWeight = w ?: fontWeight, fontFeatureSettings = NO_CALT, letterSpacing = if (fontSize.value >= 18) (-0.01f * fontSize.value).sp else 0.sp)
     Typography(
         displayLarge = displayLarge.i(), displayMedium = displayMedium.i(), displaySmall = displaySmall.i(),
         headlineLarge = headlineLarge.i(FontWeight.Bold), headlineMedium = headlineMedium.i(FontWeight.Bold), headlineSmall = headlineSmall.i(FontWeight.Bold),
@@ -168,6 +171,9 @@ private val ChirkleTypography = Typography().run {
         labelLarge = labelLarge.i(FontWeight.SemiBold), labelMedium = labelMedium.i(FontWeight.SemiBold), labelSmall = labelSmall.i(FontWeight.SemiBold),
     )
 }
+
+/** CSS font-feature-settings syntax, as TextStyle takes it. */
+const val NO_CALT = "'calt' 0"
 
 @Composable
 fun ChirkleTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {

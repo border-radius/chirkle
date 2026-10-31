@@ -34,6 +34,9 @@
     "Segoe UI",
     Roboto,
     sans-serif;
+  /* Inter's contextual alternates draw people's text as something else: "32x1n" as "32×1n", "->" as an arrow. Names
+     and messages show as typed (QA BUG-191). After `font`, which doesn't reset it. */
+  font-feature-settings: "calt" 0;
 }
 
 /* The system's theme (auto), unless the profile page's choice (§7.8, web/src/theme.ts) says otherwise. The two dark

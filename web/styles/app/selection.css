@@ -103,11 +103,14 @@ dialog.forward.busy .forward-list {
 /* Jump to (§32): high on the page, a big field over the list; an option chosen with the arrow keys shown as hovered. */
 dialog.switcher {
   width: min(35rem, calc(100% - 2rem));
+  max-height: min(36rem, calc(100dvh - 140px - 1rem));
   margin-top: 140px;
   padding: 0 0 8px;
 }
 
+/* Only the list scrolls: a long one used to squeeze the field (a flex item) to a sliver. */
 .switcher > input {
+  flex: none;
   height: 60px;
   padding: 0 20px;
   border: 0;

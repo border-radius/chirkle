@@ -118,7 +118,7 @@ test("scrolled up, 'Jump to latest' takes you back down; a forward confirmation 
   const room = await apiRoom(ada);
   seed(room, ada, 60);
   const page = await openRoom(browser, ada, room);
-  const jump = page.getByRole("button", { name: "↓ Jump to latest" });
+  const jump = page.getByRole("button", { name: "Jump to latest" });
   await expect(jump).toBeHidden();
   await page.locator("ol.messages").evaluate((el) => el.scrollTo(0, 0));
   await expect(jump).toBeVisible();

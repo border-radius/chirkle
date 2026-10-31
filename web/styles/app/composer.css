@@ -91,8 +91,9 @@
   display: flex;
   gap: 4px;
   align-items: flex-end;
-  min-height: 68px;
-  padding: 14px 14px 14px 12px;
+  /* With the composer's top border, as tall as the sidebar's foot (68px), so their top lines meet. */
+  min-height: 67px;
+  padding: 13px 14px 14px 12px;
 }
 
 .composer-row > button,
