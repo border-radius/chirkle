@@ -1720,8 +1720,8 @@ neither.
   "Attachment", "Message deleted"). It uses the window's copy of the original when there is one, so edits and
   deletes show live; otherwise the server's expanded copy. A live reply to a message beyond the window has neither
   until the controller has fetched it: its quote reads "…" meanwhile (QA BUG-180).
-- **Replies to you** (someone else's reply to one of your messages) are highlighted (`.to-me`: an accent bar on the
-  left and a faint accent tint), so you can spot them while scrolling.
+- **Replies to you** (someone else's reply to one of your messages) are highlighted (`.to-me`: a rounded card with a faint
+  accent tint; until 2026-11-01 also an accent bar on the left), so you can spot them while scrolling.
 - **Going to the original** (`ctl.goTo`): if it is in the window, it is highlighted (`.target`) and centred. The
   highlight (here and for `/r/:id/m/:msgId`) holds briefly, fades out, and is dropped after `HIGHLIGHT_MS` (3 s). If not,
   the window is replaced by the history around it (as for `/r/:id/m/:msgId`, §7.5) once that has loaded; the old

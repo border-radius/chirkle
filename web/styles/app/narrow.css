@@ -85,7 +85,7 @@
   }
 
   .msg.to-me > .avatar {
-    left: 5px;
+    left: 8px;
   }
 
   /* The smaller avatar's middle is 26px left of the text (replies.css). */

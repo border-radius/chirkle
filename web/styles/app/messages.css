@@ -11,19 +11,18 @@
   opacity: 0.7;
 }
 
-/* Someone else's reply to one of your messages (§19.3): a tinted card. */
+/* Someone else's reply to one of your messages (§19.3): a tinted card, its avatar and text where other messages have them. */
 .msg.to-me {
   margin-right: 16px;
   margin-left: 16px;
   padding-right: 12px;
   padding-left: calc(12px + 36px + 14px);
-  border-left: 3px solid var(--accent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--fill) 10%, transparent);
 }
 
 .msg.to-me > .avatar {
-  left: 9px;
+  left: 12px;
 }
 
 /* Held, then faded; the controller drops the class once it is gone (HIGHLIGHT_MS). */
