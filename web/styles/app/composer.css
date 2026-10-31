@@ -103,10 +103,16 @@
   border-radius: 10px;
 }
 
+/* One line is as tall as the buttons, with the text (and placeholder) centred on them. */
 .composer textarea {
+  flex: 1;
   align-self: center;
+  min-width: 0;
   min-height: 40px;
-  padding: 9px 6px;
+  max-height: 10rem;
+  /* overflow-x: Firefox with classic scrollbars otherwise makes room for a horizontal one, taller than a row. */
+  overflow-x: hidden;
+  padding: calc((40px - 1lh) / 2) 6px;
   border: 0;
   background: none;
   outline: none;
