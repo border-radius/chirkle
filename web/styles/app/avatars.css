@@ -26,10 +26,10 @@
   font-size: 0.75rem;
 }
 
+/* 36px: the message's text starts 14px after it (.msg's padding). */
 .msg > .avatar.s32 {
-  width: 40px;
-  height: 40px;
-  font-size: 0.9rem;
+  width: 36px;
+  height: 36px;
 }
 
 .avatar.s96 {

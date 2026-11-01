@@ -2183,3 +2183,29 @@ up the quote's offset. **BUG-195:** the field is `flex: none` and the dialog fit
 **BUG-196:** rows in Rooms and Direct messages have no menu; hidden and archived rows keep their one button (Unhide,
 else Unarchive for the owner). The "two arrows" on "Jump to latest" is BUG-184, already fixed; an older build or the
 service worker's cached copy still shows it until the page reloads.
+
+# Polish pass 2026-11-01
+
+Overnight, unattended (the user: "look at every detail in web and android app and polish. make it pixel perfect"). Every
+board in `docs/design-frames/` rendered next to the app at the same size (1440×900 and 390×844 for the web, 411 dp
+Robolectric shots for the app), dark and light, and the differences fixed. No new bug numbers: two were bugs, the rest
+spacing and styling.
+
+- **Bugs:** Jump to still showed 🔒 and 🌐 as emoji for private and Open Air rooms (now the icon masks, on a tile); the
+  guest banner's "Log in" and "sign up" links were flex items, so the banner's 12px gap opened around them mid-sentence.
+- **Web:** sidebar spacing (section heads, the top's inset line, the foot), DM avatars 22px, collection rows with a
+  tinted tile and an item count; message avatars 36px; the header's members divider; the attach menu's tiles and
+  hints; the room menu's hints (Notify) and value (Room access shows the room's visibility); the access dialog
+  restyled (head with ×, bordered member card, footer bar), its styles now a lazy stylesheet (`web/styles/access.css`);
+  Jump to (field with Esc, 46px rows, tiles, key hints); message search (author avatars, field with its icon, "Show
+  older results" pill); the media grid's title ("Media in #room") and × button; the collection page header (tinted
+  tile, primary Upload, icon-only delete); profile avatar buttons; selection bar icons (Forward, Delete) and the
+  checkbox lined up on a reply-to-you card; the forward dialog's rows; phone room list rows 48px with 15px names.
+- **App:** collection tiles with counts, 48 dp rows, no ⋮ on Rooms and DM rows (ANDROID.md §38).
+- **Tests changed:** e2e `headerAction` matches an item by the start of its name (a hint or value may follow);
+  "Creator" is capitalised; component tests read menu labels without hints; "Add people" without "+".
+- **Budgets** raised while the user was asleep, confirmed by them afterwards ("raise budget"): `app.css` 10.60 → 11.05 KB, access chunk 3 → 3.05 KB,
+  collections 6.65 → 6.70 KB script and 1.5 → 1.95 KB stylesheet (DESIGN.md §7.7, §13).
+- **Harness note:** e2e run without `FONTCONFIG_FILE` fails every login (the browser draws no text and keeps no input
+  values); see the dev-container notes.
+

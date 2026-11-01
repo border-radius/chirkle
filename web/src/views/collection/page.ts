@@ -67,7 +67,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   const status = h("p", { class: "media-status", role: "status" });
   root.replaceChildren(
     h("section", { class: "collection", "aria-labelledby": "coll-title" }, [
-      h("header", { class: "coll-head" }, [
+      // The tile's tint is the sidebar row's (t0..t3, views/rooms.ts).
+      h("header", { class: `coll-head t${id.charCodeAt(0) % 4}` }, [
         h("a", { href: "/", class: "back", "aria-label": "Back to rooms" }, "← Rooms"),
         heading,
         metaLine,

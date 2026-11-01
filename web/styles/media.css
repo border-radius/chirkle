@@ -2,14 +2,14 @@
    Uses app.css's custom properties, so it follows the theme. */
 
 dialog.media {
-  width: min(56rem, 100%);
-  height: min(48rem, 100%);
+  width: min(55rem, 100%);
+  height: min(49.25rem, 100%);
   max-width: none;
   max-height: none;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--raised);
+  background: color-mix(in srgb, var(--raised), var(--bg));
   color: var(--fg);
   box-shadow: var(--shadow);
 }
@@ -28,7 +28,7 @@ dialog.media::backdrop {
   align-items: center;
   gap: 10px;
   padding: 14px 16px 12px 24px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border);
 }
 
 .media-bar h2 {
@@ -41,9 +41,15 @@ dialog.media::backdrop {
   white-space: nowrap;
 }
 
-.media-bar .link {
-  font-size: 1.4rem;
-  line-height: 1;
+.media-bar .hash {
+  width: auto;
+  margin-right: 1px;
+}
+
+.media-bar .icon-button {
+  width: 36px;
+  height: 36px;
+  color: var(--muted);
 }
 
 .media-body {

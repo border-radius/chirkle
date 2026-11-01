@@ -1,4 +1,5 @@
-/* ---- Room access (§23) ---- */
+/* ---- Room access (§23): the guest's links and the banners in place of the composer. The access dialog's styles are
+   web/styles/access.css, linked by its chunk. ---- */
 
 /* The logo links home (a guest's way back from the login page). */
 a.brand {
@@ -32,186 +33,13 @@ a.brand {
   align-items: center;
   min-height: 68px;
   margin: 0;
-  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 28px;
   border-top: 1px solid var(--line);
-  background: var(--raised);
+  background: color-mix(in srgb, var(--raised), var(--bg));
   color: var(--text);
 }
 
 .guest-banner::before,
 .archived-banner::before {
   color: var(--muted);
-}
-
-dialog.access[open],
-.access-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-/* Only the body scrolls: the buttons stay in view however long the lists get. */
-.access-body {
-  min-height: 0;
-  margin: 0 -24px;
-  padding: 0 24px;
-  overflow-y: auto;
-}
-
-dialog.access h2,
-dialog.access h3 {
-  margin: 0;
-}
-
-dialog.access h3 {
-  font-size: 0.95rem;
-}
-
-.vis-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.vis-choices legend {
-  margin-bottom: 0.4rem;
-  font-weight: 700;
-}
-
-/* A choice: an icon tile, its name and what it means, and a radio ring on the right. */
-.vis-choice {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.vis-choice:has(input:checked) {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: var(--tint);
-}
-
-.vis-choice input {
-  appearance: none;
-  flex: none;
-  order: 1;
-  width: 20px;
-  height: 20px;
-  margin: 0 0 0 auto;
-  padding: 0;
-  border: 2px solid var(--dim);
-  border-radius: 50%;
-}
-
-.vis-choice input:checked {
-  border-color: var(--accent);
-  background: radial-gradient(var(--accent) 4px, transparent 5px);
-}
-
-.vis-icon {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--hover);
-  color: var(--muted);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.vis-choice:has(:checked) .vis-icon {
-  background: color-mix(in srgb, var(--fill) 22%, transparent);
-  color: var(--fg);
-}
-
-.vis-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.vis-label {
-  font-weight: 600;
-}
-
-.vis-hint {
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
-.members,
-.writers {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.member-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.member {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.25rem 0;
-}
-
-.member-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.member-role {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.member .remove-member,
-.search-results [aria-pressed]::after {
-  margin-left: auto;
-}
-
-.search-results [aria-pressed="true"]::after {
-  content: "✓ Added";
-  flex: none;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.add-member {
-  align-self: flex-start;
-}
-
-.access-warning:empty,
-dialog.access .field-error:empty {
-  display: none;
-}
-
-/* A change of visibility's warning, and where else a shared room's messages are kept (§33.9). */
-.access-warning,
-.access-shared {
-  margin: 0;
-  padding: 0.5rem 0.7rem;
-  border-radius: var(--radius);
-  background: var(--highlight);
-  font-size: 0.85rem;
-}
-
-.dialog-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
 }

@@ -66,11 +66,13 @@ export const beginning = () => root.querySelector("li.beginning");
 export const pill = () => root.querySelector<HTMLButtonElement>("button.new-messages")!;
 export const composer = () => root.querySelector<HTMLTextAreaElement>("form.composer textarea");
 export const sendButton = () => root.querySelector<HTMLButtonElement>("form.composer button[type='submit']")!;
-/** A button by its text, or (an icon button) its accessible name. */
+/** A menu item's label, without the hint under it or the value beside it (ui/menu.ts); else the button's text. */
+export const labelOf = (b: Element) => b.querySelector(".tile + span")?.firstChild?.textContent ?? b.textContent;
+/** A button by its text (a menu item by its label), or (an icon button) its accessible name. */
 export const button = (scope: Element | null, label: string) =>
   scope
     ? ([...scope.querySelectorAll<HTMLButtonElement>("button")].find(
-        (b) => b.textContent === label || (!b.textContent && b.getAttribute("aria-label") === label),
+        (b) => labelOf(b) === label || (!b.textContent && b.getAttribute("aria-label") === label),
       ) ?? null)
     : null;
 export const key = (el: Element, k: string, opts: KeyboardEventInit = {}) =>

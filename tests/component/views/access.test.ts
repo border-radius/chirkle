@@ -13,6 +13,7 @@ import { createRoomView } from "../../../web/src/views/room.ts";
 import { createRoomsView } from "../../../web/src/views/rooms.ts";
 import { instrument, newApi, type SignedUp, signedUp, subscribed, uniq, viewContext } from "../../support/api.ts";
 import { fakeLayout, installIntersectionObserver } from "../../support/dom.ts";
+import { labelOf } from "./room/harness.ts";
 
 describe("room access UI (§23)", () => {
   let root: HTMLElement;
@@ -54,11 +55,11 @@ describe("room access UI (§23)", () => {
 
   const menuItems = (el: Element) => {
     el.querySelector<HTMLDetailsElement>("header.room-header details")!.open = true;
-    return [...el.querySelectorAll("header.room-header .menu-items button")].map((b) => b.textContent);
+    return [...el.querySelectorAll("header.room-header .menu-items button")].map(labelOf);
   };
   const clickItem = (el: Element, label: string) => {
     el.querySelector<HTMLDetailsElement>("header.room-header details")!.open = true;
-    [...el.querySelectorAll<HTMLButtonElement>("header.room-header .menu-items button")].find((b) => b.textContent === label)!.click();
+    [...el.querySelectorAll<HTMLButtonElement>("header.room-header .menu-items button")].find((b) => labelOf(b) === label)!.click();
   };
   const dialog = (el: Element) => el.querySelector<HTMLDialogElement>("dialog.access")!;
   /** Open the dialog from the header's menu: a lazy chunk, so it opens once that is loaded. */
@@ -75,13 +76,14 @@ describe("room access UI (§23)", () => {
     [...el.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       typeof label === "string" ? b.textContent === label : label.test(b.getAttribute("aria-label") ?? b.textContent ?? ""),
     );
-  const names = (el: Element, list: string) => [...dialog(el).querySelectorAll(`${list} .member .member-name`)].map((n) => n.textContent);
+  const names = (el: Element, list: string) =>
+    [...dialog(el).querySelectorAll(`${list} .member .member-name`)].map((n) => n.firstChild?.textContent); // without " (you)"
   const memberNames = (el: Element) => names(el, ".members");
   const writerNames = (el: Element) => names(el, ".writers");
   /** Search `list`'s people for `name` and click the first result. */
   async function pick(el: Element, list: string, name: string) {
     const section = dialog(el).querySelector(list)!;
-    if (!section.querySelector(".user-search")) buttonIn(section, "+ Add people")!.click();
+    if (!section.querySelector(".user-search")) buttonIn(section, "Add people")!.click();
     const search = section.querySelector<HTMLInputElement>(".user-search input")!;
     search.value = name;
     search.dispatchEvent(new Event("input"));
@@ -125,7 +127,7 @@ describe("room access UI (§23)", () => {
       expect(memberNames(el)).toEqual([me.user.name]); // named, not "Unknown"
       expect(dialog(el).querySelector(".access-warning")!.textContent).toContain("Only you and the people you add");
 
-      buttonIn(dialog(el), "+ Add people")!.click();
+      buttonIn(dialog(el), "Add people")!.click();
       const search = dialog(el).querySelector<HTMLInputElement>(".user-search input")!;
       for (const u of [bob, cat]) {
         search.value = u.user.name;
@@ -160,9 +162,9 @@ describe("room access UI (§23)", () => {
       const el = await mountRoom(room);
       await openDialog(el, "Room access…");
       expect(memberNames(el)).toEqual([me.user.name, bob.user.name]);
-      expect(dialog(el).querySelector("h3")!.textContent).toBe("Members (2)");
+      expect(dialog(el).querySelector("h3")!.textContent).toBe("Members · 2");
 
-      buttonIn(dialog(el), "+ Add people")!.click();
+      buttonIn(dialog(el), "Add people")!.click();
       const search = dialog(el).querySelector<HTMLInputElement>(".user-search input")!;
       search.value = tag;
       search.dispatchEvent(new Event("input"));
@@ -249,7 +251,7 @@ describe("room access UI (§23)", () => {
       await openDialog(el, "Room access…");
       expect(writerNames(el)).toEqual([me.user.name, bob.user.name]);
       const section = dialog(el).querySelector(".writers")!;
-      buttonIn(section, "+ Add people")!.click();
+      buttonIn(section, "Add people")!.click();
       const search = section.querySelector<HTMLInputElement>(".user-search input")!;
       search.value = tag;
       search.dispatchEvent(new Event("input"));

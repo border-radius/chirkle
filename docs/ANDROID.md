@@ -1193,7 +1193,7 @@ The "Chirkle Sidebar Redesign" design (DESIGN.md §7.1, §7.8; boards in `docs/d
   button in the fill, dimmed when there is nothing to send; read-only notices (guest, archived, only some may post, a
   closed DM) a 68 dp strip with an icon.
 
-Not ported from the boards: the collections grid with item counts (the list has no counts or covers to show), the
+Not ported from the boards: the collections grid with item counts (ported on 2026-11-01, §38), the
 voice-message waveform (there are no voice messages) and the redesigned sheets, accounts and server screens, which keep
 their current look in the new colours.
 
@@ -1207,3 +1207,19 @@ user names, messages and the composer. The app's typography (`core/ui/Theme.kt`)
 NO_CALT` (`"'calt' 0"`) on every style, as the web's `tokens.css` does (`UiPortsTest`). The other bugs of the pass
 were in the web's own CSS and menus; the app's quotes put the author on a line of their own, so a short quote doesn't
 clip it (BUG-186).
+
+## 38. Polish pass (2026-11-01)
+
+An overnight pass over the redesign boards (`docs/design-frames/`), the web and the app side by side (docs/QA.md,
+"Polish pass 2026-11-01"). In the app's room list (`RoomsScreen`, AndroidRooms board):
+
+- **Collections** are tiles, three to a row: a square in the collection's tint (the web's four hues, picked by its id
+  as `.t0`–`.t3` are), the lock at its corner when private, how many new as a badge at the other, and under it the
+  name and "N items" (the owner's name for one you follow). The rows they replace had no count.
+- **Rows** are 48 dp (were 56) with 14 dp corners; the lock or globe moved to the end of the row, before the count.
+- **No ⋮ on rows in Rooms and Direct messages**, as the web removed its ⋯ (QA BUG-196): a long press opens their menu
+  (Hide, Archive; Close conversation), labelled for TalkBack ("Actions for …"). Hidden and archived rows keep their
+  button.
+
+Tests: `UiFeaturesTest` hides a room through the row's long press; `UiCollectionsTest` taps collections in the grid.
+

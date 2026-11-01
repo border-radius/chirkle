@@ -147,6 +147,11 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
   let lastPage = AUTH_PAGES.has(here()) ? "/" : here();
   const onNavigate = (path: string) => {
     if (!AUTH_PAGES.has(path)) lastPage = path;
+    // Who you are, at the sidebar's foot and in the app bar: lit while on your settings.
+    for (const a of root.querySelectorAll("a.me-link")) {
+      if (path === "/me") a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    }
   };
 
   const header = createHeader({ api, store });

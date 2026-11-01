@@ -76,7 +76,7 @@ describe("linked instances in the room view (§33.10)", () => {
     expect(dialog.querySelector(".access-shared")!.textContent).toBe(
       "Shared with b.example: its messages are kept there too. Add people there by their address, like ann@b.example.",
     );
-    button(dialog, "+ Add people")!.click();
+    button(dialog, "Add people")!.click();
     const input = dialog.querySelector<HTMLInputElement>(".user-search input")!;
     input.value = "ann@b.example";
     input.dispatchEvent(new Event("input", { bubbles: true }));

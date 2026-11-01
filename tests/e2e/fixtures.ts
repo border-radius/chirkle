@@ -167,7 +167,9 @@ export async function send(page: Page, text: string): Promise<void> {
 /** Open the room header menu and click an item. */
 export async function headerAction(page: Page, label: string): Promise<void> {
   await page.locator("header.room-header summary").click();
-  await page.locator("header.room-header .menu-items").getByRole("button", { name: label, exact: true }).click();
+  // The item's name starts with its label; a hint or a value may follow it ("Room access… Private").
+  const name = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+  await page.locator("header.room-header .menu-items").getByRole("button", { name }).click();
 }
 
 /** Attach files through the composer's (hidden) file input, and wait for them to show in the tray. */

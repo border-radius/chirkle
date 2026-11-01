@@ -44,6 +44,7 @@ const viewerCss = await esbuild.build({
     { in: VIEWER.css, out: "viewer" },
     { in: MEDIA.css, out: "media" },
     { in: COLLECTIONS.css, out: "collections" },
+    { in: ACCESS.css, out: "access" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -51,8 +52,13 @@ const viewerCss = await esbuild.build({
 const viewerCssPath = outputOf(viewerCss.metafile, OUTDIR, VIEWER.css);
 const mediaCssPath = outputOf(viewerCss.metafile, OUTDIR, MEDIA.css);
 const collCssPath = outputOf(viewerCss.metafile, OUTDIR, COLLECTIONS.css);
+const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
 
-const result = await esbuild.build({ ...BASE_OPTIONS, ...shared, define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath) });
+const result = await esbuild.build({
+  ...BASE_OPTIONS,
+  ...shared,
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath),
+});
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
 const eager = staticImports(result.metafile, OUTDIR, assets.js);
@@ -75,6 +81,7 @@ const sizes = {
   viewerCss: await gz(`${OUTDIR}/${viewerCssPath}`),
   searchJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, SEARCH.js)}`),
   accessJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, ACCESS.js)}`),
+  accessCss: await gz(`${OUTDIR}/${accessCssPath}`),
   mediaJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, MEDIA.js)}`),
   mediaCss: await gz(`${OUTDIR}/${mediaCssPath}`),
   collJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, COLLECTIONS.js)}`),

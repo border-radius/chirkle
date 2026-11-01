@@ -8,6 +8,7 @@ const define = {
   VIEWER_CSS: JSON.stringify("/assets/viewer.css"),
   MEDIA_CSS: JSON.stringify("/assets/media.css"),
   COLLECTIONS_CSS: JSON.stringify("/assets/collections.css"),
+  ACCESS_CSS: JSON.stringify("/assets/access.css"),
 };
 
 export default defineConfig({

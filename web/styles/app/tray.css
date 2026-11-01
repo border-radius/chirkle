@@ -65,10 +65,6 @@
   white-space: nowrap;
 }
 
-.composer button[type="submit"] {
-  height: 2.25rem;
-}
-
 .counter {
   align-self: center;
 }

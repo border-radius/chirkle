@@ -5,6 +5,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -250,8 +251,9 @@ class UiFeaturesTest {
         val room = runBlocking { a.api.createRoom("hi-${uniq()}") }
         ui.signedIn(a)
         ui.showRoom(room.name)
-        // Its click action, not a tap: scrolled to the bottom edge, the row can be cut off.
-        compose.onNodeWithContentDescription("Actions for #${room.name}").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        // A long press opens the row's menu (no ⋮ in Rooms, QA BUG-196); its action, not a gesture: scrolled to the bottom
+        // edge, the row can be cut off.
+        compose.onNode(hasText(room.name) and hasClickAction()).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnLongClick)
         ui.waitFor("Hide")
         compose.onNodeWithText("Hide").performClick()
         ui.reveal(hasContentDescription("Hidden & archived (1)"))

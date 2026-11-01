@@ -15,7 +15,7 @@ export interface SwitcherOptions {
   sections: (s: AppState) => { rooms: Room[]; dms: Room[]; hidden: Room[]; archived: Room[] };
   unread: (s: AppState, r: Room) => number;
   other: (r: Room, me: User | null) => User | undefined;
-  /** A room's visibility icon (§23.1): "#", "🔒", "🌐". */
+  /** A room's visibility icon (§23.1): the lock's or the globe's classes, "" for "#". */
   icon: (r: Room) => string;
   avatar: (u: User) => HTMLElement;
   navigate: (path: string) => void;
@@ -152,7 +152,14 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
   });
   const status = h("p", { class: "search-status", role: "status" });
   const list = h("ul", { id: `${id}-list`, class: "search-results forward-list", role: "listbox", "aria-label": "Rooms" });
-  const el = h("dialog", { class: "forward switcher", "aria-label": "Jump to" }, [input, status, list]);
+  const mac = /Mac|iP/.test(navigator.platform);
+  const keys = h("p", { class: "jump-keys", "aria-hidden": "true" }, [
+    h("span", {}, "↑ ↓ to choose"),
+    h("span", {}, "Enter to go"),
+    h("span", {}, `${mac ? "⌘" : "Ctrl+"}K again to close`),
+  ]);
+  const field = h("label", { class: "jump-field ic i-search" }, [input, h("kbd", { "aria-hidden": "true" }, "Esc")]);
+  const el = h("dialog", { class: "forward switcher", "aria-label": "Jump to" }, [field, status, list, keys]);
   let shown: Target[] = [];
   let at = 0;
 
@@ -174,9 +181,10 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
   }
 
   function option(t: Target, i: number): HTMLElement {
+    const cls = t.room && o.icon(t.room);
     const icon = t.other
       ? o.avatar(t.other)
-      : h("span", { class: "hash", "aria-hidden": "true" }, t.room ? o.icon(t.room) : h("span", { class: "ci" }));
+      : h("span", { class: `tile ${cls || ""}`, "aria-hidden": "true" }, t.room ? (cls ? "" : "#") : h("span", { class: "ci" }));
     return h(
       "li",
       {

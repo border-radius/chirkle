@@ -11,11 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 2px 4px 0;
-}
-
-.room-section:first-child .section-head {
-  padding-top: 10px;
+  padding: 16px 6px 6px 4px;
 }
 
 .room-section h2 {
@@ -139,8 +135,14 @@
   content: none;
 }
 
+.room-section li.dm .avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+
 /* The name; the icons and the badge stay visible however long it is. */
-.room-section li a > span:not(.avatar, .badge, .vis, .owner, .ci) {
+.room-section li a > span:not(.avatar, .badge, .vis, .owner, .ci, .n) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -220,8 +222,7 @@
 /* Hidden & archived: the count on the right; inside, a part for each, quieter than the rooms. */
 .room-section[data-section="more"] > summary {
   justify-content: flex-start;
-  margin-top: 14px;
-  padding-right: 10px;
+  margin: 18px 6px 0 4px; /* the last row's 2px margin collapses into it */
 }
 
 .room-section[data-section="more"] .count {

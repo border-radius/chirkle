@@ -123,9 +123,10 @@ export function createComposer(opts: {
   // With collections (§31) the paperclip offers both; without, it opens the file chooser.
   const attachMenu = onCollections && createActionMenu({ label: "Attach", icon: "i-clip", className: "attach", signal });
   attachMenu?.update([
-    { label: "Upload file", icon: "i-upload", run: () => fileInput.click() },
+    { label: "Upload file", hint: "Photo, video or document", icon: "i-upload", run: () => fileInput.click() },
     {
       label: "From collection",
+      hint: "Pick from your saved media",
       icon: "i-media",
       run: () => onCollections!(attachMenu.el.firstElementChild as HTMLElement, Math.max(0, LIMITS.attachments - files.length)),
     },

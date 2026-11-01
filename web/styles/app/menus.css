@@ -78,6 +78,62 @@
   color: var(--muted);
 }
 
+/* An item with a hint under its label or a value on the right: its icon in a span (.tile). */
+.menu-items .tile::before {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.menu-items small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.menu-items .value {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.menu-items button:has(small) {
+  padding: 6px 10px;
+}
+
+/* The composer's Attach: the icons on tinted tiles, purple, then blue; the labels bold over a larger hint. */
+.attach + .menu-items .tile {
+  --hue: #a78bfa;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+}
+
+.attach + .menu-items button + button .tile {
+  --hue: #38bdf8;
+}
+
+.attach + .menu-items .tile::before {
+  color: color-mix(in srgb, var(--hue) 70%, var(--fg));
+}
+
+.attach + .menu-items button {
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+.attach + .menu-items small {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
 /* A line above: a shadow shrunk by 6px a side, moved up 7px, so 1px of it shows. */
 .menu-items .sep {
   margin-top: 11px;

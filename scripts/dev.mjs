@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import * as esbuild from "esbuild";
 import {
+  ACCESS,
   BASE_OPTIONS,
   COLLECTIONS,
   injectAssets,
@@ -38,14 +39,16 @@ const writeIndex = {
 
 const ctx = await esbuild.context({
   ...BASE_OPTIONS,
-  // Unhashed names, so the viewer's, the media grid's and the collections' stylesheets can be built alongside.
+  // Unhashed names, so the viewer's, the media grid's, the collections' and the access dialog's stylesheets can be built
+  // alongside.
   entryPoints: [
     ...BASE_OPTIONS.entryPoints,
     { in: VIEWER.css, out: "viewer" },
     { in: MEDIA.css, out: "media" },
     { in: COLLECTIONS.css, out: "collections" },
+    { in: ACCESS.css, out: "access" },
   ],
-  define: viewerDefine("assets/viewer.css", "assets/media.css", "assets/collections.css"),
+  define: viewerDefine("assets/viewer.css", "assets/media.css", "assets/collections.css", "assets/access.css"),
   sourcemap: "inline",
   entryNames: "assets/[name]",
   logLevel: "info",

@@ -88,7 +88,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     foot.replaceChildren(
       ...(user
         ? [
-            h("a", { href: "/me", class: "me-link", title: "Your profile" }, [
+            h("a", { href: "/me", class: "me-link", title: "Your profile", "aria-current": location.pathname === "/me" ? "page" : null }, [
               avatar(user, 32, api.avatarUrl),
               h("span", { class: "who" }, user.name),
             ]),
@@ -198,18 +198,21 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   function collectionRow(c: Collection): HTMLElement {
     const current = store.get().activeCollectionId === c.id;
     const n = c.owner ? (c.new ?? 0) : 0;
-    const sig = [c.name, c.public, c.owner?.name, n, current];
+    const sig = [c.name, c.public, c.owner?.name, n, current, c.items];
     const hit = collRows.get(c.id);
     if (hit?.sig.every((v, i) => v === sig[i])) return hit.el;
     const el = h(
       "li",
-      { dataset: { collectionId: c.id } },
+      // t0..t3: the icon's tint, by id, so it stays put as collections come and go.
+      { class: `t${c.id.charCodeAt(0) % 4}`, dataset: { collectionId: c.id } },
       h("a", { href: `/c/${c.id}`, class: n ? "unread" : "", "aria-current": current ? "page" : null }, [
         collectionIcon(),
         h("span", {}, c.name),
         c.owner ? h("span", { class: "owner" }, c.owner.name) : null,
         c.public ? null : visibilityMark("private"),
-        n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")]) : null,
+        n
+          ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")])
+          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, " items")]),
       ]),
     );
     collRows.set(c.id, { sig, el });

@@ -7,7 +7,7 @@
 
 import type { h } from "../../dom.ts";
 import type { PageQuery } from "../../lib/cursor.ts";
-import type { Message } from "../../lib/types.ts";
+import type { Message, User } from "../../lib/types.ts";
 
 export interface SearchOptions {
   room: string;
@@ -19,6 +19,8 @@ export interface SearchOptions {
   h: typeof h;
   /** When a message was sent, short. */
   when: (m: Message) => string;
+  /** The author's face, next to a result. */
+  avatar: (u: User) => HTMLElement;
   /** Go to message `id` in the room. */
   onPick: (id: string) => void;
   /** Closed from the bar itself (Close, Escape). */
@@ -114,7 +116,7 @@ export function createSearch(o: SearchOptions): Search {
     {},
     h("button", { type: "button", class: "link", on: { click: () => void run(true) }, signal }, "Show older results"),
   );
-  const el = h("div", { class: "room-search", role: "search", on: { keydown: (e) => e.key === "Escape" && end(e) }, signal }, [
+  const el = h("div", { class: "room-search ic i-search", role: "search", on: { keydown: (e) => e.key === "Escape" && end(e) }, signal }, [
     h("div", { class: "search-bar" }, [input, close]),
     status,
     results,
@@ -193,6 +195,7 @@ export function createSearch(o: SearchOptions): Search {
     const parts = highlight(m.text, words).map((s, i) => (i % 2 ? h("mark", {}, s) : s));
     return h("li", {}, [
       h("button", { type: "button", class: "search-result", on: { click: () => pick(m.id) }, signal }, [
+        m.expand?.author ? o.avatar(m.expand.author) : null,
         h("span", { class: "meta" }, [
           m.expand?.author ? h("b", { class: "author" }, m.expand.author.name) : null,
           h("time", {}, o.when(m)),

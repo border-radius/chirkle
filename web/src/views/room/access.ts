@@ -7,8 +7,9 @@
 // where else the room's messages are kept (§33.9).
 // A modal <dialog>: it keeps focus inside, Escape closes it, and focus goes back to where it was.
 //
-// A lazy chunk, like search (§29): the room view import()s it when the dialog is first opened. It imports types only;
-// what it needs from app.js comes in its options (`kit`).
+// A lazy chunk, like search (§29): the room view import()s it when the dialog is first opened, and it links its own
+// stylesheet (web/styles/access.css) before showing. It imports types only; what it needs from app.js comes in its
+// options (`kit`).
 
 import type { reasonOf } from "../../api.ts";
 import type { h, uniqueId } from "../../dom.ts";
@@ -38,6 +39,23 @@ export interface AccessDialog {
   /** Open it for `room`: to change its access when `editable`, else to see its members. `me` names you in the list. */
   open(room: Room, editable: boolean, me: User | null): void;
   close(): void;
+}
+
+declare const ACCESS_CSS: string;
+
+let stylesheet: Promise<void> | null = null;
+/** The dialog's stylesheet, linked once, like the media grid's: a failed load is tried again next time, and it opens anyway. */
+function loadStylesheet(h: typeof import("../../dom.ts")["h"]): Promise<void> {
+  stylesheet ??= new Promise((resolve) => {
+    const failed = () => {
+      link.remove();
+      stylesheet = null;
+      resolve();
+    };
+    const link = h("link", { rel: "stylesheet", href: ACCESS_CSS, on: { load: () => resolve(), error: failed } });
+    document.head.append(link);
+  });
+  return stylesheet;
 }
 
 const CHOICES: readonly Visibility[] = ["private", "public", "open"];
@@ -87,6 +105,7 @@ export function createAccessDialog(opts: {
   const LIMITS = { roomMembers: opts.kit.maxMembers };
   const id = uniqueId("access");
   const title = h("h2", { id: `${id}-title` });
+  const sub = h("p", { class: "dialog-sub" });
 
   /** Radio cards: one fieldset of `values`, each with its icon, label and hint. */
   function cards<T extends string>(
@@ -126,11 +145,12 @@ export function createAccessDialog(opts: {
     visibility = v;
     changed();
   });
+  choices.legend.textContent = "Who can see it";
   const postingChoices = cards(["everyone", "selected"] as const, POSTING, (p) => {
     posting = p;
     changed();
   });
-  postingChoices.legend.textContent = "Who can post?";
+  postingChoices.legend.textContent = "Who can post";
 
   /**
    * One list of people. `pickable` says who its search offers: the members are anyone; who can post, in a private
@@ -139,10 +159,14 @@ export function createAccessDialog(opts: {
   function people(label: string, cls: string, pickable: (u: User) => boolean): People {
     const head = h("h3", {});
     const ul = h("ul", { class: "member-list", "aria-label": label });
-    const addBtn = h("button", { type: "button", class: "link add-member", on: { click: () => toggleSearch(p) }, signal }, "+ Add people");
+    const addBtn = h(
+      "button",
+      { type: "button", class: "add-member ic i-plus", on: { click: () => toggleSearch(p) }, signal },
+      "Add people",
+    );
     const slot = h("div", { class: "member-search" });
     // Search above the list, so it stays in reach however many people there are.
-    const el = h("section", { class: cls }, [head, addBtn, slot, ul]);
+    const el = h("section", { class: cls }, [h("div", { class: "people-head" }, [head, addBtn]), slot, ul]);
     const p: People = {
       el,
       addBtn,
@@ -152,7 +176,7 @@ export function createAccessDialog(opts: {
       render() {
         // Hidden, it lists nobody: only the lists in use are in the page.
         const shown = el.hidden ? [] : p.list.filter(listed);
-        head.textContent = `${label} (${shown.length})`;
+        head.textContent = `${label} · ${shown.length}`;
         const full = p.list.length >= LIMITS.roomMembers;
         addBtn.hidden = !editable || search?.p === p;
         addBtn.disabled = full;
@@ -161,16 +185,16 @@ export function createAccessDialog(opts: {
           ...shown.map((u) => {
             const owner = u.id === room?.created_by;
             return h("li", { class: "member", dataset: { userId: u.id } }, [
-              avatar(u, 24, opts.avatarUrl),
-              h("span", { class: "member-name" }, u.name),
-              owner ? h("span", { class: "member-role" }, "creator") : null,
+              avatar(u, 32, opts.avatarUrl),
+              h("span", { class: "member-name" }, [u.name, u.id === myId ? h("span", {}, " (you)") : null]),
+              owner ? h("span", { class: "member-role" }, "Creator") : null,
               u.instance ? h("span", { class: "member-role" }, u.instance) : null,
               editable && !owner
                 ? h(
                     "button",
                     {
                       type: "button",
-                      class: "link remove-member",
+                      class: "remove-member",
                       "aria-label": `Remove ${u.name}`,
                       on: { click: () => remove(p, u.id) },
                       signal,
@@ -194,11 +218,22 @@ export function createAccessDialog(opts: {
   const cancel = h("button", { type: "button", class: "cancel", on: { click: () => close() }, signal }, "Cancel");
   const save = h("button", { type: "button", class: "primary save", on: { click: () => void submit() }, signal }, "Save");
   const buttons = h("div", { class: "dialog-actions" }, [cancel, save]);
+  // For the pointer only: the footer's Cancel/Close and Escape do the same, so it isn't a second "Close" to tab to or hear.
+  const x = h("button", {
+    type: "button",
+    class: "icon-button ic i-x",
+    tabindex: "-1",
+    "aria-hidden": "true",
+    on: { click: () => close() },
+    signal,
+  });
+  const head = h("div", { class: "dialog-head" }, [h("div", {}, [title, sub]), x]);
   // The body scrolls; the title and the buttons stay put.
   const body = h("div", { class: "access-body" }, [sharedEl, choices.el, members.el, postingChoices.el, writers.el, warn, error]);
-  const el = h("dialog", { class: "access", "aria-labelledby": title.id }, [title, body, buttons]);
+  const el = h("dialog", { class: "access", "aria-labelledby": title.id }, [head, body, buttons]);
 
   let room: Room | null = null;
+  let myId: string | undefined;
   let editable = false;
   let visibility: Visibility = "public";
   let posting: Posting = "everyone";
@@ -305,12 +340,12 @@ export function createAccessDialog(opts: {
   async function submit() {
     if (busy || !room || !editable) return;
     busy = true;
-    save.disabled = cancel.disabled = true;
+    save.disabled = cancel.disabled = x.disabled = true;
     error.textContent = "";
     const ids = (p: People) => p.list.map((u) => u.id);
     const problem = await opts.onSave(visibility, ids(members), posting, ids(writers));
     busy = false;
-    save.disabled = cancel.disabled = false;
+    save.disabled = cancel.disabled = x.disabled = false;
     if (signal.aborted) return;
     if (problem === null) return close();
     error.textContent = problem;
@@ -352,18 +387,22 @@ export function createAccessDialog(opts: {
     el,
     open(r, canEdit, me) {
       room = r;
+      myId = me?.id;
       editable = canEdit;
       visibility = visibilityOf(r);
       posting = postingOf(r);
       members.list = users(r, r.members ?? [], undefined, me);
       writers.list = users(r, r.writers ?? [], r.expand?.writers, me);
-      title.textContent = editable ? "Room access" : `Members of #${r.name}`;
-      choices.legend.textContent = `Who can see #${r.name}?`;
+      title.textContent = editable ? "Room access" : "Members";
+      sub.textContent = `#${r.name}`;
       error.textContent = "";
       toggleSearch(null);
       render();
-      if (!el.open) el.showModal();
-      (editable ? choices.radios.get(visibility) : cancel)?.focus();
+      void loadStylesheet(h).then(() => {
+        if (signal.aborted || room !== r) return;
+        if (!el.open) el.showModal();
+        (editable ? choices.radios.get(visibility) : cancel)?.focus();
+      });
     },
     close,
   };

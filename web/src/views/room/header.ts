@@ -43,6 +43,7 @@ export function createRoomHeader(opts: {
     type: "button",
     class: "icon-button search-toggle ic i-search",
     "aria-label": "Search messages",
+    "aria-expanded": "false",
     title: "Search messages",
     on: { click: opts.onSearch },
     signal,
@@ -125,7 +126,12 @@ export function createRoomHeader(opts: {
     const out: MenuItem[] = [];
     if (guest) return [{ label: "Jump to beginning", run: opts.onJumpToBeginning, icon: "i-top" }];
     if (room && (mine || visibilityOf(room) === "private")) {
-      out.push({ label: mine ? "Room access…" : `Members (${room.members?.length ?? 0})`, run: opts.onAccess, icon: "i-users" });
+      out.push({
+        label: mine ? "Room access…" : `Members (${room.members?.length ?? 0})`,
+        run: opts.onAccess,
+        icon: "i-users",
+        ...(mine ? { value: VISIBILITY[visibilityOf(room)].label } : {}),
+      });
     }
     // Hiding an archived room is pointless (it is listed under Archived), but one hidden before it was
     // archived must still be unhidable, or it would silently come back hidden after an unarchive.
@@ -150,7 +156,14 @@ export function createRoomHeader(opts: {
     }
     if (room && (!room.archived || notifyAll(room.id))) {
       const on = notifyAll(room.id);
-      out.push({ label: "Notify of every message", run: () => void setNotifyAll(room.id, !on), icon: "i-bell", checked: on, sep: true });
+      out.push({
+        label: "Notify of every message",
+        hint: on ? "On — you hear about everything here" : "Off — only replies to you",
+        run: () => void setNotifyAll(room.id, !on),
+        icon: "i-bell",
+        checked: on,
+        sep: true,
+      });
     }
     out.push({ label: "Jump to beginning", run: opts.onJumpToBeginning, icon: "i-top", sep: out.length > 0 });
     return out;

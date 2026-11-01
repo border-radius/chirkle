@@ -31,6 +31,19 @@
   top: 6px;
 }
 
+/* A reply to you is a card set in by 16px: its checkbox and avatar line up with the others'. */
+.messages.selecting .msg.to-me {
+  padding-left: calc(28px + 32px + 36px + 14px - 16px);
+}
+
+.msg.to-me > .select {
+  left: 12px;
+}
+
+.messages.selecting .msg.to-me > .avatar {
+  left: 44px;
+}
+
 .msg.selected {
   background: var(--tint);
 }
@@ -52,6 +65,17 @@
   font-weight: 600;
 }
 
+.selection-bar .ic:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.selection-bar .ic::before {
+  width: 16px;
+  height: 16px;
+}
+
 .selection-bar button {
   height: 38px;
 }
@@ -69,7 +93,8 @@ dialog.access {
   padding: 20px 24px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: var(--raised);
+  /* Between the raised menus and the page, as the boards draw dialogs (#1d1929 in the dark). */
+  background: color-mix(in srgb, var(--raised), var(--bg));
   color: var(--fg);
   box-shadow: var(--shadow);
 }
@@ -90,9 +115,12 @@ dialog.access::backdrop {
   overflow-y: auto;
 }
 
-.switcher > .search-status,
+.switcher > .search-status {
+  margin: 8px 20px;
+}
+
 .switcher .forward-list {
-  margin: 0 8px;
+  padding: 8px;
 }
 
 dialog.forward.busy .forward-list {
@@ -105,20 +133,69 @@ dialog.switcher {
   width: min(35rem, calc(100% - 2rem));
   max-height: min(36rem, calc(100dvh - 140px - 1rem));
   margin-top: 140px;
-  padding: 0 0 8px;
+  padding: 0;
+  overflow: hidden;
 }
 
-/* Only the list scrolls: a long one used to squeeze the field (a flex item) to a sliver. */
-.switcher > input {
+dialog.switcher[open] {
+  gap: 0;
+}
+
+/* The field: a search icon, then Esc. Only the list scrolls: a long one used to squeeze the field (a flex item) to a
+   sliver. */
+.jump-field {
+  display: flex;
   flex: none;
+  gap: 12px;
+  align-items: center;
   height: 60px;
   padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.jump-field::before {
+  width: 18px;
+  height: 18px;
+}
+
+.jump-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
   background: none;
   outline: none;
   font-size: 1.0625rem;
+}
+
+.switcher kbd,
+.jump-button kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  font: 600 0.6875rem / 1.5 inherit;
+}
+
+/* What the keys do, under the list (not on touch screens). */
+.jump-keys {
+  display: flex;
+  flex: none;
+  gap: 16px;
+  margin: 0;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+@media (hover: none) {
+  .jump-keys,
+  .jump-field kbd {
+    display: none;
+  }
 }
 
 .switcher > .search-status:empty {
@@ -126,15 +203,49 @@ dialog.switcher {
 }
 
 .switcher .person {
-  height: 44px;
-  padding: 0 10px;
-  border-radius: 8px;
+  gap: 12px;
+  height: 46px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-weight: 500;
   cursor: pointer;
 }
 
-.switcher .person:hover,
-.switcher [aria-selected="true"] {
+.switcher .person:hover {
   background: var(--hover);
+}
+
+.switcher [aria-selected="true"] {
+  background: color-mix(in srgb, var(--fill) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* A room's "#" or icon, a collection's icon: on a tile, as big as a person's face. */
+.switcher .tile,
+.switcher .avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.switcher .tile {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--dim);
+  font-weight: 700;
+}
+
+.switcher .tile::before {
+  width: 14px;
+  height: 14px;
+}
+
+.switcher small {
+  margin-left: 4px;
+  font-size: 0.75rem;
 }
 
 .switcher .unread {
@@ -142,11 +253,45 @@ dialog.switcher {
 }
 
 .switcher small {
-  color: var(--muted);
+  color: var(--dim);
+  font-weight: 400;
 }
 
 dialog.forward .cancel {
   align-self: flex-end;
+  border-color: transparent;
+  background: none;
+}
+
+dialog.forward h2 {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+
+dialog.forward > .search-status:empty {
+  display: none;
+}
+
+/* Where to forward to: a room's "#" on a tile as big as a person's face. */
+dialog:not(.switcher) .forward-list .person {
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+}
+
+dialog:not(.switcher) .forward-list .avatar,
+dialog.forward .hash {
+  width: 30px;
+  height: 30px;
+}
+
+dialog.forward .hash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--hover);
 }
 
 .hash {

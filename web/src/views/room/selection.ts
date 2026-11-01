@@ -52,10 +52,10 @@ export function createSelection(opts: {
   const button = (label: string, run: () => void, cls = "") =>
     h("button", { type: "button", class: cls, on: { click: run }, signal }, label);
   const count = h("span", { class: "sel-count", role: "status" });
-  const deleteBtn = button("Delete", () => setConfirm(true), "danger");
+  const deleteBtn = button("Delete", () => setConfirm(true), "danger ic i-trash");
   const actions = [
     count,
-    button("Forward", () => opts.onForward([...(selected ?? [])]), "primary"),
+    button("Forward", () => opts.onForward([...(selected ?? [])]), "primary ic i-fwd"),
     deleteBtn,
     button("Cancel", () => end(true)),
   ];

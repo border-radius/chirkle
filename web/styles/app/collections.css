@@ -87,9 +87,46 @@ a.att-src:hover {
   }
 }
 
-/* Sidebar rows (§31): the icon instead of "#", and who owns one you follow. */
+/* Sidebar rows (§31): the icon on a tinted tile instead of "#" (the tile is ::before, the icon is moved over it), who
+   owns one you follow, how many items it has. */
 .room-section[data-section="collections"] li a::before {
-  content: none;
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+}
+
+/* Toward the text color: lighter in the dark theme, darker in the light one. The tints (t0..t3) are the collection's,
+   by id: its page's header has the same (collections.css). */
+.room-section[data-section="collections"] li a > .ci {
+  width: 13px;
+  height: 13px;
+  margin: 0 4.5px 0 -27.5px;
+  color: color-mix(in srgb, var(--hue) 70%, var(--fg));
+}
+
+.t0 {
+  --hue: #a78bfa;
+}
+
+.t1 {
+  --hue: #38bdf8;
+}
+
+.t2 {
+  --hue: #fb923c;
+}
+
+.t3 {
+  --hue: #4ade80;
+}
+
+.room-section li a > .n {
+  min-width: 18px;
+  color: var(--dim);
+  font-size: 0.75rem;
+  text-align: right;
 }
 
 .room-section li .owner {

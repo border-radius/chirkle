@@ -325,13 +325,18 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   const pill = h("button", { type: "button", class: "new-messages ic i-down", hidden: true });
   const footer = h("footer", { class: "room-footer" });
   const banner = h("p", { class: "archived-banner ic i-archive" }, "This room is archived. History is read-only.");
-  const guestBanner = h("p", { class: "guest-banner ic i-globe" }, [
-    "You're reading as a guest. ",
-    h("a", { href: "/login" }, "Log in"),
-    " or ",
-    h("a", { href: "/signup" }, "sign up"),
-    " to join the conversation.",
-  ]);
+  const guestBanner = h(
+    "p",
+    { class: "guest-banner ic i-globe" },
+    // One flex item: the links stay in the sentence, not spaced apart by the banner's gap.
+    h("span", {}, [
+      "You're reading as a guest. ",
+      h("a", { href: "/login" }, "Log in"),
+      " or ",
+      h("a", { href: "/signup" }, "sign up"),
+      " to join the conversation.",
+    ]),
+  );
   const readerBanner = h(
     "p",
     { class: "guest-banner reader-banner ic i-lock" },
@@ -662,7 +667,17 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   /** The room's images and videos as a grid (§30): a lazy chunk, like search. It opens the viewer with `viewImage`. */
   function openMedia() {
     import("./room/media.ts").then(
-      (m) => scope.active && m.openMedia({ room: roomId, api, h, name: attachmentName, open: viewImage, signal }),
+      (m) =>
+        scope.active &&
+        m.openMedia({
+          room: roomId,
+          label: room()?.kind === "dm" ? "" : room()?.name,
+          api,
+          h,
+          name: attachmentName,
+          open: viewImage,
+          signal,
+        }),
       () => scope.active && notice.say("Couldn't open media. Check your connection."),
     );
   }
@@ -678,6 +693,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     if (search) return search.focus();
     try {
       const { createSearch } = await import("./room/search.ts");
+      const toggle = shell.querySelector<HTMLElement>(".search-toggle");
       if (!scope.active || search) return; // opened meanwhile (it has focus)
       const r = room();
       search = createSearch({
@@ -687,14 +703,17 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
         pageSize: PAGE_SIZE,
         h,
         when: (m) => formatTime(parsePb(m.created)),
+        avatar: (u) => avatar(u, 24, api.avatarUrl),
         onPick: (id) => void now(() => ctl.goTo(id)),
         onClose: () => {
           search = null;
-          shell.querySelector<HTMLElement>(".search-toggle")?.focus();
+          toggle?.setAttribute("aria-expanded", "false");
+          toggle?.focus();
         },
         signal,
       });
       header.el.after(search.el);
+      toggle?.setAttribute("aria-expanded", "true");
       search.focus();
     } catch {
       if (scope.active) notice.say("Couldn't open search. Check your connection.");

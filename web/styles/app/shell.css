@@ -169,8 +169,9 @@ html {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 14px 14px 17px;
+  /* The line under it stops short of the edges, as the rows below do. */
+  background: linear-gradient(var(--line), var(--line)) bottom / calc(100% - 32px) 1px no-repeat;
 }
 
 .side-top .brand {
@@ -202,14 +203,6 @@ html {
   flex: 1;
 }
 
-.jump-button kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--muted);
-  font: 600 0.6875rem / 1.5 inherit;
-}
-
 .jump-button:active:not(:disabled) {
   transform: none;
 }
@@ -223,6 +216,17 @@ html {
   min-height: 68px;
   padding: 8px 12px 8px 10px;
   border-top: 1px solid var(--line);
+}
+
+.side-foot .me-link {
+  gap: 10px;
+  height: 48px;
+  padding: 0 8px;
+}
+
+.side-foot .avatar {
+  width: 34px;
+  height: 34px;
 }
 
 .side-foot .icon-button::before {

@@ -15,6 +15,10 @@ export interface MenuItem {
   checked?: boolean;
   /** Set apart from the items before it by a line. */
   sep?: boolean;
+  /** A line under the label saying more. */
+  hint?: string;
+  /** What it is set to, on the right (a room's access: "Private"). */
+  value?: string;
 }
 
 export interface ActionMenu {
@@ -96,7 +100,13 @@ export function createActionMenu(opts: {
         on: { click: onClick },
         signal,
       },
-      label,
+      item?.hint || item?.value
+        ? [
+            h("span", { class: `tile ic ${item.icon}` }),
+            h("span", {}, [label, item.hint ? h("small", {}, item.hint) : null]),
+            item.value ? h("span", { class: "value" }, item.value) : null,
+          ]
+        : label,
     );
   const find = (label: string | null) => items.find((i) => i.label === label);
   /**
@@ -138,7 +148,7 @@ export function createActionMenu(opts: {
             if (find(i.label)?.confirm) setConfirming(i.label)?.focus();
             else runItem(i.label);
           },
-          [i.icon ? `ic ${i.icon}` : "", i.sep ? "sep" : ""].join(" ").trim(),
+          [i.icon && !i.hint && !i.value ? `ic ${i.icon}` : "", i.sep ? "sep" : ""].join(" ").trim(),
           i,
         ),
       ),
@@ -164,7 +174,7 @@ export function createActionMenu(opts: {
     el,
     update(next) {
       items = next;
-      const nextShape = JSON.stringify(next.map((i) => [i.label, i.confirm ?? null, i.icon, i.checked, i.sep]));
+      const nextShape = JSON.stringify(next.map((i) => [i.label, i.confirm ?? null, i.icon, i.checked, i.sep, i.hint, i.value]));
       const stale = confirming !== null && !find(confirming)?.confirm;
       if (stale) confirming = null;
       if (nextShape === shape && !stale) return; // same buttons; they look their item up when clicked

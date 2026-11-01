@@ -4,7 +4,7 @@
 
 import type { Api } from "./api.ts";
 import { h } from "./dom.ts";
-import { otherMember, VISIBILITY, visibilityOf } from "./lib/rooms.ts";
+import { otherMember, visibilityOf } from "./lib/rooms.ts";
 import { toPb } from "./lib/time.ts";
 import { type AppState, roomSections, type Store, unreadCount } from "./store.ts";
 import { avatar } from "./ui/avatar.ts";
@@ -12,6 +12,9 @@ import type { Switcher } from "./views/switcher.ts";
 
 /** Sent on document by the sidebar's "Jump to…" button. */
 export const JUMP = "chirkle-jump";
+
+/** The switcher's icon for a private and an Open Air room; "#" for a public one. */
+const ICONS: Record<string, string> = { private: "ic i-lock", open: "ic i-globe" };
 
 export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLElement; navigate: (path: string) => void }): () => void {
   const { api, store, root } = o;
@@ -35,7 +38,7 @@ export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLEle
           sections: roomSections,
           unread: unreadCount,
           other: otherMember,
-          icon: (r) => VISIBILITY[visibilityOf(r)].icon,
+          icon: (r) => ICONS[visibilityOf(r)] ?? "",
           avatar: (u) => avatar(u, 24, api.avatarUrl),
           navigate: o.navigate,
           opened: (id) => opened.get(id) ?? "",

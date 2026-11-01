@@ -1,0 +1,276 @@
+/* The room access dialog (DESIGN.md §23.2). Not part of app.css: the dialog's chunk links this file when it first
+   opens. Uses app.css's custom properties; the dialog's card, shared with the forward dialog, is in app.css. */
+
+dialog.access[open],
+.access-body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The title, the room under it and ×; a line under them and over the buttons. Only the body between scrolls, so the
+   buttons stay in view however long the lists get. */
+.dialog-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 18px 16px 14px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+dialog.access h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+}
+
+.dialog-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.access-body {
+  gap: 22px;
+  min-height: 0;
+  padding: 18px 24px 22px;
+  overflow-y: auto;
+}
+
+dialog.access .dialog-actions {
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+dialog.access .cancel {
+  border-color: transparent;
+  background: none;
+}
+
+.vis-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.vis-choices legend,
+dialog.access h3 {
+  margin: 0;
+  padding: 0 0 8px;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* A choice: an icon tile, its name and what it means, and a radio ring on the right. */
+.vis-choice {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.vis-choice:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: var(--tint);
+}
+
+.vis-choice input {
+  appearance: none;
+  flex: none;
+  order: 1;
+  width: 20px;
+  height: 20px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 2px solid color-mix(in srgb, var(--dim) 55%, transparent);
+  border-radius: 50%;
+}
+
+.vis-choice input:checked {
+  border-color: var(--accent);
+  background: radial-gradient(var(--accent) 4.5px, transparent 5.5px);
+}
+
+.vis-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.vis-choice:has(:checked) .vis-icon {
+  background: color-mix(in srgb, var(--fill) 22%, transparent);
+  color: var(--fg);
+}
+
+.vis-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vis-label {
+  font-weight: 600;
+}
+
+.vis-hint {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.members,
+.writers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* "Members · 3" and Add people. */
+.people-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+dialog.access .people-head h3 {
+  padding: 0;
+}
+
+.add-member {
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tint);
+  color: var(--accent);
+  font-size: 0.8125rem;
+}
+
+.add-member::before {
+  width: 14px;
+  height: 14px;
+}
+
+/* The people: rows of a card, a line between them. */
+.member-list {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  list-style: none;
+}
+
+.member-list:empty {
+  display: none;
+}
+
+.member {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 52px;
+  padding: 0 8px 0 12px;
+}
+
+.member + .member {
+  border-top: 1px solid var(--line);
+}
+
+.member .avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 0.6875rem;
+}
+
+.member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-name span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.member-role {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.remove-member {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.member .remove-member,
+.search-results [aria-pressed]::after {
+  margin-left: auto;
+}
+
+.search-results [aria-pressed="true"]::after {
+  content: "✓ Added";
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.access-warning:empty,
+dialog.access .field-error:empty {
+  display: none;
+}
+
+/* A change of visibility's warning, and where else a shared room's messages are kept (§33.9). */
+.access-warning,
+.access-shared {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius);
+  background: var(--highlight);
+  font-size: 0.85rem;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+dialog.access {
+  width: min(32.5rem, calc(100% - 2rem));
+  max-height: min(52rem, calc(100dvh - 2rem));
+  padding: 0;
+  overflow: hidden;
+}

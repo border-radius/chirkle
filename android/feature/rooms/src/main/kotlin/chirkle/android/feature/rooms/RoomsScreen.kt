@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -58,6 +59,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -261,10 +265,10 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
                 empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) "No other rooms. Hidden and archived ones are listed below." else "No rooms yet. Create the first one.")
             }
-            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Rooms, s, me.id, ::act, { archiving = it }, services)) }
+            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Rooms, s, me.id, ::act, { archiving = it }, services), button = false) }
             foldHeader("dms", "Direct messages", "dms" in folded, toggle, "New direct message") { newDm = true }
             items(shown("dms", sections.dms), key = { it.id }) { r ->
-                RoomRow(r, s, me.id, onOpenRoom, listOf("Close conversation" to { act("close", r) { services.actions.hide(r.id) } }))
+                RoomRow(r, s, me.id, onOpenRoom, listOf("Close conversation" to { act("close", r) { services.actions.hide(r.id) } }), button = false)
             }
             collections(s.collections, "collections" in folded, { toggle("collections") }, onOpenCollection) { newCollection = true }
             // Hidden & archived (§7.1): one fold with how many; inside, a part for each.
@@ -368,8 +372,8 @@ private fun LazyListScope.header(text: String) = item(key = "header-$text") {
 }
 
 /**
- * Yours (🔒 when private), then those you follow with their owner's name and how many items are new (§31.3). Folded:
- * only those you follow with new items.
+ * Yours (🔒 when private), then those you follow with their owner's name and how many items are new (§31.3), three to a
+ * row as tinted tiles (the redesign's AndroidRooms board). Folded: only those you follow with new items.
  */
 private fun LazyListScope.collections(c: chirkle.android.data.model.Collections?, folded: Boolean, toggle: () -> Unit, onOpen: (String) -> Unit, onNew: () -> Unit) {
     item(key = "header-collections") {
@@ -380,8 +384,13 @@ private fun LazyListScope.collections(c: chirkle.android.data.model.Collections?
     }
     if (c == null) return
     if (c.mine.isEmpty() && c.subs.isEmpty()) empty("No collections yet. Save images and videos from the chat to one.")
-    if (!folded) items(c.mine, key = { "c" + it.id }) { CollectionRow(it, onOpen) }
-    items(if (folded) c.subs.filter { it.new > 0 } else c.subs, key = { "s" + it.id }) { CollectionRow(it, onOpen) }
+    val shown = (if (folded) emptyList() else c.mine) + (if (folded) c.subs.filter { it.new > 0 } else c.subs)
+    items(shown.chunked(3), key = { row -> "c" + row.first().id }) { row ->
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            row.forEach { CollectionTile(it, onOpen, Modifier.weight(1f)) }
+            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
 }
 
 /** A section's heading that folds it (the web's fold buttons), and its "+". */
@@ -426,40 +435,56 @@ private fun FoldTitle(text: String, folded: Boolean, toggle: () -> Unit, modifie
     }
 }
 
+/** The web's tints for a collection's tile (web/styles/app/collections.css .t0–.t3), picked the same way, by its id. */
+private val Hues = listOf(Color(0xFFA78BFA), Color(0xFF38BDF8), Color(0xFFFB923C), Color(0xFF4ADE80))
+
 @Composable
-private fun CollectionRow(c: chirkle.android.data.model.MediaCollection, onOpen: (String) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clip(RoundedCornerShape(16.dp))
+private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen: (String) -> Unit, modifier: Modifier) {
+    val hue = Hues[c.id.first().code % Hues.size]
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onOpen(c.id) }
-            .padding(horizontal = 12.dp, vertical = 8.dp)
             .semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            Icon(ChirkleIcons.Collection, contentDescription = null, tint = Chirkle.colors.dim, modifier = Modifier.size(20.dp))
-        }
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (c.new > 0) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f, fill = false))
-            if (c.owner == null && !c.public) Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.size(14.dp))
-            c.owner?.let { Text("· ${it.name}", color = Chirkle.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        }
-        if (c.new > 0) {
-            Box(
-                Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (c.new > 99) "99+" else c.new.toString(),
-                    color = androidx.compose.ui.graphics.Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.semantics { contentDescription = "${c.new} new" },
-                )
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(hue.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.background), RoundedCornerShape(14.dp))) {
+            if (c.owner == null && !c.public) {
+                Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
+            }
+            if (c.new > 0) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(8.dp).heightIn(min = 22.dp).widthIn(min = 22.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 7.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (c.new > 99) "99+" else c.new.toString(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.semantics { contentDescription = "${c.new} new" },
+                    )
+                }
             }
         }
+        Spacer(Modifier.size(6.dp))
+        Text(
+            c.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            fontWeight = if (c.new > 0) FontWeight.Bold else FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+        Text(
+            c.owner?.name ?: if (c.items == 1) "1 item" else "${c.items} items",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            color = Chirkle.colors.muted,
+            modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 2.dp),
+        )
     }
 }
 
@@ -488,7 +513,11 @@ private fun LazyListScope.fold(text: String, count: Int, open: Boolean, toggle: 
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit, menu: List<Pair<String, () -> Unit>>) {
+/**
+ * [button]: the menu has a ⋮ of its own. Rows in Rooms and Direct messages have none (the web's QA BUG-196, the
+ * AndroidRooms board): a long press opens their menu; hidden and archived rows keep theirs.
+ */
+private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit, menu: List<Pair<String, () -> Unit>>, button: Boolean = true) {
     var open by remember { mutableStateOf(false) }
     val badge = unreadBadge(r, s.unread, s.hidden.keys, s.activeRoomId)
     val title = r.title(me)
@@ -497,11 +526,11 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .clip(RoundedCornerShape(16.dp))
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(if (current) Chirkle.colors.tint else androidx.compose.ui.graphics.Color.Transparent)
                 .combinedClickable(onClick = { onOpen(r.id) }, onLongClick = if (menu.isNotEmpty()) ({ open = true }) else null, onLongClickLabel = "Actions for $title")
-                .padding(start = 12.dp, end = if (menu.isNotEmpty()) 0.dp else 12.dp, top = 8.dp, bottom = 8.dp)
+                .padding(start = 12.dp, end = if (menu.isNotEmpty() && button) 0.dp else 12.dp)
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -511,27 +540,27 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
             } else {
                 chirkle.android.ui.RoomIcon(Visibility.Public, 40.dp)
             }
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    if (r.isDm) title else r.name,
-                    modifier = Modifier.weight(1f, fill = false),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    fontWeight = if (badge > 0 || current) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (r.archived) Chirkle.colors.dim else if (badge > 0 || current) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
-                )
-                // Private and Open Air (§23.1), after the name.
-                val v = r.visibilityOrDefault
-                if (!r.isDm && v != Visibility.Public) {
-                    Icon(v.icon(), contentDescription = v.label, tint = Chirkle.colors.dim, modifier = Modifier.size(16.dp))
-                }
+            Text(
+                if (r.isDm) title else r.name,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (badge > 0 || current) FontWeight.SemiBold else FontWeight.Medium,
+                color = if (r.archived) Chirkle.colors.dim else if (badge > 0 || current) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
+            )
+            // Private and Open Air (§23.1), at the end of the row, before the count (the AndroidRooms board).
+            val v = r.visibilityOrDefault
+            if (!r.isDm && v != Visibility.Public) {
+                Icon(v.icon(), contentDescription = v.label, tint = Chirkle.colors.dim, modifier = Modifier.size(15.dp))
             }
             if (badge > 0) UnreadBadge(badge)
             if (menu.isNotEmpty()) {
                 // The menu opens at the button (a long press on the row opens it there too).
                 Box {
-                    IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "Actions for $title" }) {
-                        Icon(ChirkleIcons.More, contentDescription = null, tint = Chirkle.colors.muted)
+                    if (button) {
+                        IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "Actions for $title" }) {
+                            Icon(ChirkleIcons.More, contentDescription = null, tint = Chirkle.colors.muted)
+                        }
                     }
                     DropdownMenu(open, onDismissRequest = { open = false }) {
                         for ((label, run) in menu) {

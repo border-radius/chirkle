@@ -18,6 +18,8 @@ import type { ViewerImage } from "./viewer.ts";
 
 export interface MediaOptions {
   room: string;
+  /** The room's name, in the title ("Media in #design"); none for a DM. */
+  label?: string | undefined;
   api: Pick<Api, "media" | "fileUrl" | "posterUrl" | "fileToken">;
   h: typeof h;
   /** What to call a file (`attachmentName`). */
@@ -67,14 +69,21 @@ export function openMedia(o: MediaOptions): void {
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(false), { signal });
 
-  const title = h("h2", { id: "media-title" }, "Media");
+  const title = h("h2", { id: "media-title" }, o.label ? ["Media in ", h("span", { class: "hash" }, "#"), o.label] : "Media");
   const grid = h("div", { class: "media-grid" });
   const status = h("p", { class: "media-status", role: "status" });
   const body = h("div", { class: "media-body" }, [grid, status]);
   const dialog = h("dialog", { class: "media", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "link", "aria-label": "Close", autofocus: true, on: { click: () => close(true) }, signal }, "×"),
+      h("button", {
+        type: "button",
+        class: "icon-button ic i-x",
+        "aria-label": "Close",
+        autofocus: true,
+        on: { click: () => close(true) },
+        signal,
+      }),
     ]),
     body,
   ]);

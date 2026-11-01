@@ -27,15 +27,38 @@
     padding: 0 10px 24px;
   }
 
-  .room-section li a {
+  /* Rows of 48px (DMs and collections too), 15px names, 22px counts; a 28px face or tile. */
+  .room-section li a,
+  .room-section li.dm a,
+  .room-section[data-section="collections"] li a {
     gap: 12px;
     height: 48px;
     padding: 0 12px;
+    font-size: 0.9375rem;
   }
 
-  .room-section li .avatar {
+  .room-section .badge {
+    min-width: 22px;
+    padding: 0 7px;
+    font-size: 0.75rem;
+    line-height: 22px;
+  }
+
+  .room-section li.dm .avatar,
+  .room-section[data-section="collections"] li a::before {
     width: 28px;
     height: 28px;
+    font-size: 0.6875rem;
+  }
+
+  .room-section[data-section="collections"] li a::before {
+    border-radius: 8px;
+  }
+
+  .room-section[data-section="collections"] li a > .ci {
+    width: 14px;
+    height: 14px;
+    margin: 0 7px 0 -33px;
   }
 
   .section-head .icon-button,
@@ -44,12 +67,17 @@
     height: 44px;
   }
 
+  .section-head {
+    padding: 10px 0 0;
+  }
+
   .section-head .icon-button {
     width: 44px;
   }
 
   /* A room: tighter sides, a 60px header with 44px buttons, a 32px avatar. */
   .room-header {
+    gap: 2px;
     min-height: 60px;
     padding: 0 6px;
   }
@@ -86,6 +114,19 @@
 
   .msg.to-me > .avatar {
     left: 8px;
+  }
+
+  /* Selecting, the card is set in by 8px here (selection.css). */
+  .messages.selecting .msg.to-me {
+    padding-left: calc(28px + 32px + 36px + 14px - 8px);
+  }
+
+  .msg.to-me > .select {
+    left: 20px;
+  }
+
+  .messages.selecting .msg.to-me > .avatar {
+    left: 52px;
   }
 
   /* The smaller avatar's middle is 26px left of the text (replies.css). */

@@ -48,8 +48,8 @@ test("a private room: only the people its creator adds see it; someone taken out
   const dialog = a.locator("dialog.access");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("radio", { name: /Private/ })).toBeChecked();
-  await expect(dialog.locator(".member")).toHaveText([new RegExp(`${ada.name}.*creator`)]);
-  await dialog.getByRole("button", { name: "+ Add people" }).click();
+  await expect(dialog.locator(".member")).toHaveText([new RegExp(`${ada.name}.*creator`, "i")]);
+  await dialog.getByRole("button", { name: "Add people" }).click();
   await dialog.getByLabel("Find someone to message").fill(`Bob ${tag}`);
   await dialog.locator("button.person", { hasText: bob.name }).click();
   await expect(dialog.locator(".member")).toHaveCount(2);
@@ -57,7 +57,7 @@ test("a private room: only the people its creator adds see it; someone taken out
   await dialog.getByLabel("Find someone to message").press("Escape");
   await expect(dialog.locator(".user-search")).toHaveCount(0);
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "+ Add people" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Add people" })).toBeFocused();
   expect(
     await new AxeBuilder({ page: a })
       .include("dialog.access")
@@ -218,7 +218,7 @@ test("only the people its creator chooses post; the others read and react, and g
   await headerAction(a, "Room access…");
   const dialog = a.locator("dialog.access");
   await dialog.getByRole("radio", { name: /Only people you choose/ }).check();
-  await expect(dialog.locator(".writers .member")).toHaveText([new RegExp(`${ada.name}.*creator`)]);
+  await expect(dialog.locator(".writers .member")).toHaveText([new RegExp(`${ada.name}.*creator`, "i")]);
   expect(
     await new AxeBuilder({ page: a })
       .include("dialog.access")
@@ -239,7 +239,7 @@ test("only the people its creator chooses post; the others read and react, and g
 
   // Chosen, he gets it back.
   await headerAction(a, "Room access…");
-  await dialog.locator(".writers").getByRole("button", { name: "+ Add people" }).click();
+  await dialog.locator(".writers").getByRole("button", { name: "Add people" }).click();
   await dialog.getByLabel("Find someone to message").fill(`Bob ${tag}`);
   await dialog.locator("button.person", { hasText: bob.name }).click();
   await dialog.getByRole("button", { name: "Save" }).click();

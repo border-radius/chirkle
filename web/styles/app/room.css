@@ -9,7 +9,7 @@
 .room-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 4px 12px;
   align-items: center;
   min-height: 64px;
   padding: 0 20px 0 28px;
@@ -72,19 +72,29 @@
   height: 12px;
 }
 
-/* A private room's members: overlapping faces and a count. */
+/* A private room's members: overlapping faces and a count, a line between them and the buttons. */
 .room-members {
+  position: relative;
   display: flex;
   gap: 8px;
   align-items: center;
   height: 36px;
-  margin-right: 8px;
+  margin-right: 13px;
   padding: 0 10px 0 6px;
   border: 0;
   border-radius: 18px;
   background: none;
   color: var(--muted);
   font-size: 0.8125rem;
+}
+
+.room-members::after {
+  content: "";
+  position: absolute;
+  right: -13px;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
 }
 
 .faces {

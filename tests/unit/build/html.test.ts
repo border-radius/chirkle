@@ -66,11 +66,14 @@ describe("staticImports", () => {
 });
 
 describe("viewerDefine", () => {
-  it("defines the viewer's, the media grid's and the collections' stylesheet URLs as string literals", () => {
-    expect(viewerDefine("assets/viewer-AB12.css", "assets/media-CD34.css", "assets/collections-EF56.css")).toEqual({
+  it("defines the viewer's, the media grid's, the collections' and the access dialog's stylesheet URLs as string literals", () => {
+    expect(
+      viewerDefine("assets/viewer-AB12.css", "assets/media-CD34.css", "assets/collections-EF56.css", "assets/access-GH78.css"),
+    ).toEqual({
       VIEWER_CSS: '"/assets/viewer-AB12.css"',
       MEDIA_CSS: '"/assets/media-CD34.css"',
       COLLECTIONS_CSS: '"/assets/collections-EF56.css"',
+      ACCESS_CSS: '"/assets/access-GH78.css"',
     });
   });
 });
