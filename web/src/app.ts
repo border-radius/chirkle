@@ -21,6 +21,7 @@ import { startSite } from "./site.ts";
 import { type AppState, createStore, initialState, type Store } from "./store.ts";
 import { createSync } from "./sync.ts";
 import { createUnread } from "./unread.ts";
+import { startUpdates } from "./update.ts";
 import { createCollectionView } from "./views/collection.ts";
 import { createHomeView } from "./views/home.ts";
 import { createLoginView } from "./views/login.ts";
@@ -288,6 +289,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
   window.addEventListener("storage", onStorage);
   const stopSite = startSite(api, store);
   const stopFavicon = startFavicon(store);
+  const stopUpdates = startUpdates(api, root);
   startSession();
   router.start();
 
@@ -309,6 +311,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       stopNotify();
       header.stop();
       stopFavicon();
+      stopUpdates();
       stopSite();
       offGone();
       router.stop();

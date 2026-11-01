@@ -587,7 +587,7 @@ while its first page loads.
 
 | Asset | Budget (gzipped) |
 |---|---|
-| `app.js` (including the PocketBase client) | **≤ 49.25 KB** (25 KB for the MVP; raised for §15–§17, §19, §22, §23, §24, video attachments, the QA pass 8 and 9 fixes, bigger attachments, audio attachments, §27, the room cache and its prefetching, opening at the first unread message, the QA pass 11 fixes, service messages, the room cache without waiting for the network, the QA pass 12 fixes, prefetching rooms not yet kept, the QA pass 13 fixes, thumbnail caching, the QA pass 14 fixes, Ctrl+Up/Down to pick the reply, link previews, the room access dialog fix, who can post, message search, message permalinks, the media grid, the QA pass 16 fixes, video posters in the room, the QA pass 17 fixes, media collections, Jump to, Appearance, the room in the tab title, the QA pass 19 fixes, live collection badges, the security audit fixes, the room kept as the page goes, the prefetch herd fix, the QA pass 23 fixes, live replies quoted by the room, the 2026-10-31 redesign, taps on touch screens that also have a mouse, see §13) |
+| `app.js` (including the PocketBase client) | **≤ 49.60 KB** (25 KB for the MVP; raised for §15–§17, §19, §22, §23, §24, video attachments, the QA pass 8 and 9 fixes, bigger attachments, audio attachments, §27, the room cache and its prefetching, opening at the first unread message, the QA pass 11 fixes, service messages, the room cache without waiting for the network, the QA pass 12 fixes, prefetching rooms not yet kept, the QA pass 13 fixes, thumbnail caching, the QA pass 14 fixes, Ctrl+Up/Down to pick the reply, link previews, the room access dialog fix, who can post, message search, message permalinks, the media grid, the QA pass 16 fixes, video posters in the room, the QA pass 17 fixes, media collections, Jump to, Appearance, the room in the tab title, the QA pass 19 fixes, live collection badges, the security audit fixes, the room kept as the page goes, the prefetch herd fix, the QA pass 23 fixes, live replies quoted by the room, the 2026-10-31 redesign, taps on touch screens that also have a mouse, the new version line (§27.4), see §13) |
 | `app.css` | **≤ 11.05 KB** (10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
 | `index.html` | ≤ 1.5 KB |
 | Image viewer (§17.7), loaded on first use | ≤ 4 KB script, ≤ 1.5 KB stylesheet |
@@ -1073,6 +1073,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (QA pass 23) | `app.js` raised from 47.40 KB to 47.55 KB and `app.css` from 7.10 KB to 7.15 KB (§7.7), the user's call (2026-10-30: "raise budget if needed"): the pass's fixes (initials without a label, a closed DM's banner, the clipped italic quote) took them to 47.52 KB and just over 7.10 KB. |
 | Bundle budget (live replies) | `app.js` raised from 47.55 KB to 47.70 KB (§7.7), the user's call (2026-10-30: "raise the budget to 47.70"): live events no longer carry a reply's quote, which the room fills in itself (§19.2, docs/PERF.md §2.3), 47.52 → 47.67 KB. |
 | Bundle budget (polish pass) | 2026-11-01, overnight polish pass against the redesign boards, the user away ("don't ask me"): `app.css` raised from 10.60 KB to 11.05 KB, the access dialog chunk from 3 KB to 3.05 KB, the collections chunk from 6.65 KB to 6.70 KB script and 1.5 KB to 1.95 KB stylesheet (§7.7). The access dialog's styles moved out of `app.css` into a stylesheet of its own (new `accessCss` budget, 1.5 KB) to keep the raise small. Confirmed by the user the same day ("raise budget"). |
+| Bundle budget (new version line) | `app.js` raised from 49.25 KB to 49.60 KB (§7.7), the user's call (2026-11-02): the line saying a new version is out (§27.4) took it from 49.19 KB to 49.56 KB. A lazy chunk was turned down: one loaded only when needed is gone from the server after the deploy it should report. |
 
 ### Decided (2026-10-24, linked instances)
 
@@ -2459,6 +2460,23 @@ and realtime reconnects when the network is back (§6). A room whose first load 
   the page, a page loaded offline still shows the app. A thumbnail is kept once and then served for another token of
   the same user (one the server refuses), not for another user's; logging out deletes the cache. Other specs run with service workers blocked
   (`playwright.config.ts`): the worker fetches hashed assets itself, out of reach of `page.route()`.
+
+### 27.4 A new version (2026-11-02)
+
+A tab left open runs the build it was loaded with until it is reloaded. When a deploy changed the app, a line at the
+top of the page (`.update-bar`, above the app bar and the sidebar, `role="status"`) says "A new version of the app is
+out." with a **Reload** button (`location.reload()`: pages are network first, §27.2, so it loads the new build).
+
+- **How it knows** (`web/src/update.ts`, started by `app.ts` for guests too): the page's script is
+  `/assets/app-HASH.js`; `GET /` (`cache: "no-store"`; not a navigation, so the worker leaves it to the network)
+  naming another one is a new build. A failed load or a page that names no script (offline, a restart, a proxy's
+  error page) says nothing. Dev builds are unhashed and the name never changes: no line.
+- **When:** after a realtime reconnect (a deploy restarts the server and drops every tab's connection), at a random
+  moment in the next 10 s so open tabs don't all ask at once; when the tab comes back into view (at most once a
+  minute); and every 30 minutes. Once shown, it stops checking. No server change: `index.html` is already served
+  `no-cache` (§5.6).
+- **Tests:** `tests/unit/update.test.ts` (reconnects, the half-hourly check, failed loads, the first connect);
+  `update.spec.ts` (Chromium): `/` answered with another script name shows the line, and Reload loads the page.
 
 ---
 
