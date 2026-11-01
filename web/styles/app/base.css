@@ -57,6 +57,8 @@ h2 {
 button,
 input,
 textarea {
+  /* Firefox's default 1px block margin on textareas made the composer a pixel off. */
+  margin: 0;
   font: inherit;
   color: inherit;
 }
