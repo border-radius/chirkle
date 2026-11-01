@@ -67,7 +67,7 @@ Each web feature, the Android screen or mechanism for it, and the API it uses. O
 | Direct messages, close and reopen (§16) | "New message" user search; DM rows in the list | `POST /api/chat/dms`, `GET /api/chat/users` |
 | Avatars, profile, unique name, password, log out (§15, §22.1–2) | Profile screen; photo picker, crop and resize on the device to §15.3's sizes | `users.update`, `POST /api/chat/password` |
 | Search in a room or DM (§29) | Search bar in the room's top bar, 50 results a page; picking one opens the history around it | `messages` with `text_key` filters |
-| Replies, jump to the original (§19) | Swipe right or menu → Reply; tap the quote to load around the original | `reply_to`, `expand` |
+| Replies, jump to the original (§19) | Long press → Reply; tap the quote to load around the original | `reply_to`, `expand` |
 | Clickable links (§7.6.3) | Same rules as `lib/links.ts` (http, https, www. only); open in Custom Tabs | client only |
 | Link previews (§28) | Favicon (`data:` URL) and title under the message | `messages.previews` |
 | Emoji picker and reactions (§20) | `emoji2-emojipicker` in the composer; reaction chips; quick reactions in the long-press menu | `POST /api/chat/reactions` |
@@ -649,11 +649,11 @@ current image works and none of this applies.
 ### 18.3 Polish
 
 Nunito (the rounded face of the web's font stack, one variable font, 277 KB) for all text; Material's shared X-axis
-transitions between screens; the brand mark (the launcher icon's bubble on the accent gradient) on Log in, the server
+transitions between screens; the brand mark (the launcher icon's bubble; the web's logo since §39) on Log in, the server
 choice and the room list when the site has no logo; vector room marks (#, lock, globe) instead of emoji; the other
 person's avatar or the room's mark in the forward and share pickers; the send button a filled accent circle;
 "Logging in…" / "Checking…" on buttons while busy; a password visibility toggle; "(edited)" inline after the text;
-an add-reaction chip after a message's reactions; swipe right to reply (with a haptic tick); the message being acted
+an add-reaction chip after a message's reactions; swipe right to reply (replaced by swipe back, §40); the message being acted
 on shown at the top of its action sheet, Delete in red; the other person's avatar in a DM's header; the room's picture over "Beginning of …"; images about to be sent as thumbnails in the composer; the "New" line fades out; icons in the + menu; New room focuses its name; emoji category tabs; an inline audio player with progress and
 times; the viewer's bars fade, with the author, time and file name, and a Download button; notifications tinted with
 the accent; the app's version at the end of the profile.
@@ -1013,7 +1013,7 @@ changelog named after its `versionCode`.
 
 Bump `versionCode` and `versionName` in `app/build.gradle.kts` (F-Droid reads them there), add the changelog, and tag
 the commit `android-v<versionName>`. F-Droid's update checker finds new tags (`UpdateCheckMode: Tags ^android-v`)
-and builds them on its own.
+and builds them on its own; the push also puts the signed APK on a GitHub Release (§28.6).
 
 ### 28.5 Submitting
 
@@ -1025,6 +1025,23 @@ build server lacks them, the recipe needs extra steps.
 
 Verified: the unsigned and the debug-signed release APKs build; the signed one's signing block holds only the v2
 signature and padding (no dependency block). Release APK 3.0 MB.
+
+### 28.6 APKs on GitHub Releases (2026-11-01)
+
+`.github/workflows/android-release.yml` builds the release APK signed with the release key and attaches
+`chirkle-<versionName>.apk` and its `.sha256` to the GitHub Release:
+
+- **Pushing a tag `android-v<versionName>`** (§28.4) creates the Release if there is none (its notes are
+  `fastlane/…/changelogs/<versionCode>.txt`, or GitHub's generated notes) and attaches the APK. The job fails when the
+  tag and `versionName` disagree.
+- **A Release published from the web** with another tag gets the APK of that tag too; one with a new `android-v`
+  tag is built by the tag push it makes, not twice.
+- **By hand**: Actions → Android release → Run workflow, with an existing tag (to rebuild or re-attach).
+
+It needs the secrets of the GitHub environment `release` (the job names it): `CHIRKLE_KEYSTORE_BASE64` (the keystore, `base64 -w0`), `CHIRKLE_KEYSTORE_PASSWORD`,
+`CHIRKLE_KEY_ALIAS` and, if it differs from the store's, `CHIRKLE_KEY_PASSWORD`. Without the keystore it fails
+rather than sign with the debug key, and it checks the APK's certificate isn't the debug one. Losing the key means
+the next APK can't update installed ones: keep a backup outside GitHub. Tests aren't repeated: CI runs on tag pushes.
 
 ## 29. Attachment shapes before they load (2026-10-28)
 
@@ -1084,7 +1101,7 @@ Two fixes of docs/QA.md "QA pass 23" are the app's too:
 - **Initials** leave out a word in brackets, as the web's (`initials()` in `Avatars.kt`): a stand-in "Ann (B)" is "A",
   not "A(" (QA BUG-176).
 - **A DM that takes no messages** (one of the two has `no_dms`, as a linked instance's people do once it is unpaired)
-  shows why instead of the composer, has no swipe to reply, and isn't a forward target (`Room.dmClosed()` in
+  shows why instead of the composer, has no Reply, and isn't a forward target (`Room.dmClosed()` in
   `Rooms.kt`, QA BUG-178). Tests: `HelpersTest`, `LinkedTest`.
 
 ## 33. Baseline Profile and Macrobenchmarks (2026-10-30)
@@ -1223,3 +1240,28 @@ An overnight pass over the redesign boards (`docs/design-frames/`), the web and 
 
 Tests: `UiFeaturesTest` hides a room through the row's long press; `UiCollectionsTest` taps collections in the grid.
 
+
+## 39. The web's logo as the app icon (2026-11-01)
+
+The launcher icon and the brand mark are the web's logo (`.brand::before` in `web/styles/app/shell.css`): a speech
+bubble, round but for its tighter bottom-left corner (radii 50 % 50 % 50 % 28 %), in the grape-to-pink gradient at
+135°. The white bubble with three dots on the accent gradient is gone.
+
+- **Launcher icon**: `ic_launcher_foreground` is the bubble, 56 dp inside the 66 dp safe zone, on
+  `ic_launcher_background`, the web sidebar's lavender (#F4F1FE). `ic_launcher_monochrome` (Android 13+ themed icons)
+  is the bubble's shape alone, so it has nothing to cut out any more.
+- **Brand mark** (`BrandMark`, on Log in, the server choice and the room list when the site has no logo): the same
+  bubble as a `RoundedCornerShape` filled with `Chirkle.colors.gradient`; `ChirkleIcons.Brand` was removed.
+- **F-Droid**: `fastlane/metadata/android/en-US/images/icon.png` re-rendered from the new layers (512 px).
+
+## 40. Swipe back instead of swipe to reply; the web's send arrow (2026-11-01)
+
+- **Swipe back**: dragging a room to the right no longer replies to the message under the finger; the whole room
+  follows the finger, and letting go past 30 % of the width (or flicking faster than 800 dp/s) goes back to the
+  rooms, like the top bar's Back; a shorter drag springs back. Off while selecting or searching (Back leaves those
+  first). Only sideways drags count, so the list scrolls as before. `Modifier.swipeBack` in `SwipeBack.kt`, on the room's
+  `Scaffold`. Reply stays in a message's long-press menu.
+- **Send button**: the web's arrow (`.i-send` in `icons.css`: a 2 px stroke with round ends) instead of Material's
+  paper plane; `ChirkleIcons.Send` is now a stroke drawing.
+
+Tests: `UiFeaturesTest` swipes a room a little (it stays, nothing is quoted) and then all the way (back to the rooms).

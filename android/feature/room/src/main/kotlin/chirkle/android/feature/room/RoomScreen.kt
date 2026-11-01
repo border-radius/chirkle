@@ -248,12 +248,6 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         reactions = { c.reactions(it) },
         name = { names[it] },
         progress = { progress[it] },
-        onSwipeReply = if (me == null || room == null || room.archived || !room.canPost(me.id) || room.dmClosed(me).isNotEmpty()) null else ({ m ->
-            if (c.repliable(m)) {
-                vm.reply(m)
-                focus.requestFocusSafely()
-            }
-        }),
         onAddReaction = if (me == null || room?.archived == true) null else ({ m -> if (!vm.selecting && c.reactable(m)) emojiFor = m }),
         // A forward's files are its original's (§21.3).
         onSave = if (me == null) null else ({ m, f -> saving = chirkle.android.data.model.SaveFrom.File(m.forwardOf.ifEmpty { m.id }, f) }),
@@ -262,6 +256,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     )
 
     Scaffold(
+        // Swiping the room to the right goes back to the rooms, unless a mode (selection, search) is open.
+        modifier = Modifier.swipeBack(enabled = !vm.selecting && !vm.searching, onBack = nav.back),
         topBar = {
             when {
                 vm.selecting -> TopAppBar(

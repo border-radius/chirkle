@@ -16,6 +16,9 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.geometry.Offset
 import chirkle.android.data.api.NewMessage
 import chirkle.android.data.lib.Pages
 import chirkle.android.data.lib.newId
@@ -92,6 +95,24 @@ class UiFeaturesTest {
         send()
         ui.until { a.api.page(Pages.latest(room.id)).any { it.text == "the answer" && it.replyTo.isNotEmpty() } }
         ui.waitFor(hasContentDescription("Quoting ${a.user.name}: the question", substring = true))
+    }
+
+    @Test fun `swiping the room to the right goes back to the rooms, a short swipe stays`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("sb-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "swipe me")) }
+        ui.signedIn(a)
+        openRoom(room.name)
+        ui.waitFor("swipe me")
+        val messages = compose.onNode(hasContentDescription("Messages"))
+        // A short, slow drag springs back: the room stays, and no longer replies to the message.
+        messages.performTouchInput { swipe(centerLeft + Offset(width * 0.1f, 0f), center + Offset(-width * 0.25f, 0f), durationMillis = 600) }
+        repeat(5) { ui.pump() }
+        compose.onNodeWithContentDescription("Back to rooms").assertExists()
+        assertTrue(compose.onAllNodes(hasText("Replying to", substring = true)).fetchSemanticsNodes().isEmpty())
+        messages.performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
+        ui.waitGone("swipe me")
+        ui.showRoom(room.name)
     }
 
     @Test fun `quotes and the reply bar follow the original's edits and delete (QA BUG-181, BUG-182)`() {

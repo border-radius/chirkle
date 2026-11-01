@@ -3,6 +3,8 @@ package chirkle.android.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
@@ -12,18 +14,13 @@ private fun icon(name: String, vararg paths: String): ImageVector = ImageVector.
 }.build()
 
 object ChirkleIcons {
-    /** The app's mark (the launcher icon's bubble, its three dots cut out), on a 48 × 48 grid. */
-    val Brand by lazy {
-        ImageVector.Builder("brand", 48.dp, 48.dp, 48f, 48f).apply {
-            addPath(
-                addPathNodes("M40,4H8C5.8,4 4,5.8 4,8v36l8,-8h28c2.2,0 4,-1.8 4,-4V8C44,5.8 42.2,4 40,4zM14,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0M24,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0M34,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"),
-                pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd,
-                fill = SolidColor(Color.Black),
-            )
+    val Back by lazy { icon("back", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z") }
+    /** The web's send arrow (.i-send in icons.css): a stroke drawing, not a fill. */
+    val Send by lazy {
+        ImageVector.Builder("send", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(addPathNodes("M5,12h14M13,6l6,6 -6,6"), stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
         }.build()
     }
-    val Back by lazy { icon("back", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z") }
-    val Send by lazy { icon("send", "M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z") }
     val Close by lazy { icon("close", "M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z") }
     val Search by lazy {
         icon("search", "M15.5,14h-0.79l-0.28,-0.27C15.41,12.59 16,11.11 16,9.5 16,5.91 13.09,3 9.5,3S3,5.91 3,9.5 5.91,16 9.5,16c1.61,0 3.09,-0.59 4.23,-1.57l0.27,0.28v0.79l5,4.99L20.49,19l-4.99,-5zM9.5,14C7.01,14 5,11.99 5,9.5S7.01,5 9.5,5 14,7.01 14,9.5 11.99,14 9.5,14z")

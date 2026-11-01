@@ -47,11 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
 import chirkle.android.data.lib.isEmptyForward
@@ -84,8 +80,6 @@ class RowActions(
     val progress: (String) -> Float?,
     /** The emoji picker for a reaction, or null where you can't react (a guest, an archived room). */
     val onAddReaction: ((Message) -> Unit)? = null,
-    /** Swiping a message to the right replies to it (ANDROID.md §3), or null where you can't reply. */
-    val onSwipeReply: ((Message) -> Unit)? = null,
     /** Save a file to your collections (§31.3), or null for a guest. */
     val onSave: ((Message, String) -> Unit)? = null,
     /** What the badge of a file from this collection says; null until known, or for one that is gone. */
@@ -93,9 +87,6 @@ class RowActions(
     /** Open a collection's page (a badge was tapped). */
     val onCollection: (String) -> Unit = {},
 )
-
-/** How far a message is dragged before letting go replies to it. */
-private val SWIPE_REPLY = 64.dp
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -113,60 +104,13 @@ fun MessageRow(
     val highlight by animateColorAsState(if (target) Chirkle.colors.highlight else Color.Transparent, tween(if (target) 150 else 1200), label = "target")
     val author = m.expand?.author ?: User(m.author, "Unknown")
     val accent = MaterialTheme.colorScheme.primary
-    val swipe = remember { androidx.compose.animation.core.Animatable(0f) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
-    val threshold = with(androidx.compose.ui.platform.LocalDensity.current) { SWIPE_REPLY.toPx() }
-    val canSwipe = actions.onSwipeReply != null && !selecting && m.status == null && !m.deleted
     // A reply to one of my messages, by someone else: a tinted card (the web's .to-me).
     val toMe = me != null && m.author != me && m.replyTo.isNotEmpty() && m.expand?.replyTo?.author == me
     Box {
-        if (canSwipe && swipe.value > 0f) {
-            Icon(
-                ChirkleIcons.Reply,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 16.dp)
-                    .size(24.dp)
-                    .graphicsLayer {
-                        val p = (swipe.value / threshold).coerceIn(0f, 1f)
-                        alpha = p
-                        scaleX = 0.6f + 0.4f * p
-                        scaleY = 0.6f + 0.4f * p
-                    },
-            )
-        }
         Row(
             Modifier
                 .fillMaxWidth()
-                .offset { androidx.compose.ui.unit.IntOffset(swipe.value.toInt(), 0) }
                 .then(if (toMe) Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp).clip(RoundedCornerShape(16.dp)).background(Chirkle.colors.own) else Modifier)
-                .then(
-                    if (!canSwipe) Modifier else Modifier.pointerInput(m.id) {
-                        var armed = false
-                        detectHorizontalDragGestures(
-                            onDragStart = { armed = false },
-                            onDragEnd = {
-                                if (swipe.value >= threshold) actions.onSwipeReply?.invoke(m)
-                                scope.launch { swipe.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = 0.7f)) }
-                            },
-                            onDragCancel = { scope.launch { swipe.animateTo(0f) } },
-                            onHorizontalDrag = { change, dx ->
-                                // Only to the right, harder to pull past the threshold.
-                                val now = swipe.value
-                                val next = (now + if (now > threshold) dx * 0.3f else dx).coerceIn(0f, threshold * 1.6f)
-                                if (next != now) change.consume()
-                                if (!armed && next >= threshold) {
-                                    armed = true
-                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                } else if (next < threshold) armed = false
-                                scope.launch { swipe.snapTo(next) }
-                            },
-                        )
-                    },
-                )
                 .background(if (selected) Chirkle.colors.tint else highlight)
                 .combinedClickable(
                     onClick = { actions.onTap(m) },

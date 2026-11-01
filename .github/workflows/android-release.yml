@@ -1,0 +1,95 @@
+name: Android release
+
+# Builds the app's release APK, signed with the release key (docs/ANDROID.md §28.2), and attaches it to the GitHub
+# Release (§28.6). Pushing a tag `android-v<versionName>` makes the Release if there is none; a Release published from
+# the web with any other tag gets the APK too. The tests ran already: CI runs on every push, tags included.
+on:
+  push:
+    tags: ["android-v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach the APK to (it must exist)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+
+jobs:
+  apk:
+    name: Build and attach the APK
+    # A Release published from the web for a new android-v tag also pushes that tag: the push builds it, not this.
+    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'android-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The signing secrets are the "release" environment's, not the repository's: only jobs that name it see them.
+    environment: release
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Read the version
+        run: |
+          code=$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' app/build.gradle.kts)
+          name=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          test -n "$code" && test -n "$name" || { echo "::error::versionCode/versionName not found in app/build.gradle.kts"; exit 1; }
+          # An android-v tag names the version it releases: a forgotten bump would ship the old version under a new tag.
+          if [[ "$TAG" == android-v* && "$TAG" != "android-v$name" ]]; then
+            echo "::error::Tag $TAG but versionName is $name: bump app/build.gradle.kts (ANDROID.md §28.4)"; exit 1
+          fi
+          echo "CODE=$code" >> "$GITHUB_ENV"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+
+      # Never the debug key: an APK signed with it could not be updated by one signed properly later.
+      - name: Write the release keystore
+        env:
+          KEYSTORE: ${{ secrets.CHIRKLE_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE" || { echo "::error::Secret CHIRKLE_KEYSTORE_BASE64 is not set (ANDROID.md §28.6)"; exit 1; }
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build the release APK
+        env:
+          ORG_GRADLE_PROJECT_chirkle.keystorePassword: ${{ secrets.CHIRKLE_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_chirkle.keyAlias: ${{ secrets.CHIRKLE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_chirkle.keyPassword: ${{ secrets.CHIRKLE_KEY_PASSWORD || secrets.CHIRKLE_KEYSTORE_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --max-workers=2 "-Pchirkle.keystore=$RUNNER_TEMP/release.jks"
+
+      - name: Check the signature
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
+          if grep -q "CN=Android Debug" "$RUNNER_TEMP/certs.txt"; then echo "::error::Signed with the debug key"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$apk" "$RUNNER_TEMP/out/chirkle-$NAME.apk"
+          (cd "$RUNNER_TEMP/out" && sha256sum "chirkle-$NAME.apk" > "chirkle-$NAME.apk.sha256")
+
+      - name: Attach to the Release
+        run: |
+          notes="../fastlane/metadata/android/en-US/changelogs/$CODE.txt"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            if [ -f "$notes" ]; then gh release create "$TAG" --verify-tag --title "Android $NAME" --notes-file "$notes"
+            else gh release create "$TAG" --verify-tag --title "Android $NAME" --generate-notes; fi
+          fi
+          gh release upload "$TAG" "$RUNNER_TEMP/out/chirkle-$NAME.apk" "$RUNNER_TEMP/out/chirkle-$NAME.apk.sha256" --clobber
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

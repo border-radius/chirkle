@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="30" android:translateY="30">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M40,4H8C5.8,4 4,5.8 4,8v36l8,-8h28c2.2,0 4,-1.8 4,-4V8C44,5.8 42.2,4 40,4z" />
-        <path android:fillColor="#FF5B3DF5" android:pathData="M14,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0M24,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0M34,18m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
-    </group>
+<!-- The web logo (.brand::before in shell.css): a speech bubble, round but for its tighter bottom-left corner
+     (border-radius 50% 50% 50% 28%), in the grape-to-pink gradient at 135deg. 56dp, inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M54,26A28,28 0,0 1,82,54A28,28 0,0 1,54,82L41.68,82A15.68,15.68 0,0 1,26,66.32L26,54A28,28 0,0 1,54,26Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="26" android:startY="26" android:endX="82" android:endY="82">
+                <item android:offset="0" android:color="#FF7A5AF8" />
+                <item android:offset="0.55" android:color="#FFA43FD0" />
+                <item android:offset="1" android:color="#FFD2389E" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
