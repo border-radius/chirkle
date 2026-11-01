@@ -172,7 +172,11 @@ test("an uploaded HTML file never runs on our origin (§17, XSS)", async ({ brow
   expect(disposition).toMatch(/^attachment/);
   expect(csp).toMatch(/sandbox/);
   const tab = await a.context().newPage();
-  await expect(tab.goto(href)).rejects.toThrow(/Download is starting/);
+  // Chromium and Firefox start a download; WebKit's goto resolves instead. Either way nothing of it may run.
+  await tab.goto(href).then(
+    () => {},
+    (e: Error) => expect(e.message).toMatch(/Download is starting/),
+  );
   expect(await tab.title()).not.toBe("pwned");
   expect(await a.evaluate(() => (window as { __pwned?: number }).__pwned)).toBeUndefined();
 });
@@ -302,8 +306,16 @@ test("the image viewer: loaded on first use, steps through the room's images, cl
   await expect(a.locator("dialog.viewer")).toHaveCount(0);
 });
 
-/** A short 320×180 video, recorded in the page (webm, or mp4 where that is what the browser records). */
+/**
+ * A short 320×180 video, recorded in the page (webm, or mp4 where that is what the browser records). Playwright's
+ * WebKit has no MediaRecorder: there ffmpeg makes an mp4, and without ffmpeg the test is skipped.
+ */
 async function recordedVideo(page: Page, base: string) {
+  if (await page.evaluate(() => typeof MediaRecorder === "undefined")) {
+    const mp4 = makeMp4(320, 180);
+    test.skip(!mp4, "no MediaRecorder and no ffmpeg here");
+    return { name: `${base}.mp4`, mimeType: "video/mp4", buffer: mp4! };
+  }
   const { type, bytes } = await page.evaluate(async () => {
     const canvas = Object.assign(document.createElement("canvas"), { width: 320, height: 180 });
     const ctx = canvas.getContext("2d")!;

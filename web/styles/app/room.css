@@ -226,7 +226,7 @@
 }
 
 @media (hover: hover) {
-  .msg:hover {
+  .messages:not(.by-touch) .msg:hover {
     background: color-mix(in srgb, var(--fill) 7%, transparent);
   }
 }

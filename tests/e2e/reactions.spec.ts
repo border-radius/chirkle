@@ -11,6 +11,8 @@ async function seriousViolations(page: Page) {
 
 for (const colorScheme of ["light", "dark"] as const) {
   test(`reactions and emoji (§20), ${colorScheme}: emoji in a message; reactions show live and survive a reload`, async ({ browser }) => {
+    // Two axe scans, two users and a reload: about 30 s in Firefox under a full run's load.
+    test.slow();
     const ada = await apiUser("Ada");
     const bob = await apiUser("Bob");
     const room = await apiRoom(ada);

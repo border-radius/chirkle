@@ -130,7 +130,29 @@ const opened = new Set<BrowserContext>();
  * the test, and so did they: by the end of a run each worker had ~20 earlier users online, all fetching a busy room's
  * page at once on each of its messages, which made later specs time out (QA pass 14). Specs import `test` from here.
  */
-export const test = base.extend<{ closeOpened: undefined }>({
+export const test = base.extend<{ closeOpened: undefined }, { firefoxBlankFirst: undefined }>({
+  /**
+   * Playwright's Firefox misses "load" on a new page's first goto now and then (1 in 5 here, any page, even a bare
+   * one), and the test hangs until its timeout. Going to about:blank first doesn't. Every new page, the `page`
+   * fixture's too, starts there.
+   */
+  firefoxBlankFirst: [
+    async ({ browser, browserName }, use) => {
+      if (browserName === "firefox") {
+        const ctx = await browser.newContext();
+        const proto = Object.getPrototypeOf(ctx) as BrowserContext;
+        await ctx.close();
+        const newPage = proto.newPage;
+        proto.newPage = async function (this: BrowserContext) {
+          const page = await newPage.call(this);
+          await page.goto("about:blank");
+          return page;
+        };
+      }
+      await use(undefined);
+    },
+    { scope: "worker", auto: true },
+  ],
   closeOpened: [
     // biome-ignore lint/correctness/noEmptyPattern: Playwright reads a fixture's dependencies from this pattern
     async ({}, use) => {

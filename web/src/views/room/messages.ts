@@ -159,8 +159,11 @@ export function createMessageList(opts: {
 
   // Touch screens have no hover: tapping a message shows its actions (like hovering it does), tapping it again or
   // anywhere else hides them. Taps on its links and buttons don't count, but pressing an action hides them. A message
-  // without actions (deleted, read-only room…) doesn't light up.
+  // without actions (deleted, read-only room…) doesn't light up. A tap is a click right after a touchend: a touch
+  // screen with a mouse too (a laptop's, desktop Safari's) matches (hover:hover), and its taps still have no hover.
   let touched: string | null = null;
+  let touchEnded = -Infinity;
+  document.addEventListener("touchend", (e) => (touchEnded = e.timeStamp), { capture: true, passive: true, signal });
   const touch = (li: HTMLElement | null) => {
     if (touched) el.querySelector(`li.msg[data-id="${CSS.escape(touched)}"]`)?.classList.remove("touched");
     touched = li?.dataset.id ?? null;
@@ -172,7 +175,9 @@ export function createMessageList(opts: {
   document.addEventListener(
     "click",
     (e) => {
-      if ((!touched && !matchMedia("(hover:none)").matches) || opts.state().selected) return;
+      const tap = e.timeStamp - touchEnded < 1000;
+      el.classList.toggle("by-touch", tap);
+      if ((!touched && !tap && !matchMedia("(hover:none)").matches) || opts.state().selected) return;
       const t = e.target as Element;
       const li = t.closest<HTMLElement>("li.msg");
       if (!li || !el.contains(li) || t.closest(".actions button")) return touch(null);

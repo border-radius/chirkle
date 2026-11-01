@@ -126,7 +126,8 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
   save?.append(h("span", { class: "ci", "aria-hidden": "true" }));
   const prev = button("viewer-prev", "Previous image", "‹", () => void go(-1));
   const next = button("viewer-next", "Next image", "›", () => void go(1));
-  const img = h("img", { alt: "", decoding: "async" });
+  // Not draggable: Firefox (which has no -webkit-user-drag) would drag the image away instead of swiping.
+  const img = h("img", { alt: "", decoding: "async", draggable: "false" });
   const video = h("video", { controls: true, playsinline: true, preload: "auto", hidden: true });
   const failureText = h("span");
   const failure = h("p", { class: "viewer-error", hidden: true }, [

@@ -3,7 +3,9 @@ import { atPath, test } from "./fixtures.ts";
 
 test("app boots to the guest home (Open Air rooms) without console errors; Log in is one click away", async ({ page }) => {
   const errors: string[] = [];
-  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  // WebKit doesn't know the viewport's interactive-widget (the keyboard resizes the page elsewhere), and says so.
+  const ignored = /^Viewport argument key "interactive-widget" not recognized/;
+  page.on("console", (m) => m.type() === "error" && !ignored.test(m.text()) && errors.push(m.text()));
   page.on("pageerror", (e) => errors.push(e.message));
 
   await page.goto("/");

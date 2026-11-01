@@ -360,7 +360,10 @@ test("collections: the owner uploads images straight into one, with the button, 
     (png) => {
       const dt = new DataTransfer();
       dt.items.add(new File([new Uint8Array(png)], "image.png", { type: "image/png" }));
-      document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      // Not the constructor's clipboardData: Firefox copies it into the event without its files.
+      const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", { value: dt });
+      document.body.dispatchEvent(paste);
     },
     [...PNG],
   );

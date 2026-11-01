@@ -86,9 +86,10 @@
 
 /* Touch screens have no hover: a tapped message gets .touched instead (and the background hover gives).
    Not :focus-within: focus stays on a clicked button (☺+, a reaction…), which would keep this message's buttons up
-   next to those of the one the mouse moved on to; keyboard focus shows them below (:focus-visible). */
+   next to those of the one the mouse moved on to; keyboard focus shows them below (:focus-visible). A tap leaves the
+   message under :hover, so after a tap (.by-touch, until a click) hover shows nothing. */
 @media (hover: hover) {
-  .msg:hover .actions {
+  .messages:not(.by-touch) .msg:hover .actions {
     opacity: 1;
     pointer-events: auto;
   }
