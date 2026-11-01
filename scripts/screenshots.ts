@@ -230,6 +230,40 @@ try {
     })),
   ]);
 
+  // ---- Alex's collections, the photo saved to one so the sidebar shows a count
+  const json = { "content-type": "application/json" };
+  const auth = await fetch(`${pb.url}/api/collections/users/auth-with-password`, {
+    method: "POST",
+    headers: json,
+    body: JSON.stringify({ identity: "alex@example.com", password: PASSWORD }),
+  });
+  const asAlex = { ...json, authorization: ((await auth.json()) as { token: string }).token };
+  const shot = await fetch(`${pb.url}/api/collections/messages/records?perPage=1&filter=${encodeURIComponent("files ~ 'dusk'")}`, {
+    headers: asAlex,
+  });
+  const [withPhoto] = ((await shot.json()) as { items: { id: string; files: string[] }[] }).items;
+  for (const [name, isPublic] of [
+    ["Moodboard", false],
+    ["Screenshots", true],
+    ["Brand assets", true],
+  ] as const) {
+    const res = await fetch(`${pb.url}/api/collections/collections/records`, {
+      method: "POST",
+      headers: asAlex,
+      body: JSON.stringify({ owner: alex, name, public: isPublic }),
+    });
+    const { id } = (await res.json()) as { id: string };
+    if (!res.ok) throw new Error(`collection ${name}: ${res.status} ${JSON.stringify({ id })}`);
+    if (name !== "Moodboard") continue;
+    if (!withPhoto) throw new Error("no message with the photo to save");
+    const saved = await fetch(`${pb.url}/api/chat/items`, {
+      method: "POST",
+      headers: asAlex,
+      body: JSON.stringify({ collection: id, message: withPhoto.id, file: withPhoto.files[0] }),
+    });
+    if (!saved.ok) throw new Error(`saving the photo: ${saved.status} ${await saved.text()}`);
+  }
+
   // ---- photographs
   await mkdir(OUT, { recursive: true });
   const design = (await as("alex").listRooms()).find((r) => r.name === "design")!;
