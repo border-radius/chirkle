@@ -69,7 +69,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
     h("section", { class: "collection", "aria-labelledby": "coll-title" }, [
       // The tile's tint is the sidebar row's (t0..t3, views/rooms.ts).
       h("header", { class: `coll-head t${id.charCodeAt(0) % 4}` }, [
-        h("a", { href: "/", class: "back", "aria-label": "Back to rooms" }, "← Rooms"),
+        h("a", { href: "/", class: "back ic i-back", "aria-label": "Back to rooms" }),
         heading,
         metaLine,
         actions,

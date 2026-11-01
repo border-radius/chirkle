@@ -32,7 +32,7 @@
 .emoji-scroll {
   flex: 1;
   padding: 0 0.5rem 0.5rem;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 
 .emoji-heading {
@@ -47,7 +47,8 @@
 
 .emoji-grid {
   display: grid;
-  grid-template-columns: repeat(8, 2.4rem);
+  /* Shares out what a classic (space-taking) scrollbar leaves, rather than overflowing sideways under it. */
+  grid-template-columns: repeat(8, 1fr);
 }
 
 .emoji-grid button {
@@ -69,9 +70,5 @@
     left: 8px;
     width: auto;
     height: min(20rem, 45vh);
-  }
-
-  .emoji-grid {
-    grid-template-columns: repeat(8, 1fr);
   }
 }

@@ -4,6 +4,7 @@
 
 .collection {
   padding-bottom: 2rem;
+  container-type: inline-size;
 }
 
 /* The header: the icon on a tile, the name over whose it is, the buttons on the right; a line under it. */
@@ -56,7 +57,6 @@
 
 .coll-actions {
   grid-area: 1 / 3 / 3;
-  justify-content: flex-end;
 }
 
 .coll-head .coll-notice {
@@ -68,7 +68,15 @@
   display: none;
 }
 
-/* "← Rooms": narrow screens only (app.css hides .back on wide ones), where the header is a column. */
+/* A narrow pane (a small window, or zoomed in): the buttons go under the name rather than squeezing it to a word a line. */
+@container (width < 40rem) {
+  .coll-actions {
+    grid-area: 3 / 1 / 4 / -1;
+    margin-top: 8px;
+  }
+}
+
+/* The back arrow (as a room's, §7.8): narrow screens only (app.css hides .back on wide ones), where the header is a column. */
 @media (max-width: 720px) {
   .coll-head {
     display: block;
@@ -84,12 +92,10 @@
   }
 
   .coll-head .back {
-    display: inline-block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
   }
 
   .coll-actions {
-    justify-content: flex-start;
     margin-top: 10px;
   }
 }

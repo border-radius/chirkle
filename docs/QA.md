@@ -2209,3 +2209,30 @@ spacing and styling.
 - **Harness note:** e2e run without `FONTCONFIG_FILE` fails every login (the browser draws no text and keeps no input
   values); see the dev-container notes.
 
+
+# QA pass 26 — 150% browser zoom
+
+2026-11-01, user: "test webapp with 150% zoom in browser. is everything works and looks properly?" Browser zoom shrinks
+the CSS viewport and raises the pixel ratio, so the built app was driven in Chromium at the viewports 150% leaves on
+common screens: 1280×640 (1920×1080 window), 960×540 (1440×900), 911×452 (1366×768), 853×400 at ratio 2.25 (a
+1080p laptop already at 150% system scaling) and 683×450 (a small window: the phone layout, with a mouse). Light and
+dark; the room, message toolbar, edit, delete, reply, forward, selection, reactions and the emoji picker, the room
+menu, Room access, Jump to, search, the media grid and viewer, collections, Hidden & archived, DMs, Settings, login and
+the guest view. Nothing ran off screen; tall dialogs (Room access, media, forward) scroll inside their head and foot.
+Note for the harness: a bare headless shell reports `hover: none`, so the hover toolbar never shows; start it with
+Playwright's `--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4`.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-197 | Low | Editing (web) | Editing a message that wraps opened a one-line edit box with the rest scrolled out of sight | Fixed |
+| BUG-198 | Low | Emoji picker (web) | With space-taking (classic) scrollbars the picker scrolled sideways by a pixel and showed a horizontal scrollbar | Fixed |
+| BUG-199 | Low | Collections (web) | In a pane under ~640px the header's buttons squeezed the name to "Moodb/oard" and the line under it to three lines | Fixed |
+| BUG-200 | Low | Collections (web) | On a phone "← Rooms" broke over two lines (it took the room header's 44px icon-button width) | Fixed |
+
+**BUG-197:** the box got `rows` from its newlines only; it is now sized with `fitRows` (wrapped lines too) when it
+opens and when a redraw replaces it (`views/room/messages.ts`). **BUG-198:** the grid's columns are `1fr` (they share
+what the scrollbar leaves) and the scroller hides sideways overflow. **BUG-199:** the collection page is a size
+container; below 40rem the buttons take a row of their own under the tile and name. **BUG-200:** the back link is the
+same arrow icon as a room's and Settings' (DESIGN.md §31 updated). `collCss` 1.94/1.95 KB after dropping two
+`justify-content` rules that never applied. Not a bug: a private collection tile's first thumbnail request is a 404 and
+retries with a fresh file token by design.

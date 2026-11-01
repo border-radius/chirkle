@@ -616,6 +616,7 @@ export function createMessageList(opts: {
     if (anchor) restoreAnchor(el, anchor);
     if (typing && caret && !typing.isConnected && editing && !focusAfter) {
       const next = el.querySelector<HTMLTextAreaElement>(`${byId(editing)} textarea.edit-input`);
+      if (next) fitRows(next);
       next?.focus();
       next?.setSelectionRange(...caret);
     }
@@ -631,6 +632,8 @@ export function createMessageList(opts: {
       const target = find(focusAfter.id, focusAfter.selector);
       target?.focus();
       if (focusAfter.caretToEnd && target instanceof HTMLTextAreaElement) {
+        // rowsFor() counts only newlines: a long line wrapped in a narrow window (or zoomed in) needs its wrapped rows.
+        fitRows(target);
         target.setSelectionRange(target.value.length, target.value.length);
         // The whole message, its "Enter to save" line too: focus only scrolls the box into view (QA BUG-187).
         target.closest("li")?.scrollIntoView?.({ block: "nearest" });
