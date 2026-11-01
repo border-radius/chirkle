@@ -46,7 +46,7 @@ describe("a new version (§27.4)", () => {
     const bar = root.firstElementChild!;
     expect(bar.className).toBe("update-bar");
     expect(bar.getAttribute("role")).toBe("status");
-    expect(bar.querySelector("button")?.textContent).toBe("Reload");
+    expect(bar.querySelector("a")?.textContent).toBe("Reload");
 
     // Shown once: no more checks.
     reconnect(true);

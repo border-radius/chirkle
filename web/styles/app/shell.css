@@ -129,17 +129,10 @@ html {
 
 /* A new version is out (§27.4): one line above everything, the page shrinks under it. */
 .update-bar {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  justify-content: center;
   padding: 6px 16px;
+  text-align: center;
   background: var(--tint);
   font-size: 0.875rem;
-}
-
-.update-bar button {
-  padding: 4px 12px;
 }
 
 .app-main {

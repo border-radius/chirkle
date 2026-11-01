@@ -1,4 +1,4 @@
-// A new version (§27.4): when a deploy changed the app, a line above the app says so, with a button that reloads the page.
+// A new version (§27.4): when a deploy changed the app, a line above the app says so, with a link that reloads the page.
 // The page names its build's script (/assets/app-HASH.js); a newer index.html names another one. It is checked after
 // realtime reconnects (a deploy restarts the server), when the tab comes back into view, and every half hour.
 
@@ -35,8 +35,21 @@ export function startUpdates(
     if (next && next !== current && !shown()) {
       root.prepend(
         h("div", { class: "update-bar", role: "status" }, [
-          "A new version of the app is out.",
-          h("button", { type: "button", class: "primary", on: { click: () => location.reload() } }, "Reload"),
+          "A new version of the app is out. ",
+          // The page itself, loaded again: the router would show it in place (and middle-click opens it fresh anyway).
+          h(
+            "a",
+            {
+              href: location.href,
+              on: {
+                click: (e) => {
+                  e.preventDefault();
+                  location.reload();
+                },
+              },
+            },
+            "Reload",
+          ),
         ]),
       );
     }

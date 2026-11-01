@@ -2465,7 +2465,7 @@ and realtime reconnects when the network is back (§6). A room whose first load 
 
 A tab left open runs the build it was loaded with until it is reloaded. When a deploy changed the app, a line at the
 top of the page (`.update-bar`, above the app bar and the sidebar, `role="status"`) says "A new version of the app is
-out." with a **Reload** button (`location.reload()`: pages are network first, §27.2, so it loads the new build).
+out." and a **Reload** link (`location.reload()`: pages are network first, §27.2, so it loads the new build).
 
 - **How it knows** (`web/src/update.ts`, started by `app.ts` for guests too): the page's script is
   `/assets/app-HASH.js`; `GET /` (`cache: "no-store"`; not a navigation, so the worker leaves it to the network)

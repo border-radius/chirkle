@@ -19,7 +19,7 @@ test("a new version (§27.4): a line says so when index.html names another build
   await expect(bar).toContainText("A new version of the app is out.");
   await expect(bar).toHaveAttribute("role", "status");
   await page.screenshot({ path: test.info().outputPath("update-bar.png") });
-  await bar.getByRole("button", { name: "Reload" }).click();
+  await bar.getByRole("link", { name: "Reload" }).click();
   await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
   await expect(page.locator(".update-bar")).toHaveCount(0);
 });
