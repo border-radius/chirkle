@@ -1,0 +1,1 @@
+First release: rooms, DMs, replies, reactions, attachments, collections, search and notifications without Google services. New logo; swipe a room right to go back to the rooms.
