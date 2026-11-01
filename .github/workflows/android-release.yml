@@ -65,6 +65,25 @@ jobs:
           test -n "$KEYSTORE" || { echo "::error::Secret CHIRKLE_KEYSTORE_BASE64 is not set (ANDROID.md §28.6)"; exit 1; }
           echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
 
+      # Gradle only says "Failed to read key"; this tells which secret is wrong, without printing any of them.
+      - name: Check the keystore secrets
+        env:
+          STORE_PW: ${{ secrets.CHIRKLE_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.CHIRKLE_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.CHIRKLE_KEY_PASSWORD }}
+        run: |
+          # A PKCS12 store (keytool's default) has one password: a different key password fails to sign.
+          if [ -n "$KEY_PW" ] && [ "$KEY_PW" != "$STORE_PW" ]; then echo "::warning::CHIRKLE_KEY_PASSWORD differs from CHIRKLE_KEYSTORE_PASSWORD; for this keystore delete it"; fi
+          ks="$RUNNER_TEMP/release.jks"
+          test -n "$STORE_PW" || { echo "::error::Secret CHIRKLE_KEYSTORE_PASSWORD is not set"; exit 1; }
+          test -n "$ALIAS" || { echo "::error::Secret CHIRKLE_KEY_ALIAS is not set"; exit 1; }
+          case "$STORE_PW" in *=*) echo "::warning::CHIRKLE_KEYSTORE_PASSWORD contains '=': paste only the value, not NAME=value";; esac
+          keytool -list -keystore "$ks" -storepass:env STORE_PW > /dev/null 2>&1 \
+            || { echo "::error::CHIRKLE_KEYSTORE_PASSWORD does not open the keystore in CHIRKLE_KEYSTORE_BASE64 (wrong password, or the base64 was cut short)"; exit 1; }
+          keytool -list -keystore "$ks" -storepass:env STORE_PW -alias "$ALIAS" > /dev/null 2>&1 \
+            || { echo "::error::No key with alias CHIRKLE_KEY_ALIAS in the keystore (it is: $(keytool -list -keystore "$ks" -storepass:env STORE_PW | sed -n 's/^\([^,]*\),.*PrivateKeyEntry.*/\1/p' | head -1))"; exit 1; }
+          echo "Keystore, password and alias match."
+
       - name: Build the release APK
         env:
           ORG_GRADLE_PROJECT_chirkle.keystorePassword: ${{ secrets.CHIRKLE_KEYSTORE_PASSWORD }}
