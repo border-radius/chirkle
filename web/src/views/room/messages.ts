@@ -159,11 +159,14 @@ export function createMessageList(opts: {
 
   // Touch screens have no hover: tapping a message shows its actions (like hovering it does), tapping it again or
   // anywhere else hides them. Taps on its links and buttons don't count, but pressing an action hides them. A message
-  // without actions (deleted, read-only room…) doesn't light up. A tap is a click right after a touchend: a touch
-  // screen with a mouse too (a laptop's, desktop Safari's) matches (hover:hover), and its taps still have no hover.
+  // without actions (deleted, read-only room…) doesn't light up. A tap is a click right after a touch: a touch screen
+  // with a mouse too (a laptop's, desktop Safari's) matches (hover:hover), and its taps still have no hover. Timed by
+  // performance.now(): WebKit's synthesized touches have their own timeStamp clock.
   let touched: string | null = null;
-  let touchEnded = -Infinity;
-  document.addEventListener("touchend", (e) => (touchEnded = e.timeStamp), { capture: true, passive: true, signal });
+  let touchedAt = -Infinity;
+  const touchNow = () => (touchedAt = performance.now());
+  document.addEventListener("touchend", touchNow, { capture: true, passive: true, signal });
+  document.addEventListener("pointerdown", (e) => e.pointerType === "touch" && touchNow(), { capture: true, signal });
   const touch = (li: HTMLElement | null) => {
     if (touched) el.querySelector(`li.msg[data-id="${CSS.escape(touched)}"]`)?.classList.remove("touched");
     touched = li?.dataset.id ?? null;
@@ -175,7 +178,7 @@ export function createMessageList(opts: {
   document.addEventListener(
     "click",
     (e) => {
-      const tap = e.timeStamp - touchEnded < 1000;
+      const tap = performance.now() - touchedAt < 1000;
       el.classList.toggle("by-touch", tap);
       if ((!touched && !tap && !matchMedia("(hover:none)").matches) || opts.state().selected) return;
       const t = e.target as Element;
