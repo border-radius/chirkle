@@ -86,10 +86,20 @@ jobs:
 
       - name: Build the release APK
         env:
-          ORG_GRADLE_PROJECT_chirkle.keystorePassword: ${{ secrets.CHIRKLE_KEYSTORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_chirkle.keyAlias: ${{ secrets.CHIRKLE_KEY_ALIAS }}
-          ORG_GRADLE_PROJECT_chirkle.keyPassword: ${{ secrets.CHIRKLE_KEY_PASSWORD || secrets.CHIRKLE_KEYSTORE_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --max-workers=2 "-Pchirkle.keystore=$RUNNER_TEMP/release.jks"
+          STORE_PW: ${{ secrets.CHIRKLE_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.CHIRKLE_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.CHIRKLE_KEY_PASSWORD || secrets.CHIRKLE_KEYSTORE_PASSWORD }}
+        # The properties as -P flags (the log masks secrets); Gradle's own error becomes an annotation, which the
+        # run's page shows to anyone, unlike the log.
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease --max-workers=2 \
+            "-Pchirkle.keystore=$RUNNER_TEMP/release.jks" "-Pchirkle.keystorePassword=$STORE_PW" \
+            "-Pchirkle.keyAlias=$ALIAS" "-Pchirkle.keyPassword=$KEY_PW" 2>&1 | tee "$RUNNER_TEMP/gradle.log" || {
+            why=$(sed -n '/What went wrong/,/Try:/p' "$RUNNER_TEMP/gradle.log" | grep -v 'What went wrong\|Try:\|^$' | head -15 | tr '\n' ' ')
+            echo "::error title=Gradle::${why:-$(tail -5 "$RUNNER_TEMP/gradle.log" | tr '\n' ' ')}"
+            exit 1
+          }
 
       - name: Check the signature
         run: |
