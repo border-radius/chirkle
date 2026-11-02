@@ -343,7 +343,7 @@ describe("rooms view (§7.1)", () => {
       expect(row(b)).toBe(rowB);
     });
 
-    it("no badge for the room you are in, or for hidden and archived rooms", async () => {
+    it("no badge for hidden and archived rooms; the room you are in keeps its badge while unread is left (2026-11-02)", async () => {
       const active = await room();
       const hidden = await room();
       const archived = await room();
@@ -352,7 +352,8 @@ describe("rooms view (§7.1)", () => {
       store.set({ activeRoomId: active.id });
       await mount();
       store.set({ unread: new Map([active, hidden, archived].map((r) => [r.id, 2])) });
-      expect([active, hidden, archived].map(badge)).toEqual([null, null, null]);
+      expect(badge(active)!.textContent).toBe("2 unread");
+      expect([hidden, archived].map(badge)).toEqual([null, null]);
     });
 
     it("a message from someone else shows up live; DMs get a badge too", async () => {

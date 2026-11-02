@@ -1265,3 +1265,15 @@ bubble, round but for its tighter bottom-left corner (radii 50 % 50 % 50 % 28 %)
   paper plane; `ChirkleIcons.Send` is now a stroke drawing.
 
 Tests: `UiFeaturesTest` swipes a room a little (it stays, nothing is quoted) and then all the way (back to the rooms).
+
+## 41. The open room keeps its unread badge (2026-11-02)
+
+The web fix ported (DESIGN.md §18.3, §18.4): a room opened at its first unread message, or scrolled up, kept no badge
+and dropped out of the unread rooms at the top of the list although messages below the screen were still unread.
+`Unread` (`Sync.kt`) now only leaves out the room whose reader last said `caughtUp` (`following`): from fetched
+counts, from live +1s and from `room_reads` refetches. Otherwise the open room keeps the server's count, refetched
+after each read that goes in, so it comes down as you scroll. `unreadBadge()` no longer takes the active room; the
+launcher badge (`unreadTotal`) counts what is left in the open room too.
+
+Tests: `ServicesTest` reads an open room partway (the count comes down to what is left, a new message while scrolled
+up counts, the bottom clears it); `RoomSectionsTest`: the open room with unread messages stays first.

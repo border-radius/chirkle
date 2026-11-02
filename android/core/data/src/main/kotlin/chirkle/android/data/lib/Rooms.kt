@@ -111,12 +111,15 @@ fun roomSections(rooms: Collection<Room>, hidden: Set<String>, me: String?, acti
         }
     }
     // Rooms and DMs with unread messages first, each group in its usual order.
-    val unreadFirst = compareBy<Room> { unreadBadge(it, unread, hidden, activeRoomId) == 0 }
+    val unreadFirst = compareBy<Room> { unreadBadge(it, unread, hidden) == 0 }
     return RoomSections(open.sortedWith(unreadFirst.then(byName)), dms.sortedWith(unreadFirst.then(byActivity)), hid.sortedWith(byName), archived.sortedWith(byName))
 }
 
-/** The badge for a room (§18.4): none for the room you are in, and none for hidden or archived rooms (§13). */
-fun unreadBadge(room: Room, unread: Map<String, Int>, hidden: Set<String>, activeRoomId: String?): Int {
-    if (room.id == activeRoomId || room.archived || room.id in hidden) return 0
+/**
+ * The badge for a room (§18.4): none for hidden or archived rooms (§13). The room you are in keeps its badge (and its
+ * place among the unread) until you have scrolled down to its newest messages (2026-11-02).
+ */
+fun unreadBadge(room: Room, unread: Map<String, Int>, hidden: Set<String>): Int {
+    if (room.archived || room.id in hidden) return 0
     return unread[room.id] ?: 0
 }

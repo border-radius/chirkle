@@ -41,7 +41,7 @@ describe("favicon unread badge (§22.4)", () => {
       activeRoomId: "b",
     };
     s = { ...s, ...markHidden("d", "row")(s) };
-    expect(totalUnread(s)).toBe(2);
+    expect(totalUnread(s)).toBe(5); // the open room's count is what is left unread in it (2026-11-02)
     expect(totalUnread({ ...s, away: true })).toBe(5);
     expect(totalUnread({ ...s, away: true, activeRoomId: "d" })).toBe(5); // hidden stays silent, open or not
   });
@@ -71,15 +71,10 @@ describe("favicon unread badge (§22.4)", () => {
     expect(document.head.querySelectorAll('link[rel="icon"]')).toHaveLength(1);
     store.set(clearUnread("a"));
     store.set(bumpUnread("a"));
-    store.set({ activeRoomId: "b" }); // opening a room: its messages are being read, and its name is in the title
-    expect(document.title).toBe("(1) #b – Chirkle");
+    store.set({ activeRoomId: "b" }); // opening a room: its name is in the title; its count goes as it is read
+    expect(document.title).toBe("(3) #b – Chirkle");
     store.set(bumpUnread("b"));
-    expect(document.title).toBe("(1) #b – Chirkle");
-    // The tab away: nobody is reading the open room, so its messages count too.
-    store.set({ away: true });
     expect(document.title).toBe("(4) #b – Chirkle");
-    store.set({ away: false });
-    expect(document.title).toBe("(1) #b – Chirkle");
     store.set(clearUnread("b"));
     store.set(clearUnread("a"));
     expect(icon().href).toBe(faviconUrl(""));

@@ -98,6 +98,24 @@ test("§18.3: opening a room reads only what is on screen; scrolling down reads 
   const list = b.locator("ol.messages");
   await expect(list.locator("li.msg", { hasText: /unread 1\b/ })).toBeInViewport();
   await expect(list.locator("li.msg", { hasText: "unread 25" })).not.toBeInViewport();
+  // 2026-11-02: open, it keeps its badge and its place at the top while messages below are unread, the badge coming
+  // down to what is left once the read is in.
+  const badgeOf = (r: typeof row) => async () =>
+    Number.parseInt(
+      (await r
+        .locator(".badge")
+        .textContent({ timeout: 1_000 })
+        .catch(() => "0")) ?? "0",
+      10,
+    );
+  await expect.poll(badgeOf(row), { timeout: 3_000 }).toBeLessThan(25);
+  expect(await badgeOf(row)()).toBeGreaterThan(0);
+  // Among the unread rooms at the top (the shared server has others): every row above it has a badge too.
+  expect(
+    await row.evaluate((li) =>
+      [...li.parentElement!.children].slice(0, [...li.parentElement!.children].indexOf(li)).every((x) => x.querySelector(".badge")),
+    ),
+  ).toBe(true);
   await b.waitForTimeout(1_500); // longer than the read batching
   await toLobby();
   // What was on screen is read, the messages below it aren't (the count is refetched once the read is in).

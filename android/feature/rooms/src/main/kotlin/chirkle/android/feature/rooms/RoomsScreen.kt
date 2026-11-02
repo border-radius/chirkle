@@ -259,7 +259,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             }
             // A folded section lists only its unread rows (the open room has no badge: it is never listed folded).
             fun shown(section: String, list: List<Room>) =
-                if (section in folded) list.filter { unreadBadge(it, s.unread, s.hidden.keys, s.activeRoomId) > 0 } else list
+                if (section in folded) list.filter { unreadBadge(it, s.unread, s.hidden.keys) > 0 } else list
             val toggle = services.settings::toggleFolded
             foldHeader("rooms", "Rooms", "rooms" in folded, toggle, "New room") { newRoom = true }
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
@@ -334,7 +334,7 @@ private fun menuItems(
 
 @Composable
 private fun JumpRow(t: chirkle.android.data.lib.JumpTarget, s: AppState, me: String?, onOpen: () -> Unit) {
-    val badge = unreadBadge(t.room, s.unread, s.hidden.keys, s.activeRoomId)
+    val badge = unreadBadge(t.room, s.unread, s.hidden.keys)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -519,7 +519,7 @@ private fun LazyListScope.fold(text: String, count: Int, open: Boolean, toggle: 
  */
 private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit, menu: List<Pair<String, () -> Unit>>, button: Boolean = true) {
     var open by remember { mutableStateOf(false) }
-    val badge = unreadBadge(r, s.unread, s.hidden.keys, s.activeRoomId)
+    val badge = unreadBadge(r, s.unread, s.hidden.keys)
     val title = r.title(me)
     val current = s.activeRoomId == r.id
     Box {

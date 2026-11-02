@@ -27,7 +27,7 @@ class RoomSectionsTest {
         val s = roomSections(rooms, emptySet(), "me", null, unread)
         assertEquals(listOf("a", "c", "b"), s.dms.map { it.id })
         assertEquals(listOf("q", "r", "p"), s.rooms.map { it.id })
-        // The open room has no badge, so it keeps its usual place.
-        assertEquals(listOf("r", "p", "q"), roomSections(rooms, emptySet(), "me", "q", unread).rooms.map { it.id })
+        // The open room keeps its place among the unread while it has unread messages left (2026-11-02).
+        assertEquals(listOf("q", "r", "p"), roomSections(rooms, emptySet(), "me", "q", unread).rooms.map { it.id })
     }
 }

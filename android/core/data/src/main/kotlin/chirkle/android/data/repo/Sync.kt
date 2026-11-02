@@ -154,6 +154,13 @@ class Unread(
     private var refreshJob: Job? = null
     private val pending = mutableSetOf<Sender>()
 
+    /**
+     * The open room while its newest messages are on screen (its reader last said caughtUp): its count is the room
+     * screen's to clear, and what arrives in it is read as it comes. Scrolled up, or opened at its first unread message,
+     * it keeps the server's count, badge included: the rest is still unread (2026-11-02, user).
+     */
+    private var following: String? = null
+
     private interface Sender {
         /** The request, if one went out. */
         fun send(): Job?
@@ -174,9 +181,8 @@ class Unread(
             accounted = res.ids.toSet()
             val unread = res.rooms.toMutableMap()
             for ((room, id) in recent) if (id !in accounted) unread[room] = (unread[room] ?: 0) + 1
-            // The open room is the room screen's to clear; not while the app is away (then nobody reads it).
-            val s = store.get()
-            if (!s.away) s.activeRoomId?.let { unread.remove(it) }
+            // The room you are caught up in is the room screen's to clear; not while the app is away (then nobody reads it).
+            if (!store.get().away) following?.let { unread.remove(it) }
             store.update { it.copy(unread = unread, counted = true) }
             db.kv().put(KvEntity(Keys.UNREAD, PbJson.encodeToString(UnreadCounts.serializer(), UnreadCounts(res.at, unread))))
         } finally {
@@ -206,6 +212,8 @@ class Unread(
         var timer: Job? = null
         var closed = false
         var failures = 0
+        // What the last seen() said: not caught up, the count is fetched again once a read is in.
+        var caughtUpNow = false
         val live = { !closed && r != null && r.active && r === run }
         val self = object : Sender {
             override fun send(): Job? {
@@ -217,7 +225,11 @@ class Unread(
                 val at = readAt
                 return r.scope.launch {
                     runCatching { api.markRead(roomId, at) }
-                        .onSuccess { failures = 0 }
+                        .onSuccess {
+                            failures = 0
+                            // What is still unread below the screen: the server counts it.
+                            if (!caughtUpNow && live()) refresh()
+                        }
                         .onFailure { e ->
                             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room
                             // on screen doesn't change), and the room would stay unread everywhere. A refusal is final.
@@ -236,6 +248,8 @@ class Unread(
         return object : RoomReader {
             override fun seen(created: String, caughtUp: Boolean) {
                 if (!live()) return
+                caughtUpNow = caughtUp
+                if (caughtUp) following = roomId else if (following == roomId) following = null
                 // Not before the newest message: the rest is still unread (close() refetches the count).
                 if (caughtUp) store.update { it.clearUnread(roomId) }
                 if (created <= readAt) return
@@ -250,6 +264,7 @@ class Unread(
 
             override fun close(caughtUp: Boolean) {
                 if (closed) return
+                if (following == roomId) following = null
                 val sent = if (timer != null) self.send() else null
                 if (live()) {
                     when {
@@ -278,8 +293,9 @@ class Unread(
                         r.post {
                             val s = store.get()
                             val m = c.record
-                            // The open room is read as it arrives, unless the app is away; your own messages never count.
-                            if (c.action == Action.Create && m.author != s.user?.id && (m.room != s.activeRoomId || s.away) && m.id !in accounted) {
+                            // The room you are caught up in is read as it arrives, unless the app is away; scrolled up,
+                            // it stays unread. Your own messages never count.
+                            if (c.action == Action.Create && m.author != s.user?.id && (m.room != following || s.away) && m.id !in accounted) {
                                 if (inFlight > 0) recent += m.room to m.id
                                 store.update { it.bumpUnread(m.room) }
                             } else if (c.action == Action.Update && m.deleted && m.room in s.unread) refresh()
@@ -288,7 +304,7 @@ class Unread(
             }
             r.sub {
                 api.subscribeReads { c ->
-                    r.post { if (c.record.room != store.get().activeRoomId || store.get().away) refresh() }
+                    r.post { if (c.record.room != following || store.get().away) refresh() }
                 }
             }
             launch { api.connects.collect { reconnect -> if (reconnect) load(r) } }

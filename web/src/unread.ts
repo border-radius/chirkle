@@ -61,6 +61,12 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
   /** `at` of the counts in the store: an older answer that arrives late is dropped. */
   let countedAt = "";
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The open room while its newest messages are on screen (its reader last said `caughtUp`): its count is the room
+   * view's to clear, and what arrives in it is read as it comes. Scrolled up, or opened at its first unread message, it
+   * keeps the server's count, badge included: the rest is still unread (2026-11-02, user).
+   */
+  let following: string | null = null;
   /** Readers with a read not sent yet. */
   const pending = new Set<{ send(): void }>();
 
@@ -73,9 +79,9 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       accounted = new Set(res.ids);
       const unread = new Map(Object.entries(res.rooms));
       for (const b of recent) if (!accounted.has(b.id)) unread.set(b.room, (unread.get(b.room) ?? 0) + 1);
-      // The active room is the room view's to clear; the server may not have its latest read yet. Not while the tab
-      // is away: then the room view reads nothing, and the server's count is the one to show.
-      if (!store.get().away) unread.delete(store.get().activeRoomId ?? "");
+      // The room you are caught up in is the room view's to clear; the server may not have its latest read yet. Not
+      // while the tab is away: then the room view reads nothing, and the server's count is the one to show.
+      if (following && !store.get().away) unread.delete(following);
       store.set({ unread });
     } finally {
       if (--inFlight === 0) recent = [];
@@ -100,6 +106,8 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
     let closed = false;
     /** Failed sends in a row: the next retry waits longer. */
     let failures = 0;
+    /** What the last seen() said: not caught up, the count is fetched again once a read is in. */
+    let caughtUpNow = false;
     const live = () => !closed && !!s?.active && s === scope;
 
     const self = {
@@ -112,6 +120,8 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
         return api.markRead(roomId, at).then(
           () => {
             failures = 0;
+            // What is still unread below the screen: the server counts it.
+            if (!caughtUpNow && live()) refresh();
           },
           (e: unknown) => {
             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room on screen
@@ -128,6 +138,9 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
     return {
       seen(created, caughtUp) {
         if (!live()) return;
+        caughtUpNow = caughtUp;
+        if (caughtUp) following = roomId;
+        else if (following === roomId) following = null;
         // Even with nothing new: a count fetched while the tab was away may include what was already read. Not before
         // the newest message: the rest is still unread (close() refetches the count).
         if (caughtUp) store.set(clearUnread(roomId));
@@ -139,6 +152,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       },
       close(caughtUp) {
         if (closed) return;
+        if (following === roomId) following = null;
         const sent = timer ? self.send() : undefined;
         if (live()) {
           if (caughtUp) store.set(clearUnread(roomId));
@@ -161,10 +175,10 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       s.sub(
         api.subscribeAllMessages((action, m) => {
           if (!s.active) return;
-          const { user, activeRoomId, away, unread } = store.get();
-          // The room you are in is read as it arrives (the room view reports it), unless the tab is away; your own
-          // messages never count.
-          if (action === "create" && m.author !== user?.id && (m.room !== activeRoomId || away) && !accounted.has(m.id)) {
+          const { user, away, unread } = store.get();
+          // The room you are caught up in is read as it arrives (the room view reports it), unless the tab is away;
+          // scrolled up, it stays unread. Your own messages never count.
+          if (action === "create" && m.author !== user?.id && (m.room !== following || away) && !accounted.has(m.id)) {
             if (inFlight) recent.push({ room: m.room, id: m.id });
             store.set(bumpUnread(m.room));
           } else if (action === "update" && m.deleted && unread.has(m.room)) refresh(); // was it unread?
@@ -172,8 +186,9 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       );
       s.sub(
         api.subscribeReads((_action, row) => {
-          // Read in another tab or on another device. The room you are in is already at 0 here, unless the tab is away.
-          if (s.active && (row.room !== store.get().activeRoomId || store.get().away)) refresh();
+          // Read in another tab or on another device. The room you are caught up in is already at 0 here, unless the
+          // tab is away.
+          if (s.active && (row.room !== following || store.get().away)) refresh();
         }),
       );
       s.defer(

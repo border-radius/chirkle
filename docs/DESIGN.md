@@ -1628,8 +1628,13 @@ No row means "read up to your signup" (`users.created`): history from before you
   until it is in or refused (a 4xx other than 429): nothing else may ask, since the room on screen needn't change (QA
   BUG-162). On unmount the view calls `reader.close(caughtUp)`: a pending read goes out immediately, and when not
   caught up the counts are refetched once it is in (fetched before it, the messages just read would count again),
-  because what is below the screen is still unread and messages that arrived meanwhile weren't counted (it was the
-  active room).
+  because what is below the screen is still unread.
+- **The open room's count** (2026-11-02, user: a selected room lost its badge and its place in the room list while
+  it still had unread messages): `unread.ts` keeps the room whose reader last said `caughtUp` (`following`). Only
+  that room is left out of fetched counts and of live +1s (and `room_reads` events for it don't refetch). Opened at
+  its first unread message, or scrolled up, the open room keeps the server's count, and every read that goes in while
+  not caught up refetches the counts, so its badge comes down to what is left as you scroll; new messages that arrive
+  while scrolled up count live. Reaching the bottom clears it as before.
 - **Whose read:** the session is shared by every tab, and another tab can switch it to another user. A reader
   remembers who it was opened for and never sends a read as anyone else. Ending the session (`endSession()` in
   `app.ts`) calls `unread.flush()` first, so logging out still sends the pending read while the session exists;
@@ -1639,8 +1644,9 @@ No row means "read up to your signup" (`users.created`): history from before you
 
 - A pill after the room name (`.badge`, the accent gradient, `99+` past 99) and a bold name. The badge holds a
   visually hidden " unread", so a screen reader reads "general, 3 unread".
-- **No badge** for the active room, hidden rooms or archived rooms (`unreadCount()` in `store.ts`). The tab's
-  count (§22.4) does include the active room while the tab is away.
+- **No badge** for hidden rooms or archived rooms (`unreadCount()` in `store.ts`). The open room has one, and stays
+  among the unread rooms at the top, while it has unread messages left below the screen (§18.3; it had none before
+  2026-11-02, which hid what was still unread).
 - Room rows are now flex rows: the name ellipsizes, and the `#`, the avatar and the badge always stay visible.
 
 ### 18.5 Opening at the first unread message
@@ -2003,7 +2009,7 @@ else) removes that user's drafts. Storage that is full or disabled only means no
 
 ### 22.4 Unread count in the favicon
 
-`web/src/favicon.ts` sums the room list's badges (§18.4: not the open room, hidden or archived ones) and draws an SVG
+`web/src/favicon.ts` sums the room list's badges (§18.4: not hidden or archived ones) and draws an SVG
 favicon (a speech bubble in the app's gradient) with a red badge holding the count (`99+` past 99); the title becomes
 "(3) Chirkle". In a room, the title also names it as the room list does (`#name`, or the other member's name in a DM):
 "(3) #general – Chirkle". `index.html` carries the plain icon, so the tab has one before the script runs.
@@ -2011,8 +2017,8 @@ favicon (a speech bubble in the app's gradient) with a red badge holding the cou
 While the tab is away (`document.visibilityState` is `hidden`, kept as `AppState.away` by `app.ts`), nobody is
 reading the open room, so its new messages count too: `unread.ts` counts them live, keeps the server's count for it
 on a refetch, and refetches when the tab goes away (after sending what was read) to catch messages that came in
-unseen while scrolled up. The room list still shows no badge for it (§18.4). Coming back, the room view reads what is
-on screen as usual, which clears it; scrolled up, it stays out of the count, as before.
+unseen while scrolled up. Coming back, the room view reads what is on screen as usual, which clears it at the bottom;
+scrolled up, what is left counts, as in the room list (§18.3, 2026-11-02).
 
 ### 22.5 Focus on entering a room
 

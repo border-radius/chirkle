@@ -120,11 +120,11 @@ export function clearUnread(roomId: string): Update {
 // ---- selectors
 
 /**
- * The badge for a room (§18.4): none for the room you are in, and none for hidden or archived rooms, which stay
- * silent (§13).
+ * The badge for a room (§18.4): none for hidden or archived rooms, which stay silent (§13). The room you are in keeps
+ * its badge (and its place among the unread) until you have scrolled down to its newest messages (2026-11-02).
  */
 export function unreadCount(s: AppState, room: Room): number {
-  if (room.id === s.activeRoomId || room.archived || s.hidden.has(room.id)) return 0;
+  if (room.archived || s.hidden.has(room.id)) return 0;
   return s.unread.get(room.id) ?? 0;
 }
 

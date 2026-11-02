@@ -5,11 +5,10 @@
 import { roomTitle } from "./lib/rooms.ts";
 import { type AppState, type Store, unreadCount } from "./store.ts";
 
-/** Unread messages over every room with a badge, and the open room's while the tab is away. */
+/** Unread messages over every room with a badge. */
 export function totalUnread(s: AppState): number {
   let n = 0;
-  const view = s.away ? { ...s, activeRoomId: null } : s;
-  for (const r of s.rooms.values()) n += unreadCount(view, r);
+  for (const r of s.rooms.values()) n += unreadCount(s, r);
   return n;
 }
 

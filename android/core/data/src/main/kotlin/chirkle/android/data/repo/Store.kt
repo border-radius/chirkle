@@ -31,7 +31,7 @@ data class AppState(
 ) {
     /** Unread messages that would show a badge (§18.4): the launcher badge. */
     val unreadTotal: Int
-        get() = rooms.values.sumOf { chirkle.android.data.lib.unreadBadge(it, unread, hidden.keys, activeRoomId) }
+        get() = rooms.values.sumOf { chirkle.android.data.lib.unreadBadge(it, unread, hidden.keys) }
 }
 
 class Store(initial: AppState = AppState()) {

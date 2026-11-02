@@ -172,8 +172,8 @@ describe("roomSections (§7.1)", () => {
       const { rooms, dms } = roomSections({ ...s, unread });
       expect(dms.map((r) => r.id)).toEqual(["a", "c", "b"]);
       expect(rooms.map((r) => r.id)).toEqual(["q", "r", "p"]);
-      // The open room has no badge, so it keeps its usual place.
-      expect(roomSections({ ...s, unread, activeRoomId: "q" }).rooms.map((r) => r.id)).toEqual(["r", "p", "q"]);
+      // The open room keeps its place among the unread while it has unread messages left (2026-11-02).
+      expect(roomSections({ ...s, unread, activeRoomId: "q" }).rooms.map((r) => r.id)).toEqual(["q", "r", "p"]);
     });
 
     it("closed (hidden) DMs are left out entirely; a DM is never in Hidden or Archived", () => {
@@ -211,7 +211,7 @@ describe("unread counts (§18)", () => {
     expect(clearUnread("nope")(store.get())).toEqual({});
   });
 
-  it("unreadCount: none for the active room, hidden rooms and archived rooms (§13: hidden stays silent)", () => {
+  it("unreadCount: none for hidden rooms and archived rooms (§13: hidden stays silent); the active room keeps its count", () => {
     const rooms = [room("a", "a"), room("b", "b"), room("h", "h"), room("x", "x", { archived: true }), room("z", "z")];
     const s: AppState = {
       ...initialState(),
@@ -225,6 +225,6 @@ describe("unread counts (§18)", () => {
       ]),
       activeRoomId: "b",
     };
-    expect(rooms.map((r) => unreadCount(s, r))).toEqual([3, 0, 0, 0, 0]);
+    expect(rooms.map((r) => unreadCount(s, r))).toEqual([3, 5, 0, 0, 0]);
   });
 });

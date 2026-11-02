@@ -62,24 +62,33 @@ describe("unread counts (§18.3)", () => {
       await vi.waitFor(() => expect(count(r.id)).toBe(2));
     });
 
-    it("leaves the active room out of fetched counts (the room view clears it before the server knows)", async () => {
+    it("leaves the room you are caught up in out of fetched counts (the room view clears it before the server knows)", async () => {
       const other = await signedUp("Other");
       const r = await other.api.createRoom(`room-${uniq()}`);
       const active = await other.api.createRoom(`active-${uniq()}`);
       await say(other, r.id);
-      await say(other, active.id);
+      const m = await say(other, active.id);
       store.set({ activeRoomId: active.id });
+      const ctl = instrument(me.api);
       start();
-      await vi.waitFor(() => expect(count(r.id)).toBe(1));
+      await vi.waitFor(() => expect(count(active.id)).toBe(1)); // open, but nothing on screen yet: still unread
+      unread!.open(active.id).seen(m.created, true);
+      expect(count(active.id)).toBeUndefined();
+      unread!.refresh(); // before the read is sent
+      await vi.waitFor(() => expect(ctl.calls("unreadCounts")).toBe(2));
+      await sleep(50);
+      expect(count(r.id)).toBe(1);
       expect(count(active.id)).toBeUndefined();
     });
 
-    it("live: others' messages count, yours and the active room's don't", async () => {
+    it("live: others' messages count, yours and those of the room you are caught up in don't", async () => {
       const other = await signedUp("Other");
       const r = await other.api.createRoom(`room-${uniq()}`);
       const active = await other.api.createRoom(`active-${uniq()}`);
       store.set({ activeRoomId: active.id });
       start();
+      const reader = unread!.open(active.id);
+      reader.seen("", true);
       await subscribed(me.api);
       await say(other, r.id);
       await say(me, r.id);
@@ -88,6 +97,10 @@ describe("unread counts (§18.3)", () => {
       await say(other, r.id);
       await vi.waitFor(() => expect(count(r.id)).toBe(2));
       expect(count(active.id)).toBeUndefined();
+      // Scrolled up: what arrives stays unread, badge and all (2026-11-02).
+      reader.seen("", false);
+      await say(other, active.id);
+      await vi.waitFor(() => expect(count(active.id)).toBe(1));
     });
 
     it("the tab away (§22.4): the active room's messages count, live and in fetched counts", async () => {
@@ -309,6 +322,20 @@ describe("unread counts (§18.3)", () => {
       expect(calls).toEqual([[r.id, msgs[0]!.created]]);
       // Refetched after the read is in, not before it.
       await vi.waitFor(() => expect(count(r.id)).toBe(2), { timeout: 3000 });
+    });
+
+    it("2026-11-02: an open room not read to the end keeps its count, brought down to what is left as reads go in", async () => {
+      const { r, msgs } = await freshRoom(3);
+      store.set({ activeRoomId: r.id });
+      start();
+      await vi.waitFor(() => expect(count(r.id)).toBe(3));
+      const reader = unread!.open(r.id);
+      reader.seen(msgs[0]!.created, false);
+      await vi.waitFor(() => expect(count(r.id)).toBe(2), { timeout: 3000 });
+      reader.seen(msgs[1]!.created, false);
+      await vi.waitFor(() => expect(count(r.id)).toBe(1), { timeout: 3000 });
+      reader.seen(msgs[2]!.created, true);
+      expect(count(r.id)).toBeUndefined();
     });
 
     it("close() when not caught up refetches the counts", async () => {

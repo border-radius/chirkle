@@ -171,6 +171,30 @@ class ServicesTest {
         s.closeRoom(room.id)
     }
 
+    @Test fun `an open room not read to the end keeps its count and badge, brought down to what is left`() = runBlocking {
+        val a = newUser()
+        val b = newUser()
+        val room = a.api.createRoom("r-${uniq()}")
+        val s = services(b)
+        eventually(what = "counted") { s.store.get().counted && room.id in s.store.get().rooms }
+        val sent = (1..3).map { a.api.send(NewMessage(newId(), room.id, "m$it")) }
+        eventually(what = "three unread") { s.store.get().unread[room.id] == 3 }
+        val c = s.openRoom(room.id)
+        val reader = s.unread.open(room.id)
+        reader.seen(sent[0].created, caughtUp = false)
+        eventually(what = "two left") { s.store.get().unread[room.id] == 2 }
+        val st = s.store.get()
+        assertEquals(2, chirkle.android.data.lib.unreadBadge(st.rooms.getValue(room.id), st.unread, st.hidden.keys))
+        // Scrolled up: a new message stays unread too.
+        a.api.send(NewMessage(newId(), room.id, "m4"))
+        eventually(what = "three left") { s.store.get().unread[room.id] == 3 }
+        reader.seen(sent[2].created, caughtUp = true)
+        eventually(what = "caught up") { s.store.get().unread[room.id] == null }
+        reader.close(caughtUp = true)
+        c.close()
+        s.closeRoom(room.id)
+    }
+
     @Test fun `a read that fails on the way is sent again, with nothing new on screen`() = runBlocking {
         val a = newUser()
         val b = newUser()
