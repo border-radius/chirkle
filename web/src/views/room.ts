@@ -21,7 +21,7 @@ import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import { roomSections } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
-import { createEmojiPicker } from "../ui/emoji-picker.ts";
+import type { EmojiPicker, PickerRequest } from "../ui/emoji-picker.ts";
 import { createUserSearch, SearchError } from "../ui/user-search.ts";
 import type { RoomReader } from "../unread.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
@@ -150,8 +150,8 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
 
   // ---------------------------------------------------------------- parts
 
-  /** One emoji picker for the composer and every message's reactions. */
-  const picker = createEmojiPicker({ signal });
+  /** One emoji picker for the composer and every message's reactions, once opened: a lazy chunk (openPicker). */
+  let picker: EmojiPicker | null = null;
   /** The message the picker was opened to react to ("": the composer's). */
   let reactingTo = "";
   const notice = createNotice(signal);
@@ -282,7 +282,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     onCancelReply: () => reply.set(null),
     onEmoji: (opener, insert) => {
       reactingTo = "";
-      picker.open(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
+      void openPicker(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
     },
     // Kept as you type, so a reload doesn't lose it (§22.3).
     onChange: (text) => {
@@ -348,7 +348,6 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     notice.el,
     h("div", { class: "room-body" }, [list, pill]),
     footer,
-    picker.el,
     forwardDialog.el,
   ]);
 
@@ -367,7 +366,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     selectable: (m) => ctl.selectable(m),
     deletable: (m) => ctl.deletable(m),
     onStart: (id) => {
-      picker.close();
+      picker?.close();
       messages.focusIn(id, ["input.select"], true);
     },
     onChange: (list) => {
@@ -386,9 +385,9 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     selection.prune();
     messages.render(o);
     // Deleted (or gone from the list) meanwhile: nothing left to react to (QA BUG-121).
-    if (reactingTo && picker.isOpen) {
+    if (reactingTo && picker?.isOpen) {
       const m = ctl.find(reactingTo);
-      if (!m || !ctl.reactable(m)) picker.close();
+      if (!m || !ctl.reactable(m)) picker?.close();
     }
     markRead();
   }
@@ -402,7 +401,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   function openForward(ids: string[]) {
     if (!ids.length) return;
     forwarding = ids;
-    picker.close();
+    picker?.close();
     forwardDialog.open(ids.length);
   }
 
@@ -604,10 +603,10 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
       // The composer (and anything typed into it) comes back when selecting ends.
       selection.refresh();
       if (footer.firstChild !== selection.bar) footer.replaceChildren(selection.bar);
-      picker.close();
+      picker?.close();
     } else if (r.archived) {
       footer.replaceChildren(banner);
-      picker.close(); // nothing left to insert into or react to
+      picker?.close(); // nothing left to insert into or react to
     } else if (!me()) {
       if (footer.firstChild !== guestBanner) footer.replaceChildren(guestBanner);
     } else if (!canPost(r, me())) {
@@ -656,7 +655,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   function renderGone() {
     shown = "not-found";
     awaitReturn();
-    picker.close();
+    picker?.close();
     forwardDialog.close();
     accessDialog?.close();
     const back = h("a", { href: "/" }, "Back to rooms");
@@ -766,12 +765,30 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     if (!m || !user || !ctl.reactable(m)) return;
     const mine = new Set(ctl.reactions(m).flatMap((r) => (r.users.includes(user.id) ? [r.emoji] : [])));
     reactingTo = id;
-    picker.open(opener, {
+    void openPicker(opener, {
       label: "Add reaction",
       chosen: mine,
       onPick: (emoji) => void react(id, emoji, !mine.has(emoji)),
       restoreFocus: () => messages.focusIn(id, [".actions .react", ".reactions .add-reaction"]),
     });
+  }
+
+  /**
+   * Open the emoji picker next to `opener`. A lazy chunk, loaded the first time; if it can't be (offline, or a new
+   * version was deployed), say so. Not if the opener went meanwhile (its message, or the composer, is gone).
+   */
+  async function openPicker(opener: HTMLElement, req: PickerRequest) {
+    try {
+      const { createEmojiPicker } = await import("../ui/emoji-picker.ts");
+      if (!scope.active || !opener.isConnected) return;
+      if (!picker) {
+        picker = createEmojiPicker({ h, signal });
+        forwardDialog.el.before(picker.el);
+      }
+      picker.open(opener, req);
+    } catch {
+      if (scope.active) notice.say("Couldn't open the emoji. Check your connection.");
+    }
   }
 
   // ---------------------------------------------------------------- lifecycle

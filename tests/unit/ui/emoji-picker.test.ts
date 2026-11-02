@@ -43,7 +43,7 @@ describe("emoji picker (§20.4)", () => {
   beforeEach(() => {
     localStorage.clear();
     ac = new AbortController();
-    picker = createEmojiPicker({ signal: ac.signal });
+    picker = createEmojiPicker({ h, signal: ac.signal });
     opener = h("button", { type: "button" }, "☺");
     elsewhere = h("button", { type: "button" }, "elsewhere");
     document.body.append(opener, elsewhere, picker.el);

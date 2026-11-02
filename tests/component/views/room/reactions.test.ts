@@ -11,7 +11,12 @@ describe("room view", () => {
 
   describe("reactions and the emoji picker (§20)", () => {
     const picker = () => root.querySelector<HTMLElement>(".emoji-picker")!;
-    const pickerOpen = () => !picker().hidden;
+    const pickerOpen = () => !!picker() && !picker().hidden;
+    /** Click what opens the picker, a lazy chunk: it opens once that is loaded. */
+    const open = async (b: HTMLElement) => {
+      b.click();
+      await vi.waitFor(() => expect(pickerOpen()).toBe(true));
+    };
     const pick = (emoji: string) => picker().querySelector<HTMLButtonElement>(`button.emoji[data-emoji="${emoji}"]`)!.click();
     const chips = (id: string) =>
       [...(msgEl(id)?.querySelectorAll<HTMLElement>(".reactions .reaction") ?? [])].map((c) => {
@@ -28,8 +33,7 @@ describe("room view", () => {
       const react = button(msgEl(m.id), "Add reaction")!;
       expect(react.getAttribute("aria-label")).toBe("Add reaction");
       expect(pickerOpen()).toBe(false);
-      react.click();
-      expect(pickerOpen()).toBe(true);
+      await open(react);
       expect(picker().getAttribute("aria-label")).toBe("Add reaction");
       pick("🚀");
       expect(pickerOpen()).toBe(false);
@@ -50,7 +54,7 @@ describe("room view", () => {
       chip(m.id, "🎉").click();
       expect(chips(m.id)).toEqual(["🎉2 (mine)"]);
       for (const e of ["👍", "❤️", "😂"]) {
-        button(msgEl(m.id), "Add reaction")!.click();
+        await open(button(msgEl(m.id), "Add reaction")!);
         pick(e);
       }
       expect(chips(m.id)).toEqual(["🎉2 (mine)", "👍1 (mine)", "❤️1 (mine)", "😂1 (mine)"]);
@@ -103,7 +107,7 @@ describe("room view", () => {
       const m = await me.api.send({ id: newId(), room: room.id, text: "hi" });
       await me.api.react(m.id, "👍", true);
       await mount(room);
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       expect(picker().querySelector(`button.emoji[data-emoji="👍"]`)!.getAttribute("aria-pressed")).toBe("true");
       pick("👍");
       expect(chips(m.id)).toEqual([]);
@@ -116,7 +120,7 @@ describe("room view", () => {
       const ctl = instrument(me.api);
       ctl.failNext("react", new ApiError("Failed to fetch", 0));
       await mount(room);
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       pick("🔥");
       expect(chips(m.id)).toEqual(["🔥1 (mine)"]);
       await vi.waitFor(() => expect(msgEl(m.id)!.textContent).toContain("Couldn't add your 🔥 reaction."));
@@ -136,12 +140,12 @@ describe("room view", () => {
       const ctl = instrument(me.api);
       await mount(room);
       const release = ctl.hold("react");
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       pick("👍");
       await vi.waitFor(() => expect(ctl.calls("react")).toBe(1)); // on its way, unanswered
       chip(m.id, "👍").click(); // off
       expect(chips(m.id)).toEqual([]);
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       pick("👍"); // on again
       chip(m.id, "👍").click(); // and off
       expect(chips(m.id)).toEqual([]);
@@ -156,11 +160,11 @@ describe("room view", () => {
       const room = await newRoom();
       const m = await me.api.send({ id: newId(), room: room.id, text: "hi" });
       await mount(room);
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       key(document.activeElement!, "Escape");
       expect(pickerOpen()).toBe(false);
       expect(document.activeElement).toBe(button(msgEl(m.id), "Add reaction"));
-      button(msgEl(m.id), "Add reaction")!.click();
+      await open(button(msgEl(m.id), "Add reaction")!);
       pick("👀");
       expect(document.activeElement).toBe(chip(m.id, "👀"));
       chip(m.id, "👀").click();
@@ -198,13 +202,11 @@ describe("room view", () => {
       const theirs = await other.api.send({ id: newId(), room: room.id, text: "soon gone" });
       const also = await other.api.send({ id: newId(), room: room.id, text: "also gone" });
       await mount(room);
-      button(msgEl(theirs.id), "Add reaction")!.click();
-      expect(pickerOpen()).toBe(true);
+      await open(button(msgEl(theirs.id), "Add reaction")!);
       await other.api.softDelete(theirs.id);
       await vi.waitFor(() => expect(msgEl(theirs.id)!.textContent).toContain("Message deleted"));
       expect(pickerOpen()).toBe(false);
-      root.querySelector<HTMLButtonElement>("form.composer .emoji-button")!.click();
-      expect(pickerOpen()).toBe(true);
+      await open(root.querySelector<HTMLButtonElement>("form.composer .emoji-button")!);
       await other.api.softDelete(also.id);
       await vi.waitFor(() => expect(msgEl(also.id)!.textContent).toContain("Message deleted"));
       expect(pickerOpen()).toBe(true);
@@ -217,14 +219,14 @@ describe("room view", () => {
       composer()!.setSelectionRange(6, 11); // "world"
       const emoji = root.querySelector<HTMLButtonElement>("form.composer .emoji-button")!;
       expect(emoji.getAttribute("aria-label")).toBe("Emoji");
-      emoji.click();
+      await open(emoji);
       expect(picker().getAttribute("aria-label")).toBe("Insert emoji");
       pick("🌎");
       expect(composer()!.value).toBe("hello 🌎");
       expect(document.activeElement).toBe(composer());
       expect(composer()!.selectionStart).toBe("hello 🌎".length);
       expect(sendButton().disabled).toBe(false);
-      emoji.click();
+      await open(emoji);
       key(document.activeElement!, "Escape");
       expect(document.activeElement).toBe(composer());
       expect(composer()!.value).toBe("hello 🌎");

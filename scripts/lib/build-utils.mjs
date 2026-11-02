@@ -1,6 +1,6 @@
 // Pure helpers for scripts/build.mjs. Kept side-effect free so they can be unit-tested.
 
-/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number }} Sizes gzipped byte sizes */
+/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number, emojiJs: number }} Sizes gzipped byte sizes */
 
 /** Where builds go: PocketBase serves this directory. */
 export const OUTDIR = "pb_public";
@@ -28,6 +28,9 @@ export const COLLECTIONS = Object.freeze({ js: "web/src/views/collection/lazy.ts
 
 /** Notifications (§34): following the messages and the profile page's settings, a lazy chunk. Its styles are in app.css. */
 export const NOTIFY = Object.freeze({ js: "web/src/notify.ts" });
+
+/** The emoji picker (§20.4), with the emoji list: a lazy chunk. Its styles are in app.css. */
+export const EMOJI = Object.freeze({ js: "web/src/ui/emoji-picker.ts" });
 
 /**
  * The service worker (§27): built on its own, unhashed, to the root of the public dir (a worker controls only the paths
@@ -95,6 +98,7 @@ export const BUDGET = Object.freeze({
   collJs: 6.75 * 1024,
   collCss: 2 * 1024,
   notifyJs: 3 * 1024,
+  emojiJs: 4.25 * 1024,
 });
 
 /**

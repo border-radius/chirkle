@@ -3,8 +3,11 @@
 // Keyboard: the grid is one tab stop; arrow keys, Home and End move in it, Enter picks, Escape closes and gives
 // focus back to the button that opened it. Clicking or tabbing anywhere else closes it. A resize moves it along (on
 // Android the keyboard going away resizes the page, and opening the picker takes the focus from the composer).
+//
+// A lazy chunk, like search (§29): the room view import()s it when the picker is first opened, with the emoji list
+// (lib/emoji.ts) in it. It imports types only from app.js; `h` comes in its options.
 
-import { h } from "../dom.ts";
+import type { h } from "../dom.ts";
 import { CATEGORIES, type EmojiCategory, recentEmoji, rememberEmoji } from "../lib/emoji.ts";
 
 /** Columns of the grid; styles/app/emoji-picker.css sizes the picker for exactly this many. */
@@ -75,8 +78,8 @@ export function step(
 
 const KEYS: Record<string, "left" | "right" | "up" | "down"> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
 
-export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
-  const { signal } = opts;
+export function createEmojiPicker(opts: { h: typeof h; signal: AbortSignal }): EmojiPicker {
+  const { h, signal } = opts;
   const el = h("div", { class: "emoji-picker", role: "dialog", hidden: true });
   const tabs = h("div", { class: "emoji-tabs" });
   const scroller = h("div", { class: "emoji-scroll" });

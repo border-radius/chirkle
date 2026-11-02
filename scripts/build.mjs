@@ -8,6 +8,7 @@ import {
   BASE_OPTIONS,
   COLLECTIONS,
   checkBudget,
+  EMOJI,
   ENTRIES,
   entryOutputs,
   formatSizes,
@@ -87,6 +88,7 @@ const sizes = {
   collJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, COLLECTIONS.js)}`),
   collCss: await gz(`${OUTDIR}/${collCssPath}`),
   notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
+  emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
 };
 
 console.log(`built ${OUTDIR}/ (gzipped):\n${formatSizes(sizes)}`);

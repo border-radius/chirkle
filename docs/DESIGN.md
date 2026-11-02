@@ -177,7 +177,7 @@ chat/
 │       │   ├── reactions.ts    # optimistic reaction changes, who reacted (§20.3)
 │       │   └── token.ts        # file token cache (§17.3)
 │       ├── ui/                 # small reusable components
-│       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts
+│       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts (a lazy chunk: §20.4)
 │       └── views/
 │           ├── login.ts, rooms.ts, home.ts, profile.ts
 │           ├── room.ts         # puts the controller's changes on screen, wires the parts
@@ -596,6 +596,7 @@ while its first page loads.
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
 | Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
+| Emoji picker (§20.4) and its emoji, loaded when first opened | ≤ 4.25 KB script (its styles are in `app.css`); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
 
@@ -1823,6 +1824,10 @@ older copies in `merge` (§7.5), and is picked up by the reconnect refetch of ch
 One popover per room view, used by the composer's emoji button (it inserts at the caret, replacing a selection) and by
 reactions. It is a `role="dialog"` named for what it does ("Insert emoji", "Add reaction"). It sits next to its button
 (above it when there is room) and spans the screen width on phones.
+
+It is a lazy chunk with the emoji list (§7.7), loaded the first time a room view opens it and given `h` by the room
+view. If it can't be loaded (offline, or a new version was deployed), the room's notice says "Couldn't open the emoji.
+Check your connection."
 
 - Category tabs, then a **Recent** row (the last 24 picked, kept in `localStorage`; nothing breaks without storage),
   then the categories, in an 8-column grid. Built on first open.
