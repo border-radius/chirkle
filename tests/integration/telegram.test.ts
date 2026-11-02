@@ -6,6 +6,7 @@ import PocketBase, { type RecordModel } from "pocketbase";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PNG } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
+import { webpHeader } from "../support/images.ts";
 import { withName } from "../support/names.ts";
 import { disableRateLimits, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 import { startTelegramStub, type TelegramStub } from "../support/telegram.ts";
@@ -627,6 +628,38 @@ describe("Telegram bridge (§26)", () => {
     });
     expect(group.params.media).toMatchObject([{ type: "photo" }, { type: "video", supports_streaming: true }]);
     expect(stub.callsOf("sendDocument").find((x) => x.params.chat_id === String(chat))).toBeUndefined();
+  });
+
+  it("a lone sticker-sized WebP goes as a sticker (keeping its transparency), its text before it; others as photos", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    const webp = (name: string, w: number, h: number) => new File([new Uint8Array(webpHeader(w, h))], name, { type: "image/webp" });
+    const ours = (method: string) => stub.callsOf(method).filter((x) => x.params.chat_id === String(chat));
+    await owner.pb
+      .collection("messages")
+      .create({ room: room.id, author: owner.user.id, text: "hi", files: [webp("sticker_1.webp", 512, 480)] });
+    const sticker = await eventually(() => {
+      const c = ours("sendSticker");
+      expect(c).toHaveLength(1);
+      return c[0]!;
+    });
+    expect(sticker.files.sticker!.name).toBe("sticker_1.webp");
+    expect(sticker.params.caption).toBeUndefined();
+    expect(ours("sendMessage").map((c) => c.params.text)).toEqual([`<b>${owner.user.name}</b>\nhi`]);
+
+    // Bigger than a sticker, or one of several: photos, as before.
+    await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, files: [webp("big.webp", 513, 100)] });
+    await eventually(() => expect(ours("sendPhoto")).toHaveLength(1));
+    await owner.pb
+      .collection("messages")
+      .create({ room: room.id, author: owner.user.id, files: [webp("a.webp", 100, 100), webp("b.webp", 100, 100)] });
+    const group = await eventually(() => {
+      const c = ours("sendMediaGroup");
+      expect(c).toHaveLength(1);
+      return c[0]!;
+    });
+    expect(group.params.media).toMatchObject([{ type: "photo" }, { type: "photo" }]);
+    expect(ours("sendSticker")).toHaveLength(1);
   });
 
   it("a room linked to two groups passes each group's messages to the other", async () => {

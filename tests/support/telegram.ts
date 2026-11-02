@@ -84,6 +84,8 @@ export async function startTelegramStub(): Promise<TelegramStub> {
       case "sendVideo":
       case "sendDocument":
         return message(params, { caption: params.caption });
+      case "sendSticker":
+        return message(params);
       case "sendMediaGroup":
         return (params.media as unknown[]).map(() => message(params));
       case "editMessageText":

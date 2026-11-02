@@ -11,6 +11,8 @@ const MAX_CAPTION = 1024;
 const MAX_PHOTO = 10 * 1024 * 1024;
 
 const PHOTO_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
+/** A sticker's largest side: a lone WebP no bigger goes as a sticker, which keeps its transparency (a photo is made a JPEG). */
+const MAX_STICKER = 512;
 /** MPEG-4 and QuickTime (what phones record): Telegram plays them inline. WebM and Ogg would arrive as files anyway. */
 const VIDEO_EXT = new Set(["mp4", "m4v", "mov"]);
 /** A video plays while it downloads, rather than only once it has (Telegram shows it as a file to fetch first). */
@@ -169,18 +171,27 @@ function remember(app, messageId, chatId, sent, kind) {
  */
 function filesOf(fsys, source) {
   const names = /** @type {Record<string, string>} */ (JSON.parse(source.getString("file_names") || "{}") || {});
-  return source.getStringSlice("files").map((name) => {
+  const dims = /** @type {Record<string, number[]>} */ (JSON.parse(source.getString("file_dims") || "{}") || {});
+  const all = source.getStringSlice("files");
+  return all.map((name) => {
     const key = `${source.baseFilesPath()}/${name}`;
     const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
     const size = fsys.attributes(key).size;
-    const kind = PHOTO_EXT.has(ext) && size <= MAX_PHOTO ? "photo" : VIDEO_EXT.has(ext) ? "video" : "document";
+    const [w, h] = Array.isArray(dims[name]) ? dims[name] : [];
+    const sticker = all.length === 1 && ext === "webp" && w > 0 && h > 0 && w <= MAX_STICKER && h <= MAX_STICKER;
+    const kind = sticker ? "sticker" : PHOTO_EXT.has(ext) && size <= MAX_PHOTO ? "photo" : VIDEO_EXT.has(ext) ? "video" : "document";
     const file = fsys.getReuploadableFile(key, true);
     file.name = names[name] || name.replace(/_[a-z0-9]{10}(\.[^.]*)?$/i, "$1");
     return { kind, file };
   });
 }
 
-const SEND = /** @type {Record<string, string>} */ ({ photo: "sendPhoto", video: "sendVideo", document: "sendDocument" });
+const SEND = /** @type {Record<string, string>} */ ({
+  photo: "sendPhoto",
+  video: "sendVideo",
+  document: "sendDocument",
+  sticker: "sendSticker",
+});
 
 /**
  * Send a message to a group: its text (with its files as their caption when it fits), its files as one or two
@@ -206,7 +217,9 @@ function send(app, messageId, chatId) {
   try {
     const files = filesOf(fsys, source);
     const groups = [files.filter((f) => f.kind !== "document"), files.filter((f) => f.kind === "document")].filter((g) => g.length);
-    let caption = groups.length && [...plain].length <= MAX_CAPTION ? { caption: html, parse_mode: "HTML" } : null;
+    // A sticker takes no caption: its text goes before it.
+    const captioned = groups.length && files[0].kind !== "sticker";
+    let caption = captioned && [...plain].length <= MAX_CAPTION ? { caption: html, parse_mode: "HTML" } : null;
     if (!caption && !html) return; // anonymous, with nothing to say (a forward of a deleted message)
     if (!caption) {
       remember(app, messageId, chatId, call("sendMessage", { chat_id: chatId, text: html, parse_mode: "HTML", ...reply }), "text");

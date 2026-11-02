@@ -2379,7 +2379,9 @@ Telegram (`outbound.js`):
 - **Files:** photos (jpg, png, webp up to 10 MB, Telegram's photo limit) and videos (mp4, m4v, mov; sent with `supports_streaming`, so they play inline as they load) go together as an album,
   other files as a second album of documents (Telegram doesn't mix them); one file goes alone. The text is the first
   item's caption when it fits (1024 characters), else a message of its own before the files. Files keep their original
-  names.
+  names. A message whose only file is a WebP of at most 512 px a side (a sticker, from Telegram or a collection) sends
+  it as a sticker: Telegram makes photos JPEGs, which would lose its transparency. A sticker takes no caption, so the
+  text goes before it.
 - **A reply** replies to the Telegram message of what it answers, when that is in the group.
 - **Edits** edit the Telegram message holding the text (or the caption, its text cut to 1024 characters with "…" when
   the edit made it longer: QA BUG-87). **Deletes** delete the Telegram messages;
