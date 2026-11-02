@@ -88,8 +88,9 @@ test("the tab shows how many messages are unread, in the favicon and the title",
   const tab = () =>
     page.evaluate(() => {
       const badges = [...document.querySelectorAll("aside.sidebar .badge")].map((b) => Number.parseInt(b.textContent ?? "", 10));
-      const icon = decodeURIComponent(document.querySelector<HTMLLinkElement>('link[rel="icon"]')!.href);
-      return { title: document.title, icon: icon.match(/>([^<]*)<\/text>/)?.[1] ?? "", sum: badges.reduce((a, b) => a + b, 0) };
+      const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
+      const drawn = icon.dataset.badge ? icon.href.startsWith("data:image/png") : icon.href.endsWith("/icons/icon.svg");
+      return { title: document.title, icon: drawn ? (icon.dataset.badge ?? "") : "?", sum: badges.reduce((a, b) => a + b, 0) };
     });
   const consistent = async () => {
     const t = await tab();

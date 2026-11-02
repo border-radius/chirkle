@@ -15,25 +15,33 @@ export function totalUnread(s: AppState): number {
 /** What the badge says: nothing for 0, "99+" past 99. */
 export const badgeLabel = (n: number): string => (n <= 0 ? "" : n > 99 ? "99+" : String(n));
 
-/** The favicon as an SVG document: a speech bubble, with a red badge holding `label` when there is one. */
-export function faviconSvg(label: string): string {
-  // The app's gradient (--grad in styles/app/tokens.css).
-  const bubble =
-    '<defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6a4bff"/><stop offset="1" stop-color="#c42a7c"/></linearGradient></defs>' +
-    '<path d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-6 6v-6H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="url(#g)"/>' +
-    '<path d="M8 11h16M8 17h10" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>';
-  if (!label) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${bubble}</svg>`;
+/** The app icon, a speech bubble (`web/public/icons/icon.svg`, which `index.html` names too): the favicon as it is. */
+export const ICON = "/icons/icon.svg";
+let icon: HTMLImageElement | undefined;
+
+/** The icon with a red badge holding `label`, drawn on a canvas: a PNG data: URL. */
+export async function badgedIcon(label: string): Promise<string> {
+  icon ??= Object.assign(new Image(), { src: ICON });
+  await icon.decode();
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d") as CanvasRenderingContext2D;
+  g.scale(2, 2);
+  g.drawImage(icon, 0, 0, 32, 32);
   // Wider for more digits; the text is the largest that fits.
   const w = label.length === 1 ? 20 : label.length === 2 ? 26 : 32;
-  const size = label.length === 3 ? 13 : 16;
-  const badge =
-    `<rect x="${32 - w}" y="0" width="${w}" height="20" rx="10" fill="#d1213b" stroke="#fff" stroke-width="1.5"/>` +
-    `<text x="${32 - w / 2}" y="15" font-family="Arial,Helvetica,sans-serif" font-size="${size}" font-weight="700" ` +
-    `fill="#fff" text-anchor="middle">${label}</text>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${bubble}${badge}</svg>`;
+  g.beginPath();
+  g.roundRect(32 - w, 0, w, 20, 10);
+  g.fillStyle = "#d1213b";
+  g.fill();
+  g.lineWidth = 1.5;
+  g.strokeStyle = g.fillStyle = "#fff";
+  g.stroke();
+  g.font = `700 ${label.length === 3 ? 13 : 16}px Arial,Helvetica,sans-serif`;
+  g.textAlign = "center";
+  g.fillText(label, 32 - w / 2, 15);
+  return c.toDataURL();
 }
-
-export const faviconUrl = (label: string): string => `data:image/svg+xml,${encodeURIComponent(faviconSvg(label))}`;
 
 /** The tab's title: the unread count, the open room and the site's title, e.g. "(3) #general – Chirkle". */
 export function tabTitle(s: AppState, label: string): string {
@@ -45,19 +53,25 @@ export function tabTitle(s: AppState, label: string): string {
 /** Keep the favicon and the title in step with the unread counts. Returns a function that stops it. */
 export function startFavicon(store: Store<AppState>, doc: Document = document): () => void {
   const title = doc.title;
-  // Firefox ignores a new href on the icon's <link>, so each change puts in a fresh one.
-  const setIcon = (label: string) => {
+  let shown: string | null = null;
+  // Firefox ignores a new href on the icon's <link>, so each change puts in a fresh one, once its icon is drawn and
+  // only if no newer count came in meanwhile. The count is on it as `data-badge` too.
+  const setIcon = async (label: string) => {
+    const href = label ? await badgedIcon(label).catch(() => ICON) : ICON;
+    if (label !== shown) return;
     const link = doc.createElement("link");
     link.rel = "icon";
-    link.href = faviconUrl(label);
+    link.href = href;
+    link.dataset.badge = label;
     const old = doc.querySelector('link[rel="icon"]');
     old ? old.replaceWith(link) : doc.head.append(link);
   };
-  let shown: string | null = null;
   const render = (s: AppState) => {
     const label = badgeLabel(totalUnread(s));
-    if (label !== shown) setIcon(label);
-    shown = label;
+    if (label !== shown) {
+      shown = label;
+      void setIcon(label);
+    }
     const t = tabTitle(s, label);
     if (doc.title !== t) doc.title = t;
   };
@@ -77,6 +91,7 @@ export function startFavicon(store: Store<AppState>, doc: Document = document): 
   return () => {
     off();
     doc.title = title;
-    setIcon("");
+    shown = "";
+    void setIcon("");
   };
 }

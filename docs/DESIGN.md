@@ -2009,8 +2009,9 @@ else) removes that user's drafts. Storage that is full or disabled only means no
 
 ### 22.4 Unread count in the favicon
 
-`web/src/favicon.ts` sums the room list's badges (§18.4: not hidden or archived ones) and draws an SVG
-favicon (a speech bubble in the app's gradient) with a red badge holding the count (`99+` past 99); the title becomes
+`web/src/favicon.ts` sums the room list's badges (§18.4: not hidden or archived ones) and draws the app icon
+(`/icons/icon.svg`, a speech bubble in the app's gradient) on a canvas with a red badge holding the count (`99+` past
+99), as a PNG; the icon itself is a file so its markup isn't in `app.js`; the title becomes
 "(3) Chirkle". In a room, the title also names it as the room list does (`#name`, or the other member's name in a DM):
 "(3) #general – Chirkle". `index.html` carries the plain icon, so the tab has one before the script runs.
 

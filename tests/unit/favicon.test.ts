@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { badgeLabel, faviconSvg, faviconUrl, startFavicon, totalUnread } from "../../web/src/favicon.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { badgeLabel, ICON, startFavicon, totalUnread } from "../../web/src/favicon.ts";
 import type { Room } from "../../web/src/lib/types.ts";
 import { type AppState, bumpUnread, clearUnread, createStore, initialState, markHidden } from "../../web/src/store.ts";
 
@@ -13,13 +13,6 @@ describe("favicon unread badge (§22.4)", () => {
 
   it("labels: nothing for 0, the number up to 99, then 99+", () => {
     expect([0, 1, 42, 99, 100, 5000].map(badgeLabel)).toEqual(["", "1", "42", "99", "99+", "99+"]);
-  });
-
-  it("the icon has a badge only when there is something unread", () => {
-    expect(faviconSvg("")).not.toContain("<text");
-    expect(faviconSvg("7")).toContain(">7</text>");
-    expect(faviconUrl("7")).toMatch(/^data:image\/svg\+xml,/);
-    expect(decodeURIComponent(faviconUrl("99+"))).toContain(">99+</text>");
   });
 
   it("counts the rooms that show a badge: not the open one, hidden or archived ones", () => {
@@ -46,7 +39,7 @@ describe("favicon unread badge (§22.4)", () => {
     expect(totalUnread({ ...s, away: true, activeRoomId: "d" })).toBe(5); // hidden stays silent, open or not
   });
 
-  it("follows the store: favicon and title, back to plain when everything is read or it stops", () => {
+  it("follows the store: favicon and title, back to plain when everything is read or it stops", async () => {
     document.title = "Chirkle";
     const store = createStore<AppState>({
       ...initialState(),
@@ -57,16 +50,20 @@ describe("favicon unread badge (§22.4)", () => {
     });
     const stop = startFavicon(store);
     const icon = () => document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
-    expect(icon().href).toBe(faviconUrl(""));
+    // The badge is drawn on a canvas, which happy-dom lacks: the plain icon then, with the count on the link.
+    const badge = (label: string) => vi.waitFor(() => expect(icon().dataset.badge).toBe(label));
+    await badge("");
+    expect(icon().getAttribute("href")).toBe(ICON);
     expect(document.title).toBe("Chirkle");
     store.set(bumpUnread("a"));
     store.set(bumpUnread("b"));
     store.set(bumpUnread("b"));
-    expect(icon().href).toBe(faviconUrl("3"));
+    await badge("3");
     expect(document.title).toBe("(3) Chirkle");
     // A fresh <link> each time, not a new href on the old one, which Firefox doesn't pick up.
     const before = icon();
     store.set(bumpUnread("a"));
+    await badge("4");
     expect(icon()).not.toBe(before);
     expect(document.head.querySelectorAll('link[rel="icon"]')).toHaveLength(1);
     store.set(clearUnread("a"));
@@ -77,7 +74,7 @@ describe("favicon unread badge (§22.4)", () => {
     expect(document.title).toBe("(4) #b – Chirkle");
     store.set(clearUnread("b"));
     store.set(clearUnread("a"));
-    expect(icon().href).toBe(faviconUrl(""));
+    await badge("");
     expect(document.title).toBe("#b – Chirkle");
     // A DM is called after the other member; leaving the room leaves the site's title.
     store.set({
@@ -92,8 +89,9 @@ describe("favicon unread badge (§22.4)", () => {
     store.set({ activeRoomId: null });
     expect(document.title).toBe("Chirkle");
     store.set(bumpUnread("a"));
+    await badge("1");
     stop();
     expect(document.title).toBe("Chirkle");
-    expect(icon().href).toBe(faviconUrl(""));
+    await badge("");
   });
 });
