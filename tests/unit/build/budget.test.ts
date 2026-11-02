@@ -14,8 +14,8 @@ describe("checkBudget", () => {
       accessCss: 1.5 * 1024,
       mediaJs: 3 * 1024,
       mediaCss: 1024,
-      collJs: 6.7 * 1024,
-      collCss: 1.95 * 1024,
+      collJs: 6.75 * 1024,
+      collCss: 2 * 1024,
       notifyJs: 3 * 1024,
     });
   });

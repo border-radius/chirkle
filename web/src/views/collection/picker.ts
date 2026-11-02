@@ -19,11 +19,22 @@ export async function openPicker(o: PickOptions): Promise<void> {
   const { mine, subs } = lists(o);
   const all = [...mine, ...subs];
   const title = h("h2", { id: "coll-pick-title" }, [icon(h), " Attach from collections"]);
-  const select = h(
-    "select",
-    { "aria-label": "Collection" },
-    all.map((c) => h("option", { value: c.id }, c.owner ? `${c.name} · ${c.owner.name}` : c.name)),
+  /** The collection shown: a row of chips, as the app's. */
+  let chosen = all[0]?.id ?? "";
+  const chips = all.map((c) =>
+    h(
+      "button",
+      {
+        type: "button",
+        class: "coll-chip",
+        "aria-pressed": String(c.id === chosen),
+        on: { click: (e: Event) => choose(c.id, e.currentTarget as HTMLElement) },
+        signal,
+      },
+      c.owner ? `${c.name} · ${c.owner.name}` : c.name,
+    ),
   );
+  const row = h("div", { class: "coll-chips", role: "group", "aria-label": "Collection" }, chips);
   const grid = h("div", { class: "media-grid coll-grid" });
   const status = h("p", { class: "media-status", role: "status" });
   const count = h("span", { class: "coll-count", "aria-live": "polite" });
@@ -34,7 +45,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
       title,
       h("button", { type: "button", class: "link", "aria-label": "Close", on: { click: () => close() }, signal }, "×"),
     ]),
-    all.length ? select : null,
+    all.length ? row : null,
     body,
     h("footer", { class: "coll-foot" }, [count, attach]),
   ]);
@@ -77,7 +88,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
   }
 
   async function more() {
-    if (pages.done || !select.value) return;
+    if (pages.done || !chosen) return;
     const p = pages;
     status.textContent = "Loading…";
     try {
@@ -99,11 +110,18 @@ export async function openPicker(o: PickOptions): Promise<void> {
   }
 
   function show() {
-    pages = pager(o, select.value, signal);
+    pages = pager(o, chosen, signal);
     grid.replaceChildren();
     void more();
   }
-  select.addEventListener("change", show, { signal });
+
+  function choose(id: string, chip: HTMLElement) {
+    if (id === chosen) return;
+    chosen = id;
+    for (const c of chips) c.setAttribute("aria-pressed", String(c === chip));
+    chip.scrollIntoView({ block: "nearest", inline: "nearest" });
+    show();
+  }
   const seen = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && void more(), { root: body, rootMargin: "400px" });
 
   function done() {
@@ -132,5 +150,5 @@ export async function openPicker(o: PickOptions): Promise<void> {
     return;
   }
   show();
-  select.focus();
+  chips[0]?.focus();
 }

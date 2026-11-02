@@ -594,7 +594,7 @@ while its first page loads.
 | Message search (§29), loaded on first use | ≤ 2 KB script (its styles are in `app.css`) |
 | Room access dialog (§23.2, §33.10), loaded on first use | ≤ 3.05 KB script, ≤ 1.5 KB stylesheet (`web/styles/access.css`, linked before the dialog shows; in `app.css` until the 2026-11-01 polish pass); moved out of `app.js` for linked instances |
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
-| Media collections (§31), loaded on first use | ≤ 6.70 KB script, ≤ 1.95 KB stylesheet |
+| Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
@@ -1075,6 +1075,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (polish pass) | 2026-11-01, overnight polish pass against the redesign boards, the user away ("don't ask me"): `app.css` raised from 10.60 KB to 11.05 KB, the access dialog chunk from 3 KB to 3.05 KB, the collections chunk from 6.65 KB to 6.70 KB script and 1.5 KB to 1.95 KB stylesheet (§7.7). The access dialog's styles moved out of `app.css` into a stylesheet of its own (new `accessCss` budget, 1.5 KB) to keep the raise small. Confirmed by the user the same day ("raise budget"). |
 | Bundle budget (new version line) | `app.js` raised from 49.25 KB to 49.60 KB (§7.7), the user's call (2026-11-02): the line saying a new version is out (§27.4) took it from 49.19 KB to 49.56 KB. A lazy chunk was turned down: one loaded only when needed is gone from the server after the deploy it should report. |
 | Bundle budget (WebKit taps) | `app.js` raised from 49.60 KB to 49.75 KB (§7.7), the user's call (2026-11-02): two phone tap fixes found by the WebKit e2e run took it from 49.59 KB to 49.69 KB. A tap on a message's text counts for the message even when the browser's touch adjustment moves the click onto a link near it (WebKit; Chrome on Android does it too): it went to the time's permalink. And a touch ending outside the messages hides the tapped message's buttons, since WebKit (iOS Safari too) sends no click for a tap on something that takes none, such as the room's name. |
+| Bundle budget (collection chips) | The collections chunk raised from 6.70 KB to 6.75 KB script and 1.95 KB to 2 KB stylesheet (§7.7), the user's call (2026-11-02): the picker's collections as a row of chips, as the app's, instead of a select (§31.3) took them from 6.65 KB and 1.94 KB to 6.75 KB and 1.98 KB. |
 
 ### Decided (2026-10-24, linked instances)
 
@@ -2770,9 +2771,9 @@ when the file it was saved from has one; otherwise the media worker (§30.1) mak
 - **Saving** opens a menu of your collections, ticked where the file is already (`/saved`): tick to add, untick to
   take out, or make a new (private) one there. Public ones say so: a file saved from a private room or a DM into a
   public collection is then anyone's to see (§13).
-- **Attaching:** the picker lists your collections and those you follow; pick up to what the message still takes
-  and they join the tray (after the uploads, as the server attaches them), "From a collection". The pending message
-  shows their thumbnails; Retry sends the same ids.
+- **Attaching:** the picker lists your collections and those you follow, a row of chips over the grid (the first one
+  chosen, as the app's); pick up to what the message still takes and they join the tray (after the uploads, as the
+  server attaches them), "From a collection". The pending message shows their thumbnails; Retry sends the same ids.
 - **The badge:** a file with a `file_sources` entry gets a chip over its tile, bottom left: the icon and the
   collection's name, a link to it, if it is public or yours (yours private: 🔒 after the name); "Private collection",
   not a link, if it is someone else's private one; nothing if it is gone. The room view asks `/badges` once for the ids

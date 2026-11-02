@@ -97,6 +97,10 @@ test("collections: make one, save from the chat, follow, see what's new, attach 
   await b.locator("form.composer summary").click();
   await b.getByRole("button", { name: "From collection" }).click();
   const picker = b.getByRole("dialog", { name: "Attach from collections" });
+  // The collections are chips, as the app's, the first one chosen.
+  await expect(picker.getByRole("group", { name: "Collection" }).getByRole("button", { pressed: true })).toHaveText(/^Pets/);
+  await picker.getByRole("button", { name: "dog.png" }).waitFor();
+  await picker.screenshot({ path: "test-results/collection-picker.png" });
   await picker.getByRole("button", { name: "dog.png" }).click();
   await picker.getByRole("button", { name: "Attach 1" }).click();
   await expect(b.locator(".tray-item")).toContainText("From a collection");
