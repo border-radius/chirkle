@@ -164,9 +164,19 @@ export function createMessageList(opts: {
   // performance.now(): WebKit's synthesized touches have their own timeStamp clock.
   let touched: string | null = null;
   let touchedAt = -Infinity;
+  // Where the finger came down (a touch's events all go there). WebKit and Chrome on Android move a tap's click onto a
+  // link or button near it (touch adjustment): a tap on a short message's text went to its time's permalink above it.
+  let fingerOn: Element | null = null;
   const touchNow = () => (touchedAt = performance.now());
-  document.addEventListener("touchend", touchNow, { capture: true, passive: true, signal });
+  const touchEnd = (e: TouchEvent) => {
+    touchNow();
+    fingerOn = e.target as Element;
+    // WebKit (iOS Safari too) sends no click for a tap on what takes none, such as the room's name: hide them here.
+    if (!el.contains(fingerOn)) touch(null);
+  };
+  document.addEventListener("touchend", touchEnd, { capture: true, passive: true, signal });
   document.addEventListener("pointerdown", (e) => e.pointerType === "touch" && touchNow(), { capture: true, signal });
+  const interactive = "a, button, input, textarea, summary, label, [contenteditable]";
   const touch = (li: HTMLElement | null) => {
     if (touched) el.querySelector(`li.msg[data-id="${CSS.escape(touched)}"]`)?.classList.remove("touched");
     touched = li?.dataset.id ?? null;
@@ -181,11 +191,19 @@ export function createMessageList(opts: {
       const tap = performance.now() - touchedAt < 1000;
       el.classList.toggle("by-touch", tap);
       if ((!touched && !tap && !matchMedia("(hover:none)").matches) || opts.state().selected) return;
-      const t = e.target as Element;
+      let t = e.target as Element;
+      // A tap on a message's text is a tap on the message, wherever the browser moved the click (a link in the text
+      // still gets that help).
+      const text = tap ? fingerOn?.closest(".body") : null;
+      if (text && el.contains(text) && !text.contains(t) && t.closest(interactive)) {
+        e.preventDefault();
+        e.stopPropagation();
+        t = fingerOn!;
+      }
       const li = t.closest<HTMLElement>("li.msg");
       if (!li || !el.contains(li) || t.closest(".actions button")) return touch(null);
       const open = li.dataset.id === touched;
-      if (t.closest("a, button, input, textarea, summary, label, [contenteditable]")) return open || touch(null);
+      if (t.closest(interactive)) return open || touch(null);
       touch(open || !li.querySelector(".actions") ? null : li);
     },
     // Before the tapped button's own handler, which may redraw the message (a reaction chip) and take it off the page.

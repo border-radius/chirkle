@@ -1,5 +1,7 @@
 import { expect } from "@playwright/test";
+import { releaseName } from "../support/names.ts";
 import { atPath, composer, message, send, test, uniq } from "./fixtures.ts";
+import { E2E_BASE } from "./paths.ts";
 
 test("sign up, create a room, send the first message", async ({ page }) => {
   const errors: string[] = [];
@@ -9,6 +11,8 @@ test("sign up, create a room, send the first message", async ({ page }) => {
   await page.locator(".app-bar:visible, .side-foot").getByRole("link", { name: "Sign up" }).click();
   await expect(page).toHaveURL(atPath("/signup"));
   await expect(page.getByRole("tab", { name: "Sign up" })).toHaveAttribute("aria-selected", "true");
+  // Display names are unique (§22.1): free "Grace" from a retry or an earlier run, as apiUser() does for its names.
+  await releaseName(E2E_BASE, "Grace");
   await page.getByLabel("Display name").fill("Grace");
   await page.getByLabel("Email").fill(`grace-${uniq()}@test.local`);
   await page.getByLabel("Password").fill("password-123");
