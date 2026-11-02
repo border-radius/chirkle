@@ -48,7 +48,7 @@ escapes; `limit` ≤ 200; `page`). The app's notification check is `GET /api/cha
 (signed in; other people's DMs and replies to you, and every message of the `every` rooms; rooms you can't see left
 out). All answer a plain array of
 records, with `expand` and `fields` as the records API takes them, and see what its rules let the caller see (a room you can't
-see has no messages). The app falls back to the records API when a route answers 404 (a server from before the
+see has no messages). A message page also has an `ETag` (of its body, `expand` and `fields`) and `Cache-Control: no-store`: asked again with `If-None-Match`, an unchanged page is `304` with no body, so a client that kept the page shows it as it is (the web, since 2026-11-03, docs/PERF.md §5; the app doesn't ask). The app falls back to the records API when a route answers 404 (a server from before the
 routes; it can talk to servers it doesn't control). `tests/integration/lists.test.ts` and `search.test.ts` check each
 answer against the records API's answer for the filter it replaces; the app's `LegacyServerTest` runs the same session
 against a current server and one without the routes (or an old release's hooks, `-Pchirkle.legacyHooks=…`).

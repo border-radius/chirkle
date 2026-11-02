@@ -19,6 +19,7 @@ import {
 } from "../../lib/messages.ts";
 import { canPost } from "../../lib/rooms.ts";
 import type { LocalFile, Message, Quoted, Reaction, Room } from "../../lib/types.ts";
+import type { EarlyPage } from "../../prefetch.ts";
 import type { Scope } from "../../scope.ts";
 import { type AppState, type Store, UNCOUNTED, upsertRoom } from "../../store.ts";
 import { createWrites, revokeLocal, stray, takeStrays } from "./writes.ts";
@@ -61,6 +62,13 @@ export interface Change {
 }
 
 export interface RoomController {
+  /** The view is kept hidden (PERF.md §5): the first message from someone else that comes meanwhile is the first unread. */
+  park(): void;
+  /**
+   * Shown again: a line over the first message still unread (§18.5), brought into view (true), as on opening it. The
+   * count says which, as for a kept room; else the first from someone else that came while parked.
+   */
+  resume(): boolean;
   state(): RoomState;
   /** Subscribe and run the first load. Everything ends with the scope. */
   start(): void;
@@ -124,6 +132,8 @@ export function createRoomController(opts: {
   onUpload?: (id: string, fraction: number) => void;
   /** Where the room's latest messages are kept between visits (§7.5). */
   cache?: Cache;
+  /** The latest page, asked for as the room's link was pressed (prefetch.ts `take`): the first load uses it. */
+  early?: Promise<EarlyPage> | undefined;
   /** Any of the room's messages changed or went (`gone`: deleted for good), in the window or not. */
   onEvent?: (m: Message, gone: boolean) => void;
 }): RoomController {
@@ -155,6 +165,16 @@ export function createRoomController(opts: {
   /** An end the list asked to extend while stale: extended once the first page is in. */
   let wanted: "top" | "bottom" | null = null;
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The ETag of the latest page as the first load got it (PERF.md §5). Kept with the window: while the server's page
+   * still has that tag nothing in it changed since, so the window's newest messages, which realtime kept up, are that page.
+   */
+  let pageTag: string | undefined;
+  /** The page asked for as the room's link was pressed, until the first load takes it. */
+  let early = opts.early;
+  /** Parked (`park`), and the first message from someone else since. */
+  let parked = false;
+  let firstNew: string | null = null;
   /** Bumped whenever the window is replaced (a jump): pages requested before that are stale. */
   let gen = 0;
   /** Realtime events that arrive before the first page (even while a stale window shows); replayed once it is in. */
@@ -205,7 +225,7 @@ export function createRoomController(opts: {
     if (stale || !ready() || win.hasNewer) return;
     const saved = win.items.filter((m) => !m.status);
     const items = saved.slice(-PAGE_SIZE);
-    opts.cache?.put(owner, roomId, { items, hasOlder: win.hasOlder || items.length < saved.length, room: room() });
+    opts.cache?.put(owner, roomId, { items, hasOlder: win.hasOlder || items.length < saved.length, room: room(), tag: pageTag });
   };
   /** Local optimistic change that must win regardless of `updated` (edit/delete/revert). */
   const patchLocal = (id: string, patch: Partial<Message>) => {
@@ -336,7 +356,20 @@ export function createRoomController(opts: {
       const around = msgId ? await windowAround(msgId) : null;
       if (around) return around;
       // The latest page is asked for at once, beside the first unread message: with only a few unread, it has them.
-      const latestP = api.page(latest(roomId), signal);
+      // With the tag of the copy kept in memory, an unchanged page comes back without a body, and that copy is it.
+      const kept = opts.cache?.peek(owner, roomId);
+      const asked = early;
+      early = undefined; // a retry asks again
+      const latestP = asked
+        ? asked.then((p) => {
+            pageTag = p.tag;
+            return p.items;
+          })
+        : api.page(latest(roomId), signal, {
+            tag: kept?.tag,
+            items: kept ? [...kept.items].sort(compare).reverse() : [],
+            got: (t) => (pageTag = t),
+          });
       latestP.catch(() => {});
       const f = (firstP && (await firstP))?.id;
       const page = await (f ? latestP.catch(() => []) : latestP);
@@ -556,6 +589,7 @@ export function createRoomController(opts: {
       pill = "history";
       return emit();
     }
+    if (parked && !firstNew && m.author !== me()?.id) firstNew = m.id;
     const follow = !store.get().away && (nearBottom() || m.author === me()?.id);
     win = trim(merge(win, [m]), "top").win;
     if (!follow && pill !== "history") pill = "below";
@@ -590,6 +624,21 @@ export function createRoomController(opts: {
 
   return {
     state: () => ({ win, phase, targetId, unreadId, pill, stale, unsure: stale && asking }),
+    park() {
+      parked = true;
+    },
+    resume() {
+      parked = false;
+      const { unread } = store.get();
+      const n = unread === UNCOUNTED || win.hasNewer ? 0 : (unread.get(roomId) ?? 0);
+      const theirs = n ? win.items.filter((m) => m.author !== me()?.id && !m.deleted && !m.status) : [];
+      const id = (n && theirs[theirs.length - n]?.id) || firstNew;
+      firstNew = null;
+      if (!id || !find(id)) return false;
+      setUnread(id);
+      emit({ render: {}, scroll: "target" });
+      return true;
+    },
     start() {
       scope.defer(() => {
         clearTimeout(keepTimer);

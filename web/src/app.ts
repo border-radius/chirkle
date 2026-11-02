@@ -52,19 +52,43 @@ interface Panes {
  * Page layout (§7.1): the room list as a sidebar next to the main view. New params remount only the
  * main view, so switching rooms keeps the sidebar (and anything typed into it).
  */
-function withSidebar(panes: Panes, sidebar: () => View, main: () => View, layoutClass = ""): () => View {
+/** Rooms kept after you leave them (`keeps`), the latest first out of these many. */
+const KEPT_ROOMS = 3;
+
+/**
+ * The sidebar and a pane beside it. With `keeps` (rooms), a room you leave for another is kept out of the page, live
+ * (View.park), for the last KEPT_ROOMS: going back puts it back as it was, with what came meanwhile, nothing fetched or
+ * built again (PERF.md §5). Not one opened at a message (/r/:id/m/:msgId), which goes to it.
+ */
+function withSidebar(panes: Panes, sidebar: () => View, main: () => View, layoutClass = "", keeps = false): () => View {
   return () => {
     const side = sidebar();
     let pane = main();
     const content = h("div", { class: "pane" });
+    /** Where `pane` is mounted: `content`, or with `keeps` an element of its own in it, which goes with it when parked. */
+    let at: HTMLElement = content;
+    const place = () => {
+      if (!keeps) return content;
+      const el = content.appendChild(h("div", { class: "kept" }));
+      el.style.height = "100%"; // as the pane, for the room's own scrolling (here: the CSS budget is full)
+      return el;
+    };
+    /** Parked rooms by id, the longest parked first. */
+    const parked = new Map<string, { view: View; at: HTMLElement }>();
+    const drop = (p: { view: View; at: HTMLElement }) => {
+      p.view.unmount();
+      if (p.at !== content) p.at.remove();
+    };
     let root: HTMLElement;
     let current: Record<string, string> = {};
     // A fresh view rather than a remount: late async work of the old one must not see itself as active.
     const fresh = () => {
-      pane.unmount();
+      drop({ view: pane, at });
       pane = main();
-      pane.mount(content, current);
+      at = place();
+      pane.mount(at, current);
     };
+    const keepable = (p: Record<string, string>) => keeps && !!p.id && !p.msgId;
     return {
       mount(el, params) {
         root = el;
@@ -73,14 +97,39 @@ function withSidebar(panes: Panes, sidebar: () => View, main: () => View, layout
         const aside = h("aside", { class: "sidebar" });
         el.replaceChildren(h("div", { class: `layout ${layoutClass}`.trim() }, [aside, content]));
         side.mount(aside, {});
-        pane.mount(content, params);
+        at = place();
+        pane.mount(at, params);
       },
       update(params) {
+        const left = current;
         current = params;
-        fresh();
+        if (!keepable(left) || !keepable(params) || left.id === params.id || !pane.park) return fresh();
+        pane.park();
+        at.remove();
+        parked.set(left.id!, { view: pane, at });
+        const back = parked.get(params.id!);
+        parked.delete(params.id!);
+        if (back) {
+          content.append(back.at);
+          pane = back.view;
+          at = back.at;
+        }
+        if (!back?.view.resume?.()) {
+          if (back) drop(back);
+          pane = main();
+          at = place();
+          pane.mount(at, params);
+        }
+        for (const [id, p] of parked) {
+          if (parked.size <= KEPT_ROOMS) break;
+          parked.delete(id);
+          drop(p);
+        }
       },
       unmount() {
         if (panes.reload === fresh) panes.reload = () => {};
+        for (const p of parked.values()) drop(p);
+        parked.clear();
         pane.unmount();
         side.unmount();
         clear(root);
@@ -244,9 +293,10 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     cache,
     logOut,
     notify: startNotify,
+    early: prefetch,
   };
   const rooms = () => createRoomsView(ctx);
-  const roomPage = withSidebar(panes, rooms, () => createRoomView(ctx));
+  const roomPage = withSidebar(panes, rooms, () => createRoomView(ctx), "", true);
 
   const authPage = (mode: "login" | "signup") => () =>
     createLoginView({
@@ -293,8 +343,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
   startSession();
   router.start();
 
-  // A restored session is checked (and renewed) right away.
-  renewal.renew();
+  // A restored session is checked (and renewed) once the room list is in.
+  renewal.renewSoon();
 
   return {
     store,

@@ -152,7 +152,11 @@ export interface Api {
   markRead(room: string, at: string): Promise<void>;
 
   // messages
-  page(q: PageQuery, signal?: AbortSignal): Promise<Message[]>;
+  /**
+   * With `kept`, asked for with the ETag of a copy kept (PERF.md §5): when that copy is still the page, the server sends
+   * no body, and the page is `kept.items`. Either way the page's tag goes to `kept.got`.
+   */
+  page(q: PageQuery, signal?: AbortSignal, kept?: KeptPage): Promise<Message[]>;
   getMessage(id: string, signal?: AbortSignal): Promise<Message>;
   /** Every message matching `q` (not just one page): used for the edits/deletes missed during a disconnect. */
   changes(q: PageQuery, signal?: AbortSignal): Promise<Message[]>;
@@ -364,7 +368,13 @@ function records(pb: PbClient, collection: string) {
     delete: (id: string) => pb.send(one(id), { method: "DELETE" }),
     authWithPassword: (identity: string, password: string) =>
       auth(pb.send(`${path}/auth-with-password`, { method: "POST", body: { identity, password } })),
-    authRefresh: () => auth(pb.send(`${path}/auth-refresh`, { method: "POST" })),
+    // Saved only over the session it renewed: one ended (a logout) or changed meanwhile stays so.
+    authRefresh: async () => {
+      const sent = pb.authStore.token;
+      const { token, record } = await pb.send<{ token: string; record: AuthRecord }>(`${path}/auth-refresh`, { method: "POST" });
+      if (pb.authStore.token === sent) pb.authStore.save(token, record);
+      return record;
+    },
     /** A custom route that answers like a login. */
     authAt: (url: string, body: Record<string, unknown>) => auth(pb.send(url, { method: "POST", body })),
   };
@@ -372,6 +382,13 @@ function records(pb: PbClient, collection: string) {
 
 /** Statuses of a refused change: invalid data, or no (valid) session. */
 const REFUSED = new Set([400, 401, 403, 404]);
+
+/** A page's copy kept by the caller, and where its tag goes (Api.page). `items` as the page has them, newest first. */
+export interface KeptPage {
+  tag?: string | undefined;
+  items: readonly Message[];
+  got?: (tag: string) => void;
+}
 
 export function createApi(client: PbClient): Api {
   const rejected = new Set<() => void>();
@@ -542,8 +559,11 @@ export function createApi(client: PbClient): Api {
       await wrap(pb.send("/api/chat/reads", { method: "POST", body: { room, at } }));
     },
 
-    page: (q, signal) =>
-      wrap(pb.send<Message[]>(`/api/chat/rooms/${encodeURIComponent(q.room)}/messages`, { query: pageOptions(q), signal })),
+    page: async (q, signal, kept) => {
+      const path = `/api/chat/rooms/${encodeURIComponent(q.room)}/messages`;
+      const tag = kept && { sent: kept.items.length ? kept.tag : undefined, got: kept.got };
+      return (await wrap(pb.send<Message[] | undefined>(path, { query: pageOptions(q), signal, tag }))) ?? [...(kept?.items ?? [])];
+    },
     getMessage: (id, signal) => wrap(messages.get<Message>(id, MSG_OPTS, signal)),
     async changes(q, signal) {
       const out: Message[] = [];

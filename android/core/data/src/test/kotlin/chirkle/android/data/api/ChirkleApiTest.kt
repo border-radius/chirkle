@@ -66,6 +66,20 @@ class ChirkleApiTest {
         assertEquals(0, runCatching { api.listRooms() }.exceptionOrNull()?.toApiError()?.status)
     }
 
+    @Test fun `a renewal answered after a logout doesn't bring the session back`() = runBlocking {
+        val a = newUser()
+        val store = chirkle.android.data.pb.MemoryAuthStore(a.api.pb.authStore.session.value)
+        // Logged out while the renewal is on its way.
+        val http = TestServer.http.newBuilder().addInterceptor { chain ->
+            if (chain.request().url.encodedPath.endsWith("/auth-refresh")) store.clear()
+            chain.proceed(chain.request())
+        }.build()
+        val api = ChirkleApi(chirkle.android.data.pb.PbClient(TestServer.url, http, store))
+        assertEquals(a.user.id, api.refreshAuth().id)
+        assertNull(api.currentUser())
+        assertEquals("", store.session.value.token)
+    }
+
     @Test fun `JSON that isn't a session is network trouble too, not a crash`() = runBlocking {
         val a = newUser()
         val session = a.api.pb.authStore.session.value

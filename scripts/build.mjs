@@ -13,6 +13,7 @@ import {
   entryOutputs,
   formatSizes,
   injectAssets,
+  latinFont,
   MEDIA,
   NOTIFY,
   OUTDIR,
@@ -70,7 +71,7 @@ if (eager.length) {
 await esbuild.build({ ...SW_OPTIONS, minify: true, legalComments: "none", logLevel: "warning" });
 await cp(STATIC_DIR, OUTDIR, { recursive: true });
 
-const html = injectAssets(await readFile("web/index.html", "utf8"), assets);
+const html = injectAssets(await readFile("web/index.html", "utf8"), { ...assets, font: latinFont(result.metafile, OUTDIR) });
 await writeFile(`${OUTDIR}/index.html`, html);
 
 const gz = async (/** @type {string} */ path) => gzipSync(await readFile(path), { level: 9 }).length;

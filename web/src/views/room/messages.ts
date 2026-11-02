@@ -1,7 +1,9 @@
 // The message list DOM (§7.5, §7.6.1, §7.6.2): renders a MessageWindow with author groups and day dividers,
 // reusing each message's element until something it shows changes. Owns the per-message UI state (edit box,
 // delete confirm, inline errors), shows reactions (§20.3, reactions.ts), attachments (§17.5, attachments.ts) and which
-// messages are selected (§21.1); what those buttons *do* is up to the room view.
+// messages are selected (§21.1); what those buttons *do* is up to the room view. A message's buttons have no listeners of
+// their own: the list handles their clicks by their `data-act` (one listener, not one per button), and each toolbar is
+// a clone of one built once (PERF.md §5).
 
 import { h, reconcile } from "../../dom.ts";
 import { linkify } from "../../lib/links.ts";
@@ -14,7 +16,7 @@ import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
 import { createActionMenu } from "../../ui/menu.ts";
 import { createAttachments } from "./attachments.ts";
 import { composing, editProblem, fitRows, rowsFor } from "./composer.ts";
-import { createReactionParts, reactionFocus } from "./reactions.ts";
+import { addReactionButton, reactionFocus, reactionRow } from "./reactions.ts";
 
 export interface MsgError {
   text: string;
@@ -62,6 +64,16 @@ export interface MessageList {
 const QUOTE_SPOKEN = 80;
 
 const byId = (id: string) => `li.msg[data-id="${CSS.escape(id)}"]`;
+
+/** A message toolbar's buttons, in order: label, class (and `data-act`), icon. "react" is the reactions' own. */
+const TOOLS = [
+  ["", "react", ""],
+  ["Reply", "reply", "reply"],
+  ["Forward", "forward", "fwd"],
+  ["Select", "select", "check"],
+  ["Edit", "edit", "edit"],
+  ["Delete", "delete", "trash"],
+] as const;
 
 export function createMessageList(opts: {
   state: () => ListState;
@@ -244,13 +256,115 @@ export function createMessageList(opts: {
   /** Upload progress of sending messages, by id. */
   const uploads = new Map<string, number>();
   const attachments = createAttachments({ ...opts, uploadProgress: (id) => uploads.get(id) ?? 0 });
-  const reactionParts = createReactionParts(opts);
 
-  const btn = (label: string, onClick: () => void, cls?: string) =>
-    h("button", { type: "button", ...(cls ? { class: cls } : {}), on: { click: onClick }, signal }, label);
-  /** A button of the message toolbar: an icon, named by its label. */
-  const tool = (label: string, onClick: () => void, cls: string, icon: string) =>
-    h("button", { type: "button", class: `${cls} ic ${icon}`, "aria-label": label, title: label, on: { click: onClick }, signal });
+  /** A button whose click `onAct` handles as `act`. */
+  const btn = (label: string, act: string, cls?: string) =>
+    h("button", { type: "button", ...(cls ? { class: cls } : {}), dataset: { act } }, label);
+  /** The toolbars built so far, by which of TOOLS they have ("101001"): each message gets a clone. */
+  const toolbars = new Map<string, HTMLElement>();
+  function toolbar(has: readonly boolean[]): Node {
+    const key = has.map(Number).join("");
+    let bar = toolbars.get(key);
+    if (!bar) {
+      bar = h(
+        "div",
+        { class: "actions" },
+        TOOLS.map(([label, act, icon], i) =>
+          !has[i]
+            ? null
+            : act === "react"
+              ? addReactionButton(act)
+              : h("button", { type: "button", class: `${act} ic i-${icon}`, "aria-label": label, title: label, dataset: { act } }),
+        ),
+      );
+      toolbars.set(key, bar);
+    }
+    return bar.cloneNode(true);
+  }
+
+  /** The clicks on messages' buttons, by their `data-act`. */
+  function onAct(b: HTMLElement, id: string) {
+    switch (b.dataset.act) {
+      case "react":
+      case "add-reaction":
+        return opts.onPickReaction(id, b);
+      case "reaction":
+        return opts.onReact(id, b.dataset.emoji!, b.getAttribute("aria-pressed") !== "true");
+      case "reply":
+        return opts.onReply(id);
+      case "forward":
+        return opts.onForward(id);
+      case "select":
+        return opts.onSelect(id);
+      case "edit":
+        return list.startEdit(id);
+      case "delete":
+        return askDelete(id);
+      case "quote":
+        return opts.onOpenQuote(b.dataset.quote!);
+      case "send":
+        return opts.onRetrySend(id);
+      case "discard":
+        return opts.onDiscard(id);
+      case "confirm":
+        confirmDelete = null;
+        return opts.onDelete(id);
+      case "cancel":
+        return cancelDelete(id);
+      case "retry":
+        return errors.get(id)?.retry();
+    }
+  }
+  /** The message (its id) of an event in it, and the button with a `data-act` it is on, if any. */
+  const at = (e: Event) => {
+    const t = e.target as Element;
+    const id = t.closest<HTMLElement>("li.msg")?.dataset.id;
+    return id && el.contains(t) ? { t, id, b: t.closest<HTMLElement>("[data-act]") } : null;
+  };
+  el.addEventListener(
+    "click",
+    (e) => {
+      const hit = at(e);
+      if (hit?.b) onAct(hit.b, hit.id);
+    },
+    { signal },
+  );
+  // Selecting (§21.1): shows what is selected, not what was clicked: a refused one (the limit) stays unchecked.
+  el.addEventListener(
+    "change",
+    (e) => {
+      const hit = at(e);
+      if (!hit || !(hit.t instanceof HTMLInputElement) || !hit.t.matches("input.select")) return;
+      hit.t.checked = !!opts.state().selected?.has(hit.id);
+      opts.onSelect(hit.id);
+    },
+    { signal },
+  );
+  // Escape in a delete confirm cancels it.
+  el.addEventListener(
+    "keydown",
+    (e) => {
+      const hit = e.key === "Escape" ? at(e) : null;
+      if (!hit?.t.closest(".confirm")) return;
+      e.preventDefault();
+      cancelDelete(hit.id);
+    },
+    { signal },
+  );
+  // An author's menu (authorEl) works once it is first opened. (`toggle` doesn't bubble: caught on its way down.)
+  el.addEventListener(
+    "toggle",
+    (e) => {
+      const d = e.target;
+      if (!(d instanceof HTMLDetailsElement) || !d.open || !d.matches(".author-menu:not(.made)")) return;
+      d.classList.add("made");
+      const name = d.querySelector("summary")?.textContent ?? "";
+      const menu = createActionMenu({ label: name, note: d.dataset.note, el: d, signal });
+      const user = d.dataset.user!;
+      menu.update([{ label: "Message", run: () => opts.onMessageUser(user) }]);
+    },
+    { capture: true, signal },
+  );
 
   function askDelete(id: string) {
     confirmDelete = id;
@@ -398,14 +512,6 @@ export function createMessageList(opts: {
           class: "select",
           checked: picked,
           "aria-label": `Select message from ${author.name}, ${formatFull(ms)}`,
-          on: {
-            change: (e) => {
-              // Shows what is selected, not what was clicked: a refused one (the limit) stays unchecked.
-              (e.currentTarget as HTMLInputElement).checked = picked;
-              opts.onSelect(m.id);
-            },
-          },
-          signal,
         }),
       );
     }
@@ -438,15 +544,15 @@ export function createMessageList(opts: {
     }
     if (!m.deleted) parts.push(attachments(m));
     if (!m.deleted && m.previews?.length) parts.push(previewList(m.previews));
-    if (reactions.length) parts.push(reactionParts.row(m, reactions, reactable, me?.id ?? ""));
+    if (reactions.length) parts.push(reactionRow(reactions, reactable, me?.id ?? ""));
     if (m.status === "failed") {
       // The original went away while this reply was sending: Retry sends it without the quote (§19).
       const replyGone = !!quoted?.deleted;
       parts.push(
         h("div", { class: "send-error" }, [
           replyGone ? "Not sent: the message you replied to was deleted. " : "Not sent. ",
-          btn(replyGone ? "Send without quote" : "Retry", () => opts.onRetrySend(m.id)),
-          btn("Discard", () => opts.onDiscard(m.id)),
+          btn(replyGone ? "Send without quote" : "Retry", "send"),
+          btn("Discard", "discard"),
         ]),
       );
     }
@@ -454,48 +560,16 @@ export function createMessageList(opts: {
       // Selecting: no actions on single messages.
     } else if (confirmDelete === m.id) {
       parts.push(
-        h(
-          "div",
-          {
-            class: "confirm",
-            role: "group",
-            "aria-label": "Confirm delete",
-            on: {
-              keydown: (e) => {
-                if (e.key !== "Escape") return;
-                e.preventDefault();
-                cancelDelete(m.id);
-              },
-            },
-            signal,
-          },
-          [
-            "Delete this message? ",
-            btn(
-              "Delete message",
-              () => {
-                confirmDelete = null;
-                opts.onDelete(m.id);
-              },
-              "danger",
-            ),
-            btn("Cancel", () => cancelDelete(m.id), "cancel"),
-          ],
-        ),
-      );
-    } else if (editing !== m.id && (reactable || repliable || deletable || selectable)) {
-      parts.push(
-        h("div", { class: "actions" }, [
-          reactable ? reactionParts.addButton(m.id, "react") : null,
-          repliable ? tool("Reply", () => opts.onReply(m.id), "reply", "i-reply") : null,
-          selectable && !emptyForward(m) ? tool("Forward", () => opts.onForward(m.id), "forward", "i-fwd") : null,
-          selectable ? tool("Select", () => opts.onSelect(m.id), "select", "i-check") : null,
-          editable ? tool("Edit", () => list.startEdit(m.id), "edit", "i-edit") : null,
-          deletable ? tool("Delete", () => askDelete(m.id), "delete", "i-trash") : null,
+        h("div", { class: "confirm", role: "group", "aria-label": "Confirm delete" }, [
+          "Delete this message? ",
+          btn("Delete message", "confirm", "danger"),
+          btn("Cancel", "cancel", "cancel"),
         ]),
       );
+    } else if (editing !== m.id && (reactable || repliable || deletable || selectable)) {
+      parts.push(toolbar([reactable, repliable, selectable && !emptyForward(m), selectable, editable, deletable]) as HTMLElement);
     }
-    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, [`${err.text} `, btn("Retry", err.retry)]));
+    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, [`${err.text} `, btn("Retry", "retry")]));
 
     const li = h("li", { class: cls, dataset: { id: m.id } }, parts);
     if (touched === m.id) li.classList.add("touched");
@@ -555,22 +629,25 @@ export function createMessageList(opts: {
         class: `reply-quote${q.deleted ? " deleted" : ""}`,
         title: "Show the original message",
         "aria-label": `Quoting ${name || "a message"}: ${spoken}. Show the original message.`,
-        on: { click: () => opts.onOpenQuote(q.id) },
-        signal,
+        dataset: { act: "quote", quote: q.id },
       },
       [name ? h("span", { class: "reply-author" }, name) : null, h("span", { class: "reply-text" }, text)],
     );
   }
 
-  /** The author's name: for other (known) users a menu offering "Message" (§16.5), unless they take no DMs (§16.7). Guests can't message (§23.3). */
+  /**
+   * The author's name: for other (known) users a menu offering "Message" (§16.5), unless they take no DMs (§16.7). Guests
+   * can't message (§23.3). The menu is drawn as ui/menu.ts draws it, and made to work when first opened (the `toggle`
+   * listener above).
+   */
   function authorEl(author: User, me: User | null, known: boolean): HTMLElement {
     // Someone on a linked instance says where (§33.4).
     const where = author.instance ? `On ${author.instance}` : undefined;
     if (!me || author.id === me.id || !known || author.no_dms) return h("span", { class: "author", title: where }, author.name);
-    const menu = createActionMenu({ label: author.name, summary: author.name, className: "author", note: where, signal });
-    menu.update([{ label: "Message", run: () => opts.onMessageUser(author.id) }]);
-    menu.el.classList.add("author-menu");
-    return menu.el;
+    return h("details", { class: "menu author-menu", dataset: { user: author.id, ...(where ? { note: where } : {}) } }, [
+      h("summary", { class: "author" }, author.name),
+      h("div", { class: "menu-items" }, [where ? h("p", {}, where) : null, h("button", { type: "button" }, "Message")]),
+    ]);
   }
 
   function divider(ms: number): HTMLElement {

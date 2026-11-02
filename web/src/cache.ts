@@ -15,12 +15,19 @@ export interface Kept {
   room?: Room | undefined;
   /** Prefetched (prefetch.ts): the room's unread count when the page was asked for. */
   unread?: number | undefined;
+  /**
+   * The ETag of the latest page these items are (PERF.md §5): asked for with it, an unchanged page comes back without a
+   * body. Only where `items` are that page, as the server still has it while the tag stands (the room at its live edge).
+   */
+  tag?: string | undefined;
 }
 
 export interface Cache {
   /** The room as `user` ("" for a guest) last saw it, if kept. */
   get(user: string, roomId: string): Promise<Kept | undefined>;
   put(user: string, roomId: string, kept: Kept): void;
+  /** The room as kept in memory, at once: undefined when it is only in IndexedDB (or not kept). */
+  peek(user: string, roomId: string): Kept | undefined;
   /** Forget every room. */
   clear(): void;
 }
@@ -97,6 +104,10 @@ export function createCache(name = "chat"): Cache {
   return {
     async get(user, roomId) {
       const kept = mem.get(roomId) ?? (await run<(Kept & { user: string }) | undefined>("readonly", (s) => s.get(roomId)));
+      return kept?.user === user ? kept : undefined;
+    },
+    peek(user, roomId) {
+      const kept = mem.get(roomId);
       return kept?.user === user ? kept : undefined;
     },
     put(user, roomId, kept) {

@@ -285,6 +285,10 @@ export function memoryCache(): Cache & { rooms: Map<string, Kept & { user: strin
       const kept = rooms.get(roomId);
       return kept?.user === user ? kept : undefined;
     },
+    peek(user, roomId) {
+      const kept = rooms.get(roomId);
+      return kept?.user === user ? kept : undefined;
+    },
     put: (user, roomId, kept) => void rooms.set(roomId, { ...structuredClone(kept), user }),
     clear: () => rooms.clear(),
   };

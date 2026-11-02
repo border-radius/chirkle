@@ -5,6 +5,7 @@ import type { Api } from "./api.ts";
 import type { Cache } from "./cache.ts";
 import type { CollectionsService } from "./collections.ts";
 import type { Drafts } from "./drafts.ts";
+import type { Prefetch } from "./prefetch.ts";
 import type { AppState, Store } from "./store.ts";
 import type { Sync } from "./sync.ts";
 import type { Unread } from "./unread.ts";
@@ -28,4 +29,6 @@ export interface Ctx {
   logOut: () => void;
   /** The notification settings changed (§34): follow them, if not yet. */
   notify: () => void;
+  /** Rooms' latest pages asked for as their links are pressed or pointed at, for the room to start with (prefetch.ts). */
+  early?: Pick<Prefetch, "hint" | "take">;
 }

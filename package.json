@@ -21,6 +21,7 @@
     "test:int": "vitest run --project integration",
     "test:e2e": "playwright test",
     "screenshots": "node --no-warnings scripts/screenshots.ts",
+    "profile:web": "node --no-warnings scripts/profile-web.ts",
     "schema:snapshot": "vitest run --project integration -u tests/integration/schema.snapshot.test.ts",
     "check": "npm run typecheck && npm run lint && npm run lint:sinks && npm test && npm run test:int && npm run build"
   },

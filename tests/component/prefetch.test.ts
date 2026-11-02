@@ -49,6 +49,42 @@ describe("prefetching rooms with unread messages (§7.5)", () => {
     expect(new Set(kept.items.map((m) => m.id))).toEqual(new Set(all.slice(10).map((m) => m.id)));
   });
 
+  describe("a room's link pressed or pointed at (PERF.md §5)", () => {
+    it("asks for the latest page once, for the room to take once, and keeps it", async () => {
+      const all = await seedMessages(room.id, me.user.id, 3);
+      prefetch.hint(room.id);
+      prefetch.hint(room.id); // pressed after pointed at: the same request
+      expect(net.calls("page")).toBe(1);
+      const page = await prefetch.take(room.id)!;
+      expect(page.items.map((m) => m.id).sort()).toEqual(all.map((m) => m.id).sort());
+      expect(page.tag).toMatch(/^"\w+"$/);
+      expect(prefetch.take(room.id)).toBeUndefined();
+      expect(cache.rooms.get(room.id)).toMatchObject({ tag: page.tag });
+    });
+
+    it("an unchanged room answers 304: the kept page, nothing kept again", async () => {
+      await seedMessages(room.id, me.user.id, 3);
+      prefetch.hint(room.id);
+      const first = await prefetch.take(room.id)!;
+      const kept = cache.rooms.get(room.id);
+      await sleep(5100); // EARLY_MS: asked again
+      prefetch.hint(room.id);
+      const again = await prefetch.take(room.id)!;
+      expect(again.tag).toBe(first.tag);
+      expect(again.items.map((m) => m.id)).toEqual(first.items.map((m) => m.id));
+      expect(cache.rooms.get(room.id)).toBe(kept);
+    }, 15_000);
+
+    it("not for the open room, nor signed out", async () => {
+      store.set({ activeRoomId: room.id });
+      prefetch.hint(room.id);
+      store.set({ activeRoomId: null, user: null });
+      prefetch.hint(room.id);
+      expect(net.calls("page")).toBe(0);
+      expect(prefetch.take(room.id)).toBeUndefined();
+    });
+  });
+
   it("a burst of messages in a room is one fetch", async () => {
     await seedMessages(room.id, me.user.id, 3);
     for (let i = 0; i < 5; i++) store.set(bumpUnread(room.id));

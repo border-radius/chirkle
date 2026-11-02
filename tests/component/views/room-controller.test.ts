@@ -913,6 +913,8 @@ describe("room controller (§7.5, no DOM)", () => {
       await seedMessages(room.id, me.user.id, 5);
       await visit(room);
       const kept = cache!.rooms.get(room.id)!;
+      // Copies from before a rename: kept with the tag of that page, which the server no longer gives.
+      kept.tag = '"before"';
       for (const m of kept.items) m.expand = { author: { ...me.user, name: "Old name" } };
       const release = instrument(me.api).hold("page");
       start(room);

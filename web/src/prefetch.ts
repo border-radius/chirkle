@@ -6,17 +6,36 @@
 // refetches it too, so the cache never shows its text again. Runs while someone is logged in (unread counts are theirs);
 // stopped before the cache is cleared, so nothing lands in it afterwards. Once the room list is in, the rooms that
 // aren't kept yet are fetched too (after the unread ones, up to WARM of them): a room not yet opened here opens at once.
+// A room's link pressed, or pointed at for HOVER_MS, asks for its latest page at once (`hint`): the room takes that
+// request as its first page when it opens (`take`), a click later (PERF.md §5).
 
 import type { Api } from "./api.ts";
 import type { Cache } from "./cache.ts";
 import { latest, PAGE_SIZE } from "./lib/cursor.ts";
+import { compare } from "./lib/messages.ts";
+import type { Message } from "./lib/types.ts";
 import { createScope, type Scope } from "./scope.ts";
 import { type AppState, roomSections, type Store } from "./store.ts";
 
 export interface Prefetch {
   start(): void;
   stop(): void;
+  /** The pointer went down on room `id`'s link, or rests on it: ask for its latest page now. Signed in only. */
+  hint(id: string): void;
+  /** The page `hint` asked for, if lately (EARLY_MS): the room's first page, and its tag. Taken once. */
+  take(id: string): Promise<EarlyPage> | undefined;
 }
+
+/** A latest page asked for early, and its ETag (PERF.md §5). */
+export interface EarlyPage {
+  items: Message[];
+  tag: string;
+}
+
+/** A hinted page goes stale after this long: the room asks for its own. */
+const EARLY_MS = 5000;
+/** How long the pointer rests on a room's link before its page is asked for. */
+export const HOVER_MS = 120;
 
 const DELAY_MS = 1000;
 /** Between two fetches: hundreds of rooms must not use up the server's per-IP request limit (QA BUG-94). */
@@ -42,8 +61,32 @@ export function createPrefetch({
   refetchMs?: number;
 }): Prefetch {
   let scope: Scope | null = null;
+  /** Pages asked for by `hint`, by room, with when. */
+  const early = new Map<string, { at: number; page: Promise<EarlyPage> }>();
 
   return {
+    hint(id) {
+      const user = store.get().user?.id ?? "";
+      const s = scope;
+      const was = early.get(id);
+      if (!s || !user || id === store.get().activeRoomId || (was && was.at > Date.now() - EARLY_MS)) return;
+      const kept = cache.peek(user, id);
+      let tag = "";
+      const items = kept ? [...kept.items].sort(compare).reverse() : [];
+      const page = api.page(latest(id), s.signal, { tag: kept?.tag, items, got: (t) => (tag = t) }).then((p) => {
+        // Kept too, as prefetching keeps a page: pointed at and not opened, it opens at once later.
+        if (s.active && store.get().user?.id === user && store.get().activeRoomId !== id && tag !== kept?.tag)
+          cache.put(user, id, { items: p, hasOlder: p.length >= PAGE_SIZE, room: store.get().rooms.get(id), tag });
+        return { items: p, tag };
+      });
+      page.catch(() => early.delete(id));
+      early.set(id, { at: Date.now(), page });
+    },
+    take(id) {
+      const was = early.get(id);
+      early.delete(id);
+      return was && was.at > Date.now() - EARLY_MS ? was.page : undefined;
+    },
     start() {
       const user = store.get().user?.id ?? "";
       if (scope || !user) return;
@@ -76,7 +119,11 @@ export function createPrefetch({
           const unread = store.get().unread.get(id);
           // From when it is asked for: a message that comes while it is on its way waits too.
           fetched.set(id, Date.now());
-          const page = await api.page(latest(id), s.signal).catch(() => null);
+          // With the kept copy's tag: unchanged, the page comes without a body, and nothing is parsed or written (PERF.md §5).
+          const kept = cache.peek(user, id);
+          let tag = "";
+          const same: Message[] = [];
+          const page = await api.page(latest(id), s.signal, { tag: kept?.tag, items: same, got: (t) => (tag = t) }).catch(() => null);
           if (!s.active) return;
           // Refused (the rate limit, offline): the rest waits for their counts to go up again (or the next start).
           if (!page) {
@@ -86,7 +133,9 @@ export function createPrefetch({
           }
           // The open room keeps its own page (and gets every message live).
           if (store.get().user?.id === user && store.get().activeRoomId !== id) {
-            cache.put(user, id, { items: page, hasOlder: page.length >= PAGE_SIZE, room: store.get().rooms.get(id), unread });
+            if (kept && kept.tag === tag && kept.items.length) {
+              if (kept.unread !== unread) cache.put(user, id, { ...kept, unread }); // the same page: only the count to note
+            } else cache.put(user, id, { items: page, hasOlder: page.length >= PAGE_SIZE, room: store.get().rooms.get(id), unread, tag });
           }
           await new Promise((r) => setTimeout(r, gapMs));
         }
@@ -125,6 +174,7 @@ export function createPrefetch({
     stop() {
       scope?.dispose();
       scope = null;
+      early.clear();
     },
   };
 }

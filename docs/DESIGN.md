@@ -467,6 +467,8 @@ interface MessageWindow {
 
 Each message the user sees is loaded once per visit. Moving the window costs one indexed query of 50 rows, and the DOM never holds more than about 300 messages.
 
+**Rooms you go back to (2026-11-03, PERF.md §5).** The last 3 rooms you left for another stay mounted, out of the page and still live (`app.ts` `withSidebar`, `View.park`/`resume`). Going back puts the room back as it was: scrolled where it was (or at the bottom, if it was there), with what came meanwhile. When something in it is still unread, it goes to the first unread message under the New line, as opening it does (§18.5). Nothing is fetched or drawn again. A room opened at a message (`/r/:id/m/:msgId`), or the same room again, starts afresh. A room's latest page is asked for as its link is pressed, or once the pointer rests on it for 120 ms (`prefetch.ts` `hint`), and the room takes that request as its first page. A kept page keeps its `ETag` (API.md), so asking for it again answers 304 when nothing changed. What counts as read (§18.3) is what an `IntersectionObserver` on the list reports as whole on screen or scrolled past; the view no longer measures rows itself.
+
 The window state machine above lives in `views/room/controller.ts`, which has no DOM; what it writes (sends, edits, deletes, reactions) is `writes.ts`, which reaches the window only through the controller's `WriteCtx`. It reports each change with a hint (render, keep the anchor, scroll to the bottom/top/target), and `views/room.ts` applies that hint to the list.
 
 **DOM rendering (`views/room.ts`, `views/room/messages.ts`):**

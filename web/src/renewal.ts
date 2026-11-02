@@ -16,10 +16,17 @@ const RENEW_RETRY_MS = 60 * 1000;
  */
 const CHECK_MIN_MS = 30 * 1000;
 const CHECK_STALE_MS = 5 * 60 * 1000;
+/** At start, the check waits for the room list (it would take a connection and server time from it), at most this long. */
+const START_WAIT_MS = 3000;
 
 export interface Renewal {
-  /** Check (and renew) the session now: a restored one, at start. */
+  /** Check (and renew) the session now. */
   renew(): void;
+  /**
+   * A restored session, at start: checked (and renewed) once the room list is in, or START_WAIT_MS on, whichever is
+   * first. One that ran out meanwhile is over at once. Until checked, a revoked one shows what a guest sees (PERF.md §5).
+   */
+  renewSoon(): void;
   /** The tab became visible: timers were late or paused meanwhile. */
   visible(): void;
   stop(): void;
@@ -29,6 +36,8 @@ export function createRenewal({ api, store, expire }: { api: Api; store: Store<A
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** When the session was last checked with the server (renewed, or found revoked). */
   let checkedAt = 0;
+  /** Stops waiting for the room list to check a restored session (renewSoon). */
+  let starting = () => {};
 
   function schedule(ms = Math.min(Math.max((api.sessionExpiry() - Date.now()) / 2, 0), RENEW_MAX_MS)) {
     clearTimeout(timer);
@@ -72,12 +81,29 @@ export function createRenewal({ api, store, expire }: { api: Api; store: Store<A
 
   return {
     renew,
+    renewSoon() {
+      if (!store.get().user) return;
+      if (api.sessionExpiry() <= Date.now()) return expire();
+      const listed = (s: AppState) => s.roomsStatus !== "idle" && s.roomsStatus !== "loading";
+      if (listed(store.get())) return renew();
+      const go = () => {
+        starting();
+        renew();
+      };
+      const wait = setTimeout(go, START_WAIT_MS);
+      const off = store.subscribe((s) => listed(s) && go());
+      starting = () => {
+        clearTimeout(wait);
+        off();
+      };
+    },
     visible() {
       // Also check a session not checked for a while: revoked meanwhile, this tab would get nothing live and send nothing.
       if (store.get().user && Date.now() - checkedAt > CHECK_STALE_MS) renew();
       else schedule();
     },
     stop() {
+      starting();
       offRejected();
       offStore();
       clearTimeout(timer);

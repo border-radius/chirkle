@@ -1277,3 +1277,16 @@ launcher badge (`unreadTotal`) counts what is left in the open room too.
 
 Tests: `ServicesTest` reads an open room partway (the count comes down to what is left, a new message while scrolled
 up counts, the bottom clears it); `RoomSectionsTest`: the open room with unread messages stays first.
+
+## 42. The web speed pass (2026-11-03)
+
+The web's speed pass (PERF.md §5) changed one thing the app talks to: a message page
+(`GET /api/chat/rooms/{room}/messages`) now has an `ETag` and `Cache-Control: no-store`, and answers `304` to
+`If-None-Match` with its tag (API.md). The app sends no `If-None-Match`, so it always gets the page as before; OkHttp
+keeps no HTTP cache here. Not ported: the web's other changes are how its page is built (rooms kept mounted, rows
+read by an `IntersectionObserver`, an icon sprite, a press or hover asking for a room's page early), which the app
+does its own way (Compose keeps the room list and the room's state; kept rooms open from the database).
+
+Ported: a session renewal answered after a logout (or another login) no longer saves the old session back
+(`ChirkleApi.auth(renewing)`), the web's fix of the same race. Test: `ChirkleApiTest` "a renewal answered after a
+logout doesn't bring the session back".

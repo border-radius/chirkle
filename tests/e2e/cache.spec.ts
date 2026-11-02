@@ -47,16 +47,16 @@ test("a room opens at once from the cache, after switching and after a reload, a
   await page.goto(`/r/${first.id}`);
   await expect(message(page, "kept from last time")).toBeVisible();
 
-  // Switching back while the network is slow: the room shows what it had, then the new message.
+  // Switching back while no page can come: the room was kept live (PERF.md §5), with what came meanwhile.
   await page.locator(`a[href="/r/${second.id}"]`).click();
   await expect(message(page, "in the second room")).toBeVisible();
   await apiSend(ada, first, "sent meanwhile");
+  await page.waitForTimeout(500); // the live event
   let release = await holdMessages(page);
   await page.locator(`a[href="/r/${first.id}"]`).click();
   await expect(message(page, "kept from last time")).toBeVisible();
-  await expect(message(page, "sent meanwhile")).toHaveCount(0);
-  release();
   await expect(message(page, "sent meanwhile")).toBeVisible();
+  release();
   await page.unrouteAll({ behavior: "ignoreErrors" });
 
   // After a reload too, before the room list is in (the window is saved a second after it last changed: a reload
@@ -121,8 +121,9 @@ test("after a reload, a kept room shows before the server has answered anything,
     await held;
     await route.continue().catch(() => {});
   });
-  await apiSend(ada, room, "unread three");
   await page.goto(`/r/${room.id}`);
+  // Sent once the page is gone: kept live in the room left open (PERF.md §5), it would be in the cache already.
+  await apiSend(ada, room, "unread three");
   await expect(message(page, "unread two")).toBeVisible();
   await expect(page.locator("header.room-header h1")).toHaveText(`#${room.name}`);
   await expect(message(page, "unread three")).toHaveCount(0);

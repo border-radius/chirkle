@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryOutputs, injectAssets, staticImports, viewerDefine } from "../../../scripts/lib/build-utils.mjs";
+import { entryOutputs, injectAssets, latinFont, staticImports, viewerDefine } from "../../../scripts/lib/build-utils.mjs";
 
 const template = `<!doctype html><head><!--CSS--></head><body><div id="app"></div><!--JS--></body>`;
 
@@ -17,9 +17,25 @@ describe("injectAssets", () => {
     expect(html.indexOf("a.js")).toBeGreaterThan(html.indexOf(`<div id="app">`));
   });
 
+  it("preloads the font before the stylesheet, which would ask for it only once in (PERF.md §5)", () => {
+    const html = injectAssets(template, { js: "assets/a.js", css: "assets/a.css", font: "assets/inter-latin-EF56.woff2" });
+    expect(html).toContain(`<link rel="preload" href="/assets/inter-latin-EF56.woff2" as="font" type="font/woff2" crossorigin>`);
+    expect(html.indexOf("inter-latin")).toBeLessThan(html.indexOf("a.css"));
+    expect(injectAssets(template, { js: "a.js", css: "a.css" })).not.toContain("preload");
+  });
+
   it("throws when a placeholder is missing", () => {
     expect(() => injectAssets("<head><!--CSS--></head>", { js: "a.js", css: "a.css" })).toThrow(/<!--JS-->/);
     expect(() => injectAssets("<body><!--JS--></body>", { js: "a.js", css: "a.css" })).toThrow(/<!--CSS-->/);
+  });
+});
+
+describe("latinFont", () => {
+  it("finds the Latin Inter, not its extended or other scripts' subsets", () => {
+    const outputs = Object.fromEntries(
+      ["inter-latin-ext-AB12CD34", "inter-cyrillic-EF56GH78", "inter-latin-IJ90KL12"].map((n) => [`pb_public/assets/${n}.woff2`, {}]),
+    );
+    expect(latinFont({ outputs }, "pb_public")).toBe("assets/inter-latin-IJ90KL12.woff2");
   });
 });
 

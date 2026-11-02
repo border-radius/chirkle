@@ -9,6 +9,12 @@ export interface View {
    * factory, e.g. switching rooms keeps the sidebar mounted.
    */
   update?(params: Record<string, string>): void;
+  /**
+   * Optional: kept, hidden, after it was left (app.ts withSidebar keeps the last rooms, PERF.md §5): still live, but not
+   * what you are looking at. `resume` shows it again; false if it can't be (it is to be unmounted and made afresh).
+   */
+  park?(): void;
+  resume?(): boolean;
 }
 
 export interface Route {

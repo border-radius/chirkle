@@ -187,14 +187,15 @@ class ChirkleApi(val pb: PbClient) {
         }
     }
 
-    private suspend fun auth(path: String, body: JsonObject): User {
+    /** Log in (or renew `renewing`, a token: saved only over that same session, not one ended or changed meanwhile). */
+    private suspend fun auth(path: String, body: JsonObject, renewing: String? = null): User {
         // Not a session (another server's answer, a proxy's): like network trouble, never a crash (QA BUG-158).
         val unreadable = { ApiError("The server's answer couldn't be read.", 0) }
         val json = call(path, "POST", body = Body.Json(body)) as? JsonObject ?: throw unreadable()
         val record = json["record"] as? JsonObject ?: throw unreadable()
         val token = (json["token"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw unreadable()
         val user = runCatching { decode<User>(record) }.getOrElse { throw unreadable() }
-        pb.authStore.save(Session(token, record))
+        if (renewing == null || pb.authStore.session.value.token == renewing) pb.authStore.save(Session(token, record))
         return user
     }
 
@@ -234,7 +235,8 @@ class ChirkleApi(val pb: PbClient) {
     /** Re-validate the stored session, which renews it. Throws when it is no longer valid. */
     suspend fun refreshAuth(): User {
         if (currentUser() == null) throw ApiError("Not logged in.", 401)
-        return auth("/api/collections/users/auth-refresh", JsonObject(emptyMap()))
+        // A logout (or another login) while it is on its way stays so (as the web, PERF.md §5).
+        return auth("/api/collections/users/auth-refresh", JsonObject(emptyMap()), renewing = pb.authStore.session.value.token)
     }
 
     fun logOut() = pb.authStore.clear()

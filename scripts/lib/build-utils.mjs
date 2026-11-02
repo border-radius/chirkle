@@ -83,6 +83,16 @@ export const BASE_OPTIONS = {
   assetNames: "assets/[name]-[hash]",
 };
 
+/**
+ * The Latin Inter's output (fonts.css's last face): the font index.html preloads.
+ * @param {{ outputs: Record<string, unknown> }} metafile
+ * @param {string} outdir
+ */
+export function latinFont(metafile, outdir) {
+  const out = Object.keys(metafile.outputs).find((p) => /\/inter-latin-[A-Z0-9]+\.woff2$/.test(p));
+  return out?.slice(outdir.length + 1);
+}
+
 /** Gzipped size budget in bytes (DESIGN.md §7.7). */
 export const BUDGET = Object.freeze({
   js: 49.75 * 1024,
@@ -119,16 +129,18 @@ export function formatSizes(sizes) {
 }
 
 /**
- * Replace the `<!--CSS-->` and `<!--JS-->` placeholders in the HTML template.
+ * Replace the `<!--CSS-->` and `<!--JS-->` placeholders in the HTML template. `font`, the Latin Inter every page
+ * draws its text in, is preloaded: otherwise it is asked for only once the stylesheet is in (PERF.md §5).
  * @param {string} template
- * @param {{ js: string, css: string }} assets paths relative to the public dir
+ * @param {{ js: string, css: string, font?: string | undefined }} assets paths relative to the public dir
  */
 export function injectAssets(template, assets) {
   for (const p of ["<!--CSS-->", "<!--JS-->"]) {
     if (!template.includes(p)) throw new Error(`index.html template is missing the ${p} placeholder`);
   }
+  const font = assets.font ? `<link rel="preload" href="/${assets.font}" as="font" type="font/woff2" crossorigin>\n` : "";
   return template
-    .replace("<!--CSS-->", `<link rel="stylesheet" href="/${assets.css}">`)
+    .replace("<!--CSS-->", `${font}<link rel="stylesheet" href="/${assets.css}">`)
     .replace("<!--JS-->", `<script type="module" src="/${assets.js}"></script>`);
 }
 

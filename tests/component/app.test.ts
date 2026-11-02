@@ -107,14 +107,16 @@ describe("app boot (§7.1)", () => {
     await api.unsubscribeAll();
   });
 
-  it("with a stored session it goes straight to the route and refreshes auth in the background", async () => {
+  it("with a stored session it goes straight to the route and refreshes auth in the background, once the room list is in", async () => {
     const { api, user } = await signedUp("Ada");
     const ctl = instrument(api);
     history.replaceState(null, "", "/r/abc");
     app = startApp({ api, root });
     expect(location.pathname).toBe("/r/abc");
     expect(app.store.get().user).toEqual(user);
-    expect(ctl.calls("refreshAuth")).toBe(1);
+    expect(ctl.calls("refreshAuth")).toBe(0); // the room list first (PERF.md §5)
+    await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
+    expect(app.store.get().roomsStatus).toBe("ready");
     expect(root.textContent).toContain("Ada");
     expect(meLink()).not.toBeNull();
   });
@@ -320,6 +322,40 @@ describe("app boot (§7.1)", () => {
     expect(ctl.calls("listRooms")).toBe(fetches);
     expect(ctl.calls("subscribeRooms")).toBe(1); // one app-wide subscription, not one per view
     await vi.waitFor(() => expect(sidebar.querySelector(`a[href="/r/${r2.id}"]`)?.getAttribute("aria-current")).toBe("page"));
+  });
+
+  it("a room left for another is kept, live: going back shows it with what came meanwhile, nothing fetched (PERF.md §5)", async () => {
+    const { api } = await signedUp("Ada");
+    const ctl = instrument(api);
+    const r1 = await api.createRoom(`one-${newId()}`);
+    const r2 = await api.createRoom(`two-${newId()}`);
+    await api.send({ id: newId(), room: r1.id, text: "before" });
+    history.replaceState(null, "", `/r/${r1.id}`);
+    app = startApp({ api, root });
+    await vi.waitFor(() => expect(root.querySelector("li.msg")?.textContent).toContain("before"));
+    const list = root.querySelector("ol.messages")!;
+
+    visit(`/r/${r2.id}`);
+    await vi.waitFor(() => expect(root.querySelector("header.room-header h1")?.textContent).toBe(`#${r2.name}`));
+    expect(list.isConnected).toBe(false); // out of the page: not found by queries, not read out
+    expect(root.querySelectorAll("ol.messages")).toHaveLength(1);
+    await api.send({ id: newId(), room: r1.id, text: "meanwhile" });
+    await vi.waitFor(() => expect(list.textContent).toContain("meanwhile"));
+    const pages = ctl.calls("page");
+
+    visit(`/r/${r1.id}`);
+    await vi.waitFor(() => expect(root.querySelector("header.room-header h1")?.textContent).toBe(`#${r1.name}`));
+    expect(root.querySelector("ol.messages")).toBe(list);
+    expect(ctl.calls("page")).toBe(pages);
+    expect(root.querySelector("aside.sidebar a[aria-current=page]")?.getAttribute("href")).toBe(`/r/${r1.id}`);
+
+    // Opened at a message, it starts afresh, there.
+    const m = await api.send({ id: newId(), room: r1.id, text: "linked" });
+    visit(`/r/${r2.id}`);
+    await vi.waitFor(() => expect(root.querySelector("header.room-header h1")?.textContent).toBe(`#${r2.name}`));
+    visit(`/r/${r1.id}/m/${m.id}`);
+    await vi.waitFor(() => expect(root.querySelector("ol.messages")).not.toBe(list));
+    expect(root.querySelectorAll("ol.messages")).toHaveLength(1);
   });
 
   it("a network failure during the background refresh keeps the session (offline ≠ logged out)", async () => {

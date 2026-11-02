@@ -66,6 +66,20 @@ describe("createApi", () => {
       expect(anon.currentUser()).toEqual(user);
     });
 
+    it("a renewal answered after a logout, or another login, doesn't bring its session back", async () => {
+      const { a } = await setup();
+      const renewing = a.refreshAuth();
+      a.logOut();
+      await renewing;
+      expect(a.currentUser()).toBeNull();
+
+      await signUpAs(a, { email: `d-${uniq()}@test.local`, password: "password-123", name: "Dora" });
+      const again = a.refreshAuth();
+      const eve = await signUpAs(a, { email: `e-${uniq()}@test.local`, password: "password-123", name: "Eve" });
+      await again;
+      expect(a.currentUser()).toEqual(eve);
+    });
+
     it("bad credentials reject with 400", async () => {
       const { anon } = await setup();
       const err = await rejection(anon.logIn(`nobody-${uniq()}@test.local`, "wrong-password"));

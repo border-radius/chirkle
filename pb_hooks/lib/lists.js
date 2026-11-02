@@ -54,7 +54,8 @@ function rooms(e) {
  * cursor (`created`, `id`); `changed` takes `since` (an `updated` value) and `from`, `to` (`created` values). `files=1`:
  * only messages that may have attachments (theirs, or a forward's original's, §17.7). `q`: only messages with every
  * word of it (search, §29; with `latest` and `older`). `limit` (at most 200) and `page` (from 1) as the records API has
- * them. A room the caller can't see has no messages, as the records API says.
+ * them. A room the caller can't see has no messages, as the records API says. Answered with an ETag: asked again with it
+ * (If-None-Match), an unchanged page is a 304 without a body (PERF.md §5).
  * @param {core.RequestEvent} e
  */
 function messages(e) {
@@ -79,7 +80,24 @@ function messages(e) {
     kind.where,
     q.files === "1" ? `(files:length > 0 || forward_of != "")` : "",
   ];
-  return e.json(200, list(e, where, kind.sort, q, params, [roomId]));
+  return tagged(e, list(e, where, kind.sort, q, params, [roomId]));
+}
+
+/**
+ * Answer with `body` and an ETag of it, or 304 when the client has that one already. The tag is a hash of the records as
+ * they serialize with their expands and what the enrich hooks added, so anything a page shows changes it. `no-store`:
+ * nothing keeps a page but the app itself (cache.ts, which a logout clears), and it sends the tag it kept.
+ * @param {core.RequestEvent} e
+ * @param {core.Record[]} body
+ */
+function tagged(e, body) {
+  const tag = `"${$security.sha256(JSON.stringify([e.requestInfo().query.fields ?? "", e.requestInfo().query.expand ?? "", body])).slice(0, 32)}"`;
+  const h = e.response.header();
+  h.set("ETag", tag);
+  h.set("Cache-Control", "no-store");
+  const asked = e.request?.header.get("If-None-Match") ?? "";
+  if (asked.split(",").some((t) => t.trim() === tag)) return e.noContent(304);
+  return e.json(200, body);
 }
 
 /**

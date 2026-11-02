@@ -11,6 +11,7 @@ import { brand, jumpButton } from "../header.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
 import { isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
 import type { Collection, Room, User, Visibility } from "../lib/types.ts";
+import { HOVER_MS } from "../prefetch.ts";
 import type { View } from "../router.ts";
 import { createScope, type Scope } from "../scope.ts";
 import { roomSections, unreadCount } from "../store.ts";
@@ -39,17 +40,15 @@ function nameError(err: unknown): string {
 export function visibilityMark(v: Visibility): HTMLElement | null {
   if (v === "public") return null;
   const { label } = VISIBILITY[v];
-  return h(
-    "span",
-    { class: `vis ic ${v === "open" ? "i-globe" : "i-lock"}`, title: label },
+  return h("span", { class: `vis ic ${v === "open" ? "i-globe" : "i-lock"}`, title: label }, [
     h("span", { class: "visually-hidden" }, ` (${label})`),
-  );
+  ]);
 }
 
 /** What the room list uses of the app shell's services. */
-export type RoomsCtx = Pick<Ctx, "api" | "store" | "sync" | "unread" | "actions" | "navigate" | "collections">;
+export type RoomsCtx = Pick<Ctx, "api" | "store" | "sync" | "unread" | "actions" | "navigate" | "collections" | "early">;
 
-export function createRoomsView({ api, store, sync, unread, actions, navigate, collections }: RoomsCtx): View {
+export function createRoomsView({ api, store, sync, unread, actions, navigate, collections, early }: RoomsCtx): View {
   const id = uniqueId("rooms");
   let root: HTMLElement;
   let scope: Scope;
@@ -615,6 +614,29 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
           if (s.site !== prev.site || s.user !== prev.user) renderEnds();
         }),
       );
+      // A room's page is asked for as its link is pressed, or once the pointer rests on it (PERF.md §5).
+      const roomOf = (e: Event) => (e.target as Element).closest?.<HTMLAnchorElement>('a[href^="/r/"]')?.pathname.slice(3);
+      let resting: ReturnType<typeof setTimeout> | undefined;
+      const on = { signal: scope.signal };
+      nav.addEventListener(
+        "pointerdown",
+        (e) => {
+          const id = roomOf(e);
+          if (id) early?.hint(id);
+        },
+        on,
+      );
+      nav.addEventListener(
+        "pointerover",
+        (e) => {
+          clearTimeout(resting);
+          const id = e.pointerType === "mouse" && roomOf(e);
+          if (id) resting = setTimeout(() => early?.hint(id), HOVER_MS);
+        },
+        on,
+      );
+      nav.addEventListener("pointerout", () => clearTimeout(resting), on);
+      scope.defer(() => clearTimeout(resting));
       renderAlert();
       render();
     },

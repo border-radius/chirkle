@@ -89,6 +89,33 @@ jobs:
             test-results/
           retention-days: 7
 
+  speed:
+    name: Web speed check
+    needs: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run build
+      # Loose limits (docs/PERF.md §4): a change that makes loading, switching or scrolling several times slower fails.
+      - run: npm run profile:web -- --cpu=4 --check --out=profile-web.json
+      - name: Upload the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-web
+          path: profile-web.json
+          retention-days: 30
+
   android:
     name: Android (check, size)
     needs: static

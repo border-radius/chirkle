@@ -136,3 +136,81 @@ scrolling) and benchmarks start and scrolling with and without it. The profile i
 The emulator is many times slower than a phone, so only the differences mean anything: the profile takes about a
 fifth off showing the room list and over a third off the room's frames. The first frame doesn't move (on this
 emulator it is mostly the process starting).
+
+## 4. The web client profile
+
+`scripts/profile-web.ts` starts a throwaway server with 150 rooms (one with 3,000 messages, the rest with 20) and 25
+people, logs in in Chromium, then times the built client (`npm run build` first) with the CPU slowed down (`--cpu`,
+default 4×, a mid-range phone) and 80 ms added to every request:
+
+```sh
+npm run profile:web -- [--cpu=4] [--latency=80] [--out=run.json] [--check]
+```
+
+| Number | What |
+|---|---|
+| `cold…Ms`, `warm…Ms` | A load straight into the busy room, then a reload (HTTP cache, service worker, kept rooms): when the room list and the messages are in the page |
+| `switchFirstP50Ms` | Clicking rooms not visited yet, until the frame after their messages show (median of 15) |
+| `switchKeptP50Ms` | Back and forth between the last three rooms (median of 10) |
+| `switchHoveredP50Ms` | First visits with the pointer resting on the link for 250 ms first (median of 10) |
+| `scrollFrame…Ms` | 8 s of scrolling up through the busy room's history, 120 px a frame: frame times |
+| `burstLongTasksMs` | 60 messages coming in 30 ms apart at the bottom of the busy room: long tasks meanwhile |
+
+CI runs it (`speed` job) with `--check`, which fails when a number is over its loose limit in the script's `CHECKS`
+(several times the numbers here: CI runners vary). The numbers are kept as the job's `profile-web` artifact. For where
+time goes, Chrome's own profiler on the same page; the 2026-11-03 profile (§5) mapped CPU samples to source files
+through `pb_public/assets/*.map`.
+
+## 5. 2026-11-03: the web client
+
+A profile (§4's scenarios, Chrome's profiler) found the time in measuring the list on every scroll event and after
+every render, in each message's own toolbar and author menu built and listened to, in the composer's focus laying out
+the page in the middle of loading, and in work that waited for the script or the room list without needing to. What
+was changed:
+
+- **Read state by `IntersectionObserver`** (`views/room.ts`): what is whole on screen or scrolled past, as the
+  browser reports it, instead of measuring rows after each render and on each scroll event.
+- **One listener per event on the message list** (`views/room/messages.ts`): buttons say what they do (`data-act`);
+  toolbars are cloned from one built per kind; an author's menu is made when first opened.
+- **Rooms kept** (`app.ts` `withSidebar`, DESIGN.md §7.5): the last 3 rooms you left stay mounted out of the page, live;
+  going back to one shows it as it was, nothing fetched or drawn again.
+- **A room's page asked for early** (`prefetch.ts` `hint`): on pressing its link, or after the pointer rests on it for
+  120 ms; the room starts from that request.
+- **Conditional pages** (`pb_hooks/lib/lists.js`, API.md): a page has an `ETag`; the client keeps it with the kept
+  page and asks with `If-None-Match`, so an unchanged room is a `304` with no body.
+- **What a page loads first, early**: index.html preloads the Latin Inter (asked for otherwise only once the
+  stylesheet is in), and pages send a `Link` header with the stylesheet, script and font (`lib/http.js`), which a proxy
+  can turn into 103 Early Hints.
+- **The session check waits** (`renewal.ts` `renewSoon`): until the room list is in (at most 3 s), not alongside it.
+- **The composer's focus on entering a room** is in the next frame, whose layout it uses (`renderFooter`).
+- **The media viewer's image** is fetched at high priority (`fetchpriority`), ahead of thumbnails.
+
+Tried and left out, by measurement:
+
+- **An SVG sprite (`<use>`) for the message toolbars' icons**, instead of CSS masks: for a room's 300 icons at 4×,
+  cloning took 25–34 ms against ~1 ms, and the next frame 80–120 ms against ~13 ms (each `<use>` builds a shadow tree).
+  Room switches got a quarter slower. Masks stay.
+- **`content-visibility` on the room list's rows**: at 150 rooms the layout it saves comes back in the next frame
+  (53 against 51 ms at 4×); it pays from about 600 rooms (−90 ms), and the CSS budget had no room for it.
+- **A worker for pages (parsing, keeping)**: a 50-message page parses in 0.8 ms at 4×; the copy back from a worker
+  costs about as much. Nothing to win.
+- **HTTP/3** on chat.chirkle.com is a change to the Dokku host's nginx (a build with QUIC, UDP 443 open, `listen 443
+  quic` and `Alt-Svc`), not to the app; not done. nginx answers HTTP/2 there now.
+
+Numbers (§4's scenarios, this machine, the client before and after run back to back; ms, medians where several):
+
+| | 4× CPU before | after | 1× before | after |
+|---|---|---|---|---|
+| Cold load: messages shown | 1,622 | 1,543 | 737 | 740 |
+| Cold load: LCP | 1,788 | 1,676 | 776 | 796 |
+| Cold load: long tasks, total / longest | 1,023 / 406 | 860 / 356 | 180 / 95 | 153 / 79 |
+| Reload: messages shown | 658 | 595 | 258 | 229 |
+| Switch to a room not visited yet | 315 | 304 | 138 | 143 |
+| Switch back to one of the last 3 rooms | 187 | 105 | 40 | 23 |
+| Switch after resting on the link 250 ms | 270 | 181 | 143 | 33 |
+| History scroll frames p50 / p95 / max | 46 / 103 / 346 | 48 / 118 / 281 | 17 / 29 / 95 | 17 / 28 / 69 |
+| Typing: long tasks | 63 | 0 | 0 | 0 |
+
+The machine is shared and numbers move by 10–30% between runs: only the differences within a column pair count. The
+cold load and first visits to a room are about even; kept rooms, rooms pointed at first, reloads and long tasks are
+where it shows. The 1× "before" is from an earlier run of the same day.

@@ -1,8 +1,9 @@
 // Reactions on a message (§20.3): a chip per emoji with how many reacted and who, and the buttons that open the emoji
-// picker to add one. What reacting *does* is up to the room view.
+// picker to add one. What reacting *does* is up to the room view; the buttons have no listeners of their own: the message
+// list handles their clicks by their `data-act` (messages.ts, PERF.md §5).
 
 import { h } from "../../dom.ts";
-import type { Message, Reaction } from "../../lib/types.ts";
+import type { Reaction } from "../../lib/types.ts";
 
 /** A reaction as shown: with who reacted, in words. */
 export type ShownReaction = Reaction & { who: string };
@@ -14,67 +15,48 @@ export const reactionFocus = (emoji: string): readonly string[] => [
   ".actions .react",
 ];
 
-export interface ReactionParts {
-  /** The message's reactions row. */
-  row(m: Message, reactions: readonly ShownReaction[], reactable: boolean, me: string): HTMLElement;
-  /** "Add reaction" for message `id`, with class `cls`. */
-  addButton(id: string, cls: string): HTMLButtonElement;
+/**
+ * "Add reaction", with class `cls` (also its `data-act`): opens the emoji picker for a reaction to its message. The
+ * picker says whether it is open (`aria-expanded`).
+ */
+export function addReactionButton(cls: string): HTMLButtonElement {
+  const label = "Add reaction";
+  return h("button", {
+    type: "button",
+    class: `${cls} ic i-react`,
+    title: label,
+    "aria-label": label,
+    "aria-haspopup": "dialog",
+    "aria-expanded": "false",
+    dataset: { act: cls },
+  });
 }
 
-export function createReactionParts(opts: {
-  /** A reaction chip was clicked: add (`on`) or take back my `emoji`. */
-  onReact: (id: string, emoji: string, on: boolean) => void;
-  /** React (or a reactions row's +) was clicked: offer the emoji picker next to `opener`. */
-  onPickReaction: (id: string, opener: HTMLElement) => void;
-  signal: AbortSignal;
-}): ReactionParts {
-  const { signal } = opts;
-
-  /** "Add reaction": opens the emoji picker for a reaction to message `id`. */
-  function addButton(id: string, cls: string): HTMLButtonElement {
-    const label = "Add reaction";
-    const b: HTMLButtonElement = h("button", {
-      type: "button",
-      class: `${cls} ic i-react`,
-      title: label,
-      "aria-label": label,
-      "aria-haspopup": "dialog",
-      "aria-expanded": "false",
-      on: { click: () => opts.onPickReaction(id, b) },
-      signal,
-    });
-    return b;
-  }
-
-  /**
-   * The emoji people reacted with, each with how many (§20.3). Where I can react, each one is a toggle for mine, and a
-   * last button adds another; otherwise (an archived room) they only show.
-   */
-  function row(m: Message, reactions: readonly ShownReaction[], reactable: boolean, me: string): HTMLElement {
-    const chips = reactions.map((r) => {
-      const mine = r.users.includes(me);
-      const n = r.users.length;
-      const content = [h("span", { class: "reaction-emoji" }, r.emoji), h("span", { class: "reaction-count" }, String(n))];
-      const attrs = { class: `reaction${mine ? " mine" : ""}`, title: `${r.who} reacted with ${r.emoji}`, dataset: { emoji: r.emoji } };
-      if (!reactable) return h("span", attrs, content);
-      return h(
-        "button",
-        {
-          ...attrs,
-          type: "button",
-          "aria-pressed": String(mine),
-          "aria-label": `${r.emoji} ${n} ${n === 1 ? "reaction" : "reactions"}`,
-          on: { click: () => opts.onReact(m.id, r.emoji, !mine) },
-          signal,
-        },
-        content,
-      );
-    });
-    return h("div", { class: "reactions", role: "group", "aria-label": "Reactions" }, [
-      ...chips,
-      reactable ? addButton(m.id, "add-reaction") : null,
-    ]);
-  }
-
-  return { row, addButton };
+/**
+ * The emoji people reacted with, each with how many (§20.3). Where I can react, each one is a toggle for mine
+ * (`data-act="reaction"`, `aria-pressed`), and a last button adds another; otherwise (an archived room) they only show.
+ */
+export function reactionRow(reactions: readonly ShownReaction[], reactable: boolean, me: string): HTMLElement {
+  const chips = reactions.map((r) => {
+    const mine = r.users.includes(me);
+    const n = r.users.length;
+    const content = [h("span", { class: "reaction-emoji" }, r.emoji), h("span", { class: "reaction-count" }, String(n))];
+    const attrs = { class: `reaction${mine ? " mine" : ""}`, title: `${r.who} reacted with ${r.emoji}`, dataset: { emoji: r.emoji } };
+    if (!reactable) return h("span", attrs, content);
+    return h(
+      "button",
+      {
+        ...attrs,
+        dataset: { emoji: r.emoji, act: "reaction" },
+        type: "button",
+        "aria-pressed": String(mine),
+        "aria-label": `${r.emoji} ${n} ${n === 1 ? "reaction" : "reactions"}`,
+      },
+      content,
+    );
+  });
+  return h("div", { class: "reactions", role: "group", "aria-label": "Reactions" }, [
+    ...chips,
+    reactable ? addReactionButton("add-reaction") : null,
+  ]);
 }

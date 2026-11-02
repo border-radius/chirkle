@@ -14,7 +14,14 @@ export function fakeLayout(list: HTMLElement, opts: { rowHeight: number; clientH
   Object.defineProperties(list, {
     clientHeight: { configurable: true, get: () => clientHeight },
     scrollHeight: { configurable: true, get: scrollHeight },
-    scrollTop: { configurable: true, get: () => scrollTop, set: (v: number) => (scrollTop = clamp(v)) },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (v: number) => {
+        scrollTop = clamp(v);
+        relayout();
+      },
+    },
   });
   // offsetTop of each child = its index × rowHeight (children are looked up live).
   const proto = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetTop");
@@ -43,6 +50,7 @@ export function fakeLayout(list: HTMLElement, opts: { rowHeight: number; clientH
     /** The visible height changes (e.g. the composer grew); scrollTop stays, as in a browser. */
     setClientHeight(h: number) {
       clientHeight = h;
+      relayout();
     },
     scrollTo(v: number) {
       list.scrollTop = v;
@@ -56,25 +64,67 @@ export function fakeLayout(list: HTMLElement, opts: { rowHeight: number; clientH
 
 type IOCallback = (entries: IntersectionObserverEntry[], observer: IntersectionObserver) => void;
 
-/** Replace IntersectionObserver with a controllable fake. Returns `intersect(el)` to fire it. */
+/** Set by installIntersectionObserver: the fake layout changed (a scroll, rows added), so whole-row observers look again. */
+let relayout = () => {};
+
+/**
+ * Replace IntersectionObserver with a controllable fake. Returns `intersect(el)` to fire it. Observers watching for
+ * whole rows (`threshold: 1`) of a list with fakeLayout follow it on their own, after the change, as a browser's do
+ * (with `rootMargin`'s top); the others fire only by `intersect()`.
+ */
 export function installIntersectionObserver() {
   const observers = new Set<FakeIO>();
+  let pending: ReturnType<typeof setTimeout> | undefined;
+  relayout = () => {
+    pending ??= setTimeout(() => {
+      pending = undefined;
+      for (const o of [...observers]) o.look();
+    });
+  };
 
   class FakeIO {
     readonly targets = new Set<Element>();
     readonly callback: IOCallback;
-    constructor(callback: IOCallback) {
+    readonly root: HTMLElement | null;
+    readonly whole: boolean;
+    readonly marginTop: number;
+    /** The ratio last told, by target. */
+    readonly told = new Map<Element, number>();
+    constructor(callback: IOCallback, opts: IntersectionObserverInit = {}) {
       this.callback = callback;
+      this.root = (opts.root as HTMLElement | null) ?? null;
+      this.whole = opts.threshold === 1;
+      this.marginTop = Number.parseFloat(opts.rootMargin ?? "0") || 0;
       observers.add(this);
+    }
+    /** Tell the targets whose ratio changed (a new one always), as the fake layout places them. */
+    look() {
+      const root = this.root as (HTMLElement & { __rowHeight?: number }) | null;
+      if (!this.whole || !root?.__rowHeight) return;
+      const entries = [];
+      for (const target of this.targets) {
+        if (!target.isConnected) continue;
+        const r = target.getBoundingClientRect();
+        const top = Math.max(r.top, -this.marginTop);
+        const bottom = Math.min(r.bottom, root.clientHeight);
+        const ratio = r.height ? Math.max(0, bottom - top) / r.height : 0;
+        if (this.told.get(target) === ratio) continue;
+        this.told.set(target, ratio);
+        entries.push({ target, intersectionRatio: ratio, isIntersecting: ratio > 0 } as unknown as IntersectionObserverEntry);
+      }
+      if (entries.length) this.callback(entries, this as unknown as IntersectionObserver);
     }
     observe(el: Element) {
       this.targets.add(el);
+      relayout();
     }
     unobserve(el: Element) {
       this.targets.delete(el);
+      this.told.delete(el);
     }
     disconnect() {
       this.targets.clear();
+      this.told.clear();
       observers.delete(this);
     }
     takeRecords() {
@@ -100,6 +150,8 @@ export function installIntersectionObserver() {
     observing: (el: Element | null) => !!el && [...observers].some((o) => o.targets.has(el)),
     restore() {
       globalThis.IntersectionObserver = original;
+      clearTimeout(pending);
+      relayout = () => {};
     },
   };
 }

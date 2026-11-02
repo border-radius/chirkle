@@ -59,6 +59,31 @@ describe("the room list and message pages as routes", () => {
     expect(await route()).toHaveLength(7);
   });
 
+  it("a page has an ETag: asked again with it, unchanged is 304 with no body; any change is a new one (PERF.md §5)", async () => {
+    const own = await me.pb.collection("rooms").update((await newRoom(me)).id, { visibility: "private" });
+    const m = await post(me, own.id, "first");
+    const pageUrl = (q = "") => `${me.pb.baseURL}/api/chat/rooms/${own.id}/messages?kind=latest&limit=3${q}`;
+    const get = (tag = "", token = me.pb.authStore.token, q = "") =>
+      fetch(pageUrl(q), { headers: { Authorization: token, ...(tag ? { "If-None-Match": tag } : {}) } });
+    const first = await get();
+    expect(first.status).toBe(200);
+    expect(first.headers.get("cache-control")).toBe("no-store"); // the client keeps it, not the browser's cache
+    const tag = first.headers.get("etag")!;
+    expect(tag).toMatch(/^"[0-9a-f]{32}"$/);
+    const again = await get(tag);
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect((await get(tag, me.pb.authStore.token, "&fields=id")).status).toBe(200); // other fields: another answer
+
+    await me.pb.collection("messages").update(m.id, { text: "first, edited" });
+    const changed = await get(tag);
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get("etag")).not.toBe(tag);
+    // Someone else asking with my tag gets their own answer, never a 304 for what they can't see.
+    const other = await newUser();
+    expect((await get(changed.headers.get("etag")!, other.pb.authStore.token)).status).not.toBe(304);
+  });
+
   it("only messages that may have attachments, with files=1", async () => {
     expect(ids(await route({ files: "1" }))).toEqual([sent[3]!.id]);
   });

@@ -39,6 +39,11 @@ export function createActionMenu(opts: {
   icon?: string;
   /** A line over the items, e.g. which instance an author is on (§33.4). */
   note?: string | undefined;
+  /**
+   * The menu already drawn (a `details.menu` with its summary and `.menu-items`, as this would draw it), to make work:
+   * the message list draws authors' menus as plain markup and makes one work when it is first opened (PERF.md §5).
+   */
+  el?: HTMLDetailsElement;
   signal: AbortSignal;
 }): ActionMenu {
   const { signal } = opts;
@@ -46,33 +51,34 @@ export function createActionMenu(opts: {
   let shape = "";
   let confirming: string | null = null;
 
-  const summary = opts.summary
-    ? h("summary", { class: opts.className ?? "" }, opts.summary)
-    : h("summary", { "aria-label": opts.label, class: `ic ${opts.icon ?? "i-dots"} ${opts.className ?? ""}`.trim() });
-  const body = h("div", { class: "menu-items" });
-  const el = h(
-    "details",
-    {
-      class: "menu",
-      on: {
-        toggle: () => {
-          if (el.open) watchOutside();
-          else {
-            outside?.abort();
-            outside = null;
-            if (confirming) setConfirming(null);
-          }
-        },
-        keydown: (e) => {
-          if (e.key !== "Escape" || !el.open) return;
-          e.preventDefault();
-          close();
-          summary.focus();
-        },
-      },
-      signal,
+  const summary =
+    (opts.el?.querySelector("summary") as HTMLElement | null) ??
+    (opts.summary
+      ? h("summary", { class: opts.className ?? "" }, opts.summary)
+      : h("summary", { "aria-label": opts.label, class: `ic ${opts.icon ?? "i-dots"} ${opts.className ?? ""}`.trim() }));
+  const body = (opts.el?.querySelector(".menu-items") as HTMLElement | null) ?? h("div", { class: "menu-items" });
+  const el = opts.el ?? h("details", { class: "menu" }, [summary, body]);
+  el.addEventListener(
+    "toggle",
+    () => {
+      if (el.open) watchOutside();
+      else {
+        outside?.abort();
+        outside = null;
+        if (confirming) setConfirming(null);
+      }
     },
-    [summary, body],
+    { signal },
+  );
+  el.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Escape" || !el.open) return;
+      e.preventDefault();
+      close();
+      summary.focus();
+    },
+    { signal },
   );
 
   /** While open: listeners that close it when you click or tab anywhere else (QA BUG-46). */
@@ -88,6 +94,7 @@ export function createActionMenu(opts: {
     document.addEventListener("focusin", away, opts);
   }
   signal.addEventListener("abort", () => outside?.abort(), { once: true });
+  if (el.open) watchOutside(); // made to work as it opens
 
   const button = (label: string, onClick: () => void, cls?: string, item?: MenuItem) =>
     h(

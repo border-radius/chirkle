@@ -12,6 +12,8 @@ export interface RequestOptions {
   signal?: AbortSignal | undefined;
   /** How much of a multipart body has been sent, 0 to 1: the request then goes through XHR (fetch can't tell). */
   onUpload?: ((fraction: number) => void) | undefined;
+  /** A conditional GET (PERF.md §5): `sent` goes as If-None-Match, the answer's ETag to `got`. A 304 answers undefined. */
+  tag?: { sent?: string | undefined; got?: ((tag: string) => void) | undefined } | undefined;
 }
 
 export interface AuthRecord {
@@ -185,9 +187,11 @@ function upload(url: string, method: string, headers: Record<string, string>, bo
 export function createClient(baseUrl: string, authStore: AuthStore = createAuthStore()): PbClient {
   const base = baseUrl.replace(/\/+$/, "");
 
-  async function send<T>(path: string, { method = "GET", query, body, signal, onUpload }: RequestOptions = {}): Promise<T> {
+  async function send<T>(path: string, { method = "GET", query, body, signal, onUpload, tag }: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = {};
     if (authStore.token) headers.Authorization = authStore.token;
+    // The 304 is ours to read, not the HTTP cache's to answer from (it keeps no copy: no-store).
+    if (tag?.sent) Object.assign(headers, { "If-None-Match": tag.sent, "Cache-Control": "no-cache" });
     let payload: BodyInit | undefined;
     if (body) {
       if (Object.values(body).some(isFiles)) payload = toFormData(body);
@@ -197,7 +201,7 @@ export function createClient(baseUrl: string, authStore: AuthStore = createAuthS
       }
     }
     const aborted = (e: unknown) => !!signal?.aborted || (e as Error)?.name === "AbortError";
-    let res: { status: number; json: () => Promise<unknown> };
+    let res: { status: number; json: () => Promise<unknown>; headers?: Headers };
     let data: PbError["response"] = {};
     const url = base + path + qs(query);
     try {
@@ -205,6 +209,9 @@ export function createClient(baseUrl: string, authStore: AuthStore = createAuthS
         onUpload && payload instanceof FormData
           ? await upload(url, method, headers, payload, onUpload)
           : await fetch(url, { method, headers, ...(payload ? { body: payload } : {}), ...(signal ? { signal } : {}) });
+      const etag = res.headers?.get("ETag");
+      if (etag) tag?.got?.(etag);
+      if (res.status === 304) return undefined as T;
       // No body is fine for a 204, or an error the server didn't explain. A success whose body never came (the page
       // navigated away, the connection dropped) is a failure, not `{}`: as a login's answer it saved no session (QA BUG-117).
       data = await (res.json() as Promise<PbError["response"]>).catch((e) => {

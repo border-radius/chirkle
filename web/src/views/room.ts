@@ -51,10 +51,22 @@ export function mergeChanges(a: Change, b: Change): Change {
 /** What the room view uses of the app shell's services. */
 export type RoomCtx = Pick<
   Ctx,
-  "api" | "store" | "unread" | "actions" | "navigate" | "reopen" | "drafts" | "cache" | "collections" | "notify"
+  "api" | "store" | "unread" | "actions" | "navigate" | "reopen" | "drafts" | "cache" | "collections" | "notify" | "early"
 >;
 
-export function createRoomView({ api, store, unread, actions, navigate, reopen, drafts, cache, collections, notify }: RoomCtx): View {
+export function createRoomView({
+  api,
+  store,
+  unread,
+  actions,
+  navigate,
+  reopen,
+  drafts,
+  cache,
+  collections,
+  notify,
+  early,
+}: RoomCtx): View {
   const vid = uniqueId("room");
   const scope = createScope();
   const { signal } = scope;
@@ -72,6 +84,18 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   let viewing: ((m: Message, gone: boolean) => void) | undefined;
   /** Put the caret in the composer as soon as it is shown: on entering the room (§22.5). */
   let focusComposer = true;
+  /**
+   * Kept, out of the page, after you left the room (park), until you come back (resume): still live and drawn, never
+   * measured. A scroll asked for meanwhile waits for the resume. At the live bottom (`pinned`), the list stays there;
+   * else where it was: the message at the top (`parkedAt`) goes back where it was.
+   */
+  let parked = false;
+  let parkedScroll: Change["scroll"];
+  let parkedAt: { id: string; dy: number; top: number } | undefined;
+  let pinned = true;
+  /** Ends when the room is left (parked or unmounted): what shows over the page for it (the media grid, the viewer). */
+  let onScreen = new AbortController();
+  scope.defer(() => onScreen.abort());
 
   const room = () => store.get().rooms.get(roomId);
   const me = () => store.get().user;
@@ -380,7 +404,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     signal,
   });
 
-  /** Render the list, then mark what it shows as read. */
+  /** Render the list, then mark what it shows as read (once it is laid out). */
   function render(o?: { anchor?: boolean }) {
     selection.prune();
     messages.render(o);
@@ -389,7 +413,56 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
       const m = ctl.find(reactingTo);
       if (!m || !ctl.reactable(m)) picker?.close();
     }
-    markRead();
+    watchRows();
+    readSoon();
+  }
+
+  /**
+   * The messages shown whole or scrolled past (§18.3), as the browser tells it (PERF.md §5): their bottom is above the
+   * list's. By id, the element that is. Measuring them ourselves after a render made the browser lay the list out at
+   * once, and again for every scroll event.
+   */
+  const above = new Map<string, Element>();
+  const rows = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const id = (e.target as HTMLElement).dataset.id!;
+        if (e.intersectionRatio >= 0.999) above.set(id, e.target);
+        else if (above.get(id) === e.target) above.delete(id);
+      }
+      markRead();
+    },
+    // Everything above the list's bottom counts: whole means the bottom is in.
+    { root: list, rootMargin: "1000000px 0px 0px 0px", threshold: 1 },
+  );
+  scope.defer(() => rows.disconnect());
+  const watched = new Set<Element>();
+  /** Watch the rows a render added; forget those it took away. */
+  function watchRows() {
+    for (const el of watched) {
+      if (el.parentNode === list) continue;
+      rows.unobserve(el);
+      watched.delete(el);
+      const id = (el as HTMLElement).dataset.id!;
+      if (above.get(id) === el) above.delete(id);
+    }
+    for (const el of list.children) {
+      if (!el.classList.contains("msg") || watched.has(el)) continue;
+      rows.observe(el);
+      watched.add(el);
+    }
+  }
+  /** markRead after the next frame's layout: what a render changed may not cross a row's edge (a first page replacing the kept one). */
+  let reading = false;
+  function readSoon() {
+    if (reading) return;
+    reading = true;
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        reading = false;
+        if (scope.active) markRead();
+      }),
+    );
   }
 
   async function deleteSelected(ids: string[]) {
@@ -460,6 +533,10 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
       render(c.render);
       reply.refresh();
     }
+    if (parked) {
+      parkedScroll = c.scroll ?? parkedScroll;
+      return;
+    }
     if (c.scroll === "bottom") scrollToBottom();
     else if (c.scroll === "top") list.scrollTop = 0;
     else if (c.scroll === "target") {
@@ -506,22 +583,20 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     if (m) reader.seen(m.created, caughtUp);
   }
 
-  /** The newest saved message whose bottom is on screen. The list is in order, so its rows are bisected. */
+  /** The newest saved message whose bottom is on screen (or scrolled past). */
   function lastShown(): Message | undefined {
-    const rows = list.querySelectorAll<HTMLElement>("li.msg");
-    const bottom = list.getBoundingClientRect().bottom + 1;
-    let lo = 0;
-    let hi = rows.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (rows[mid]!.getBoundingClientRect().bottom <= bottom) lo = mid + 1;
-      else hi = mid;
-    }
-    for (let i = lo - 1; i >= 0; i--) {
-      const m = ctl.find(rows[i]!.dataset.id!);
-      if (m && !m.status) return m;
+    const { items } = ctl.state().win;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const m = items[i]!;
+      if (!m.status && above.has(m.id)) return m;
     }
     return undefined;
+  }
+
+  /** Stop reading what is on screen (leaving, or parked). Left before the first page was in, the server may have more than the kept window showed: it says what is unread. */
+  function leaveReader() {
+    reader?.close(atLiveEdge() && !ctl.state().stale);
+    reader = null;
   }
 
   function scrollToBottom() {
@@ -587,7 +662,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
         ...(me() ? { onSave: saveFile } : {}),
         opener,
         follow: (fn) => (viewing = fn),
-        signal,
+        signal: onScreen.signal,
       });
     } catch {
       if (scope.active) window.open(api.fileUrl(m, file), "_blank", "noopener");
@@ -622,7 +697,10 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
     // keyboard over the messages you came to read.
     if (focusComposer && footer.contains(composer.el)) {
       focusComposer = false;
-      if (!matchMedia("(hover:none)").matches) composer.focus();
+      // In the next frame, whose layout it then uses: focus() lays the page out at once, and on entering a room that
+      // came in the middle of drawing it (PERF.md §5).
+      if (!matchMedia("(hover:none)").matches)
+        requestAnimationFrame(() => scope.active && !parked && footer.contains(composer.el) && composer.focus());
     }
   }
 
@@ -633,7 +711,8 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
   let offReturn: (() => void) | null = null;
   function awaitReturn() {
     offReturn ??= store.subscribe((s, prev) => {
-      if (s.rooms.has(roomId) && !prev.rooms.has(roomId) && s.user === prev.user) reopen();
+      // Parked, it is made afresh when you come back (resume can't show it).
+      if (s.rooms.has(roomId) && !prev.rooms.has(roomId) && s.user === prev.user && !parked) reopen();
     });
   }
 
@@ -675,7 +754,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
           h,
           name: attachmentName,
           open: viewImage,
-          signal,
+          signal: onScreen.signal,
         }),
       () => scope.active && notice.say("Couldn't open media. Check your connection."),
     );
@@ -804,10 +883,11 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
         roomId,
         msgId: params.msgId,
         scope,
-        nearBottom: () => isNearBottom(list),
+        nearBottom: () => (parked ? pinned : isNearBottom(list)),
         onChange: apply,
         onUpload: (id, fraction) => messages.setUpload(id, fraction),
         cache,
+        early: params.msgId ? undefined : early?.take(roomId),
         onEvent: (m, gone) => viewing?.(m, gone),
       });
 
@@ -847,6 +927,7 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
       window.addEventListener(
         "focus",
         () =>
+          !parked &&
           footer.contains(composer.el) &&
           document.activeElement!.matches("body,a") &&
           getSelection()!.isCollapsed &&
@@ -854,15 +935,13 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
           composer.focus(),
         { signal },
       );
-      list.addEventListener("scroll", markRead, { signal });
       // When the list gets shorter (the attachment tray opens, the textarea grows, the keyboard opens) while it is
       // at the live bottom, keep it there instead of letting the newest messages slide under the composer (BUG-31).
-      let pinned = true;
       list.addEventListener("scroll", () => (pinned = isNearBottom(list)), { signal });
       if (typeof ResizeObserver === "function") {
         const resizes = new ResizeObserver(() => {
           const s = ctl.state();
-          if (pinned && s.phase === "ready" && !s.win.hasNewer) scrollToBottom();
+          if (pinned && !parked && s.phase === "ready" && !s.win.hasNewer) scrollToBottom();
         });
         resizes.observe(list);
         scope.defer(() => resizes.disconnect());
@@ -902,11 +981,10 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
       composer.setText(drafts.get(roomId));
 
       store.set({ activeRoomId: roomId });
-      scope.defer(() => store.set({ activeRoomId: null }));
-      const r = unread.open(roomId);
-      reader = r;
-      // Left before the first page was in, the server may have more than the kept window showed: it says what is unread.
-      scope.defer(() => r.close(atLiveEdge() && !ctl.state().stale));
+      // Not if another room is open by now (this one was kept, and goes).
+      scope.defer(() => store.get().activeRoomId === roomId && store.set({ activeRoomId: null }));
+      reader = unread.open(roomId);
+      scope.defer(leaveReader);
       scope.defer(
         store.subscribe((s, prev) => {
           // Lost while you were in it (§23.4). Not on logging out: the views start over then anyway.
@@ -923,6 +1001,43 @@ export function createRoomView({ api, store, unread, actions, navigate, reopen, 
         }),
       );
       ctl.start();
+    },
+    park() {
+      leaveReader();
+      const top = list.scrollTop;
+      const first = [...list.querySelectorAll<HTMLElement>("li.msg")].find((el) => el.offsetTop + el.offsetHeight > top);
+      parkedAt = { id: first?.dataset.id ?? "", dy: (first?.offsetTop ?? 0) - top, top };
+      parked = true;
+      onScreen.abort();
+      onScreen = new AbortController();
+      picker?.close();
+      forwardDialog.close();
+      accessDialog?.close();
+      ctl.park();
+    },
+    resume() {
+      if (!scope.active || shown === "not-found" || shown === "failed" || offReturn) return false;
+      parked = false;
+      store.set({ activeRoomId: roomId });
+      reader = unread.open(roomId);
+      focusComposer = true;
+      renderHeader();
+      renderFooter();
+      const scroll = parkedScroll;
+      parkedScroll = undefined;
+      // The first message that came meanwhile is brought into view; else a scroll asked for meanwhile, or the bottom.
+      if (!now(() => ctl.resume())) {
+        if (scroll) draw({ scroll });
+        else if (pinned) scrollToBottom();
+        else if (parkedAt) {
+          const el = parkedAt.id && list.querySelector<HTMLElement>(`li.msg[data-id="${CSS.escape(parkedAt.id)}"]`);
+          list.scrollTop = el ? el.offsetTop - parkedAt.dy : parkedAt.top;
+        }
+      }
+      parkedAt = undefined;
+      renderPill();
+      readSoon();
+      return true;
     },
     unmount() {
       offReturn?.();

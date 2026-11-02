@@ -29,7 +29,37 @@ function headers(e) {
     // Only content-hashed names (esbuild "[name]-[hash]", 8 chars) are immutable; dev builds are unhashed.
     if (/^\/assets\/.+-[A-Z0-9]{8}\.(js|css|woff2)(\.map)?$/.test(path)) h.set("Cache-Control", "public, max-age=31536000, immutable");
     else h.set("Cache-Control", "no-cache");
+    // A page (the app's index.html, at any path without a file name): what it loads first.
+    if (e.request?.method === "GET" && !path.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(path)) {
+      const link = preloads();
+      if (link) h.set("Link", link);
+    }
   }
+}
+
+/** index.html's assets as a Link header, read once by each JS runtime (again while there are none: not built yet). */
+let links;
+
+/**
+ * What a page loads first (index.html's stylesheet, script and preloaded font), as a Link header: a proxy in front can
+ * send it ahead of the page as 103 Early Hints, so the browser asks for them while the page is still on its way
+ * (PERF.md §5).
+ */
+function preloads() {
+  if (links) return links;
+  links = "";
+  try {
+    const html = toString($os.readFile($filepath.join(publicDir(), "index.html")));
+    const out = [];
+    for (const m of html.matchAll(/<(link|script)\b[^>]*?(?:href|src)="(\/assets\/[^"]+)"/g)) {
+      const url = m[2];
+      if (url.endsWith(".css")) out.push(`<${url}>; rel=preload; as=style`);
+      else if (url.endsWith(".js")) out.push(`<${url}>; rel=modulepreload`);
+      else if (url.endsWith(".woff2")) out.push(`<${url}>; rel=preload; as=font; type="font/woff2"; crossorigin`);
+    }
+    links = out.join(", ");
+  } catch {}
+  return links;
 }
 
 /** PocketBase's own request body limit, which every request but a message create keeps. */
