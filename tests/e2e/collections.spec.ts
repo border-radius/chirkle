@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 import { PNG } from "../support/files.ts";
-import { apiRoom, apiUser, attach, composer, message, openRoom, type Room, test, type User } from "./fixtures.ts";
+import { apiRoom, apiUser, attach, composer, message, openRoom, type Room, test, type User, urlOf } from "./fixtures.ts";
 import { E2E_BASE } from "./paths.ts";
 
 /** A message with images, through the API. */
@@ -61,7 +61,7 @@ test("collections: make one, save from the chat, follow, see what's new, attach 
   await expect(a.getByRole("heading", { level: 1, name: "Pets" })).toBeVisible();
   await expect(a.getByText("Nothing here yet.", { exact: false })).toBeVisible();
   await expect(sidebarRow(a, "Pets")).toHaveAttribute("aria-current", "page");
-  const collUrl = a.url();
+  const collUrl = await urlOf(a);
 
   // Saved from a message's tile (the collections icon), it shows on the page.
   await a.goBack();

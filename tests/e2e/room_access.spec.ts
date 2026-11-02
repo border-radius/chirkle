@@ -16,6 +16,7 @@ import {
   send,
   test,
   uniq,
+  urlOf,
 } from "./fixtures.ts";
 
 const newPage = async (browser: Browser): Promise<Page> => (await browser.newContext({ viewport: { width: 1100, height: 720 } })).newPage();
@@ -67,14 +68,15 @@ test("a private room: only the people its creator adds see it; someone taken out
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
 
-  // Bob gets it live, with its history; Cat never does.
-  await expect(row(b, name)).toBeVisible();
+  // Bob gets it live, with its history; Cat never does. Its row comes in before its unread count, which then moves it to
+  // the top (unread first): click it once it has the count, not as it jumps.
+  await expect(row(b, name).locator(".badge")).toBeVisible();
   await row(b, name).locator("a").click();
   await expect(message(b, "just us")).toBeVisible();
   await send(b, "hi Ada");
   await expect(message(a, "hi Ada")).toBeVisible();
   await expect(row(c, name)).toHaveCount(0);
-  await c.goto(a.url());
+  await c.goto(await urlOf(a));
   await expect(c.getByText("This room doesn't exist.")).toBeVisible();
 
   // Bob can see who is in it, not change it.

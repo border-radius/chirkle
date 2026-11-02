@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { apiRoom, apiSend, apiUser, composer, login, message, send, test, uniq } from "./fixtures.ts";
+import { apiRoom, apiSend, apiUser, composer, login, message, send, test, uniq, urlOf } from "./fixtures.ts";
 
 test("direct messages: start one from the user search, reply live, private to the two, reopen on a new message (§16)", async ({
   browser,
@@ -22,7 +22,7 @@ test("direct messages: start one from the user search, reply live, private to th
   await a.locator(".user-search button.person", { hasText: bob.name }).click();
   await expect(a.locator("header.room-header h1")).toHaveText(new RegExp(bob.name));
   await expect(composer(a)).toHaveAttribute("placeholder", `Message ${bob.name}`);
-  const dmUrl = a.url();
+  const dmUrl = await urlOf(a);
   await send(a, "psst, Bob");
 
   // Bob sees the DM appear in his sidebar live, opens it and replies.

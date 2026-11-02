@@ -108,6 +108,12 @@ export const atPath =
   (url: URL): boolean =>
     !url.hash && (typeof path === "string" ? url.pathname === path : path.test(url.pathname));
 
+/**
+ * The URL the page itself is at. Playwright 1.63's Firefox now and then never hears of an in-app navigation (pushState):
+ * page.url() stayed "/" in about 1 of 36 room creations while the page was in the room. Read this one to pass on a URL.
+ */
+export const urlOf = (page: Page): Promise<string> => page.evaluate(() => location.href);
+
 export async function login(page: Page, user: User, base = ""): Promise<void> {
   await page.goto(`${base}/login`);
   await page.getByLabel("Email").fill(user.email);
