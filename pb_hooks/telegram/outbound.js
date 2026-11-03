@@ -228,8 +228,8 @@ function send(app, messageId, chatId) {
     // A sticker takes no caption: its text goes before it.
     const captioned = groups.length && files[0].kind !== "sticker";
     let caption = captioned && [...plain].length <= MAX_CAPTION ? { caption: html, parse_mode: "HTML" } : null;
-    if (!caption && !html) return; // anonymous, with nothing to say (a forward of a deleted message)
-    if (!caption) {
+    // No text goes alone when there is none: an anonymous link's sticker, or a forward of a deleted message.
+    if (!caption && html) {
       remember(app, messageId, chatId, call("sendMessage", { chat_id: chatId, text: html, parse_mode: "HTML", ...reply }), "text");
       reply = {};
     }

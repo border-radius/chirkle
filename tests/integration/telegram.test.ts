@@ -566,6 +566,12 @@ describe("Telegram bridge (§26)", () => {
     // An edit too long for a caption is cut to exactly Telegram's limit, with no header to make room for.
     await owner.pb.collection("messages").update(pic.id, { text: "y".repeat(1100) });
     expect((await sentTo("editMessageCaption")).params.caption).toBe(`${"y".repeat(1023)}…`);
+
+    // A sticker with no text: no header either, so only the sticker (it was dropped whole).
+    const webp = new File([new Uint8Array(webpHeader(512, 512))], "sticker_1.webp", { type: "image/webp" });
+    await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, files: [webp] });
+    expect((await sentTo("sendSticker")).params.caption).toBeUndefined();
+    expect(stub.callsOf("sendMessage").filter((x) => x.params.chat_id === String(chat))).toHaveLength(2);
   });
 
   it("an anonymous room's messages go under the room's name, and forwards of them as from it (§35)", async () => {
