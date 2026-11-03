@@ -2737,7 +2737,8 @@ when the file it was saved from has one; otherwise the media worker (§30.1) mak
 ### 31.2 Routes (`pb_hooks/lib/collections.js`)
 
 - **`GET /api/chat/collections`** → `{ mine, subs }` by name: yours, and the public ones you follow with their owner,
-  `seen_at` and `new` (items added after `seen_at`, at most 100, one range scan each on `(collection, created)`).
+  `seen_at` and `new` (items added after `seen_at`, at most 100, one range scan each on `(collection, created)`); each
+  with `preview`, its newest four items (`id`, `file`, `video`, `poster`) for its tile in the Android room list.
   One that turned private is left out but its row kept: public again, it is back.
 - **`POST /api/chat/items`** `{ collection, message, file }` or `{ collection, item }` → the item. Yours only (403
   for someone else's you can see, 404 for one you can't); a message file you can see by the messages **view** rule (a

@@ -1301,3 +1301,25 @@ forwards come the same way, and so does the media grid's author. The new fields 
 are not in `fields.message`, so the app never sees them. The server now refuses filters on `author` unless they
 compare it with the caller (§35.3). The app's records-API fallback (`LegacyPagesTest`) uses only `author != {:me}`
 and `reply_to.author = {:me}`, which pass (`anonymous.test.ts`).
+
+## 44. Collection previews; swipe left for your accounts; 0.1.2 (2026-11-03)
+
+- **Previews**: a collection's tile in the room list shows what is in it instead of a blank tinted square. The server's
+  `GET /api/chat/collections` now gives each collection `preview`, its newest four items (`id`, `file`, `video`,
+  `poster`; DESIGN.md §31.2), and `MediaCollection.preview` keeps them (empty from older servers: the tile stays
+  tinted). One item fills the tile; two to four share it as quarters, newest at the top left, empty quarters tinted.
+  Each is `ItemPicture` (grid thumbnail, or a video's poster with a small ▶). Private ones keep their lock, on a dark
+  disc over pictures. The list refetches when a collection's `items` changes, so the tiles follow saves and removals.
+- **Swipe left**: dragging the room list to the left opens your accounts, as the brand does. The list follows the
+  finger; past 30 % of the width or a fast flick it opens, a short drag springs back (off while Jump to is open). The
+  gesture is the room's swipe back (§40) made two-way: `Modifier.swipeAway(enabled, toRight, onSwipe)` in
+  `core/ui/Swipe.kt`; `swipeBack` is now that, to the right. The accounts screen, dragged to the right, goes back to the
+  rooms the same way.
+- **Version** 0.1.2 (`versionCode` 3), changelog `3.txt`, F-Droid recipe updated.
+
+- **QA pass 28** (QA.md): `ItemPicture` now fetches a file token before loading (BUG-208: the first screen to show
+  items, the room list, got 404s); a video's poster reaches the tiles live (BUG-207, server); the room list's top bar is
+  opaque, so rows no longer scroll into the status bar (BUG-209).
+
+Tests: `UiAccountsTest` "swiping the room list to the left opens your accounts", `UiCollectionsTest` (a saved item is
+in its collection's preview), `collections.test.ts` (newest four, followed ones too, removal).

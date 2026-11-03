@@ -29,6 +29,8 @@ const MAX_ITEMS = 2000;
 const MAX_SUBS = 200;
 /** As UNREAD_CAP (§18.2): the badge shows "99+" past 99. */
 const NEW_CAP = 100;
+/** How many of its newest items a collection's tile in the room list shows. */
+const PREVIEW_ITEMS = 4;
 /** The realtime topic that hears a collection's id when what its badge says may have changed (§31). */
 const BADGES_TOPIC = "chat/badges";
 const MAX_BADGES = 50;
@@ -222,8 +224,16 @@ function list(e) {
     )
     .bind({ me: user.id })
     .all(subs);
+  const previews = previewsOf(e.app, [...mine.map((c) => c.id), ...subs.map((c) => c.id)]);
   return e.json(200, {
-    mine: mine.map((c) => ({ id: c.id, name: c.name, public: !!c.public, items: c.items, last_added: c.last_added })),
+    mine: mine.map((c) => ({
+      id: c.id,
+      name: c.name,
+      public: !!c.public,
+      items: c.items,
+      last_added: c.last_added,
+      preview: previews[c.id] ?? [],
+    })),
     subs: subs.map((c) => ({
       id: c.id,
       name: c.name,
@@ -233,8 +243,41 @@ function list(e) {
       owner: { id: c.owner, name: c.owner_name },
       seen_at: c.seen_at,
       new: c.n,
+      preview: previews[c.id] ?? [],
     })),
   });
+}
+
+/**
+ * The newest PREVIEW_ITEMS items of each of these collections, newest first, for their tiles in the room list: one index
+ * range of (collection, created) each. CROSS JOIN keeps SQLite from scanning every item and running the subquery for
+ * each one (which it otherwise plans).
+ * @param {core.App} app
+ * @param {string[]} ids
+ * @returns {Record<string, { id: string, file: string, video: boolean, poster: boolean }[]>}
+ */
+function previewsOf(app, ids) {
+  /** @type {Record<string, { id: string, file: string, video: boolean, poster: boolean }[]>} */
+  const out = {};
+  if (ids.length === 0) return out;
+  const rows = arrayOf(new DynamicModel({ id: "", collection: "", file: "", video: false, poster: false }));
+  app
+    .db()
+    .newQuery(
+      `SELECT i.id, i.collection, i.file, i.video, i.poster
+       FROM json_each({:ids}) c
+       CROSS JOIN collection_items i ON i.id IN (
+         SELECT j.id FROM collection_items j WHERE j.collection = c.value ORDER BY j.created DESC, j.id DESC LIMIT ${PREVIEW_ITEMS}
+       )
+       ORDER BY i.created DESC, i.id DESC`,
+    )
+    .bind({ ids: JSON.stringify(ids) })
+    .all(rows);
+  for (const r of rows) {
+    if (!out[r.collection]) out[r.collection] = [];
+    out[r.collection].push({ id: r.id, file: r.file, video: !!r.video, poster: !!r.poster });
+  }
+  return out;
 }
 
 /**
@@ -350,6 +393,7 @@ function saveItem(e) {
         fs.copy(from, media.posterKey(dirOf(item), item.getString("file")));
         e.app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE id = {:id}").bind({ id: item.id }).execute();
         item.set("poster", true);
+        media.posterReady(e.app, item.id);
       }
     }
     return e.json(200, itemOut(item));

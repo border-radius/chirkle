@@ -205,6 +205,8 @@ data class MediaCollection(
     val owner: CollectionOwner? = null,
     @SerialName("seen_at") val seenAt: String = "",
     val new: Int = 0,
+    /** Its newest items (four at most), for its tile in the room list; none from servers before 2026-11-03. */
+    val preview: List<CollectionItem> = emptyList(),
 )
 
 @Serializable

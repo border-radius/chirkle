@@ -52,3 +52,5 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | Send button (`.i-send`, `icons.css`) | `ChirkleIcons.Send` is the web's stroked arrow (ANDROID.md §40) | Same |
 | — (Android only) | Swipe a room right to go back to the rooms (ANDROID.md §40; replaced swipe to reply): `UiFeaturesTest` | Covered |
 | — (server, 2026-11-03) | Anonymous rooms (DESIGN.md §35, ANDROID.md §43): the server shows the room as the author to everyone but the author; nothing to port. The legacy own-id `author` filters stay allowed: `tests/integration/anonymous.test.ts` | Same (no app change) |
+| — (Android only) | Collection tiles in the room list show their newest four items (`preview` of `GET /api/chat/collections`, ANDROID.md §44): `UiCollectionsTest`; server `collections.test.ts`. The web's sidebar keeps its small icon rows | Covered |
+| — (Android only) | Swipe the room list left to open your accounts (ANDROID.md §44): `UiAccountsTest` | Covered |

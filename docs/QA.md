@@ -2288,3 +2288,45 @@ changes (PERF.md §5). The Android app has neither BUG-203 (no such line) nor BU
   codecs here), Firefox `signup.spec.ts` once (5 of 6 alone: Playwright's Firefox missing a pushState now and then), and
   WebKit `room_access.spec.ts:26`, which takes ~17 s of its 30 s alone and timed out under parallel load (4 of 4 run
   one at a time).
+
+# QA pass 28 — server, web and Android, after collection previews and swipe to accounts
+
+2026-11-03, user: "collection icons in android app should not just be blank squares, but preview media in collections
+(like 4 of the first ones) … also left swipe on the room list should open account switch view. after you're done, test
+everything heavily (server, web app, android app), list all bugs, fix them. raise budgets if needed. also bump android
+app version." Built first (ANDROID.md §44, DESIGN.md §31.2: `preview` on `GET /api/chat/collections`), then tested:
+the server's suites and new probes, the web's suites and scripted runs, the app's Robolectric suite and the debug build
+(0.1.2) on the API 28 emulator against a seeded server with collections (pictures, a video) and an anonymous room.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-207 | Low-Medium | Server, collections | A video item's poster, made by the media worker after the save, never reached the room list: nothing about the collection changed, so the app's tile showed a dark ▶ quarter until something else did | Fixed |
+| BUG-208 | Medium | Android, collections | An item's picture (`ItemPicture`) took the file token only if one was already fetched: shown before any other screen had asked for one (the room list's tiles right after launch), protected items answered 404 and stayed blank | Fixed |
+| BUG-209 | Low | Android, room list | Scrolled up, rows showed through the status bar and around the search pill: the top bar was transparent outside the pill | Fixed |
+
+**BUG-207:** the media worker (`lib/media.js` `itemThumbs`) and a save that copies a poster along (`saveItem`) now save
+the item's collection again, unchanged (`posterReady`): its realtime update reaches the owner and its followers, and the
+app's list asks again. `collections.test.ts` checks the event and the preview's `poster` (it failed without the fix).
+**BUG-208:** `ItemPicture` waits for `tokens.ensure()` (null until then; a guest's "" still loads public items), as the
+viewer does. Found on Robolectric: the tiles stayed blank with a 404 on every thumbnail. **BUG-209:** the top bar has
+the list's background from the top of the screen.
+
+Before it shipped, the preview query itself was fixed: SQLite planned it as a scan of every item with the subquery run
+for each; `CROSS JOIN` makes it walk the given collections and seek `(collection, created)`, and a plan test holds that.
+
+**Checked and fine**
+- **Previews on the device:** one item fills the tile, two to four share it newest first, a video shows its poster
+  with ▶ (once BUG-207 was fixed), the lock and "1 new" read over pictures; Bob adding to a followed collection and
+  Alice removing three items both redrew the tiles live; a tile still opens its page, in the same order.
+- **Swipe left:** opens Accounts on the device (slow `input swipe`; quick ones land as taps on TCG, as before) and in
+  `UiAccountsTest`, where a short drag springs back and a swipe right on Accounts goes back to the rooms.
+- **Anonymous rooms (made this morning, server-only):** on the device and in Chromium others' messages show as the room,
+  grouped, with no author menu; Alice's own stay hers; a live message from Bob arrives as the room. The reaction and
+  forward routes answer through enrich, so they hide the author too.
+- **Version:** the debug build on the emulator reports 0.1.2 (versionCode 3).
+- **Suites:** typecheck, lint, 759 unit and component tests, 467 integration tests, then `collections.test.ts` again
+  after the fixes (25 of 25, the video ones with ffmpeg),
+  build within every budget (no web code changed). Android: 163 tests, release APK 3.46 MB of 6. E2E Chromium 77 passed,
+  1 skipped, and `attachments.spec.ts:184` failed: in this container Chromium's browser process segfaults
+  (`SEGV_MAPERR`, seen with `DEBUG=pw:browser`) when Ctrl+click opens the image in a new tab, about 1 run in 3 even
+  alone. That's the environment, not the app (the same spec was flaky in pass 27's notes).

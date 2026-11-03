@@ -13,6 +13,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.geometry.Offset
+import org.junit.Assert.assertTrue
 import chirkle.android.data.lib.serverLabel
 import chirkle.android.data.testing.TestServer
 import chirkle.android.data.testing.TestServer.newUser
@@ -89,6 +96,23 @@ class UiAccountsTest {
         compose.onNodeWithText("Cancel").performClick()
         ui.waitFor("Just looking? Read the Open Air rooms")
         assertEquals(TestServer.url, ui.services!!.server)
+    }
+
+    @Test fun `swiping the room list to the left opens your accounts, a short swipe stays, right goes back (ANDROID §44)`() {
+        val u = newUser()
+        ui.signedIn(u)
+        ui.waitFor(hasContentDescription("Profile"))
+        // A short, slow drag springs back.
+        compose.onRoot().performTouchInput { swipe(center + Offset(width * 0.2f, 0f), center, durationMillis = 600) }
+        repeat(5) { ui.pump() }
+        assertTrue(compose.onAllNodes(hasText("Add account")).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithContentDescription("Profile").assertExists()
+        compose.onRoot().performTouchInput { swipeLeft(startX = width * 0.9f, endX = width * 0.1f) }
+        ui.waitFor("Add account")
+        // And back, the other way.
+        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
+        ui.waitGone("Add account")
+        ui.waitFor(hasContentDescription("Profile"))
     }
 
     @Test fun `logging out leaves your other accounts a tap away`() {

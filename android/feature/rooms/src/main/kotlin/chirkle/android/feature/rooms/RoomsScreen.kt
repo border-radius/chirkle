@@ -1,7 +1,7 @@
 // The room list (DESIGN.md §5, §16.5, §18.4; web/src/views/rooms.ts): DMs, rooms, your media collections and those you
 // follow (§31.3), and the hidden and archived rooms folded away; unread badges, unread rows first; a row's menu (hide,
 // close, archive). A section's heading folds it, as on the web: then only its unread rows stay listed. A guest sees the
-// Open Air rooms (§23.3). The brand at the top opens your accounts (ANDROID.md §17.2). The look (2026-10-31 redesign): a
+// Open Air rooms (§23.3). The brand at the top, or a swipe to the left, opens your accounts (ANDROID.md §17.2, §44). The look (2026-10-31 redesign): a
 // search pill on top (brand, Jump to, your avatar), Rooms, Direct messages and Collections each with its "+", then one
 // folded Hidden & archived section, on the sidebar's darker surface.
 package chirkle.android.feature.rooms
@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.draw.clip
 import chirkle.android.ui.icon
+import chirkle.android.ui.swipeAway
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -145,7 +146,9 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 if (e.nativeKeyEvent.repeatCount == 0) { if (jumping) closeJump() else jumping = true }
                 true
             } else false
-        },
+        }
+            // Dragged to the left, the list opens your accounts, as the brand does (§44).
+            .swipeAway(enabled = !jumping, toRight = false, onSwipe = onAccounts),
         topBar = {
             if (jumping) {
                 val focus = remember { FocusRequester() }
@@ -177,10 +180,12 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 )
                 return@Scaffold
             }
-            // A search pill: the brand (your accounts), Jump to, and you (or Log in).
+            // A search pill: the brand (your accounts), Jump to, and you (or Log in). On the list's own background, from the
+            // top of the screen: rows scrolled up go under it, not into the status bar or around the pill (QA BUG-209).
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .statusBarsPadding()
                     .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
                     .heightIn(min = 56.dp)
@@ -447,9 +452,19 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             .clickable { onOpen(c.id) }
             .semantics(mergeDescendants = true) {},
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(hue.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.background), RoundedCornerShape(14.dp))) {
+        val tint = hue.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.background)
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(tint)) {
+            Preview(c.preview, tint)
             if (c.owner == null && !c.public) {
-                Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
+                if (c.preview.isEmpty()) {
+                    Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
+                } else {
+                    // Over pictures: on a dark disc, so it shows on any of them.
+                    Box(
+                        Modifier.align(Alignment.BottomEnd).padding(6.dp).size(24.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Color.White, modifier = Modifier.size(13.dp)) }
+                }
             }
             if (c.new > 0) {
                 Box(
@@ -485,6 +500,29 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             color = Chirkle.colors.muted,
             modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 2.dp),
         )
+    }
+}
+
+/**
+ * A collection's newest items on its tile, so what is in it shows without opening it: one fills the tile; two to four
+ * share it as quarters, newest first (top left), the rest of the quarters left [tint].
+ */
+@Composable
+private fun Preview(items: List<chirkle.android.data.model.CollectionItem>, tint: Color) {
+    when (items.size) {
+        0 -> Unit
+        1 -> chirkle.android.ui.ItemPicture(items[0], Modifier.fillMaxSize())
+        else -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            for (row in 0..1) {
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (col in 0..1) {
+                        val it = items.getOrNull(row * 2 + col)
+                        if (it != null) chirkle.android.ui.ItemPicture(it, Modifier.weight(1f).fillMaxSize(), small = true)
+                        else Box(Modifier.weight(1f).fillMaxSize().background(tint))
+                    }
+                }
+            }
+        }
     }
 }
 

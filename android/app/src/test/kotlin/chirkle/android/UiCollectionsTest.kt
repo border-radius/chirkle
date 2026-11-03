@@ -75,6 +75,9 @@ class UiCollectionsTest {
         val coll = ui.services!!.store.get().collections!!.mine.single { it.name == name }.id
         val msg = runBlocking { a.api.page(chirkle.android.data.lib.Pages.latest(room.id)) }.single { it.text == "a picture" }
         ui.until { a.api.savedIn(SaveFrom.File(msg.id, msg.files.single())).keys == setOf(coll) }
+        // Its tile shows what is in it (the newest four).
+        val item = runBlocking { a.api.savedIn(SaveFrom.File(msg.id, msg.files.single())) }.getValue(coll)
+        ui.until { ui.services!!.store.get().collections!!.mine.single { it.id == coll }.preview.map { it.id } == listOf(item) }
     }
 
     @Test fun `a badge links to a public collection, which another user subscribes to and sees what is new`() {

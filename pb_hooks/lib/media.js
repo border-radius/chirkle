@@ -478,7 +478,10 @@ function itemPass(app, beat, rest = true) {
 function itemThumbs(app, fs, dir, id, file) {
   const key = `${dir}/${file}`;
   if (!fs.exists(key)) return;
-  const mark = () => app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE id = {:id}").bind({ id }).execute();
+  const mark = () => {
+    app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE id = {:id}").bind({ id }).execute();
+    posterReady(app, id);
+  };
   if (isVideo(file)) {
     const target = posterKey(dir, file);
     if (fs.exists(target)) return mark();
@@ -492,6 +495,21 @@ function itemThumbs(app, fs, dir, id, file) {
   if (!THUMB_EXT.includes(ext(file))) return;
   const thumb = `${dir}/thumbs_${file}/${GRID_THUMB}_${file}`;
   if (!fs.exists(thumb)) fs.createThumb(key, thumb, GRID_THUMB);
+}
+
+/**
+ * A collection item's poster is ready: its collection is saved again (unchanged), so the room lists showing its tile
+ * (GET /api/chat/collections' `preview`) hear of it live and ask again, as they do when an item is added (QA BUG-207).
+ * @param {core.App} app
+ * @param {string} id the item's
+ */
+function posterReady(app, id) {
+  try {
+    const item = app.findRecordById("collection_items", id);
+    app.save(app.findRecordById("collections", item.getString("collection")));
+  } catch (err) {
+    app.logger().warn("media: item poster", "item", id, "error", String(err));
+  }
 }
 
 /**
@@ -595,4 +613,4 @@ function tick(e) {
   return e.noContent(204);
 }
 
-module.exports = { add, drop, list, poster, itemPoster, run, wake, tick, isMedia, isVideo, tempCopy, posterKey };
+module.exports = { add, drop, list, poster, itemPoster, run, wake, tick, isMedia, isVideo, tempCopy, posterKey, posterReady };

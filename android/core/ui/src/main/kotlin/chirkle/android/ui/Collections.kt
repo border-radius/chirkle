@@ -58,20 +58,26 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** An item's square picture: its grid thumbnail, a video's poster (or a dark tile until there is one) with ▶. */
+/**
+ * An item's square picture: its grid thumbnail, a video's poster (or a dark tile until there is one) with ▶ ([small]: a
+ * smaller ▶, for a quarter of a collection's tile).
+ */
 @Composable
-fun ItemPicture(it: CollectionItem, modifier: Modifier = Modifier) {
+fun ItemPicture(it: CollectionItem, modifier: Modifier = Modifier, small: Boolean = false) {
     val services = LocalServices.current
     val context = LocalContext.current
-    val token = services.tokens.current
+    // Items' files are protected: with no token yet (the room list's tiles on a cold start), get one first (null until
+    // then; a guest's is "", and public items need none).
+    val token by androidx.compose.runtime.produceState(services.tokens.current.ifEmpty { null }) { value = runCatching { services.tokens.ensure() }.getOrDefault("") }
     Box(modifier.background(if (it.video) Color(0xFF13111D) else MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-        if (!it.video || it.poster) {
-            val url = if (it.video) services.api.itemPosterUrl(it.id, it.file, token) else services.api.itemUrl(it.id, it.file, "240x240", token)
+        val t = token
+        if ((!it.video || it.poster) && t != null) {
+            val url = if (it.video) services.api.itemPosterUrl(it.id, it.file, t) else services.api.itemUrl(it.id, it.file, "240x240", t)
             AsyncImage(Images.request(context, url), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         if (it.video) {
-            Box(Modifier.size(32.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
-                Icon(ChirkleIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Box(Modifier.size(if (small) 20.dp else 32.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                Icon(ChirkleIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(if (small) 12.dp else 20.dp))
             }
         }
     }

@@ -34,9 +34,10 @@ interface Item {
   created: string;
 }
 
+type Preview = { id: string; file: string; video: boolean; poster: boolean }[];
 interface Listed {
-  mine: { id: string; name: string; public: boolean; items: number; last_added: string }[];
-  subs: { id: string; name: string; items: number; owner: { id: string; name: string }; seen_at: string; new: number }[];
+  mine: { id: string; name: string; public: boolean; items: number; last_added: string; preview: Preview }[];
+  subs: { id: string; name: string; items: number; owner: { id: string; name: string }; seen_at: string; new: number; preview: Preview }[];
 }
 
 const png = (name: string, w = 64, h = 48) => new File([new Uint8Array(pngOf(w, h))], name, { type: "image/png" });
@@ -103,6 +104,27 @@ describe("collections (§31)", () => {
     expect(await status(b.pb.collection("collections").delete(pub.id))).toBe(404);
     expect(await status(a.pb.collection("collections").update(priv.id, { name: "Renamed", public: true }))).toBe(200);
     expect(await status(b.pb.collection("collections").getOne(priv.id))).toBe(200);
+  });
+
+  it("are listed with their newest four items for their tiles, followed ones too", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const coll = await newCollection(a, { public: true });
+    const empty = await newCollection(a);
+    const items: Item[] = [];
+    for (let i = 0; i < 5; i++) {
+      items.push(await a.pb.send<Item>("/api/chat/items", { method: "POST", body: { collection: coll.id, file: png(`p${i}.png`) } }));
+    }
+    const ids = items.map((i) => i.id);
+    const mine = (await listed(a)).mine;
+    const row = mine.find((c) => c.id === coll.id)!;
+    expect(row.preview.map((p) => p.id)).toEqual(ids.slice(1).reverse());
+    expect(row.preview[0]).toEqual({ id: items[4]!.id, file: items[4]!.file, video: false, poster: false });
+    expect(mine.find((c) => c.id === empty.id)!.preview).toEqual([]);
+    await sub(b, coll.id);
+    expect((await listed(b)).subs.find((c) => c.id === coll.id)!.preview.map((p) => p.id)).toEqual(ids.slice(1).reverse());
+    await a.pb.send(`/api/chat/items/${ids[4]}`, { method: "DELETE" });
+    expect((await listed(a)).mine.find((c) => c.id === coll.id)!.preview.map((p) => p.id)).toEqual(ids.slice(0, 4).reverse());
   });
 
   it("are at most 50 per user", async () => {
@@ -435,6 +457,26 @@ describe("subscriptions (§31)", () => {
     }
   });
 
+  it("lists the tiles' previews from the (collection, created) index, never scanning every item", () => {
+    const db = rawDb();
+    try {
+      const plan = db
+        .prepare(
+          `EXPLAIN QUERY PLAN SELECT i.id FROM json_each('["a","b"]') c CROSS JOIN collection_items i ON i.id IN (
+             SELECT j.id FROM collection_items j WHERE j.collection = c.value ORDER BY j.created DESC, j.id DESC LIMIT 4
+           )`,
+        )
+        .all()
+        .map((r) => (r as { detail: string }).detail)
+        .join("\n");
+      expect(plan).toMatch(/SEARCH i USING (COVERING )?INDEX/);
+      expect(plan).toMatch(/SEARCH j USING (COVERING )?INDEX idx_collection_items_collection/);
+      expect(plan).not.toMatch(/SCAN i\b/);
+    } finally {
+      db.close();
+    }
+  });
+
   it("counts with the (collection, created) index", () => {
     const db = rawDb();
     try {
@@ -470,8 +512,16 @@ describe("the media worker and items (§31)", () => {
       const m = await send(a, room.id, { files: [video("clip.mp4")] });
       const fresh = await save(a, { collection: coll.id, message: m.id, file: m.files[0] });
       expect(fresh).toMatchObject({ video: true, poster: false });
-      await tick();
-      expect((await a.pb.collection("collection_items").getOne(fresh.id)).poster).toBe(true);
+      const events = await collect(a.pb, "collections");
+      try {
+        await tick();
+        expect((await a.pb.collection("collection_items").getOne(fresh.id)).poster).toBe(true);
+        // The room list's tile hears of it and shows the poster (QA BUG-207).
+        await eventually(() => expect(events.events.some((e) => e.action === "update" && e.record.id === coll.id)).toBe(true));
+        expect((await listed(a)).mine.find((c) => c.id === coll.id)!.preview[0]).toMatchObject({ id: fresh.id, poster: true });
+      } finally {
+        await events.stop();
+      }
       const later = await save(a, { collection: (await newCollection(a)).id, message: m.id, file: m.files[0] });
       expect(later.poster).toBe(true); // copied along: the message has its poster now
       const url = async (u: TestUser) =>

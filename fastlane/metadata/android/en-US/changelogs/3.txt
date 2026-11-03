@@ -1,0 +1,1 @@
+Collections in the room list show their newest pictures and videos. Swipe the room list left to open your accounts. Anonymous rooms, and fixes.
