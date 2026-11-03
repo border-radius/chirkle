@@ -82,7 +82,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
             vm.replyTo?.let { r ->
                 Bar("Replying to ${r.expand?.author?.name ?: "Unknown"}", r.quote().line(), "Cancel reply", vm::cancelReply)
             }
-            if (vm.attachments.isNotEmpty() || vm.items.isNotEmpty()) {
+            if (vm.attachments.isNotEmpty() || vm.items.isNotEmpty() || vm.preparing.isNotEmpty()) {
                 LazyRow(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     items(vm.attachments, key = { it.uri }) { f ->
                         // An image shows itself; other files their name.
@@ -113,6 +113,22 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             onClick = { vm.removeAttachment(f) },
                             label = { Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(120.dp)) },
                             trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = "Remove ${f.name}", modifier = Modifier.size(16.dp)) },
+                        )
+                    }
+                    // Videos being compressed (VideoPrep): × stops one.
+                    items(vm.preparing, key = { "prep-" + it.id }) { p ->
+                        InputChip(
+                            selected = false,
+                            onClick = { vm.cancelPreparing(p) },
+                            label = {
+                                Text(
+                                    if (p.progress < 0) "Waiting: ${p.name}" else "Compressing ${p.progress}%: ${p.name}",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.width(160.dp),
+                                )
+                            },
+                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = "Remove ${p.name}", modifier = Modifier.size(16.dp)) },
                         )
                     }
                     // From a collection (§31.3): after the uploads, as the server attaches them.
@@ -208,7 +224,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                         Spacer(Modifier.width(12.dp))
                     }
                 }
-                val canSend = (!isBlank(vm.text.text) || ((vm.attachments.isNotEmpty() || vm.items.isNotEmpty()) && vm.editing == null)) && n <= Limits.MESSAGE_TEXT
+                val canSend = (!isBlank(vm.text.text) || ((vm.attachments.isNotEmpty() || vm.items.isNotEmpty()) && vm.editing == null)) && n <= Limits.MESSAGE_TEXT && vm.preparing.isEmpty()
                 Spacer(Modifier.width(8.dp))
                 // A rounded square in the accent fill; dimmed while there is nothing to send.
                 val bg by androidx.compose.animation.animateColorAsState(if (canSend) Chirkle.colors.fill else Chirkle.colors.fill.copy(alpha = 0.25f), label = "send")

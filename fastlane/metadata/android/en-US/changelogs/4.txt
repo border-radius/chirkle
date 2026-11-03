@@ -1,0 +1,1 @@
+Videos are compressed before they are sent: much smaller, at most 720p, without their location. Moderators can manage rooms, delete messages and ban. Fixes.

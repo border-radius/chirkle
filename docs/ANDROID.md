@@ -1358,3 +1358,38 @@ QA pass 29 (QA.md, BUG-210..218) added three things to the app:
 
 `UiModeratorsTest` covers the creator's name and the warning, and that a banned user's open app is signed out (it
 failed without the fix).
+
+## 46. Videos compressed before upload (2026-11-04)
+
+Phones record about 17 Mbit/s at 1080p (a minute is ~130 MB), and the server kept every video as sent. Videos are now
+compressed on the phone before they are uploaded, as photos already were (§15.3). This is `VideoPrep` in `feature/room`
+and uses Media3 Transformer (`media3-transformer` and `media3-effect` 1.11.1, +0.15 MB in the release APK: 3.46 →
+3.61 MB, budget 6 MB). Transformer uses the phone's hardware encoder, so there are no native libraries.
+
+- **Every video goes through it** into an MP4. The source's metadata entries are dropped by a muxer wrapper
+  (`NoMetadata`), which removes the GPS location that phones write; Transformer would otherwise copy it. The rotation
+  is part of the track, so it is kept.
+- **Re-encoded** (H.264, AAC when the audio isn't already AAC) when the short side is over 720 px, the bitrate is over
+  ~1.25× the target plus 192 kbit/s for audio, or the file is over the 20 MB limit. It is scaled to a short side of
+  720 px (`Presentation.createForShortSide`) and capped at 30 fps. HDR is tone-mapped to SDR on Android 10+.
+- **The target bitrate** is 2 Mbit/s, or less when that's what fits a long video into 20 MB (90% of it, minus the
+  audio). Below 1 Mbit/s the short side is 480 px. Below 400 kbit/s the video isn't sent: "too long to send (about 4
+  minutes at most)". So 1080p comes out about 8× smaller, 4K about 25×.
+- **Only remuxed** (fast, no quality loss) when it is already small.
+- **When it fails** (a format Transformer can't read, or no metadata): the original is sent as before, if it is under
+  20 MB.
+- **Bigger picks are accepted:** a picked video may be up to 4 GB, since only the result has to be under 20 MB. It is
+  read straight from its content URI, so the original isn't copied.
+- **Composer:** each video shows as a chip in the tray: "Waiting: name", then "Compressing 45%: name". Videos are
+  compressed one at a time (hardware encoders are few), and × cancels one. Send is disabled until they are ready, so a
+  message can't go without its video. A video counts towards the 10 files while it is compressed.
+- **Collection Upload:** "Compressing 1 of 3… 45%", then "Uploading…". The compressed file is kept for a retry after a
+  429, and deleted after.
+
+The web still uploads videos as they are; browsers have no comparable encoder without a large WASM build.
+
+Tests: `VideoPrepTest` (the plan: 1080p and portrait at 720p/2 Mbit/s, small ones remuxed, a long one at the bitrate
+that fits and 480p, too long refused, MP4 names). Transformer itself doesn't run on Robolectric, so the export hasn't
+been tried on the emulator yet.
+
+**Version** 0.1.3 (`versionCode` 4), changelog `4.txt` (video compression and moderators), F-Droid recipe updated.

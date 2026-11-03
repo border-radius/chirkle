@@ -89,6 +89,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import okio.BufferedSink
 import okio.source
+import java.io.File
 
 /** What can be uploaded into a collection: images and videos (lib/files.ts), at most 20 MB. */
 private val MEDIA = Regex("\\.(jpe?g|png|gif|webp|avif|mp4|m4v|webm|mov|ogv)$", RegexOption.IGNORE_CASE)
@@ -96,7 +97,13 @@ private const val MAX_BYTES = 20L * 1024 * 1024
 private fun count(n: Int) = "$n ${if (n == 1) "item" else "items"}"
 
 /** A picked file, streamed from its content URI when it is sent. */
-private class Picked(val uri: Uri, val name: String, val type: String, val size: Long)
+private class Picked(val uri: Uri, val name: String, val type: String, val size: Long) {
+    /** The compressed video, once it is (VideoPrep). */
+    var prepared: VideoPrep.Result.Done? = null
+}
+
+/** A file that isn't uploaded, and why. */
+private class Skip(why: String) : Exception(why)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -242,7 +249,8 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
         for (f in picked) {
             when {
                 !MEDIA.containsMatchIn(f.name) -> failures += "${f.name}: not an image or video"
-                f.size > MAX_BYTES -> failures += "${f.name}: larger than 20 MB"
+                // A video may be bigger: it is compressed first (VideoPrep).
+                f.size > (if (f.type.startsWith("video/")) VideoPrep.MAX_SOURCE_BYTES else MAX_BYTES) -> failures += "${f.name}: larger than 20 MB"
                 else -> queue.addLast(f)
             }
         }
@@ -260,23 +268,43 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                 val at = "Uploading ${sent + 1} of ${sent + queue.size}…"
                 notice = at
                 try {
+                    // A video is compressed first (VideoPrep), once: a 429 sends the same file again.
+                    if (f.type.startsWith("video/") && f.prepared == null) {
+                        val out = File(context.cacheDir, "upload-${java.util.UUID.randomUUID()}.mp4")
+                        val doing = "Compressing ${sent + 1} of ${sent + queue.size}…"
+                        notice = doing
+                        when (val r = VideoPrep.prepare(context, f.uri, f.name, f.size, out) { x -> notice = "$doing $x%" }) {
+                            is VideoPrep.Result.Done -> f.prepared = r
+                            VideoPrep.Result.TooLong -> throw Skip("too long to send (about ${VideoPrep.maxMinutes()} minutes at most)")
+                            VideoPrep.Result.Failed -> Unit
+                        }
+                        notice = at
+                    }
+                    val p = f.prepared
+                    val size = p?.file?.length() ?: f.size
+                    if (size > MAX_BYTES) throw Skip("larger than 20 MB")
                     val body = object : RequestBody() {
-                        override fun contentType() = f.type.toMediaTypeOrNull()
-                        override fun contentLength() = f.size
+                        override fun contentType() = (if (p != null) "video/mp4" else f.type).toMediaTypeOrNull()
+                        override fun contentLength() = size
                         override fun writeTo(sink: BufferedSink) {
-                            context.contentResolver.openInputStream(f.uri)!!.source().use { sink.writeAll(it) }
+                            (p?.file?.inputStream() ?: context.contentResolver.openInputStream(f.uri)!!).source().use { sink.writeAll(it) }
                         }
                     }
-                    services.api.uploadItem(id, UploadFile(f.name, f.type, body)) { x -> notice = "$at ${(x * 100).toInt()}%" }
+                    services.api.uploadItem(id, UploadFile(p?.name ?: f.name, if (p != null) "video/mp4" else f.type, body)) { x -> notice = "$at ${(x * 100).toInt()}%" }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) {
+                        f.prepared?.file?.delete()
+                        throw e
+                    }
                     // Too many at once (the server's rate limit): wait, then the same one again.
                     if ((e as? ApiError)?.status == 429) {
                         notice = "Waiting for the server…"
                         delay(10_000)
                         continue
                     }
-                    failures += "${f.name}: ${reasonOf(e)}"
+                    failures += "${f.name}: ${if (e is Skip) e.message else reasonOf(e)}"
                 }
+                f.prepared?.file?.delete()
                 queue.removeFirst()
                 sent++
                 services.collections.refresh()

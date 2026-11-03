@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
@@ -90,6 +92,9 @@ class RoomViewModel(
     var editing by mutableStateOf<Message?>(null)
         private set
     var attachments by mutableStateOf<List<LocalFile>>(emptyList())
+        private set
+    /** Videos being compressed for the tray (VideoPrep), in turn; the message waits for them. */
+    var preparing by mutableStateOf<List<Preparing>>(emptyList())
         private set
     /** Collection items picked to attach (DESIGN.md §31.3): sent after the files, as the server attaches them. */
     var items by mutableStateOf<List<chirkle.android.data.model.CollectionItem>>(emptyList())
@@ -222,6 +227,7 @@ class RoomViewModel(
             viewModelScope.launch { if (saved?.await() == false) toast = "Couldn't save your edit." }
             return
         }
+        if (preparing.isNotEmpty()) return
         if (isBlank(body) && attachments.isEmpty() && items.isEmpty()) return
         tooLong(body)?.let { return run { composerError = it } }
         if (!controller.send(body.trim(), attachments, replyTo, items)) return
@@ -237,16 +243,69 @@ class RoomViewModel(
     fun attach(uris: List<Uri>) {
         viewModelScope.launch {
             val dir = File(app.filesDir, "outbox/${services.accountId}/${UUID.randomUUID()}").apply { mkdirs() }
-            val picked = withContext(Dispatchers.IO) { uris.mapNotNull { copy(it, dir) } }
-            val check = checkFiles(attachments.size + items.size, picked, { it.name }, { it.size })
+            val all = withContext(Dispatchers.IO) { uris.mapNotNull { describe(it) } }
+            // Videos are compressed first (VideoPrep), so a bigger one than the limit may still go.
+            val (videos, others) = all.partition { it.type.startsWith("video/") && it.size in 0..VideoPrep.MAX_SOURCE_BYTES }
+            val rejected = mutableListOf<Pair<String, String>>()
+            val room = filesLeft
+            for ((i, v) in videos.withIndex()) {
+                if (i < room) prepareVideo(v, dir) else rejected += v.name to "at most ${Limits.ATTACHMENTS} files per message"
+            }
+            val picked = withContext(Dispatchers.IO) { others.mapNotNull { copy(it, dir) } }
+            val check = checkFiles(attachments.size + items.size + preparing.size, picked, { it.name }, { it.size })
             for (f in picked - check.accepted.toSet()) File(f.uri).delete()
             attachments = attachments + check.accepted
-            composerError = check.rejected.joinToString(" ") { (name, why) -> "“$name” wasn't added: $why." }
+            composerError = (rejected + check.rejected).joinToString(" ") { (name, why) -> "“$name” wasn't added: $why." }
         }
     }
 
+    /** A video in the tray while it is compressed: [progress] is 0..100, or -1 while it waits for the one before. */
+    data class Preparing(val id: String, val name: String, val progress: Int = -1)
+
+    private val preparingJobs = mutableMapOf<String, Job>()
+    private val videoLock = Mutex()
+
+    private fun prepareVideo(v: Picked, dir: File) {
+        val p = Preparing(UUID.randomUUID().toString(), v.name)
+        preparing = preparing + p
+        fun progress(n: Int) {
+            preparing = preparing.map { if (it.id == p.id) it.copy(progress = n) else it }
+        }
+        preparingJobs[p.id] = viewModelScope.launch {
+            try {
+                val result = videoLock.withLock {
+                    progress(0)
+                    VideoPrep.prepare(app, v.uri, v.name, v.size, File(dir, "prepared-${p.id}.mp4"), ::progress)
+                }
+                val file = when (result) {
+                    is VideoPrep.Result.Done -> LocalFile(result.file.path, result.name, "video/mp4", result.file.length())
+                    // Not readable as a video here: sent as it is, as before.
+                    VideoPrep.Result.Failed -> withContext(Dispatchers.IO) { copy(v, dir) }
+                    VideoPrep.Result.TooLong -> null
+                }
+                preparing = preparing - p
+                if (file == null) {
+                    composerError = "“${v.name}” wasn't added: too long to send (about ${VideoPrep.maxMinutes()} minutes at most)."
+                    return@launch
+                }
+                val check = checkFiles(attachments.size + items.size + preparing.size, listOf(file), { it.name }, { it.size })
+                if (check.accepted.isEmpty()) File(file.uri).delete()
+                attachments = attachments + check.accepted
+                composerError = check.rejected.joinToString(" ") { (name, why) -> "“$name” wasn't added: $why." }
+            } finally {
+                preparing = preparing - p
+                preparingJobs.remove(p.id)
+            }
+        }
+    }
+
+    /** × on a video being compressed: it stops and leaves the tray. */
+    fun cancelPreparing(p: Preparing) {
+        preparingJobs[p.id]?.cancel()
+    }
+
     /** How many more files the message takes. */
-    val filesLeft: Int get() = (Limits.ATTACHMENTS - attachments.size - items.size).coerceAtLeast(0)
+    val filesLeft: Int get() = (Limits.ATTACHMENTS - attachments.size - items.size - preparing.size).coerceAtLeast(0)
 
     /** Items picked from a collection join the tray (each once, as many as the message still takes). */
     fun attachItems(picked: List<chirkle.android.data.model.CollectionItem>) {
@@ -264,7 +323,10 @@ class RoomViewModel(
         File(f.uri).delete()
     }
 
-    private fun copy(uri: Uri, dir: File): LocalFile? = runCatching {
+    /** A picked file: its name, type and size (-1 when unknown). */
+    private class Picked(val uri: Uri, val name: String, val type: String, val size: Long)
+
+    private fun describe(uri: Uri): Picked? = runCatching {
         if (!isForeignContent(uri.scheme, uri.authority, app.packageName)) return null
         val cr = app.contentResolver
         var name = "file"
@@ -275,7 +337,15 @@ class RoomViewModel(
                 if (!c.isNull(1)) size = c.getLong(1)
             }
         }
-        val type = cr.getType(uri) ?: "application/octet-stream"
+        Picked(uri, name, cr.getType(uri) ?: "application/octet-stream", size)
+    }.getOrNull()
+
+    private fun copy(p: Picked, dir: File): LocalFile? = runCatching {
+        val uri = p.uri
+        val name = p.name
+        val type = p.type
+        val size = p.size
+        val cr = app.contentResolver
         // Too big to send: not copied at all.
         if (size > Limits.ATTACHMENT_BYTES) return LocalFile("", name, type, size)
         val safe = name.replace(Regex("[/\\\\\u0000]"), "_").ifBlank { "file" }
