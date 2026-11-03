@@ -192,6 +192,7 @@ function applyRoom(app, sender, ev) {
   if (!dm) {
     room.set("visibility", ["public", "private", "open"].includes(ev.visibility) ? ev.visibility : "public");
     room.set("posting", ev.posting === "selected" ? "selected" : "everyone");
+    room.set("anonymous", ev.anonymous === true); // DESIGN.md §35; a home from before it sends none
     room.set("archived", !!ev.archived);
     room.set("writers", writers);
   }
@@ -224,7 +225,19 @@ function checkMirrorEdit(e) {
   const home = peerById(e.app, orig.getString("peer"));
   const where = home ? peerHost(home) : "its home";
   if (!e.hasSuperuserAuth()) throw new ForbiddenError(`This room is shared from ${where}; it is changed there.`);
-  for (const f of ["kind", "visibility", "posting", "writers", "archived", "created_by", "dm_key", "peer", "remote_id", "shared"]) {
+  for (const f of [
+    "kind",
+    "visibility",
+    "posting",
+    "anonymous",
+    "writers",
+    "archived",
+    "created_by",
+    "dm_key",
+    "peer",
+    "remote_id",
+    "shared",
+  ]) {
     if (fieldValue(rec, f) !== fieldValue(orig, f)) throw fieldError(f, `This room is shared from ${where}; this is changed there.`);
   }
   const was = orig.getStringSlice("members");

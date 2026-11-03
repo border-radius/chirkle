@@ -568,6 +568,27 @@ describe("Telegram bridge (§26)", () => {
     expect((await sentTo("editMessageCaption")).params.caption).toBe(`${"y".repeat(1023)}…`);
   });
 
+  it("an anonymous room's messages go under the room's name, and forwards of them as from it (§35)", async () => {
+    const owner = await signUp(`Ann-${uniq()}`);
+    const source = await owner.pb.collection("rooms").create({ name: `anon-${uniq()}`, created_by: owner.user.id });
+    await admin.collection("rooms").update(source.id, { anonymous: true });
+    const { room, chat } = await linkedRoom(owner);
+    const sentTo = (n: number) =>
+      eventually(() => {
+        const c = stub.callsOf("sendMessage").filter((x) => x.params.chat_id === String(chat));
+        expect(c).toHaveLength(n);
+        return c[n - 1]!;
+      });
+
+    await admin.collection("rooms").update(room.id, { anonymous: true });
+    await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "unsigned" });
+    expect((await sentTo(1)).params.text).toBe(`<b>${room.name}</b>\nunsigned`);
+    await admin.collection("rooms").update(room.id, { anonymous: false });
+    const original = await owner.pb.collection("messages").create({ room: source.id, author: owner.user.id, text: "passed on" });
+    await owner.pb.send("/api/chat/forward", { method: "POST", body: { messages: [original.id], room: room.id } });
+    expect((await sentTo(2)).params.text).toBe(`<b>${owner.user.name}</b> <i>forwarded from ${source.name}</i>\npassed on`);
+  });
+
   it("attachments go as an album of photos with the text as its caption, and documents apart", async () => {
     const owner = await signUp();
     const { room, chat } = await linkedRoom(owner);

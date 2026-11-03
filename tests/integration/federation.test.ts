@@ -476,6 +476,31 @@ describe("a shared public room (§33.5)", () => {
     });
   }, 60_000);
 
+  it("is anonymous on the mirror when the home's is (DESIGN.md §35)", async () => {
+    const ann = await signUp(A);
+    const bob = await signUp(B);
+    const room = await ann.pb.collection("rooms").create({ name: `anon${uniq()}`, created_by: ann.user.id });
+    await A.admin.collection("rooms").update(room.id, { anonymous: true });
+    const mirror = await share(A, B, room.id, ab.xPeer.id);
+    expect(mirror.anonymous).toBe(true);
+    // Only the home changes it.
+    expect(await status(B.admin.collection("rooms").update(mirror.id, { anonymous: false }))).toBe(400);
+
+    await ann.pb.collection("messages").create({ room: room.id, author: ann.user.id, text: "from A, unsigned" });
+    const copy = await eventually(async () => {
+      const found = (await messagesIn(B, mirror.id)).find((m) => m.text === "from A, unsigned");
+      expect(found).toBeTruthy();
+      return found as RecordModel;
+    });
+    expect(copy.anonymous).toBe(true);
+    const seen = await bob.pb.collection("messages").getOne(copy.id, { expand: "author" });
+    expect(seen.author).toBe(mirror.id);
+    expect(seen.expand?.author?.name).toBe(mirror.name);
+
+    await A.admin.collection("rooms").update(room.id, { anonymous: false });
+    await eventually(async () => expect((await B.admin.collection("rooms").getOne(mirror.id)).anonymous).toBe(false));
+  }, 60_000);
+
   it("copies attachments", async () => {
     const ann = await signUp(A);
     const room = await ann.pb.collection("rooms").create({ name: `files${uniq()}`, created_by: ann.user.id });

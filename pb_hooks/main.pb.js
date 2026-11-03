@@ -17,6 +17,17 @@ routerUse((e) => {
 routerUse($apis.bodyLimit(require(`${__hooks}/lib/http.js`).MESSAGE_BODY_LIMIT));
 routerUse((e) => require(`${__hooks}/lib/http.js`).bodyLimit(e));
 
+// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35).
+routerUse((e) => {
+  // Re-encoded: letters never are (%61uthor would pass a look at the raw query).
+  if (/author|forwarded_from/i.test(e.request?.url?.query().encode() ?? "")) require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  return e.next();
+});
+onRealtimeSubscribeRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
+  e.next();
+});
+
 // Not the app's index.html (PocketBase's fallback for any other path, §7.1) for a missing asset or API.
 routerAdd("GET", "/assets/{path...}", (e) => require(`${__hooks}/lib/http.js`).asset(e));
 routerAdd("GET", "/manifest.webmanifest", (e) => require(`${__hooks}/lib/site.js`).manifest(e));
@@ -131,6 +142,8 @@ onRecordUpdate((e) => {
   e.next();
   // Saved: whoever can't see it any more is told (§23.4).
   if (e.record) access.dropLostAccess(e.app, before, e.record);
+  // Its anonymous messages show its new name (§35).
+  if (e.record) require(`${__hooks}/lib/anonymous.js`).forget(e.app, e.record.id);
   // A home room's changes go to its mirrors (§33).
   if (fed && e.record) fed.rooms.roomChanged(e.app, e.record, state);
 }, "rooms");
@@ -140,6 +153,7 @@ onRecordDelete((e) => {
   const room = e.record;
   const peers = fed && room ? fed.rooms.peersToTell(e.app, room) : [];
   e.next();
+  if (room) require(`${__hooks}/lib/anonymous.js`).forget(e.app, room.id);
   if (fed && room) fed.rooms.tellDeleted(e.app, room, peers);
 }, "rooms");
 
@@ -252,13 +266,16 @@ onRecordUpdate((e) => {
 }, "messages");
 
 onRecordEnrich((e) => {
+  const enrich = require(`${__hooks}/lib/enrich.js`);
   // lib/messages.js only for the messages that need it: loading it costs more than the rest (lib/enrich.js).
-  if (require(`${__hooks}/lib/enrich.js`).needsWork(e)) {
+  if (enrich.needsWork(e)) {
     const messages = require(`${__hooks}/lib/messages.js`);
     messages.keepToRoom(e);
     messages.showOriginal(e);
   }
   e.next();
+  // An anonymous room's message shows the room, not its author (§35): once expanded (in next()), by the real author.
+  if (enrich.isAnonymous(e)) require(`${__hooks}/lib/anonymous.js`).hide(e);
 }, "messages");
 
 onRecordUpdateRequest((e) => {

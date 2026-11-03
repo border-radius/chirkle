@@ -1314,7 +1314,9 @@
         "(@request.body.room.posting != \"selected\" || @request.body.room.writers.id ?= @request.auth.id || @request.body.room.created_by = @request.auth.id)",
         "@request.body.file_sources:isset = false",
         "@request.body.remote_id:isset = false",
-        "@request.body.file_dims:isset = false"
+        "@request.body.file_dims:isset = false",
+        "@request.body.anonymous:isset = false",
+        "@request.body.forwarded_anonymous:isset = false"
       ],
       "updateRule": [
         "author = @request.auth.id",
@@ -1335,7 +1337,9 @@
         "(room.posting != \"selected\" || room.writers.id ?= @request.auth.id || room.created_by = @request.auth.id)",
         "@request.body.file_sources:isset = false",
         "@request.body.remote_id:isset = false",
-        "@request.body.file_dims:isset = false"
+        "@request.body.file_dims:isset = false",
+        "@request.body.anonymous:isset = false",
+        "@request.body.forwarded_anonymous:isset = false"
       ],
       "deleteRule": null,
       "fields": [
@@ -1576,6 +1580,24 @@
           "required": false,
           "system": false,
           "type": "json"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "anonymous",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "forwarded_anonymous",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
         }
       ],
       "indexes": [
@@ -1666,7 +1688,8 @@
         "@request.body.writers:isset = false",
         "@request.body.peer:isset = false",
         "@request.body.remote_id:isset = false",
-        "@request.body.shared:isset = false"
+        "@request.body.shared:isset = false",
+        "@request.body.anonymous:isset = false"
       ],
       "updateRule": [
         "created_by = @request.auth.id",
@@ -1678,7 +1701,8 @@
         "@request.body.last_message_at:isset = false",
         "@request.body.peer:isset = false",
         "@request.body.remote_id:isset = false",
-        "@request.body.shared:isset = false"
+        "@request.body.shared:isset = false",
+        "@request.body.anonymous:isset = false"
       ],
       "deleteRule": null,
       "fields": [
@@ -1905,6 +1929,15 @@
           "required": false,
           "system": false,
           "type": "json"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "anonymous",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
         }
       ],
       "indexes": [

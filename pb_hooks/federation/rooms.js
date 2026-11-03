@@ -132,6 +132,7 @@ function roomEvent(app, room, peer, refused = "") {
     kind: room.getString("kind"),
     visibility: room.getString("visibility"),
     posting: room.getString("posting"),
+    anonymous: room.getBool("anonymous"),
     archived: room.getBool("archived"),
     created_by: gidOf(app, creator),
     members: members.map((id) => gidOf(app, id)),
@@ -167,7 +168,7 @@ const fieldValue = (r, f) =>
 
 /** What a room event says, compared before and after a save. @param {core.Record} r */
 const stateOf = (r) =>
-  ["name", "kind", "visibility", "posting", "archived", "created_by", "members", "writers", "shared"]
+  ["name", "kind", "visibility", "posting", "anonymous", "archived", "created_by", "members", "writers", "shared"]
     .map((f) => fieldValue(r, f))
     .join("|");
 

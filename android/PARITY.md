@@ -51,3 +51,4 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | Logo (`.brand::before`, `shell.css`) | The launcher icon, its themed (monochrome) layer and `BrandMark` draw the web's gradient bubble (ANDROID.md §39) | Same |
 | Send button (`.i-send`, `icons.css`) | `ChirkleIcons.Send` is the web's stroked arrow (ANDROID.md §40) | Same |
 | — (Android only) | Swipe a room right to go back to the rooms (ANDROID.md §40; replaced swipe to reply): `UiFeaturesTest` | Covered |
+| — (server, 2026-11-03) | Anonymous rooms (DESIGN.md §35, ANDROID.md §43): the server shows the room as the author to everyone but the author; nothing to port. The legacy own-id `author` filters stay allowed: `tests/integration/anonymous.test.ts` | Same (no app change) |

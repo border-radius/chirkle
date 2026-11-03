@@ -3,6 +3,7 @@
 // a linked room. The worker (worker.js) sends it, so a user's request never waits for Telegram, and what Telegram
 // refuses for now (it is down, or asks to slow down) is retried in order.
 
+const { roomName, sourceName } = require(`${__hooks}/lib/anonymous.js`);
 const { asTelegram, call } = require(`${__hooks}/telegram/api.js`);
 const { linkOfChat, linksOfRoom } = require(`${__hooks}/telegram/links.js`);
 
@@ -100,17 +101,24 @@ function userName(app, id) {
 
 /**
  * What a message shows, as Telegram HTML: its author in bold over its text; a forward says whose it is, and shows its
- * original's text and files (§21.3). An anonymous link's group gets no header: only the text (and files).
+ * original's text and files (§21.3). An anonymous link's group gets no header: only the text (and files). A message of an
+ * anonymous room is the room's, and a forward of one from its room (DESIGN.md §35).
  * @param {core.App} app
  * @param {core.Record} msg
  * @param {boolean} anonymous
  */
 function contentOf(app, msg, anonymous) {
   let source = msg;
-  let header = anonymous ? "" : `<b>${esc(userName(app, msg.getString("author")) || "Someone")}</b>`;
+  const author = msg.getBool("anonymous") ? roomName(app, msg.getString("room")) : userName(app, msg.getString("author"));
+  let header = anonymous ? "" : `<b>${esc(author || "Someone")}</b>`;
   if (msg.getString("forwarded_from")) {
-    if (!anonymous) header += ` <i>forwarded from ${esc(userName(app, msg.getString("forwarded_from")) || "someone")}</i>`;
     const original = msg.getString("forward_of") ? findMessage(app, msg.getString("forward_of")) : null;
+    const from = !msg.getBool("forwarded_anonymous")
+      ? userName(app, msg.getString("forwarded_from"))
+      : original
+        ? sourceName(app, original.getString("room"))
+        : "Anonymous";
+    if (!anonymous) header += ` <i>forwarded from ${esc(from || "someone")}</i>`;
     if (msg.getString("forward_of")) source = original && !original.getBool("deleted") ? original : msg;
   }
   const text = source.getString("text");

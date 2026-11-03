@@ -243,6 +243,10 @@ the bot posts Chirkle messages with the author's name above them.
    room and tick `enabled`. `/chatid` in the group says whether it is linked. Tick `anonymous` too to repost the
    room's messages to that group without their authors' names.
 
+To make a room **anonymous**, tick `anonymous` on its row under *Collections → rooms* in the admin UI. Messages
+posted from then on show the room's name instead of their authors to everyone but the authors themselves (and
+superusers); see DESIGN.md §35. Telegram groups linked to it get the room's name as the author too.
+
 The bridge is self-contained: `pb_hooks/telegram.pb.js`, `pb_hooks/telegram/` and its own `tg_*` collections. Delete
 the first two to remove it.
 

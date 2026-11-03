@@ -64,4 +64,12 @@ function needsWork(e) {
   return !!rec.getString("reply_to") || !(reactions === "" || reactions === "[]" || reactions === "null");
 }
 
-module.exports = { markChecked, inCheckedRoom, needsWork };
+/**
+ * Is anything about this message's author kept to themselves (lib/anonymous.js, DESIGN.md §35), or the author of the
+ * message it replies to? Checked for every message, the list routes' too.
+ * @param {core.RecordEnrichEvent} e
+ */
+const isAnonymous = (e) =>
+  !!e.record && (e.record.getBool("anonymous") || e.record.getBool("forwarded_anonymous") || !!e.record.expand()?.reply_to);
+
+module.exports = { markChecked, inCheckedRoom, needsWork, isAnonymous };

@@ -1290,3 +1290,14 @@ does its own way (Compose keeps the room list and the room's state; kept rooms o
 Ported: a session renewal answered after a logout (or another login) no longer saves the old session back
 (`ChirkleApi.auth(renewing)`), the web's fix of the same race. Test: `ChirkleApiTest` "a renewal answered after a
 logout doesn't bring the session back".
+
+## 43. Anonymous rooms (2026-11-03)
+
+DESIGN.md §35: a superuser can tick `rooms.anonymous` in the admin UI. The server then answers each message of the
+room, to everyone but its author, with `author` = the room's id and `expand.author` = a user named after the room that
+takes no DMs. The app needs no change. It already shows such an author by name and initials, offers no "Message" for
+`no_dms`, groups the messages under it, and shows the author their own messages as theirs (`author` = me). Quotes and
+forwards come the same way, and so does the media grid's author. The new fields (`anonymous`, `forwarded_anonymous`)
+are not in `fields.message`, so the app never sees them. The server now refuses filters on `author` unless they
+compare it with the caller (§35.3). The app's records-API fallback (`LegacyPagesTest`) uses only `author != {:me}`
+and `reply_to.author = {:me}`, which pass (`anonymous.test.ts`).

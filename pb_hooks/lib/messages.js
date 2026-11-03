@@ -118,19 +118,22 @@ function beforeMessageCreate(e) {
     const refused = dmRefusal(e.app, rec.getString("author"), room.getStringSlice("members"));
     if (refused) throw fieldError("room", refused);
   }
+  // Posted in an anonymous room (§35): its author is kept to themselves for good. DMs never are.
+  rec.set("anonymous", !!room && !isDm(room) && room.getBool("anonymous"));
   assertReplyTarget(e.app, rec);
-  assertForwardTarget(e.app, rec);
+  rec.set("forwarded_anonymous", assertForwardTarget(e.app, rec));
 }
 
 /**
  * A forward (§21.3) shows an original that is still there: not deleted, and not a forward itself (POST
- * /api/chat/forward points a forward of a forward at its original), so a chain is never more than one step.
+ * /api/chat/forward points a forward of a forward at its original), so a chain is never more than one step. Returns
+ * whether the original's author is kept to themselves (§35).
  * @param {core.App} app
  * @param {core.Record} rec
  */
 function assertForwardTarget(app, rec) {
   const id = rec.getString("forward_of");
-  if (!id) return;
+  if (!id) return false;
   let original = null;
   try {
     original = app.findRecordById("messages", id);
@@ -139,6 +142,7 @@ function assertForwardTarget(app, rec) {
   }
   if (!original || original.getBool("deleted")) throw fieldError("forward_of", "That message was deleted.");
   if (original.getString("forward_of") !== "") throw fieldError("forward_of", "That message is a forward.");
+  return original.getBool("anonymous");
 }
 
 /**

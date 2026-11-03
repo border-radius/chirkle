@@ -14,6 +14,7 @@
 //   were any (§17.5): a new image's the create hook already set.
 // - GET /api/chat/posters/{message}/{file}: a video's poster, checked as PocketBase checks the file itself.
 
+const { gridAuthor } = require(`${__hooks}/lib/anonymous.js`);
 const { visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { HEADER_BYTES, shownSize } = require(`${__hooks}/lib/images.js`);
 
@@ -126,13 +127,25 @@ function list(e) {
     ? "AND (md.sent < {:sent} OR (md.sent = {:sent} AND (md.message < {:message} OR (md.message = {:message} AND md.pos < {:pos}))))"
     : "";
   const rows = arrayOf(
-    new DynamicModel({ message: "", source: "", file: "", pos: 0, video: false, poster: false, sent: "", names: "", author: "", name: "" }),
+    new DynamicModel({
+      message: "",
+      source: "",
+      file: "",
+      pos: 0,
+      video: false,
+      poster: false,
+      sent: "",
+      names: "",
+      author: "",
+      name: "",
+      anonymous: false,
+    }),
   );
   e.app
     .db()
     .newQuery(
       `SELECT md.message, md.source, md.file, md.pos, md.video, md.poster, md.sent, COALESCE(s.file_names, '') AS names,
-              m.author, COALESCE(u.name, '') AS name
+              m.author, COALESCE(u.name, '') AS name, m.anonymous
        FROM media md
        JOIN messages m ON m.id = md.message
        JOIN messages s ON s.id = md.source
@@ -160,7 +173,7 @@ function list(e) {
       video: !!r.video,
       poster: !!r.poster,
       sent: r.sent,
-      author: r.author ? { id: r.author, name: r.name } : null,
+      author: gridAuthor(e, { author: r.author, name: r.name, anonymous: !!r.anonymous, room }),
     };
   });
   return e.json(200, { items, more: rows.length > limit });

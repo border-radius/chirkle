@@ -35,6 +35,11 @@ Rules that more than one implementation must follow have test vectors in [`share
 | `collections`, `collection_items` | ✓ | ✓ | the collections pages (`fields.collectionItem`) |
 | `push_tokens` | | delete only | apps from before ANDROID.md §21 unregister their Firebase token |
 
+Since 2026-11-03 (anonymous rooms, DESIGN.md §35) no one but a superuser may filter or sort by `author` or
+`forwarded_from`, or expand `messages_via_author`/`messages_via_forwarded_from`, except to compare an author with
+their own id (what older apps do): 400 otherwise. A message of an anonymous room reads, to anyone but its author, with
+`author` = the room's id and `expand.author` = `{ id, name: the room's name, no_dms: true }`, a user that doesn't exist.
+
 The clients send filters in PocketBase's filter syntax. Apps from before 2026-10-29 name the fields `room`, `created`,
 `id`, `updated`, `files`, `forward_of`, `text_key`, `author`, `deleted`, `room.kind`, `reply_to.author` and
 `collection`; apps from then on (with a current server) only `id` (users), `room` (`room_reads`, the live room),
