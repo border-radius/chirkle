@@ -300,6 +300,53 @@ describe("app boot (§7.1)", () => {
     await api.unsubscribeAll();
   });
 
+  it("QA BUG-205: what is typed while Jump to loads goes to its field, not the composer; Escape then gives it up", async () => {
+    const { api } = await signedUp("Ada");
+    const r1 = await api.createRoom(`one-${newId()}`);
+    history.replaceState(null, "", `/r/${r1.id}`);
+    app = startApp({ api, root });
+    await vi.waitFor(() => expect(root.querySelector("header.room-header h1")?.textContent).toBe(`#${r1.name}`));
+    const composer = root.querySelector<HTMLTextAreaElement>("form.composer textarea")!;
+    const sent = vi.spyOn(api, "send");
+    const press = (init: KeyboardEventInit) => {
+      const e = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      composer.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    const dialog = () => root.querySelector<HTMLDialogElement>("dialog.switcher");
+    composer.value = "draft";
+    // The chunk is still on its way (import() answers no sooner than a later task): the keys are held for it.
+    press({ key: "k", ctrlKey: true });
+    expect([..."onx"].map((key) => press({ key }))).toEqual([true, true, true]);
+    expect(press({ key: "Backspace" })).toBe(true);
+    expect(press({ key: "Enter" })).toBe(true);
+    await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+    expect(dialog()!.querySelector("input")!.value).toBe("on");
+    expect(composer.value).toBe("draft");
+    expect(sent).not.toHaveBeenCalled();
+    // Once it is in, keys are the field's own.
+    expect(press({ key: "a" })).toBe(false);
+    press({ key: "k", ctrlKey: true });
+    await vi.waitFor(() => expect(dialog()!.open).toBe(false));
+    app.stop();
+
+    // Escape while it loads: it doesn't open, and what is typed next is the page's again.
+    app = startApp({ api, root });
+    await vi.waitFor(() => expect(root.querySelector("form.composer textarea")).not.toBeNull());
+    const next = root.querySelector<HTMLTextAreaElement>("form.composer textarea")!;
+    const pressNext = (init: KeyboardEventInit) => {
+      const e = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      next.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    pressNext({ key: "k", ctrlKey: true });
+    expect(pressNext({ key: "Escape" })).toBe(true);
+    expect(pressNext({ key: "x" })).toBe(false);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(root.querySelector<HTMLDialogElement>("dialog.switcher")?.open ?? false).toBe(false);
+    await api.unsubscribeAll();
+  });
+
   it("switching rooms keeps the sidebar mounted: no refetch, and a half-typed room name survives", async () => {
     const { api } = await signedUp("Ada");
     const ctl = instrument(api);

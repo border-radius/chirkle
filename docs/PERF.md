@@ -180,7 +180,8 @@ was changed:
   page and asks with `If-None-Match`, so an unchanged room is a `304` with no body.
 - **What a page loads first, early**: index.html preloads the Latin Inter (asked for otherwise only once the
   stylesheet is in), and pages send a `Link` header with the stylesheet, script and font (`lib/http.js`), which a proxy
-  can turn into 103 Early Hints.
+  can turn into 103 Early Hints. It is read again when index.html changes, so a new build put in place while the
+  server runs is what pages name (QA BUG-206).
 - **The session check waits** (`renewal.ts` `renewSoon`): until the room list is in (at most 3 s), not alongside it.
 - **The composer's focus on entering a room** is in the next frame, whose layout it uses (`renderFooter`).
 - **The media viewer's image** is fetched at high priority (`fetchpriority`), ahead of thumbnails.

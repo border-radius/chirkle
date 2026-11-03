@@ -211,7 +211,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
         c.public ? null : visibilityMark("private"),
         n
           ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")])
-          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, " items")]),
+          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, c.items === 1 ? " item" : " items")]),
       ]),
     );
     collRows.set(c.id, { sig, el });

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { adminClient, newRoom, newUser, post, status, uniq } from "./helpers.ts";
@@ -101,6 +101,25 @@ describe("security and cache headers (§5.6)", () => {
     }
     for (const path of ["/assets/app-TEST1234.js", "/assets/nope.js", "/api/health", "/sw.js"]) {
       expect((await fetch(url(path))).headers.get("link"), path).toBeNull();
+    }
+  });
+
+  it("a new build put in place while the server runs is what pages preload, not the last one (QA BUG-206)", async () => {
+    const index = join(inject("pbPublicDir"), "index.html");
+    const before = await readFile(index, "utf8");
+    // Every JS runtime has read the old one (requests are spread over the pool).
+    for (let i = 0; i < 20; i++) await fetch(url("/"));
+    try {
+      await writeFile(index, before.replaceAll("TEST1234", "NEW56789"));
+      await utimes(index, new Date(), new Date(Date.now() + 5_000)); // a later time, whatever the file system's resolution
+      for (let i = 0; i < 20; i++) {
+        const link = (await fetch(url(`/r/n${i}`))).headers.get("link") ?? "";
+        expect(link).toContain("/assets/app-NEW56789.js");
+        expect(link).not.toContain("TEST1234");
+      }
+    } finally {
+      await writeFile(index, before);
+      await utimes(index, new Date(), new Date(Date.now() + 10_000));
     }
   });
 

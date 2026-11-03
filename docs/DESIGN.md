@@ -2829,7 +2829,8 @@ field and the rooms, DMs and collections you can go to. Typing narrows the list;
 click goes there, Escape, a click outside or the shortcut again closes it. The browser's own meaning of those keys
 (the search bar, printing) is prevented; Ctrl+Shift+P (a private window) and anything with Alt are left alone. On a
 layout that types no Latin letter there (Cyrillic: Ctrl+Л) the key's place counts (`KeyK`, `KeyP`). Guests jump
-between the Open Air rooms.
+between the Open Air rooms. The dialog is a lazy chunk: what is typed while it first loads goes to its field once it
+shows, not to the composer behind it (where Enter would send it), and Escape meanwhile gives it up (QA BUG-205).
 
 - **What is listed:** the sidebar's rooms, open DMs (titled after the other member, with their avatar) and your
   collections and those you follow, from the store: no request. Hidden and archived rooms are found when typed for,

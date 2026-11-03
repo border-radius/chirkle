@@ -57,6 +57,14 @@ for (const colorScheme of ["light", "dark"] as const) {
       await expect(page.locator(".archived-banner")).toBeVisible();
       expect(await seriousViolations(page), "archived room").toEqual([]);
 
+      // Jump to, its picked row with a note ("Archived") on the row's tint (QA BUG-202).
+      await page.keyboard.press("Control+k");
+      const jump = page.getByRole("dialog", { name: "Jump to" });
+      await jump.locator("input").fill(archived.name);
+      await expect(jump.locator('[aria-selected="true"] small')).toHaveText(/Archived/);
+      expect(await seriousViolations(page), "jump to").toEqual([]);
+      await page.keyboard.press("Escape");
+
       // A DM, with the user search open in the sidebar.
       await page.goto("/");
       await page.getByRole("button", { name: "New message" }).click();

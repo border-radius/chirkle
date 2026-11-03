@@ -245,16 +245,18 @@ dialog.switcher[open] {
 
 .switcher small {
   margin-left: 4px;
+  color: var(--dim);
   font-size: 0.75rem;
+  font-weight: 400;
+}
+
+/* --dim is under 4.5:1 on the picked row's tint (QA BUG-202). */
+.switcher [aria-selected="true"] small {
+  color: var(--muted);
 }
 
 .switcher .unread {
   font-weight: 700;
-}
-
-.switcher small {
-  color: var(--dim);
-  font-weight: 400;
 }
 
 dialog.forward .cancel {

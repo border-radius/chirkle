@@ -88,7 +88,7 @@ function messages(e) {
  * they serialize with their expands and what the enrich hooks added, so anything a page shows changes it. `no-store`:
  * nothing keeps a page but the app itself (cache.ts, which a logout clears), and it sends the tag it kept.
  * @param {core.RequestEvent} e
- * @param {core.Record[]} body
+ * @param {(core.Record | undefined)[]} body
  */
 function tagged(e, body) {
   const tag = `"${$security.sha256(JSON.stringify([e.requestInfo().query.fields ?? "", e.requestInfo().query.expand ?? "", body])).slice(0, 32)}"`;

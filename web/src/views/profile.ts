@@ -56,6 +56,9 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   const removeBtn = h("button", { type: "button" }, "Remove");
   const avatarError = h("p", { class: "field-error", role: "alert" });
 
+  const signedIn = h("p", { class: "field-status" });
+  const showSignedIn = () => (signedIn.textContent = `Signed in as ${me()?.name ?? ""} on this device.`);
+  showSignedIn();
   const nameInput = h("input", { id: `${vid}-name`, name: "name", autocomplete: "nickname", "aria-describedby": `${vid}-name-status` });
   const saveBtn = h("button", { type: "submit", class: "primary" }, "Save");
   const nameStatus = h("p", { id: `${vid}-name-status`, class: "field-status", role: "status" });
@@ -309,10 +312,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
             [h("h2", { id: `${vid}-pw-title` }, "Password"), pw.current.el, pw.next.el, pw.confirm.el, pwBtn, pwStatus],
           ),
           h("section", { class: "card profile-session", "aria-labelledby": `${vid}-session-title` }, [
-            h("div", {}, [
-              h("h2", { id: `${vid}-session-title` }, "Session"),
-              h("p", { class: "field-status" }, `Signed in as ${me()?.name ?? ""} on this device.`),
-            ]),
+            h("div", {}, [h("h2", { id: `${vid}-session-title` }, "Session"), signedIn]),
             h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, "Log out"),
           ]),
         ]),
@@ -339,6 +339,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
         store.subscribe((s, prev) => {
           if (s.user === prev.user) return;
           renderPicture();
+          showSignedIn(); // renamed here or in another tab (QA BUG-203)
           // Renamed in another tab: show the new name, unless a change is being typed here. Saving the old one
           // would quietly undo the rename.
           if (s.user && nameInput.value.trim() === prev.user?.name) nameInput.value = s.user.name;

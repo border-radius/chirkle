@@ -37,19 +37,26 @@ function headers(e) {
   }
 }
 
-/** index.html's assets as a Link header, read once by each JS runtime (again while there are none: not built yet). */
-let links;
+/**
+ * index.html's assets as a Link header, read again by each JS runtime when index.html changes: a deploy may replace
+ * pb_public/ while the server runs, and the last build's assets must not be preloaded (QA BUG-206).
+ */
+/** @type {string} */
+let links = "";
+/** index.html's modification time when `links` was read. */
+let linksOf = "";
 
 /**
  * What a page loads first (index.html's stylesheet, script and preloaded font), as a Link header: a proxy in front can
  * send it ahead of the page as 103 Early Hints, so the browser asks for them while the page is still on its way
- * (PERF.md §5).
+ * (PERF.md §5). None while there is no index.html (not built yet).
  */
 function preloads() {
-  if (links) return links;
-  links = "";
   try {
-    const html = toString($os.readFile($filepath.join(publicDir(), "index.html")));
+    const file = $filepath.join(publicDir(), "index.html");
+    const at = String($os.stat(file).modTime().unixNano());
+    if (at === linksOf) return links;
+    const html = toString($os.readFile(file));
     const out = [];
     for (const m of html.matchAll(/<(link|script)\b[^>]*?(?:href|src)="(\/assets\/[^"]+)"/g)) {
       const url = m[2];
@@ -58,7 +65,11 @@ function preloads() {
       else if (url.endsWith(".woff2")) out.push(`<${url}>; rel=preload; as=font; type="font/woff2"; crossorigin`);
     }
     links = out.join(", ");
-  } catch {}
+    linksOf = at;
+  } catch {
+    links = "";
+    linksOf = "";
+  }
   return links;
 }
 

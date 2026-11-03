@@ -29,7 +29,23 @@ export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLEle
     if (!e.repeat) toggle(); // held down: not open, closed, open… (QA BUG-137)
   };
 
+  /**
+   * While the chunk loads (the first time, slow on a slow network): what is typed meanwhile, for the field once it shows,
+   * not for the composer behind it, where an Enter would send it (QA BUG-205). Null: Escape, so it doesn't show.
+   */
+  let early: string | null | undefined;
+  const hold = (e: KeyboardEvent) => {
+    if (early == null || e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    if (e.key === "Escape") early = null;
+    else if (e.key === "Backspace") early = early.slice(0, -1);
+    else if (e.key.length === 1) early += e.key;
+    else if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+
   const toggle = () => {
+    if (!switcher) early = "";
     switcher ??= import("./views/switcher.ts").then(
       (m) => {
         const s = m.createSwitcher({
@@ -48,11 +64,21 @@ export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLEle
       },
       (err: unknown) => {
         switcher = undefined; // tried again next time
+        early = undefined;
         throw err;
       },
     );
     switcher.then(
-      (s) => s.toggle(),
+      (s) => {
+        const typed = early;
+        early = undefined;
+        if (typed === null) return;
+        s.toggle();
+        const input = s.el.querySelector("input");
+        if (!typed || !input) return;
+        input.value = typed;
+        input.dispatchEvent(new Event("input"));
+      },
       () => {},
     );
   };
@@ -72,9 +98,11 @@ export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLEle
     }
   });
   document.addEventListener("keydown", onKey);
+  document.addEventListener("keydown", hold, true);
   document.addEventListener(JUMP, toggle);
   return () => {
     document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keydown", hold, true);
     document.removeEventListener(JUMP, toggle);
     offStore();
   };

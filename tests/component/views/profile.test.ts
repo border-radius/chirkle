@@ -142,6 +142,8 @@ describe("profile view (§15.5)", () => {
     await vi.waitFor(() => expect(store.get().user?.name).toBe("Ada King"));
     expect(status().textContent).toBe("Saved.");
     expect(nameInput().getAttribute("aria-invalid")).toBeNull();
+    // QA BUG-203: the Session card says the new name too.
+    expect(root.querySelector(".profile-session")!.textContent).toContain("Signed in as Ada King on this device.");
   });
 
   it("a display name someone else has is refused (§22.1)", async () => {

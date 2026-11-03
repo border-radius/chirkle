@@ -2236,3 +2236,55 @@ container; below 40rem the buttons take a row of their own under the tile and na
 same arrow icon as a room's and Settings' (DESIGN.md §31 updated). `collCss` 1.94/1.95 KB after dropping two
 `justify-content` rules that never applied. Not a bug: a private collection tile's first thumbnail request is a 404 and
 retries with a fresh file token by design.
+
+# QA pass 27 — web, after the speed pass
+
+2026-11-03, user: "test web app heavily. list all bugs. then fix them. raise budgets if needed". The built app on a
+seeded server (8 people, 7 rooms, a 400-message room, DMs, collections), driven in Chromium by scripts, with a second
+user writing through the API; the same day's speed pass (rooms kept after you leave them, read tracking by what is on
+screen, prefetch on hover/press, ETag pages, delegated message listeners, lazy author menus, the lazy emoji picker) got
+most of the attention. All three e2e suites ran too (Chromium, and Firefox and WebKit locally).
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-201 | Low | Tooling (server) | `npm run typecheck` (so `npm run check`) failed on the clean tree: two JSDoc types in `lib/http.js` and `lib/lists.js` | Fixed |
+| BUG-202 | Low | Jump to (web) | The picked row's note ("Archived", a collection's owner) was 4.4:1 on the row's tint in the light theme | Fixed |
+| BUG-203 | Low | Settings (web) | After a rename the Session card still said "Signed in as" the old name | Fixed |
+| BUG-204 | Low | Room list (web) | A collection holding one item was read out as "1 items" | Fixed |
+| BUG-205 | Medium | Jump to (web) | Typed right after Ctrl+K while the dialog's chunk loaded, the text went into the composer, and Enter sent it to the room | Fixed |
+| BUG-206 | Low-Medium | Server | The `Link` header was read once per JS runtime: after a new build was put in place without a restart (README's rsync of `pb_public/`), every page preloaded the last build's script and stylesheet (404s once they're gone) | Fixed |
+
+**BUG-201:** `links` is typed, and `tagged()` takes what `findRecordsByFilter` returns. **BUG-202:** the note is
+`--muted` on the picked row (4.84:1); the two `.switcher small` rules are one, so `app.css` stays at 11.04 KB.
+**BUG-203:** the line is redrawn when the user changes (here or in another tab). **BUG-205:** `jump.ts` holds the keys
+typed while the chunk loads (a capture listener on the document) and puts them in the field once it shows; Enter does
+nothing meanwhile, Escape gives the dialog up and lets later keys through (DESIGN.md §32). With a 300 ms chunk the whole
+query used to land in the composer. **BUG-206:** `preloads()` reads index.html again when its modification time
+changes (PERF.md §5). The Android app has neither BUG-203 (no such line) nor BUG-204 (its counts say "1 item").
+
+**Checked and fine**
+- **Rooms kept after you leave them:** messages, edits, deletes and reactions that come while a room is parked show
+  when you go back; a burst of 30 while away lands at the first new one under the New line, the badge counting down as
+  they come into view; drafts, search, selection and scroll position stay; reply, edit, react, forward and delete work
+  in a room put back; a room you lose access to while parked says it doesn't exist, not its old copy; a real disconnect
+  (the server stopped, 60 messages written meanwhile) is filled in order with no duplicates; random clicking through 8
+  rooms (72 clicks) and Back/Forward spam always left one room, matching the URL and the sidebar; desktop ↔ phone
+  resizes keep the list pinned.
+- **Read tracking:** a background tab reads nothing (title and badge count up) until it is visible; opening at the
+  first unread reads only what is on screen; history paging back to the first of 400 messages.
+- **Prefetch and pages:** a hinted page followed by a new message shows the message; a slow open with a message sent
+  meanwhile shows it; the room route refuses unknown kinds (`constructor`, `__proto__`) and missing cursors, clamps
+  `limit`, answers `If-None-Match` lists, and a weak or bare tag with the whole page; guests get no messages of a room
+  they can't read, tag or not.
+- **Elsewhere:** composer (Shift+Enter, Up to edit, Ctrl+Up/Down replies, over-limit text, unbroken 2000-character
+  words and long links at 390 px), edit edge cases (unchanged sends nothing, blank and over-long are refused),
+  creating rooms (duplicate name refused) and DMs, archive/unarchive, hide/unhide, author menus by mouse and keyboard,
+  focus after every way of switching rooms, guest links to rooms and collections they can't see, password and name
+  errors in Settings. axe (WCAG 2.1 AA): room, room menu, media, search, Settings, a collection, Jump to, guest home
+  and room, login and sign-up, light and dark, 1280 and 390 px wide: only BUG-202.
+- **Suites after the fixes:** `npm run check` green (typecheck, lint, 759 unit and component, 453 integration, build:
+  JS 48.10/49.75 KB, CSS 11.04/11.05 KB, no budget raised). E2E Chromium 78 passed, 1 skipped. Locally, Firefox 74
+  passed and WebKit 72; the failures were the known local-only media specs (Firefox's video poster, WebKit's audio: no
+  codecs here), Firefox `signup.spec.ts` once (5 of 6 alone: Playwright's Firefox missing a pushState now and then), and
+  WebKit `room_access.spec.ts:26`, which takes ~17 s of its 30 s alone and timed out under parallel load (4 of 4 run
+  one at a time).
