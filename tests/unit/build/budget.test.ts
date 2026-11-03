@@ -10,7 +10,7 @@ describe("checkBudget", () => {
       viewerJs: 4 * 1024,
       viewerCss: 1.5 * 1024,
       searchJs: 2 * 1024,
-      accessJs: 3.05 * 1024,
+      accessJs: 3.1 * 1024,
       accessCss: 1.5 * 1024,
       mediaJs: 3 * 1024,
       mediaCss: 1024,

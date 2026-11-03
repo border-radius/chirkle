@@ -213,7 +213,10 @@ export function createWrites(ctx: WriteCtx) {
   function removeMessage(id: string) {
     const m = find(id);
     if (!m) return null;
-    return optimistic(id, { text: "", deleted: true }, { text: m.text, deleted: false }, () => api.softDelete(id));
+    // Someone else's, or a moderator's own where they can't post (§36): only the delete route allows it.
+    const own = m.author === me()?.id && ctx.posting();
+    const remove = own ? () => api.softDelete(id) : async () => (await api.deleteMany([id]))[0]!;
+    return optimistic(id, { text: "", deleted: true }, { text: m.text, deleted: false }, remove);
   }
 
   function removeMany(ids: readonly string[]) {

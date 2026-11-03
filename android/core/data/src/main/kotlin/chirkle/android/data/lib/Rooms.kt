@@ -18,6 +18,15 @@ fun Room.canPost(me: String?): Boolean {
     return postingOrDefault != Posting.Selected || createdBy == me || me in writers
 }
 
+/**
+ * May [me] change the room's access and archive it? Its creator, or a moderator (DESIGN.md §36); never a DM. A copy of
+ * another instance's room is changed there (§33.5).
+ */
+fun Room.canManage(me: User?): Boolean {
+    if (me == null || isDm) return false
+    return createdBy == me.id || (me.moderator && shared?.home.isNullOrEmpty())
+}
+
 /** How each visibility is called and explained (§23.1). */
 val Visibility.label: String
     get() = when (this) {

@@ -345,6 +345,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
 
   // A restored session is checked (and renewed) once the room list is in.
   renewal.renewSoon();
+  // A live connection the server closed may have been a ban's (§36) or a revoked session's: checked again.
+  const offConnect = api.onConnect((reconnect) => reconnect && renewal.renew());
 
   return {
     store,
@@ -352,6 +354,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     logOut,
     stop() {
       offAuth();
+      offConnect();
       renewal.stop();
       window.removeEventListener("dragover", swallowFileDrag);
       window.removeEventListener("drop", swallowFileDrag);

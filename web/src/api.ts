@@ -166,8 +166,12 @@ export interface Api {
   softDelete(id: string): Promise<Message>;
   /** Add (`on`) or remove your `emoji` reaction on a message (§20). Idempotent. */
   react(id: string, emoji: string, on: boolean): Promise<Message>;
-  /** Soft-delete several of your messages at once, all or none (§21.2). Resolves to them, deleted. */
+  /** Soft-delete several of your messages at once, all or none (§21.2), or a moderator anyone's (§36). Resolves to them, deleted. */
   deleteMany(ids: readonly string[]): Promise<Message[]>;
+  /** Is this user banned (§36)? */
+  isBanned(user: string, signal?: AbortSignal): Promise<boolean>;
+  /** A moderator bans or unbans someone (§36). */
+  setBanned(user: string, banned: boolean): Promise<void>;
   /** Copy messages into `room` as yours, saying who first wrote them, all or none (§21.3). Resolves to the copies. */
   forward(ids: readonly string[], room: string): Promise<Message[]>;
 
@@ -315,6 +319,7 @@ const toUser = (r: AuthRecord): User => ({
   avatar: (r.avatar as string | undefined) ?? "",
   ...(r.no_dms ? { no_dms: true } : {}),
   ...(r.instance ? { instance: r.instance as string } : {}),
+  ...(r.moderator ? { moderator: true } : {}),
 });
 /** What the profile calls return: never the email, even for yourself. */
 export const USER_FIELDS = "id,name,avatar,instance";
@@ -596,6 +601,8 @@ export function createApi(client: PbClient): Api {
       wrap(pb.send<Message>("/api/chat/reactions", { method: "POST", body: { message: id, emoji, on }, query: MSG_OPTS })),
 
     deleteMany: (ids) => wrap(pb.send<Message[]>("/api/chat/delete", { method: "POST", body: { messages: ids }, query: MSG_OPTS })),
+    isBanned: async (user, signal) => !!(await wrap(users.get<AuthRecord>(user, { fields: "id,banned" }, signal))).banned,
+    setBanned: async (user, banned) => void (await wrap(pb.send("/api/chat/ban", { method: "POST", body: { user, banned } }))),
     forward: (ids, room) =>
       wrap(pb.send<Message[]>("/api/chat/forward", { method: "POST", body: { messages: ids, room }, query: MSG_OPTS })),
     fileToken: async (force) => (api.currentUser() ? tokens.ensure(force) : ""),

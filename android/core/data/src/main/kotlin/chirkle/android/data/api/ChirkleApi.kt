@@ -39,7 +39,9 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import okhttp3.HttpUrl
@@ -491,9 +493,18 @@ class ChirkleApi(val pb: PbClient) {
         call("/api/chat/reactions", "POST", MSG_OPTS, Body.Json(buildJsonObject { put("message", id); put("emoji", emoji); put("on", on) })),
     )
 
-    /** Soft-delete several of your messages at once, all or none (§21.2). */
+    /** Soft-delete several of your messages at once, all or none (§21.2), or a moderator anyone's (DESIGN.md §36). */
     suspend fun deleteMany(ids: List<String>): List<Message> =
         decode(call("/api/chat/delete", "POST", MSG_OPTS, Body.Json(JsonObject(mapOf("messages" to JsonArray(ids.map { JsonPrimitive(it) }))))))
+
+    /** Is this user banned (DESIGN.md §36)? */
+    suspend fun isBanned(user: String): Boolean =
+        call(record("users", user), query = mapOf("fields" to "id,banned")).obj["banned"]?.jsonPrimitive?.booleanOrNull == true
+
+    /** A moderator bans or unbans someone (DESIGN.md §36). */
+    suspend fun setBanned(user: String, banned: Boolean) {
+        call("/api/chat/ban", "POST", body = Body.Json(buildJsonObject { put("user", user); put("banned", banned) }))
+    }
 
     /** Copy messages into [room] as yours, saying who first wrote them, all or none (§21.3). */
     suspend fun forward(ids: List<String>, room: String): List<Message> = decode(

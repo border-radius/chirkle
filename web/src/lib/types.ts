@@ -9,6 +9,8 @@ export interface User {
   no_dms?: boolean;
   /** Someone on a linked instance (§33.4): its host, e.g. "b.example". Absent for this instance's own people. */
   instance?: string;
+  /** You are a moderator (§36): only said of the signed-in user. */
+  moderator?: boolean;
 }
 
 /**

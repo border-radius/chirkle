@@ -7,7 +7,7 @@
 import type { RoomActions } from "../../actions.ts";
 import { errorMessage } from "../../api.ts";
 import { h } from "../../dom.ts";
-import { otherMember, roomTitle, sharedNote, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
+import { canManage, otherMember, roomTitle, sharedNote, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
 import type { Room, User } from "../../lib/types.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
 import { createActionMenu, type MenuItem } from "../../ui/menu.ts";
@@ -214,7 +214,7 @@ export function createRoomHeader(opts: {
     const note = room ? sharedNote(room) : "";
     if (shared.textContent !== note) shared.textContent = note;
     shared.hidden = !note;
-    menu.update(items(room, hidden, !!room && room.created_by === me?.id, !me));
+    menu.update(items(room, hidden, !!room && canManage(room, me), !me));
   }
 
   return { el, update };

@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import chirkle.android.data.api.ApiError
 import chirkle.android.data.api.errorMessage
 import chirkle.android.data.lib.Limits
+import chirkle.android.data.lib.canManage
 import chirkle.android.data.lib.hint
 import chirkle.android.data.lib.label
 import chirkle.android.data.lib.otherMember
@@ -270,7 +271,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
                 empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) "No other rooms. Hidden and archived ones are listed below." else "No rooms yet. Create the first one.")
             }
-            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Rooms, s, me.id, ::act, { archiving = it }, services), button = false) }
+            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Rooms, s, ::act, { archiving = it }, services), button = false) }
             foldHeader("dms", "Direct messages", "dms" in folded, toggle, "New direct message") { newDm = true }
             items(shown("dms", sections.dms), key = { it.id }) { r ->
                 RoomRow(r, s, me.id, onOpenRoom, listOf("Close conversation" to { act("close", r) { services.actions.hide(r.id) } }), button = false)
@@ -282,9 +283,9 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 fold("Hidden & archived", moreCount, showMore) { showMore = !showMore }
                 if (showMore) {
                     if (sections.hidden.isNotEmpty()) part("Hidden", ChirkleIcons.Hide)
-                    items(sections.hidden, key = { "h" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Hidden, s, me.id, ::act, { archiving = it }, services)) }
+                    items(sections.hidden, key = { "h" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Hidden, s, ::act, { archiving = it }, services)) }
                     if (sections.archived.isNotEmpty()) part("Archived", ChirkleIcons.Archive)
-                    items(sections.archived, key = { "a" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Archived, s, me.id, ::act, { archiving = it }, services)) }
+                    items(sections.archived, key = { "a" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Archived, s, ::act, { archiving = it }, services)) }
                 }
             }
         }
@@ -322,12 +323,12 @@ private fun menuItems(
     r: Room,
     section: Section,
     s: AppState,
-    me: String,
     act: (String, Room, suspend () -> Unit) -> Unit,
     archive: (Room) -> Unit,
     services: chirkle.android.data.repo.ChirkleServices,
 ): List<Pair<String, () -> Unit>> {
-    val mine = r.createdBy == me
+    // Its creator's, or a moderator's (DESIGN.md §36).
+    val mine = r.canManage(s.user)
     val items = mutableListOf<Pair<String, () -> Unit>>()
     if (section == Section.Rooms) items += "Hide" to { act("hide", r) { services.actions.hide(r.id) } }
     // An archived room you had hidden is listed under Archived; it can still be unhidden from there.

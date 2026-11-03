@@ -13,7 +13,7 @@ import { captureAnchor, restoreAnchor } from "../../lib/scroll.ts";
 import { dayLabel, formatFull, formatTime, parsePb } from "../../lib/time.ts";
 import type { Badge, LinkPreview, Message, Quoted, Reaction, User } from "../../lib/types.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
-import { createActionMenu } from "../../ui/menu.ts";
+import { type ActionMenu, createActionMenu, type MenuItem } from "../../ui/menu.ts";
 import { createAttachments } from "./attachments.ts";
 import { composing, editProblem, fitRows, rowsFor } from "./composer.ts";
 import { addReactionButton, reactionFocus, reactionRow } from "./reactions.ts";
@@ -115,6 +115,9 @@ export function createMessageList(opts: {
   avatarUrl: AvatarUrl;
   /** "Message" in an author's menu (§16.5). */
   onMessageUser: (userId: string) => void;
+  /** A moderator's author menu (§36): whether they are banned, and Ban or Unban. */
+  isBanned?: (userId: string) => Promise<boolean>;
+  onBan?: (userId: string, banned: boolean) => void;
   /** Signed URL of an attachment (§17.3). */
   fileUrl: (m: Message, filename: string, thumb?: string) => string;
   /** Signed URL of a video's poster frame (§30.1). */
@@ -351,17 +354,43 @@ export function createMessageList(opts: {
     },
     { signal },
   );
-  // An author's menu (authorEl) works once it is first opened. (`toggle` doesn't bubble: caught on its way down.)
+  // An author's menu (authorEl) works once it is first opened. (`toggle` doesn't bubble: caught on its way down.) A
+  // moderator's then offers Ban or Unban, as they are each time it opens (§36).
+  const authorMenus = new WeakMap<HTMLDetailsElement, ActionMenu>();
   el.addEventListener(
     "toggle",
     (e) => {
       const d = e.target;
-      if (!(d instanceof HTMLDetailsElement) || !d.open || !d.matches(".author-menu:not(.made)")) return;
-      d.classList.add("made");
+      if (!(d instanceof HTMLDetailsElement) || !d.open || !d.matches(".author-menu")) return;
       const name = d.querySelector("summary")?.textContent ?? "";
-      const menu = createActionMenu({ label: name, note: d.dataset.note, el: d, signal });
+      let menu = authorMenus.get(d);
+      if (!menu) {
+        d.classList.add("made");
+        menu = createActionMenu({ label: name, note: d.dataset.note, el: d, signal });
+        authorMenus.set(d, menu);
+      }
       const user = d.dataset.user!;
-      menu.update([{ label: "Message", run: () => opts.onMessageUser(user) }]);
+      const items: MenuItem[] = [{ label: "Message", run: () => opts.onMessageUser(user) }];
+      menu.update(items);
+      const { isBanned, onBan } = opts;
+      if (!d.dataset.ban || !isBanned || !onBan) return;
+      isBanned(user).then(
+        (banned) => {
+          if (signal.aborted) return;
+          menu.update([
+            ...items,
+            banned
+              ? { label: "Unban", run: () => onBan(user, false), sep: true }
+              : {
+                  label: "Ban…",
+                  confirm: { text: `Ban ${name}? They are signed out everywhere and can't sign in until unbanned.`, action: "Ban" },
+                  run: () => onBan(user, true),
+                  sep: true,
+                },
+          ]);
+        },
+        () => {}, // not known: no item
+      );
     },
     { capture: true, signal },
   );
@@ -521,7 +550,7 @@ export function createMessageList(opts: {
       parts.push(avatar(author, 32, opts.avatarUrl));
       parts.push(
         h("div", { class: "meta" }, [
-          authorEl(author, me, !!m.expand?.author),
+          authorEl(author, me, !!m.expand?.author, m.room),
           permalink(m, h("time", { datetime: new Date(ms).toISOString(), title: formatFull(ms) }, time)),
         ]),
       );
@@ -640,11 +669,14 @@ export function createMessageList(opts: {
    * can't message (§23.3). The menu is drawn as ui/menu.ts draws it, and made to work when first opened (the `toggle`
    * listener above).
    */
-  function authorEl(author: User, me: User | null, known: boolean): HTMLElement {
+  function authorEl(author: User, me: User | null, known: boolean, room: string): HTMLElement {
     // Someone on a linked instance says where (§33.4).
     const where = author.instance ? `On ${author.instance}` : undefined;
     if (!me || author.id === me.id || !known || author.no_dms) return h("span", { class: "author", title: where }, author.name);
-    return h("details", { class: "menu author-menu", dataset: { user: author.id, ...(where ? { note: where } : {}) } }, [
+    // A moderator bans this instance's people (§36); an anonymous room's author is the room (§35), no one to ban.
+    const ban = me.moderator && !author.instance && author.id !== room;
+    const data = { user: author.id, ...(where ? { note: where } : {}), ...(ban ? { ban: "1" } : {}) };
+    return h("details", { class: "menu author-menu", dataset: data }, [
       h("summary", { class: "author" }, author.name),
       h("div", { class: "menu-items" }, [where ? h("p", {}, where) : null, h("button", { type: "button" }, "Message")]),
     ]);

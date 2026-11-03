@@ -27,6 +27,15 @@ export function canPost(room: Room, me: User | null): boolean {
   return postingOf(room) !== "selected" || room.created_by === me.id || !!room.writers?.includes(me.id);
 }
 
+/**
+ * May `me` change the room's access and archive it? Its creator, or a moderator (§36); never a DM. A copy of another
+ * instance's room is changed there (§33.5).
+ */
+export function canManage(room: Room, me: User | null): boolean {
+  if (!me || isDm(room)) return false;
+  return room.created_by === me.id || (!!me.moderator && !room.shared?.home);
+}
+
 /** How each visibility is called and explained (§23.1). */
 export const VISIBILITY: Record<Visibility, { label: string; icon: string; hint: string }> = {
   private: { label: "Private", icon: "🔒", hint: "Only the people you add can read and post." },

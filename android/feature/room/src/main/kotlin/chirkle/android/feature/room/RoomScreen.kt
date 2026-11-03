@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -78,6 +79,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import chirkle.android.data.lib.PageKind
 import chirkle.android.data.lib.Side
 import chirkle.android.data.lib.attachmentName
+import chirkle.android.data.lib.canManage
 import chirkle.android.data.lib.canPost
 import chirkle.android.data.lib.dmClosed
 import chirkle.android.data.lib.highlight
@@ -138,6 +140,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     var composerEmoji by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<List<String>?>(null) }
     var forwarding by remember { mutableStateOf<List<String>?>(null) }
+    /** A moderator's Ban, asked first (DESIGN.md §36): the author's id and name. */
+    var banning by remember { mutableStateOf<Pair<String, String>?>(null) }
     var saving by remember { mutableStateOf<chirkle.android.data.model.SaveFrom?>(null) }
     var pickingItems by remember { mutableStateOf(false) }
     val badges by vm.badges.state.collectAsStateWithLifecycle()
@@ -326,7 +330,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         if (room != null && me != null) {
                             Box {
                                 IconButton(onClick = { roomMenu = true }) { Icon(ChirkleIcons.More, contentDescription = "Room actions") }
-                                RoomMenu(roomMenu, { roomMenu = false }, room, me.id, app_.hidden.containsKey(roomId), nav, snackbar)
+                                RoomMenu(roomMenu, { roomMenu = false }, room, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar)
                             }
                         }
                     },
@@ -395,6 +399,11 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     }
 
     sheetFor?.let { m ->
+        val author = m.expand?.author
+        val bannable = me?.moderator == true && author != null && m.author != me.id && m.author != m.room && author.instance.isEmpty() && !author.noDms
+        val banned by produceState<Boolean?>(null, m.id, bannable) {
+            value = if (bannable) runCatching { services.api.isBanned(m.author) }.getOrNull() else null
+        }
         val items = buildList {
             if (c.repliable(m)) add(MenuItem("Reply", ChirkleIcons.Reply) { sheetFor = null; vm.reply(m); focus.requestFocusSafely() })
             if (c.editable(m)) add(MenuItem("Edit", ChirkleIcons.Edit) { sheetFor = null; vm.startEdit(m); focus.requestFocusSafely() })
@@ -405,6 +414,13 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             if (me != null && c.selectable(m)) add(MenuItem("Forward", ChirkleIcons.Forward) { sheetFor = null; forwarding = listOf(m.id) })
             if (c.selectable(m)) add(MenuItem("Select", ChirkleIcons.Check) { sheetFor = null; vm.toggleSelect(m) })
             if (c.deletable(m)) add(MenuItem("Delete", ChirkleIcons.Delete, danger = true) { sheetFor = null; confirmDelete = listOf(m.id) })
+            // A moderator bans this instance's people; an anonymous room's author is the room (§35), no one to ban.
+            val name = author?.name.orEmpty()
+            when (banned) {
+                false -> add(MenuItem("Ban $name", ChirkleIcons.Lock, danger = true) { sheetFor = null; banning = m.author to name })
+                true -> add(MenuItem("Unban $name", ChirkleIcons.Lock) { sheetFor = null; vm.setBanned(m.author, false) })
+                null -> {}
+            }
         }
         MessageSheet(m, c.reactable(m), recent, items, onReact = { e -> sheetFor = null; vm.react(m, e) }, onMoreEmoji = { sheetFor = null; emojiFor = m }, onDismiss = { sheetFor = null })
     }
@@ -424,6 +440,17 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
         )
     }
+    banning?.let { (id, name) ->
+        AlertDialog(
+            onDismissRequest = { banning = null },
+            title = { Text("Ban $name") },
+            text = { Text("Ban $name? They are signed out everywhere and can't sign in until unbanned.") },
+            confirmButton = {
+                TextButton(onClick = { banning = null; vm.setBanned(id, true) }) { Text("Ban", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { banning = null }) { Text("Cancel") } },
+        )
+    }
     saving?.let { from -> chirkle.android.ui.SaveToCollectionSheet(from) { saving = null } }
     if (pickingItems) CollectionPickerSheet(vm.filesLeft, onPick = { pickingItems = false; vm.attachItems(it) }) { pickingItems = false }
     forwarding?.let { ids ->
@@ -438,7 +465,7 @@ private fun FocusRequester.requestFocusSafely() {
 }
 
 @Composable
-private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, me: String, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState) {
+private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, manage: Boolean, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState) {
     val services = LocalServices.current
     val scope = rememberCoroutineScope()
     var archive by remember { mutableStateOf(false) }
@@ -448,7 +475,7 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
         scope.launch { runCatching { block() }.onFailure { snackbar.showSnackbar("That didn't work. ${chirkle.android.data.api.errorMessage(it)}") } }
     }
     DropdownMenu(open, onDismissRequest = close) {
-        if (!room.isDm) DropdownMenuItem(text = { Text(if (room.createdBy == me) "Room access…" else "Members") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
+        if (!room.isDm) DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
         if (room.isDm) DropdownMenuItem(text = { Text("Close conversation") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
         else if (hidden) DropdownMenuItem(text = { Text("Unhide room") }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
         else DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
@@ -461,7 +488,8 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
                 onClick = { close(); services.notifyRooms.set(room.id, !on) },
             )
         }
-        if (!room.isDm && room.createdBy == me) {
+        // Its creator's, or a moderator's (DESIGN.md §36).
+        if (manage) {
             if (room.archived) DropdownMenuItem(text = { Text("Unarchive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { act("unarchive") { services.actions.setArchived(room.id, false) } })
             else DropdownMenuItem(text = { Text("Archive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { close(); archive = true })
         }

@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -45,6 +45,7 @@ routerAdd("GET", "/api/chat/unread/{room}", (e) => require(`${__hooks}/lib/reads
 routerAdd("POST", "/api/chat/reads", (e) => require(`${__hooks}/lib/reads.js`).markRead(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reactions", (e) => require(`${__hooks}/lib/reactions.js`).react(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/delete", (e) => require(`${__hooks}/lib/bulk.js`).deleteMessages(e), $apis.requireAuth("users"));
+routerAdd("POST", "/api/chat/ban", (e) => require(`${__hooks}/lib/moderation.js`).ban(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/forward", (e) => require(`${__hooks}/lib/bulk.js`).forward(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/media/{room}", (e) => require(`${__hooks}/lib/media.js`).list(e));
 routerAdd("GET", "/api/chat/posters/{message}/{file}", (e) => require(`${__hooks}/lib/media.js`).poster(e));
@@ -75,7 +76,11 @@ onRecordUpdate((e) => {
   // A changed profile goes to the peers that know it (§33).
   const profile = fed && e.record ? fed.people.profileKey(e.record.original()) : "";
   require(`${__hooks}/lib/users.js`).beforeUserSave(e);
+  // A ban ends their sessions (§36).
+  const moderation = require(`${__hooks}/lib/moderation.js`);
+  const banned = !!e.record && moderation.beforeBan(e.record);
   e.next();
+  if (banned && e.record) moderation.afterBan(e.app, e.record.id);
   if (fed && e.record) fed.people.userChanged(e.app, e.record, profile);
 }, "users");
 
@@ -102,11 +107,14 @@ onRecordCreateRequest((e) => {
 
 onRecordAuthWithOAuth2Request((e) => {
   require(`${__hooks}/lib/site.js`).checkOAuth2Signup(e);
+  require(`${__hooks}/lib/moderation.js`).refuseBanned(e.record, null);
   e.next();
 }, "users");
 
 onRecordAuthWithPasswordRequest((e) => {
   require(`${__hooks}/lib/users.js`).findLoginByEmail(e);
+  // A banned account is told so (§36).
+  require(`${__hooks}/lib/moderation.js`).refuseBanned(e.record, e.password);
   e.next();
 }, "users");
 

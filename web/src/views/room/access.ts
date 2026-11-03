@@ -1,4 +1,4 @@
-// Room access dialog (§23.2, §23.6): the creator chooses who can see the room (Private, Public or Open Air) and, for a
+// Room access dialog (§23.2, §23.6): the creator (or a moderator, §36) chooses who can see the room (Private, Public or Open Air) and, for a
 // private room, who its members are; then who can post: everyone who can see it, or only the people they choose.
 // Anyone else in a private room gets the same dialog to see who is in it (and who can post), read-only.
 // Telegram stand-ins (no_dms, §26.3) are left out of it: the bridge adds them itself, so adding or removing one does
@@ -70,11 +70,12 @@ const POSTING: Record<Posting, { label: string; icon: string; hint: string }> = 
 };
 
 /** What a change of visibility does that may not be obvious, or "". */
-function warning(from: Visibility, to: Visibility): string {
+function warning(from: Visibility, to: Visibility, mine: boolean): string {
   if (from === to) return "";
   if (to === "open") return "Everything ever written here, and everything to come, becomes readable by anyone on the web.";
   if (from === "private") return "Everyone with an account will be able to read the whole history.";
-  if (to === "private") return "Only you and the people you add will see this room. Everyone else loses it from their list.";
+  if (to === "private")
+    return `Only ${mine ? "you and the people you add" : "its creator and the people added"} will see this room. Everyone else loses it from their list.`;
   return "People without an account won't see this room any more.";
 }
 
@@ -260,7 +261,7 @@ export function createAccessDialog(opts: {
     writers.el.hidden = posting !== "selected";
     members.render();
     writers.render();
-    warn.textContent = editable ? warning(visibilityOf(room), visibility) : "";
+    warn.textContent = editable ? warning(visibilityOf(room), visibility, room.created_by === myId) : "";
     const hosts = sharedHosts();
     sharedEl.hidden = !hosts.length;
     sharedEl.textContent = !hosts.length
@@ -377,9 +378,12 @@ export function createAccessDialog(opts: {
   /** The people `ids` names, as expanded, the creator first (as the server keeps them). */
   function users(r: Room, ids: string[], expanded: User[] | undefined, me: User | null) {
     const known = new Map([...(r.expand?.members ?? []), ...(expanded ?? [])].map((u) => [u.id, u]));
-    // A room made private (or posting chosen) starts with its creator, who isn't expanded yet.
+    // A room made private (or posting chosen) starts with its creator, who isn't expanded yet, and a moderator making
+    // it so with themselves (§36), who would otherwise lose it.
     if (me && !known.has(me.id)) known.set(me.id, me);
-    const list = (ids.length ? ids : [r.created_by]).map((uid) => known.get(uid) ?? { id: uid, name: "Unknown" });
+    const list = [...new Set(ids.length ? ids : [r.created_by, myId || r.created_by])].map(
+      (uid) => known.get(uid) ?? { id: uid, name: "Unknown" },
+    );
     return list.sort((a, b) => Number(b.id === r.created_by) - Number(a.id === r.created_by));
   }
 

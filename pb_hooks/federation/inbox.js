@@ -9,6 +9,7 @@
 // - GET /api/fed/users?name=&for=dm|member: one person by exact name, for a DM or to add to a shared private room.
 
 const { canSee, accessOf } = require(`${__hooks}/lib/access.js`);
+const { canManage } = require(`${__hooks}/lib/moderation.js`);
 const { nameKey } = require(`${__hooks}/lib/text.js`);
 const { gid, isActive, myHost, peerByHost, peerHost, splitGid } = require(`${__hooks}/federation/config.js`);
 const { call, errorOf, jsonBody, verify } = require(`${__hooks}/federation/net.js`);
@@ -269,8 +270,8 @@ function remoteUser(e) {
       throw new NotFoundError("The room doesn't exist.");
     }
     if (!canSee(accessOf(room), me.id)) throw new NotFoundError("The room doesn't exist.");
-    if (room.getString("created_by") !== me.id || room.getString("peer"))
-      throw new ForbiddenError("Only the room's creator adds people to it.");
+    if (!canManage(room, me) || room.getString("peer"))
+      throw new ForbiddenError("Only the room's creator or a moderator adds people to it.");
     const shared = e.app.findRecordsByFilter("fed_shares", "room = {:r} && peer = {:p} && state = 'active'", "", 1, 0, {
       r: room.id,
       p: peer.id,

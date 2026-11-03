@@ -135,7 +135,11 @@ internal class RoomWrites(
 
     fun remove(id: String): Deferred<Boolean>? {
         val m = host.find(id) ?: return null
-        return optimistic(id, { it.copy(text = "", deleted = true) }, { it.copy(text = m.text, deleted = false) }) { api.softDelete(id) }
+        // Someone else's, or a moderator's own where they can't post (DESIGN.md §36): only the delete route allows it.
+        val mine = m.author == host.me()?.id && host.posting()
+        return optimistic(id, { it.copy(text = "", deleted = true) }, { it.copy(text = m.text, deleted = false) }) {
+            if (mine) api.softDelete(id) else api.deleteMany(listOf(id)).first()
+        }
     }
 
     fun removeMany(ids: List<String>): Deferred<Throwable?>? {

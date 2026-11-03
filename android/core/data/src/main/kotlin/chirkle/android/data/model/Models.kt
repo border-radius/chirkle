@@ -14,6 +14,8 @@ data class User(
     @SerialName("no_dms") val noDms: Boolean = false,
     /** Someone on a linked instance (§33.4): its host, e.g. "b.example". "" for this server's own people. */
     val instance: String = "",
+    /** You are a moderator (DESIGN.md §36): only said of the signed-in user. */
+    val moderator: Boolean = false,
 )
 
 /**

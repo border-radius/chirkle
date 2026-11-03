@@ -6,6 +6,7 @@
 
 const { canWrite } = require(`${__hooks}/lib/access.js`);
 const { isService } = require(`${__hooks}/lib/messages.js`);
+const { canModerate } = require(`${__hooks}/lib/moderation.js`);
 
 /** Most messages one request may act on (MAX_SELECTED in web/src/lib/limits.ts). */
 const MAX_MESSAGES = 50;
@@ -80,7 +81,8 @@ function answer(e, recs) {
 
 /**
  * POST /api/chat/delete { messages: [ids] } → the messages, soft-deleted (§21.2). Only the caller's own, in rooms that
- * aren't archived and they may still post in. Already deleted ones are left as they are, so a retry succeeds.
+ * aren't archived and they may still post in; a moderator's, anyone's outside DMs (§36). Already deleted ones are left
+ * as they are, so a retry succeeds.
  * @param {core.RequestEvent} e
  */
 function deleteMessages(e) {
@@ -89,12 +91,19 @@ function deleteMessages(e) {
   const what = "Failed to delete the messages.";
   const info = e.requestInfo();
   const msgs = visibleMessages(e, info, messageIds(/** @type {Record<string, unknown>} */ (info.body), what));
-  if (msgs.some((m) => m.getString("author") !== me.id)) throw new ForbiddenError("You can only delete your own messages.");
-  // (Archived meanwhile: beforeMessageUpdate refuses the save, and the transaction rolls back.)
   const rooms = msgs.map((m) => e.app.findRecordById("rooms", m.getString("room")));
+  const moderating = rooms.map((r) => canModerate(r, me));
+  if (msgs.some((m, i) => m.getString("author") !== me.id && !moderating[i])) {
+    throw new ForbiddenError("You can only delete your own messages.");
+  }
+  // The app's own lines stay (no author has them; only a moderator gets this far).
+  if (msgs.some(isService)) throw badRequest("messages", "Service messages can't be deleted.", what);
+  // (Archived meanwhile: beforeMessageUpdate refuses the save, and the transaction rolls back.)
   if (rooms.some((r) => r.getBool("archived"))) throw badRequest("messages", "This room is archived and read-only.", what);
-  // As the update rule says: no longer allowed to post there, no deleting either (§23.6).
-  if (rooms.some((r) => !canWrite(r, me.id))) throw badRequest("messages", "Only some people can post in this room.", what);
+  // As the update rule says: no longer allowed to post there, no deleting either (§23.6). Moderators still can.
+  if (rooms.some((r, i) => !moderating[i] && !canWrite(r, me.id))) {
+    throw badRequest("messages", "Only some people can post in this room.", what);
+  }
 
   /** @type {core.Record[]} */
   const saved = [];

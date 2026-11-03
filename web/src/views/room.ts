@@ -13,7 +13,18 @@ import { newer, older, PAGE_SIZE, withFiles } from "../lib/cursor.ts";
 import { attachmentName, isMedia, isVideo } from "../lib/files.ts";
 import { LIMITS } from "../lib/limits.ts";
 import { emptyForward, lastSaved } from "../lib/messages.ts";
-import { canPost, dmClosed, isAddress, isDm, otherMember, postingOf, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
+import {
+  canManage,
+  canPost,
+  dmClosed,
+  isAddress,
+  isDm,
+  otherMember,
+  postingOf,
+  roomTitle,
+  VISIBILITY,
+  visibilityOf,
+} from "../lib/rooms.ts";
 import { isNearBottom } from "../lib/scroll.ts";
 import { formatFull, formatTime, parsePb } from "../lib/time.ts";
 import type { Badge, Message } from "../lib/types.ts";
@@ -204,8 +215,16 @@ export function createRoomView({
       const { createAccessDialog } = await import("./room/access.ts");
       if (!scope.active) return;
       accessDialog ??= newAccessDialog(createAccessDialog);
-      const r = room();
-      if (r) accessDialog.open(r, r.created_by === me()?.id, me());
+      let r = room();
+      // A moderator's in someone else's room (§36): its creator by name, who isn't expanded unless a member.
+      const u = me();
+      if (r && u && r.created_by !== u.id && !r.expand?.members?.some((x) => x.id === r!.created_by)) {
+        const found = await api.usersById([r.created_by]).catch(() => []);
+        if (!scope.active) return;
+        r = room() ?? r;
+        r = { ...r, expand: { ...r.expand, members: [...(r.expand?.members ?? []), ...found] } };
+      }
+      if (r) accessDialog.open(r, canManage(r, me()), me());
     } catch {
       if (scope.active) notice.say("Couldn't open room access. Check your connection.");
     }
@@ -288,6 +307,8 @@ export function createRoomView({
     ...(me() ? { onSave: saveFile } : {}),
     avatarUrl: api.avatarUrl,
     onMessageUser: (userId) => void messageUser(userId),
+    isBanned: (userId) => api.isBanned(userId),
+    onBan: (userId, banned) => void setBanned(userId, banned),
     signal,
   });
   const composer = createComposer({
@@ -615,6 +636,16 @@ export function createRoomView({
       if (scope.active) navigate(`/r/${dm.id}`);
     } catch (e) {
       if (scope.active) notice.say(`Couldn't open that conversation. ${errorMessage(e)}`);
+    }
+  }
+
+  /** A moderator's Ban or Unban on an author (§36). */
+  async function setBanned(userId: string, banned: boolean) {
+    try {
+      await api.setBanned(userId, banned);
+      if (scope.active) notice.say(banned ? "Banned. They can't sign in until unbanned." : "Unbanned.");
+    } catch (e) {
+      if (scope.active) notice.say(`Couldn't ${banned ? "ban" : "unban"} them. ${errorMessage(e)}`);
     }
   }
 

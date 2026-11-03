@@ -349,6 +349,16 @@ class RoomViewModel(
         viewModelScope.launch { if (!done.await()) toast = "Couldn't delete this message." }
     }
 
+    /** A moderator's Ban or Unban (DESIGN.md §36). */
+    fun setBanned(user: String, banned: Boolean) {
+        viewModelScope.launch {
+            toast = runCatching { services.api.setBanned(user, banned) }.fold(
+                { if (banned) "Banned. They can't sign in until unbanned." else "Unbanned." },
+                { "Couldn't ${if (banned) "ban" else "unban"} them. ${chirkle.android.data.api.errorMessage(it)}" },
+            )
+        }
+    }
+
     // ---- search (§29)
 
     var searching by mutableStateOf(false)

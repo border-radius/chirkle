@@ -17,7 +17,7 @@ import {
   remove,
   trim,
 } from "../../lib/messages.ts";
-import { canPost } from "../../lib/rooms.ts";
+import { canPost, isDm } from "../../lib/rooms.ts";
 import type { LocalFile, Message, Quoted, Reaction, Room } from "../../lib/types.ts";
 import type { EarlyPage } from "../../prefetch.ts";
 import type { Scope } from "../../scope.ts";
@@ -200,8 +200,17 @@ export function createRoomController(opts: {
     const r = room();
     return !!r && !r.archived && canPost(r, me());
   };
-  const deletable = (m: Message) => posting() && m.author === me()?.id && !m.deleted && !m.status;
-  const editable = (m: Message) => deletable(m) && !m.forwarded_from;
+  /**
+   * Moderators delete anyone's messages outside DMs, even where they can't post (§36); in a copy of another instance's
+   * room, not that instance's people's: its home moderates them (§33.5).
+   */
+  const moderates = (m: Message) => {
+    const r = room();
+    if (!r || r.archived || !me()?.moderator || isDm(r) || !m.author) return false;
+    return !(r.shared?.home && m.expand?.author?.instance);
+  };
+  const deletable = (m: Message) => !m.deleted && !m.status && ((posting() && m.author === me()?.id) || moderates(m));
+  const editable = (m: Message) => deletable(m) && posting() && m.author === me()?.id && !m.forwarded_from;
   /** Guests only read (§23.3): no replies, reactions or selecting. Readers who can't post still react (§23.6). */
   const reactable = (m: Message) => {
     const r = room();

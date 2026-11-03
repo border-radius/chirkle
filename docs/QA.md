@@ -2330,3 +2330,80 @@ for each; `CROSS JOIN` makes it walk the given collections and seek `(collection
   1 skipped, and `attachments.spec.ts:184` failed: in this container Chromium's browser process segfaults
   (`SEGV_MAPERR`, seen with `DEBUG=pw:browser`) when Ctrl+click opens the image in a new tab, about 1 run in 3 even
   alone. That's the environment, not the app (the same spec was flaky in pass 27's notes).
+
+# QA pass 29 — moderators
+
+2026-11-03, user: "test this feature heavily. list all bugs. fix them. raise budget if needed", about moderators
+(DESIGN.md §36, ANDROID.md §45), built earlier the same day. The checks:
+- server probes for every rule and route;
+- a new Chromium e2e spec, `moderators.spec.ts`: two to three browsers each, including a banned user's open tab, run
+  three times over;
+- component tests;
+- Robolectric tests against a real server.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-210 | High | Web, Android | A banned user's open tab or app stayed signed in. The ban closed their live connection, but it reconnected as a guest and the room list reloaded with a guest's view. Nothing signed them out until a write, a renewal (hours) or the tab coming back | Fixed |
+| BUG-211 | Medium | Server | A banned user logging in was told "The request doesn't satisfy the collection requirements to authenticate." | Fixed |
+| BUG-212 | Medium | Web, Android | A moderator deleting their own message in a room where they can't post (only some people post) failed and the message came back. The clients sent their own messages through the records API, whose rule wants posting rights | Fixed |
+| BUG-213 | Medium | Web, Android | A moderator opening a public room's access in someone else's room saw its creator as "Unknown": the creator is expanded only as a member, and before moderators the creator was always the viewer | Fixed |
+| BUG-214 | Low | Web, Android | Making someone else's room private, a moderator read "Only you and the people you add will see this room"; its creator keeps it too | Fixed |
+| BUG-215 | Low | Server | A moderator couldn't unban someone a superuser had banned if that person was a moderator, from a linked instance or a stand-in: the ban route's checks applied to unbanning too | Fixed |
+| BUG-216 | Low | Server | With the Telegram bridge off, its stand-ins could be banned (the check asked the bridge's module, loaded only while it is on) | Fixed |
+| BUG-217 | Low | Web, Android | In a copy of another instance's room, a moderator was offered *Delete* on that instance's people's messages, which the server refuses (their home moderates them) | Fixed |
+| BUG-218 | Low | Server | A moderator could delete service messages (the app's own lines) through `POST /api/chat/delete`; nobody else can | Fixed |
+
+**BUG-210:** both clients now check the session again whenever the live connection comes back (web `app.ts`
+`api.onConnect` → `renewal.renew()`; Android `ChirkleServices` collects `api.connects` → `checkSession()`). The ban's
+refreshed token key makes that check answer 401, and the client logs out. This also catches sessions revoked
+elsewhere (a password change) sooner. With either fix taken out, its test failed (`moderators.spec.ts` "bans an
+author", `UiModeratorsTest` "a banned user's open app is signed out").
+
+**BUG-211:** `lib/moderation.js` `refuseBanned` answers 403 "This account is banned." It does so for a password login
+only once the password checks out, so a stranger learns nothing; a wrong password still gets "Failed to
+authenticate." OAuth2 sign-ins get the same answer.
+
+**BUG-212:** an own message goes through the records API only while you can post; otherwise it goes to the delete
+route.
+
+**BUG-213:** before opening the dialog for someone else's room, the web looks the creator up (`usersById`) and passes
+them in as an expanded member. That changes nothing that is saved. The app's access screen does the same in a
+`LaunchedEffect`.
+
+**BUG-214:** the warning now says "Only its creator and the people added will see this room" to anyone but the
+creator.
+
+**BUG-215:** only *banning* refuses moderators, other instances' people and stand-ins.
+
+**BUG-216:** `isStandIn` reads `tg_people` itself.
+
+**BUG-217:** `deletable` leaves out a mirror's remote authors (`shared.home` and `expand.author.instance`).
+
+**BUG-218:** the route refuses service messages ("Service messages can't be deleted.").
+
+The access dialog's script went from 3.05 KB to 3.08 KB with BUG-213 and BUG-214: its budget is raised to 3.10 KB, the
+user's call ("raise budget if needed").
+
+**Checked and fine**
+- **Rules:**
+  - a moderator can't rename a room, even with a `name+` modifier;
+  - they can't set `anonymous`, `shared` or `kind`;
+  - they can't touch DMs, and can't delete in archived rooms, DMs or private rooms they aren't in;
+  - their powers end with the flag, or with a ban;
+  - a moderator who makes a room private through the API without themselves loses it, as the creator would (the
+    clients start them in the list).
+- **Live deletes:** a moderator's deletes, one or several selected, reach other open tabs at once.
+- **Ban and unban:** the menu offers Ban or Unban as the user now is, and unbanning lets them log in again.
+- **Others:** someone who isn't a moderator gets no Ban, no Delete on others' messages and no access settings.
+- **Linked instances:** a home moderator's delete of a remote member's message goes to the mirrors like a superuser's
+  (`applyDelete` takes the home's word). A mirror's room settings stay its superusers' alone.
+
+**Suites:**
+- typecheck and lint;
+- 767 unit and component tests;
+- 484 integration tests;
+- E2E Chromium: the moderator, room access, archive, session, reconnect, edit, forward, linked and a11y specs, 19 of
+  19, and the moderator spec 12 of 12 when run three times over;
+- the build is within every budget (`app.js` 48.62 KB).
+- Android: all 168 tests pass. In the first full run `UiFeaturesTest` "hiding a room" timed out under load. It passed
+  alone twice and in the full rerun.

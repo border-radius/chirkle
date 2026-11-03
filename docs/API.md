@@ -40,6 +40,12 @@ Since 2026-11-03 (anonymous rooms, DESIGN.md §35) no one but a superuser may fi
 their own id (what older apps do): 400 otherwise. A message of an anonymous room reads, to anyone but its author, with
 `author` = the room's id and `expand.author` = `{ id, name: the room's name, no_dms: true }`, a user that doesn't exist.
 
+Since 2026-11-03 (moderators, DESIGN.md §36) `users` has `moderator` and `banned`, which no client sets, and a
+banned account can't sign in or refresh its session (401 for its old token). A moderator deletes others' messages
+through `POST /api/chat/delete` (the records API still allows only the author) and changes any public room's
+access and `archived` through the records API, as its creator does. `POST /api/chat/ban { user, banned }` is theirs
+only.
+
 The clients send filters in PocketBase's filter syntax. Apps from before 2026-10-29 name the fields `room`, `created`,
 `id`, `updated`, `files`, `forward_of`, `text_key`, `author`, `deleted`, `room.kind`, `reply_to.author` and
 `collection`; apps from then on (with a current server) only `id` (users), `room` (`room_reads`, the live room),
@@ -59,7 +65,7 @@ answer against the records API's answer for the filter it replaces; the app's `L
 against a current server and one without the routes (or an old release's hooks, `-Pchirkle.legacyHooks=…`).
 
 **Custom routes** (`pb_hooks/main.pb.js`, `federation.pb.js`):
-`/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `forward`, `media/{room}`,
+`/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `ban`, `forward`, `media/{room}`,
 `posters/{message}/{file}`, `posters/items/{item}/{file}`, `collections`, `badges`, `items`, `items/{id}`, `saved`,
 `subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (with a file token), `/api/health` and
 `/.well-known/assetlinks.json`.

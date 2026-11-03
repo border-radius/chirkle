@@ -1692,7 +1692,7 @@
         "@request.body.anonymous:isset = false"
       ],
       "updateRule": [
-        "created_by = @request.auth.id",
+        "(created_by = @request.auth.id || (@request.auth.moderator = true && @request.body.name:isset = false))",
         "kind = \"public\"",
         "@request.body.created_by:isset = false",
         "@request.body.archived_at:isset = false",
@@ -2599,7 +2599,9 @@
       "createRule": [
         "(@request.body.emailVisibility:isset = false || @request.body.emailVisibility = false)",
         "@request.body.peer:isset = false",
-        "@request.body.instance:isset = false"
+        "@request.body.instance:isset = false",
+        "@request.body.moderator:isset = false",
+        "@request.body.banned:isset = false"
       ],
       "updateRule": [
         "id = @request.auth.id",
@@ -2607,10 +2609,12 @@
         "@request.body.password:isset = false",
         "@request.body.passwordConfirm:isset = false",
         "@request.body.peer:isset = false",
-        "@request.body.instance:isset = false"
+        "@request.body.instance:isset = false",
+        "@request.body.moderator:isset = false",
+        "@request.body.banned:isset = false"
       ],
       "deleteRule": null,
-      "authRule": "",
+      "authRule": "banned = false",
       "manageRule": null,
       "passwordAuth": {
         "enabled": true,
@@ -2795,6 +2799,24 @@
           "required": false,
           "system": false,
           "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "moderator",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "banned",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
         }
       ],
       "indexes": [

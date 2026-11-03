@@ -9,7 +9,7 @@ import type { Ctx } from "../context.ts";
 import { clear, h, reconcile, uniqueId } from "../dom.ts";
 import { brand, jumpButton } from "../header.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
-import { isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
+import { canManage, isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
 import type { Collection, Room, User, Visibility } from "../lib/types.ts";
 import { HOVER_MS } from "../prefetch.ts";
 import type { View } from "../router.ts";
@@ -237,14 +237,14 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   // ---- rendering ----
 
   /**
-   * A hidden or archived room's button: Unhide, else Unarchive for its owner. Everything else (Hide, Archive, Close
+   * A hidden or archived room's button: Unhide, else Unarchive for its owner or a moderator (§36). Everything else (Hide, Archive, Close
    * conversation) is in the room's own menu; the list has no per-row menus.
    */
   function rowAction(r: Room, section: Section): MenuItem | null {
     if (guest() || section === "rooms" || section === "dms") return null;
     // An archived room you had hidden is listed under Archived; it can still be unhidden from there.
     if (section === "hidden" || store.get().hidden.has(r.id)) return { label: "Unhide", run: () => void unhide(r) };
-    if (r.created_by === store.get().user?.id) return { label: "Unarchive", run: () => void setArchived(r, false) };
+    if (canManage(r, store.get().user)) return { label: "Unarchive", run: () => void setArchived(r, false) };
     return null;
   }
 

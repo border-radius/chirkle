@@ -1,4 +1,4 @@
-// Room access (DESIGN.md §23.2, §23.6; web/src/views/room/access.ts): the creator chooses who can see the room
+// Room access (DESIGN.md §23.2, §23.6; web/src/views/room/access.ts): the creator (or a moderator, §36) chooses who can see the room
 // (Private, Public or Open Air) and a private room's members, then who can post: everyone who can see it, or only the
 // people they choose. Anyone else sees who is in it, read-only. Telegram stand-ins (no_dms, §26.3) aren't listed: the
 // bridge adds them itself; they stay members and writers when it is saved.
@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import chirkle.android.data.api.errorMessage
 import chirkle.android.data.api.reasonOf
 import chirkle.android.data.lib.Limits
+import chirkle.android.data.lib.canManage
 import chirkle.android.data.lib.hint
 import chirkle.android.data.lib.label
 import chirkle.android.data.lib.postingOrDefault
@@ -67,11 +69,12 @@ import chirkle.android.ui.UserSearchDialog
 import kotlinx.coroutines.launch
 
 /** What a change of visibility does that may not be obvious, or "". */
-fun accessWarning(from: Visibility, to: Visibility): String = when {
+fun accessWarning(from: Visibility, to: Visibility, mine: Boolean = true): String = when {
     from == to -> ""
     to == Visibility.Open -> "Everything ever written here, and everything to come, becomes readable by anyone on the web."
     from == Visibility.Private -> "Everyone with an account will be able to read the whole history."
-    to == Visibility.Private -> "Only you and the people you add will see this room. Everyone else loses it from their list."
+    to == Visibility.Private ->
+        "Only ${if (mine) "you and the people you add" else "its creator and the people added"} will see this room. Everyone else loses it from their list."
     else -> "People without an account won't see this room any more."
 }
 
@@ -79,7 +82,9 @@ fun accessWarning(from: Visibility, to: Visibility): String = when {
 private fun users(r: Room, ids: List<String>, expanded: List<User>, me: User?): List<User> {
     val known = (r.expand?.members.orEmpty() + expanded).associateBy { it.id }.toMutableMap()
     if (me != null && me.id !in known) known[me.id] = me
-    return (ids.ifEmpty { listOf(r.createdBy) }).map { known[it] ?: User(it, "Unknown") }.sortedByDescending { it.id == r.createdBy }
+    // A moderator making someone else's room private (or choosing who posts) starts with themselves (DESIGN.md §36),
+    // or they would lose it.
+    return (ids.ifEmpty { listOfNotNull(r.createdBy, me?.id).distinct() }).map { known[it] ?: User(it, "Unknown") }.sortedByDescending { it.id == r.createdBy }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,7 +94,7 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
     val s by services.store.flow.collectAsStateWithLifecycle()
     val room = s.rooms[roomId] ?: return
     val me = s.user
-    val editable = me != null && room.createdBy == me.id
+    val editable = room.canManage(me)
     val scope = rememberCoroutineScope()
     var visibility by remember(roomId) { mutableStateOf(room.visibilityOrDefault) }
     var posting by remember(roomId) { mutableStateOf(room.postingOrDefault) }
@@ -98,6 +103,14 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
     var adding by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // A moderator's in someone else's room (DESIGN.md §36): its creator by name, who isn't expanded unless a member.
+    LaunchedEffect(roomId) {
+        if (me == null || room.createdBy == me.id || room.createdBy.isEmpty()) return@LaunchedEffect
+        if (members.none { it.id == room.createdBy && it.name == "Unknown" } && writers.none { it.id == room.createdBy && it.name == "Unknown" }) return@LaunchedEffect
+        val creator = runCatching { services.api.usersById(listOf(room.createdBy)) }.getOrNull()?.firstOrNull() ?: return@LaunchedEffect
+        members = members.map { if (it.id == creator.id) creator else it }
+        writers = writers.map { if (it.id == creator.id) creator else it }
+    }
 
     fun remove(list: String, id: String) {
         if (list == "members") {
@@ -155,7 +168,7 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
                 }
             }
             if (posting == Posting.Selected) People("Who can post", writers, room, editable, onAdd = { adding = "writers" }, onRemove = { remove("writers", it) })
-            val warn = if (editable) accessWarning(room.visibilityOrDefault, visibility) else ""
+            val warn = if (editable) accessWarning(room.visibilityOrDefault, visibility, room.createdBy == me?.id) else ""
             if (warn.isNotEmpty()) Text(warn, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }

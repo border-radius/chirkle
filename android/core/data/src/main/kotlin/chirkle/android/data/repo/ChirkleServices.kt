@@ -96,6 +96,8 @@ class ChirkleServices(
         // Renew the session after launch, off the critical path; one the server refuses ends here.
         appScope.launch { checkSession() }
         api.onRejected { appScope.launch { checkSession() } }
+        // A live connection the server closed may have been a ban's (DESIGN.md §36) or a revoked session's.
+        appScope.launch { api.connects.collect { reconnect -> if (reconnect) checkSession() } }
     }
 
     private suspend fun sessionChanged() {

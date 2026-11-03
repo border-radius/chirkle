@@ -169,8 +169,18 @@ class RoomController(
         return !r.archived && r.canPost(me()?.id)
     }
 
-    fun deletable(m: Message) = posting() && m.author == me()?.id && !m.deleted && m.status == null
-    fun editable(m: Message) = deletable(m) && m.forwardedFrom.isEmpty()
+    /**
+     * Moderators delete anyone's messages outside DMs, even where they can't post (DESIGN.md §36); in a copy of another
+     * instance's room, not that instance's people's: its home moderates them (§33.5).
+     */
+    private fun moderates(m: Message): Boolean {
+        val r = room() ?: return false
+        if (r.archived || me()?.moderator != true || r.isDm || m.author.isEmpty()) return false
+        return !(r.shared?.home.orEmpty().isNotEmpty() && m.expand?.author?.instance.orEmpty().isNotEmpty())
+    }
+
+    fun deletable(m: Message) = !m.deleted && m.status == null && ((posting() && m.author == me()?.id) || moderates(m))
+    fun editable(m: Message) = deletable(m) && posting() && m.author == me()?.id && m.forwardedFrom.isEmpty()
 
     /** Guests only read (§23.3): no replies, reactions or selecting. Readers who can't post still react (§23.6). */
     fun reactable(m: Message): Boolean {

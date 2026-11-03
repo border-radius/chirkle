@@ -1323,3 +1323,38 @@ and `reply_to.author = {:me}`, which pass (`anonymous.test.ts`).
 
 Tests: `UiAccountsTest` "swiping the room list to the left opens your accounts", `UiCollectionsTest` (a saved item is
 in its collection's preview), `collections.test.ts` (newest four, followed ones too, removal).
+
+## 45. Moderators (2026-11-03)
+
+The app now has what the web gained with DESIGN.md §36:
+- `User.moderator` is read from the signed-in user's record.
+- `Room.canManage(me)` (`lib/Rooms.kt`) is true for the creator, or for a moderator outside DMs and other instances'
+  rooms. It decides *Room access…* and *Archive room* in the room's menu, *Unarchive* in the room list, and whether
+  the access screen can be edited.
+- In the access screen, a room made private (or given chosen posters) starts with the creator and the moderator, as on
+  the web.
+- `RoomController.deletable` lets a moderator delete anyone's message outside DMs (not in archived rooms).
+  `RoomWrites.remove` sends someone else's message to `POST /api/chat/delete`, since the records API allows only the
+  author. Editing stays the author's.
+- The message's long-press sheet has *Ban name* or *Unban name* for a moderator. It asks the server
+  (`ChirkleApi.isBanned`) each time it opens, and isn't shown for:
+  - yourself;
+  - people on linked instances;
+  - stand-ins (`no_dms`);
+  - an anonymous room's author.
+- *Ban* asks first, then calls `ChirkleApi.setBanned` (`POST /api/chat/ban`). A toast says how it went.
+- A banned user's app is logged out by the revoked-session handling it already has (QA BUG-183): the ban refreshes
+  their token key.
+
+Tests: `UiModeratorsTest` covers:
+- archiving someone else's room and seeing its access;
+- deleting someone else's message and banning and unbanning its author;
+- none of it for anyone else.
+
+QA pass 29 (QA.md, BUG-210..218) added three things to the app:
+- the session is checked again whenever the live connection comes back, so a banned user is logged out within seconds;
+- a moderator's own message where they can't post goes through the delete route;
+- the access screen names someone else's room's creator (looked up), and a mirror's remote authors get no *Delete*.
+
+`UiModeratorsTest` covers the creator's name and the warning, and that a banned user's open app is signed out (it
+failed without the fix).
