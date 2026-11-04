@@ -99,7 +99,12 @@ fun errorMessage(e: Throwable): String = when {
 /** errorMessage, or the server's reason when it gave one (e.g. "A message was deleted." for a forward, §21). */
 fun reasonOf(e: Throwable): String = (e as? ApiError)?.fields?.values?.firstOrNull() ?: errorMessage(e)
 
+/**
+ * This failure as an ApiError. A cancellation is thrown on, never wrapped: an ApiError from a cancelled coroutine (a
+ * request in flight when an account is switched away from) reaches the uncaught handler and ends the app.
+ */
 fun Throwable.toApiError(): ApiError = when (this) {
+    is kotlinx.coroutines.CancellationException -> throw this
     is ApiError -> this
     is PbError -> ApiError(message ?: "", status, fields, codes)
     else -> ApiError(message ?: toString(), 0)

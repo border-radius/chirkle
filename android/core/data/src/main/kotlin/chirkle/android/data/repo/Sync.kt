@@ -233,8 +233,9 @@ class Unread(
                         .onFailure { e ->
                             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room
                             // on screen doesn't change), and the room would stay unread everywhere. A refusal is final.
+                            if (e is kotlinx.coroutines.CancellationException) return@onFailure
                             val status = e.toApiError().status
-                            if (e is kotlinx.coroutines.CancellationException || (status in 400..499 && status != 429) || !live() || timer != null) return@onFailure
+                            if ((status in 400..499 && status != 429) || !live() || timer != null) return@onFailure
                             val wait = minOf(retryMs shl minOf(failures++, 5), MAX_RETRY_MS)
                             pending += sender
                             timer = r.scope.launch {

@@ -2486,3 +2486,16 @@ earlier version ran. Tests: `media.test.ts`, `media.s3.test.ts`.
     answered 200;
   - `UiCollectionsTest` expected *Saved in* without the collection the item was opened from. That collection has the
     file now (§37.1), so the test was updated.
+
+## BUG-226 (2026-11-04, user report)
+
+| ID | Severity | Area | Problem | Status |
+|---|---|---|---|---|
+| BUG-226 | High | Android | The app sometimes crashed when switching accounts | Fixed |
+
+**BUG-226:** `ChirkleApi.send` and the `subscribe*` calls caught every `Exception` and rethrew it as `ApiError`,
+including `CancellationException`. Switching accounts cancels the old account's scope, so a request in flight at that
+moment came back as `ApiError(status 0)` inside a cancelled coroutine. Coroutines hand such an exception to the uncaught
+handler, which ends the app. It only happened when a request was in flight at that moment, which is why the crash was
+intermittent. `toApiError()` now rethrows a cancellation instead of wrapping it. Test: `UiAccountsTest` (switching
+accounts while requests are in flight), which failed every run before the fix.

@@ -23,6 +23,7 @@ import org.junit.Assert.assertTrue
 import chirkle.android.data.lib.serverLabel
 import chirkle.android.data.testing.TestServer
 import chirkle.android.data.testing.TestServer.newUser
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -128,5 +129,36 @@ class UiAccountsTest {
         assertEquals(other, ui.services!!.server)
         // The account logged out of was a guest's on its server, and leaving it forgot it.
         assertEquals(listOf(other), ui.accounts!!.list.value.map { it.server })
+    }
+
+    @Test fun `switching accounts while requests are in flight doesn't crash the app`() {
+        // A request cancelled by the switch came back as an ApiError, uncaught in the cancelled scope: a crash.
+        val errors = java.util.Collections.synchronizedList(mutableListOf<Throwable>())
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> errors += e }
+        try {
+            val u = newUser()
+            val v = newUser()
+            ui.startWith(listOf(TestServer.url to u.api.pb.authStore.session.value, other to v.api.pb.authStore.session.value))
+            val a = ui.accounts!!
+            val ids = a.list.value.map { it.id }
+            repeat(6) { i ->
+                a.scope.launch { a.switchTo(ids[(i + 1) % 2]) }
+                repeat(i % 3) { ui.pump() }
+            }
+            // A new account left before logging in is forgotten: its database closes under whatever was running.
+            repeat(3) { i ->
+                a.scope.launch { a.add(TestServer.url) }
+                repeat(i) { ui.pump() }
+                a.scope.launch { a.switchTo(ids[0]) }
+                repeat(5) { ui.pump() }
+            }
+            ui.until { ui.services?.store?.get()?.user?.id == u.user.id }
+            repeat(20) { ui.pump() }
+            assertEquals(emptyList<Throwable>(), errors.toList())
+            assertEquals(2, a.list.value.size)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(prev)
+        }
     }
 }

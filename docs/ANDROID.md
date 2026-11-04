@@ -1411,3 +1411,12 @@ are the same, and a `?token=` is ignored, so 0.1.2 and 0.1.3 keep working unchan
 Tests: `ChirkleApiTest` (this server wants no token; the token route is still there for older apps).
 
 **Version** 0.1.4 (`versionCode` 5), changelog `5.txt`, F-Droid recipe updated.
+
+## 48. Crash switching accounts; 0.1.5 (2026-11-05)
+
+A request in flight when an account was switched away from came back as an `ApiError` in a cancelled coroutine, which
+ended the app (QA BUG-226). `toApiError()` now rethrows a cancellation instead of wrapping it.
+
+Tests: `UiAccountsTest` (switching accounts while requests are in flight).
+
+**Version** 0.1.5 (`versionCode` 6), changelog `6.txt`, F-Droid recipe updated.
