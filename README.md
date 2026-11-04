@@ -99,7 +99,9 @@ android/         the Android app (docs/ANDROID.md): core/data (API, realtime, da
 ## Deploying
 
 Build once, then copy `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `pb_hooks/` to the server.
-Migrations run automatically on start.
+Migrations run automatically on start, and nothing is served until they are done. The shared files migration
+(`1760000041`, DESIGN.md §37) copies every stored file once, which on S3 can take many minutes: it prints how far it
+is (`shared files: message 200 of …`), and `app.json` gives Dokku's startup check 30 minutes for it.
 
 ```sh
 npm ci && npm run setup && npm run build

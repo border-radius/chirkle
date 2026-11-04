@@ -228,7 +228,10 @@
            FROM messages WHERE files != '' AND files != '[]' AND files IS NOT NULL`,
           )
           .all(msgs);
+        // On S3 each file is several requests, and nothing is served until this is done: say how far it is.
+        let done = 0;
         for (const m of msgs) {
+          if (++done % 200 === 0) console.log(`shared files: message ${done} of ${msgs.length}`);
           const list = parse(m.files, []);
           if (!Array.isArray(list) || !list.length) continue;
           const names = parse(m.file_names, {});
@@ -298,7 +301,9 @@
             "SELECT id, collection, COALESCE(file, '') AS file, name, COALESCE(origin, '') AS origin, created FROM collection_items ORDER BY created, id",
           )
           .all(items);
+        done = 0;
         for (const it of items) {
+          if (++done % 200 === 0) console.log(`shared files: collection item ${done} of ${items.length}`);
           let id = "";
           const m = /^m:([a-z0-9]+)\/(.+)$/.exec(it.origin);
           const i = /^i:([a-z0-9]+)$/.exec(it.origin);
