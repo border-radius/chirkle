@@ -135,7 +135,7 @@ describe.skipIf(!run)("media worker, files in S3 (§30.1)", () => {
     expect(readdirSync(temp).filter((f) => f.startsWith("chirkle-poster-"))).toEqual([]);
   });
 
-  it("the shared files migration (§37) moves files within the bucket, merges a saved copy, and cleans up after", async () => {
+  it("the shared files migration (§37) touches nothing in the bucket; the worker moves the files and cleans up after (§37.5)", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "files-migration-s3-"));
     let own = await startPocketBase({ dataDir, env: { TMPDIR: temp } });
     try {
@@ -171,7 +171,7 @@ describe.skipIf(!run)("media worker, files in S3 (§30.1)", () => {
       await admin.send("/api/media/tick", { method: "POST" });
       await own.stop();
 
-      migrate(dataDir, "down", "1");
+      migrate(dataDir, "down", "2");
       const ids = (() => {
         const db = new DatabaseSync(join(dataDir, "data.db"));
         try {
@@ -197,19 +197,23 @@ describe.skipIf(!run)("media worker, files in S3 (§30.1)", () => {
         db.close();
       }
       expect(row.refs).toBe(2);
-      expect(existsSync(join(s3.dir, row.collectionId, row.id, m.files[0]))).toBe(true);
-      expect(existsSync(join(s3.dir, row.collectionId, row.id, `thumbs_${m.files[0]}/240x240_${m.files[0]}`))).toBe(true);
+      expect(existsSync(join(s3.dir, row.collectionId, row.id))).toBe(false);
+      expect(existsSync(join(s3.dir, ids.items, item.id, item.file))).toBe(true);
 
       own = await startPocketBase({ dataDir, env: { TMPDIR: temp } });
       admin.baseURL = own.url;
       await admin.collection("_superusers").authWithPassword(SUPERUSER.email, SUPERUSER.password);
       const at = (path: string) => fetch(`${own.url}${path}`).then((r) => r.status);
+      // Served from the message's old folder until it is moved.
       expect(await at(`/api/files/messages/${m.id}/${m.files[0]}?thumb=240x240`)).toBe(200);
       expect(await at(`/api/files/collection_items/${item.id}/${m.files[0]}`)).toBe(200);
       await admin.send("/api/media/tick", { method: "POST" });
-      // The old folders are gone from the bucket; the shared one stays.
+      // Moved, with its thumbnails; the old folders are gone from the bucket.
+      expect(existsSync(join(s3.dir, row.collectionId, row.id, m.files[0]))).toBe(true);
+      expect(existsSync(join(s3.dir, row.collectionId, row.id, `thumbs_${m.files[0]}/240x240_${m.files[0]}`))).toBe(true);
       expect(existsSync(join(s3.dir, ids.messages, m.id))).toBe(false);
       expect(existsSync(join(s3.dir, ids.items, item.id))).toBe(false);
+      expect(await at(`/api/files/messages/${m.id}/${m.files[0]}?thumb=240x240`)).toBe(200);
       expect(await at(`/api/files/collection_items/${item.id}/${m.files[0]}`)).toBe(200);
     } finally {
       await own.stop();

@@ -1,7 +1,7 @@
 // The media grid's server side (§30.1): the `media` index kept by the messages hooks, GET /api/chat/media/{room}, the
 // worker's thumbnails and video posters (POST /api/media/tick), and GET /api/chat/posters/{message}/{file}.
 
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -207,6 +207,78 @@ describe("the media worker (§30.1)", () => {
     },
   );
 
+  it.skipIf(!mp4 && !process.env.CI)(
+    "serves a file the worker hasn't moved yet (§37.5) from where it is, its poster and thumbnails too, then moves it",
+    async () => {
+      const a = await newUser();
+      const room = await newRoom(a);
+      const m = await send(a, room.id, [video("old.mp4"), png("old.png")]);
+      const gone = await send(a, room.id, [png("lost.png")]);
+      await tick();
+      const [clip, pic] = m.files as [string, string];
+      const lost = gone.files[0] as string;
+      const storage = join(inject("pbDataDir"), "storage");
+      const messagesId = (await admin.collections.getOne("messages")).id;
+      const bytes = readFileSync(join(storage, filesId, rowOf(clip), clip));
+      const thumbBytes = readFileSync(join(storage, filesId, rowOf(pic), `thumbs_${pic}`, `240x240_${pic}`)).byteLength;
+      expect(thumbBytes).not.toBe(readFileSync(join(storage, filesId, rowOf(pic), pic)).byteLength);
+      // As the migration leaves a file from before shared files: in its message's folder, its row saying so.
+      const db = rawDb({ write: true });
+      try {
+        for (const file of [clip, pic]) {
+          cpSync(join(storage, filesId, rowOf(file)), join(storage, messagesId, m.id), { recursive: true });
+          rmSync(join(storage, filesId, rowOf(file)), { recursive: true });
+          db.prepare("UPDATE files SET src = ? WHERE file = ?").run(`${messagesId}/${m.id}/${file}`, file);
+        }
+        // One that isn't there any more.
+        rmSync(join(storage, filesId, rowOf(lost)), { recursive: true });
+        db.prepare("UPDATE files SET src = ? WHERE file = ?").run(`${messagesId}/${gone.id}/${lost}`, lost);
+      } finally {
+        db.close();
+      }
+      const get = (path: string) => fetch(`${inject("pbUrl")}${path}`);
+      const check = async () => {
+        const res = await get(`/api/files/messages/${m.id}/${clip}`);
+        expect(res.status).toBe(200);
+        expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(bytes));
+        const range = await fetch(`${inject("pbUrl")}/api/files/messages/${m.id}/${clip}`, { headers: { Range: "bytes=0-9" } });
+        expect(range.status).toBe(206);
+        expect((await range.arrayBuffer()).byteLength).toBe(10);
+        const poster = await get(`/api/chat/posters/${m.id}/${clip}`);
+        expect(poster.status).toBe(200);
+        expect(poster.headers.get("content-type")).toBe("image/jpeg");
+        const thumb = await get(`/api/files/messages/${m.id}/${pic}?thumb=240x240`);
+        expect(thumb.status).toBe(200);
+        // The thumbnail, not the image: the 240×240 crop of a 64×48 one is smaller than it.
+        expect(thumb.headers.get("content-type")).toBe("image/png");
+        expect((await thumb.arrayBuffer()).byteLength).toBe(thumbBytes);
+        expect((await get(`/api/files/messages/${gone.id}/${lost}`)).status).toBe(404);
+      };
+      await check();
+      expect(stored(clip, clip)).toBe(false);
+
+      await tick();
+      // Moved, with its poster and thumbnail; the message's old folder is gone.
+      expect(stored(clip, clip)).toBe(true);
+      expect(stored(clip, `thumbs_${clip}/poster.jpg`)).toBe(true);
+      expect(stored(pic, `thumbs_${pic}/240x240_${pic}`)).toBe(true);
+      expect(existsSync(join(storage, messagesId, m.id))).toBe(false);
+      await check();
+      const after = rawDb();
+      try {
+        expect(after.prepare("SELECT file, src, poster FROM files WHERE file IN (?, ?, ?) ORDER BY file").all(clip, pic, lost)).toEqual(
+          [
+            { file: clip, src: "", poster: 1 },
+            { file: pic, src: "", poster: 0 },
+            { file: lost, src: "", poster: 0 },
+          ].sort((x, y) => (x.file < y.file ? -1 : 1)),
+        );
+      } finally {
+        after.close();
+      }
+    },
+  );
+
   it("records the shapes of files sent before messages kept them (§17.5), each file once", async () => {
     const a = await newUser();
     const room = await newRoom(a);
@@ -302,7 +374,7 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
     }
   }, 60_000);
 
-  it("move every file into `files` once: an item saved from a message file or an item names that file, its copy goes", async () => {
+  it("move every file into `files` once: an item saved from a message file or an item names that file, its copy goes; the worker moves them after", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "files-migration-"));
     let server = await startPocketBase({ dataDir });
     try {
@@ -330,7 +402,7 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
       await server.stop();
 
       // Down: each message and item has its own copy in its own folder again, as before shared files.
-      migrate(dataDir, "down", "1");
+      migrate(dataDir, "down", "2");
       const storage = join(dataDir, "storage");
       const ids = (() => {
         const db = new DatabaseSync(join(dataDir, "data.db"));
@@ -365,7 +437,21 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
           [i3.id]: a.files[0],
         });
         expect((db.prepare("SELECT files FROM messages WHERE id = ?").get(a.id) as { files: string }).files).toBe(JSON.stringify(a.files));
-        expect(db.prepare("SELECT COUNT(*) AS n FROM storage_cleanup").get()).toEqual({ n: 4 });
+        // Nothing stored is touched (§37.5): each file is where it was, and the two item copies no longer named go later.
+        const src = Object.fromEntries(
+          (db.prepare("SELECT file, src FROM files").all() as { file: string; src: string }[]).map((r) => [r.file, r.src]),
+        );
+        expect(src).toEqual({
+          [a.files[0]]: `${ids.messages}/${a.id}/${a.files[0]}`,
+          [a.files[1]]: `${ids.messages}/${a.id}/${a.files[1]}`,
+          [i2.file]: `${ids.items}/${i2.id}/${i2.file}`,
+        });
+        expect(
+          db
+            .prepare("SELECT prefix FROM storage_cleanup ORDER BY prefix")
+            .all()
+            .map((r) => (r as { prefix: string }).prefix),
+        ).toEqual([`${ids.items}/${i1.id}`, `${ids.items}/${i3.id}`].sort());
       } finally {
         db.close();
       }
@@ -377,22 +463,39 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
       await su.collection("_superusers").authWithPassword(SUPERUSER.email, SUPERUSER.password);
       await pb.collection("users").authWithPassword(email, "password-123");
       const at = (path: string) => fetch(`${server.url}${path}`).then((r) => r.status);
-      expect(await at(`/api/files/messages/${a.id}/${a.files[0]}?thumb=240x240`)).toBe(200);
-      expect(await at(`/api/files/messages/${a.id}/${a.files[1]}`)).toBe(200);
+      // Served from where they are, before the worker has moved anything: a thumbnail made before, a download.
+      expect(existsSync(join(storage, filesId))).toBe(false);
+      const thumb = await fetch(`${server.url}/api/files/messages/${a.id}/${a.files[0]}?thumb=240x240`);
+      expect(thumb.status).toBe(200);
+      expect((await thumb.arrayBuffer()).byteLength).toBe(
+        readFileSync(join(storage, ids.messages, a.id, `thumbs_${a.files[0]}`, `240x240_${a.files[0]}`)).byteLength,
+      );
+      const pdfAt = await fetch(`${server.url}/api/files/messages/${a.id}/${a.files[1]}?download=1`);
+      expect(pdfAt.status).toBe(200);
+      expect(pdfAt.headers.get("content-disposition")).toMatch(/^attachment/);
+      expect(pdfAt.headers.get("content-security-policy")).toContain("sandbox");
       expect(await at(`/api/files/collection_items/${i3.id}/${a.files[0]}`)).toBe(200);
       expect(await at(`/api/files/collection_items/${i2.id}/${i2.file}`)).toBe(200);
-      await su.send("/api/media/tick", { method: "POST" });
-      // The old folders are gone, the files' are there.
-      expect(existsSync(join(storage, ids.messages, a.id))).toBe(false);
-      expect(existsSync(join(storage, ids.items, i1.id))).toBe(false);
-      expect(existsSync(join(storage, ids.items, i2.id))).toBe(false);
-      expect(await at(`/api/files/collection_items/${i1.id}/${a.files[0]}`)).toBe(200);
-      expect(readdirSync(join(storage, filesId))).toHaveLength(3);
-      // The message deleted: its image stays for the items, its PDF goes.
+      expect(await at(`/api/files/collection_items/${i2.id}/nope.png`)).toBe(404);
+      // The message deleted before its files moved: its image stays for the items, its PDF goes from where it was.
       await pb.collection("messages").update(a.id, { deleted: true });
       expect(await at(`/api/files/messages/${a.id}/${a.files[0]}`)).toBe(404);
       expect(await at(`/api/files/collection_items/${i1.id}/${a.files[0]}`)).toBe(200);
+      await su.send("/api/media/tick", { method: "POST" });
+      // Moved: the old places are gone, the files' folders are there.
+      expect(existsSync(join(storage, ids.messages, a.id))).toBe(false);
+      expect(existsSync(join(storage, ids.items, i1.id))).toBe(false);
+      expect(existsSync(join(storage, ids.items, i2.id))).toBe(false);
       expect(readdirSync(join(storage, filesId))).toHaveLength(2);
+      expect(await at(`/api/files/collection_items/${i1.id}/${a.files[0]}?thumb=240x240`)).toBe(200);
+      expect(await at(`/api/files/collection_items/${i2.id}/${i2.file}`)).toBe(200);
+      const after = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
+      try {
+        expect(after.prepare("SELECT COUNT(*) AS n FROM files WHERE src != ''").get()).toEqual({ n: 0 });
+        expect(after.prepare("SELECT COUNT(*) AS n FROM storage_cleanup").get()).toEqual({ n: 0 });
+      } finally {
+        after.close();
+      }
     } finally {
       await server.stop();
       rmSync(dataDir, { recursive: true, force: true });

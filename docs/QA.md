@@ -2427,6 +2427,7 @@ apps and server heavily. list all bugs. fix them", about shared files (DESIGN.md
 | BUG-222 | Medium | Server, Android | Pages with `files=1` (the viewer's paging, §17.7) listed every message: `files:length` means nothing on a JSON field | Fixed |
 | BUG-223 | High | Server | Deleting one message (or item, or collection) twice at once unlinked its files twice: a file was deleted while a collection item still named it, and the item showed nothing | Fixed |
 | BUG-224 | Low | Server | Saving to a collection while the message was being deleted could give the item a file just deleted (found reading the code; not reproduced) | Fixed |
+| BUG-225 | High | Server | The migration copied every stored file at startup: on chat.th61.com (S3) the site was down about 5 minutes for 259 messages with files, and a restart meanwhile began again (found deploying) | Fixed |
 
 **BUG-219:** `messages.files` has `maxSize` 10 × 20 MB, so the body limit fits the most a message may carry. Each file
 is still held to 20 MB (`files.fromUploads`). Test: `messages.files.test.ts` (10 files of 20 MB).
@@ -2448,6 +2449,10 @@ messages deleted outright. Test: `collections.test.ts` (8 deletes at once, then 
 then left refs equal to the names in the database, 4 runs of 120 operations, with no folder in storage without a row.
 
 **BUG-224:** `addItem` finds the file again in its transaction, and answers 404 if it is gone.
+
+**BUG-225:** the migration changes only the database. Each row's `src` says where its file still is; it is served from
+there, and the media worker moves it in the background (DESIGN.md §37.5). `1760000042_files_src.js` adds `src` where the
+earlier version ran. Tests: `media.test.ts`, `media.s3.test.ts`.
 
 **Checked and fine**
 - **Claims:** a client can't make a message or item name a file it doesn't have:

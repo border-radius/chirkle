@@ -10,6 +10,9 @@
 // - `refs` counts the messages and items that name a file. link() and unlink() keep it in the same save; a file named
 //   by nothing is deleted, and PocketBase deletes what is stored once that is committed.
 // - The media worker (lib/media.js) makes each file's thumbnails and video poster once, whoever names it.
+// - A file from before shared files may not be in its row's folder yet: `src` is where it still is (a message's or an
+//   item's old folder), the migration having left the moves to the worker (DESIGN.md §37.5). keyOf and posterKeyOf say
+//   where a file is now, and serve() serves such a file from there.
 
 const { fieldError } = require(`${__hooks}/lib/records.js`);
 const { clipFileName, tidy, unescapeUploadName } = require(`${__hooks}/lib/text.js`);
@@ -31,12 +34,21 @@ const isImage = (name) => IMAGE_EXT.includes(ext(name));
 /** @param {string} name */
 const isMedia = (name) => isImage(name) || isVideo(name);
 
-/** A file's folder in storage, and where its file, thumbnails and video poster are. @param {core.Record} row */
+/** A file's own folder in storage, and where its file, thumbnails and video poster go there. @param {core.Record} row */
 const dirOf = (row) => row.baseFilesPath();
 /** @param {core.Record} row */
-const keyOf = (row) => `${dirOf(row)}/${row.getString("file")}`;
+const homeKeyOf = (row) => `${dirOf(row)}/${row.getString("file")}`;
+/** Where a file is now: its old place until the worker has moved it (`src`), then its own folder. @param {core.Record} row */
+const keyOf = (row) => row.getString("src") || homeKeyOf(row);
+/** The folder beside a stored file that has its thumbnails and poster. @param {string} key */
+const thumbsDirOf = (key) => {
+  const slash = key.lastIndexOf("/");
+  return `${key.slice(0, slash)}/thumbs_${key.slice(slash + 1)}/`;
+};
+/** Where a stored file's thumbnail `size` (or "poster.jpg") is. @param {string} key @param {string} size */
+const thumbKeyOf = (key, size) => `${thumbsDirOf(key)}${size === "poster.jpg" ? size : `${size}_${key.slice(key.lastIndexOf("/") + 1)}`}`;
 /** @param {core.Record} row */
-const posterKeyOf = (row) => `${dirOf(row)}/thumbs_${row.getString("file")}/poster.jpg`;
+const posterKeyOf = (row) => thumbKeyOf(keyOf(row), "poster.jpg");
 
 /**
  * The `files` row of a stored name, or null.
@@ -128,8 +140,26 @@ function unlink(app, names) {
     app.db().newQuery("UPDATE files SET refs = refs - 1 WHERE file = {:name}").bind({ name }).execute();
   }
   for (const row of app.findAllRecords("files", $dbx.in("file", ...list), $dbx.exp("refs <= 0"))) {
-    if (row) app.delete(row);
+    if (!row) continue;
+    // Not moved yet: what is in its old place goes too, once this is committed (lib/media.js cleanupPass).
+    const src = row.getString("src");
+    if (src) cleanupLater(app, src);
+    app.delete(row);
   }
+}
+
+/**
+ * Delete what is stored under `prefix` (a record's folder, or a file and its thumbnails), after the transaction this
+ * is in commits: the media worker does it (cleanupPass).
+ * @param {core.App} app
+ * @param {string} prefix
+ */
+function cleanupLater(app, prefix) {
+  app
+    .db()
+    .newQuery("INSERT INTO storage_cleanup (id, prefix) VALUES ({:id}, {:prefix})")
+    .bind({ id: $security.randomStringWithAlphabet(15, "abcdefghijklmnopqrstuvwxyz0123456789"), prefix })
+    .execute();
 }
 
 /**
@@ -260,28 +290,63 @@ function shownBy(app, collection, id, name) {
  * GET /api/files/{collection}/{record}/{name} (a router middleware, before PocketBase's own route): a message's or a
  * collection item's file is served from its `files` row, by PocketBase's handler (thumbnails, ranges, the headers that
  * keep it from running as a page), the path pointed at that row. The token clients still send is ignored. 404 when
- * the message or item doesn't show it (deleted, taken out). The `files` rows themselves only through these.
+ * the message or item doesn't show it (deleted, taken out). The `files` rows themselves only through these. True when
+ * it has answered (a file not moved yet), false to go on to PocketBase's route.
  * @param {core.RequestEvent} e
+ * @returns {boolean}
  */
 function serve(e) {
   const req = e.request;
-  if (!req || (req.method !== "GET" && req.method !== "HEAD")) return;
+  if (!req || (req.method !== "GET" && req.method !== "HEAD")) return false;
   const collection = req.pathValue("collection");
   const id = req.pathValue("recordId");
   const name = req.pathValue("filename");
-  if (!collection || !id || !name) return;
+  if (!collection || !id || !name) return false;
   let coll;
   try {
     coll = e.app.findCachedCollectionByNameOrId(collection);
   } catch {
-    return; // PocketBase answers 404
+    return false; // PocketBase answers 404
   }
   if (coll.name === "files") throw new NotFoundError();
-  if (coll.name !== "messages" && coll.name !== "collection_items") return;
+  if (coll.name !== "messages" && coll.name !== "collection_items") return false;
   const row = shownBy(e.app, coll.name, id, name);
   if (!row) throw new NotFoundError();
+  if (row.getString("src")) {
+    serveUnmoved(e, row);
+    return true;
+  }
   req.setPathValue("collection", row.collection().id);
   req.setPathValue("recordId", row.id);
+  return false;
+}
+
+/**
+ * A file not moved to its folder yet, served from its old place (src): a thumbnail asked for if it is there (the old
+ * folders have those that were ever asked for), else the file itself. PocketBase's handler would make a missing one,
+ * but serves only a file field's own files. As it does, `download` makes it an attachment.
+ * @param {core.RequestEvent} e
+ * @param {core.Record} row
+ */
+function serveUnmoved(e, row) {
+  const key = row.getString("src");
+  const name = row.getString("file");
+  const q = e.request?.url?.query();
+  const thumb = q?.get("thumb") ?? "";
+  const sizes = /** @type {any} */ (row.collection().fields.getByName("file")).thumbs ?? [];
+  const fs = e.app.newFilesystem();
+  try {
+    let served = key;
+    if (thumb && sizes.includes(thumb) && isImage(name) && fs.exists(thumbKeyOf(key, thumb))) served = thumbKeyOf(key, thumb);
+    else if (!fs.exists(key)) throw new NotFoundError();
+    const download = q?.get("download") ?? "";
+    if (download && download !== "0" && download !== "false") {
+      e.response.header().set("Content-Disposition", `attachment; filename=${name}`);
+    }
+    fs.serve(e.response, /** @type {any} */ (e.request), served, name);
+  } finally {
+    fs.close();
+  }
 }
 
 module.exports = {
@@ -291,8 +356,12 @@ module.exports = {
   isMedia,
   ext,
   dirOf,
+  homeKeyOf,
   keyOf,
+  thumbsDirOf,
+  thumbKeyOf,
   posterKeyOf,
+  cleanupLater,
   byName,
   byNames,
   fromUploads,

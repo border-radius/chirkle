@@ -3444,7 +3444,8 @@ remove token from url".
 
 - **`files`**: one row per stored file: `file` (a file field, 20 MB, not protected, the thumbnails of §17.1), `name`
   (the original name), `video`, `dims` (its shape, §17.5), `poster` (a video's poster is made), `ready` (thumbnails or
-  poster made), `sized` (shape known), `refs`, `created`. No API rules: only superusers list or read it.
+  poster made), `sized` (shape known), `refs`, `src` (where a file from before still is, §37.5), `created`. No API
+  rules: only superusers list or read it.
 - **`messages.files`** is JSON now: the stored names of its files, as it held as a file field, so every client builds
   the same URLs. Its `maxSize` is 10 × 20 MB: PocketBase holds a create's body to its fields' sizes, and the uploads
   come in that body.
@@ -3464,10 +3465,10 @@ remove token from url".
   index keeps `file` and joins `files` for the poster.
 - **Federation and Telegram** make rows from the files they receive (`attachUploads`) and send each row's stored file.
 
-The migration moves every message's files, with their thumbnails, into rows, and gives every item the row of the file it
-was saved from (`origin` `m:…` or `i:…`), so copies saved before become one file. Two items of one collection that turn
-out to be the same file become one. The old folders are deleted by the media worker after the migration is committed
-(`storage_cleanup`). It reverses: the down migration copies each file back into its messages and items.
+The migration makes a row for every message's file, and gives every item the row of the file it was saved from (`origin`
+`m:…` or `i:…`), so copies saved before become one file. Two items of one collection that turn out to be the same file
+become one. It changes only the database: the files themselves are moved afterwards, in the background (§37.5). It
+reverses: the down migration copies each file back into its messages and items.
 
 ### 37.2 URLs
 
@@ -3499,3 +3500,29 @@ from before (Android 0.1.2) send tokens, which are ignored.
 items; `refs`; a race), `media.test.ts` (the worker per row; the migration down and up, merging copies),
 `media.s3.test.ts` (the bucket keeps one file, gone once nothing names it), the access matrix and room access tests
 (every viewer opens an attachment by URL). Android: `ChirkleApiTest` (no token here).
+### 37.5 Moving the files in the background (2026-11-04)
+
+The first deploy (chat.th61.com, on S3) showed the migration copying every file there and then: about 5 minutes for 259
+messages with files, and PocketBase serves nothing until its migrations are done. The user: "migration took too long.
+and app is not working while migrations is not done. we need to fix this before deploying to other instances."
+
+- **The migration** reads and writes only the database: each row's `src` is where its file is (`{collection}/{record}/
+  {name}` of the message or item it came from), and what the worker had made of it (`ready`, `poster`) comes from the
+  old columns (`media`, `collection_items`). An item copy merged into its message's file is queued for deletion
+  (`storage_cleanup`). The server starts in seconds.
+- **Serving** (`files.serve`): a row with `src` is served from there by `fs.serve` (ranges, the headers that keep it
+  from running as a page, `?download`); `?thumb=` serves the thumbnail if the old folder has it, else the file itself
+  (PocketBase makes a missing one only for a file field's own files). Posters, Telegram and federation read `keyOf`,
+  which is `src` until the move.
+- **The media worker** moves them (`movePass`), after new uploads' thumbnails and before shapes: copy the file and its
+  thumbnails folder into the row's folder, then, in a transaction, clear `src` if it hasn't changed and queue the old
+  place for deletion (`cleanupPass` deletes it once that is committed, and the record's old folder once it is empty).
+  A row deleted meanwhile has its copy deleted; one whose file isn't there any more just loses `src`. A file the
+  migration renamed (a stored name two records had) gets its thumbnails made again. Thumbnails and shapes wait for the
+  move (`src = ''`).
+- **Deleting** a row not moved yet (`unlink`) queues its `src` for deletion too.
+- **`1760000042_files_src.js`** adds `src` where the earlier version of the migration ran (chat.th61.com): all moved.
+
+Tests: `media.test.ts` (served from the old place with poster, thumbnail and ranges, then moved; one missing; the
+migration leaves storage untouched, a message deleted before the move), `media.s3.test.ts` (the same in a bucket).
+

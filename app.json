@@ -5,8 +5,7 @@
         "type": "startup",
         "name": "pocketbase health",
         "path": "/api/health",
-        "attempts": 360,
-        "wait": 5
+        "attempts": 5
       }
     ]
   }

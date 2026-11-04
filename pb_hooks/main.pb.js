@@ -25,7 +25,7 @@ routerUse((e) => {
 });
 // A message's or collection item's file is its shared `files` row's (§37): served without a file token.
 routerUse((e) => {
-  if (e.request?.url?.path.startsWith("/api/files/")) require(`${__hooks}/lib/files.js`).serve(e);
+  if (e.request?.url?.path.startsWith("/api/files/") && require(`${__hooks}/lib/files.js`).serve(e)) return;
   return e.next();
 });
 

@@ -1133,6 +1133,20 @@
           "type": "number"
         },
         {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 255,
+          "min": 0,
+          "name": "src",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": false,
+          "system": false,
+          "type": "text"
+        },
+        {
           "hidden": false,
           "name": "created",
           "onCreate": true,
@@ -1145,7 +1159,8 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_files_file ON files (file)",
         "CREATE INDEX idx_files_pending ON files (created) WHERE ready = FALSE",
-        "CREATE INDEX idx_files_unsized ON files (created) WHERE sized = FALSE"
+        "CREATE INDEX idx_files_unsized ON files (created) WHERE sized = FALSE",
+        "CREATE INDEX idx_files_unmoved ON files (created) WHERE src != ''"
       ]
     },
     {

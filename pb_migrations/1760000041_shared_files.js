@@ -7,9 +7,11 @@
 //   poster). `refs`: how many messages and items name it. No API access: messages and items serve it (lib/files.js).
 // - messages.files and collection_items.file become plain names (json, text): the same values the clients read now.
 // - The files there are move into it: each message's own, and each item's, except an item saved from a message file
-//   (or another item) that is still there, which names that file and whose copy goes. The stored files are copied to
-//   the new folders here, and the old folders are left to the media worker (storage_cleanup) to delete once this is
-//   committed: a move that fails leaves them as they were.
+//   (or another item) that is still there, which names that file and whose copy goes. Only the database here: nothing
+//   stored is read or copied, so the server starts in seconds whatever the storage (on S3, a copy each file took
+//   minutes for a few hundred messages, with nothing served meanwhile). Each row's `src` says where its file still is;
+//   the media worker moves it to the row's folder afterwards, and it is served from where it is until then (§37.5).
+//   The item copies that go are left to the worker too (storage_cleanup), once this is committed.
 // - The media index and collection items no longer keep the worker's state: the file's row does.
 // - Going down copies every file back to each message and item that names it.
 
@@ -46,20 +48,22 @@
   }
 
   /**
-   * Copy a stored file and what PocketBase and the media worker keep next to it (thumbs_{name}/: thumbnails, poster)
-   * from folder `from` to folder `to`. Whether the file was there.
+   * Copy a stored file (key `from`) to `to`, with what PocketBase and the media worker keep next to it (thumbs_{name}/:
+   * thumbnails, poster) when the name stays. Whether the file was there. Going down only.
    * @param {filesystem.System} fs
    * @param {string} from
    * @param {string} to
-   * @param {string} name
    */
-  function copyFile(fs, from, to, name) {
-    if (!fs.exists(`${from}/${name}`)) return false;
-    fs.copy(`${from}/${name}`, `${to}/${name}`);
-    const thumbs = `${from}/thumbs_${name}/`;
+  function copyKey(fs, from, to) {
+    if (from === to || !fs.exists(from)) return from === to;
+    fs.copy(from, to);
+    const name = (/** @type {string} */ k) => k.slice(k.lastIndexOf("/") + 1);
+    if (name(from) !== name(to)) return true;
+    const dir = (/** @type {string} */ k) => `${k.slice(0, k.lastIndexOf("/"))}/thumbs_${name(k)}/`;
+    const thumbs = dir(from);
     for (const obj of fs.list(thumbs)) {
       if (!obj || obj.key.endsWith(".attrs")) continue;
-      fs.copy(obj.key, `${to}/thumbs_${name}/${obj.key.slice(thumbs.length)}`);
+      fs.copy(obj.key, `${dir(to)}${obj.key.slice(thumbs.length)}`);
     }
     return true;
   }
@@ -88,29 +92,24 @@
   }
 
   /**
-   * A new `files` row for a stored file of folder `from` (named `name` there, `as` in `files`), its blob copied.
+   * A new `files` row for the stored file `name` of folder `from` (`as` in `files`), which stays where it is
+   * (`src`) until the media worker moves it. `done`: what the worker had made of it (thumbnails, poster), as the old
+   * columns say.
    * @param {MigrationApp} app
-   * @param {filesystem.System} fs
-   * @param {string} filesDir the `files` collection's folder
-   * @param {{ from: string, name: string, as: string, original: string, dims: any, created: string }} f
+   * @param {{ from: string, name: string, as: string, original: string, dims: any, created: string, done: { ready: boolean, poster: boolean } }} f
    */
-  function addRow(app, fs, filesDir, f) {
+  function addRow(app, f) {
     const id = newId();
-    const there = copyFile(fs, f.from, `${filesDir}/${id}`, f.name);
-    if (there && f.as !== f.name) {
-      // Renamed: the copy and its thumbnails take the new name.
-      fs.copy(`${filesDir}/${id}/${f.name}`, `${filesDir}/${id}/${f.as}`);
-      fs.delete(`${filesDir}/${id}/${f.name}`);
-      fs.deletePrefix(`${filesDir}/${id}/thumbs_${f.name}/`);
-    }
     const video = isVideo(f.as);
-    const poster = there && f.as === f.name && fs.exists(`${filesDir}/${id}/thumbs_${f.as}/poster.jpg`);
+    // Renamed: its thumbnails carry the old name, and are made again once it is moved.
+    const kept = f.as === f.name;
+    const poster = kept && video && f.done.poster;
     const dims = Array.isArray(f.dims) && f.dims.length === 2 ? JSON.stringify(f.dims) : "null";
     app
       .db()
       .newQuery(
-        `INSERT INTO files (id, file, name, video, dims, poster, ready, sized, refs, created)
-       VALUES ({:id}, {:file}, {:name}, {:video}, {:dims}, {:poster}, {:ready}, {:sized}, 0, {:created})`,
+        `INSERT INTO files (id, file, name, video, dims, poster, ready, sized, refs, src, created)
+       VALUES ({:id}, {:file}, {:name}, {:video}, {:dims}, {:poster}, {:ready}, {:sized}, 0, {:src}, {:created})`,
       )
       .bind({
         id,
@@ -120,12 +119,33 @@
         dims,
         poster,
         // What the worker had made stays: a video without its poster, or a file renamed, gets another look.
-        ready: !video || poster,
+        ready: kept && f.done.ready && (!video || poster),
         sized: dims !== "null" || !video,
+        src: `${f.from}/${f.name}`,
         created: f.created,
       })
       .execute();
     return id;
+  }
+
+  /**
+   * What the worker had made of a message's file (the media index's columns); a file not in the index has nothing to make.
+   * @param {MigrationApp} app
+   * @param {string} message
+   * @param {string} name
+   */
+  function doneOfMessage(app, message, name) {
+    const row = new DynamicModel({ ready: false, poster: false });
+    try {
+      app
+        .db()
+        .newQuery("SELECT ready, poster FROM media WHERE source = {:m} AND file = {:f} LIMIT 1")
+        .bind({ m: message, f: name })
+        .one(row);
+      return { ready: !!row.ready, poster: !!row.poster };
+    } catch {
+      return { ready: true, poster: false };
+    }
   }
 
   /** @param {MigrationApp} app @param {string} id */
@@ -186,12 +206,15 @@
               { type: "bool", name: "ready" },
               { type: "bool", name: "sized" },
               { type: "number", name: "refs", onlyInt: true },
+              // Where the file still is (collection/record/name) until the media worker moves it into this row's folder.
+              { type: "text", name: "src", max: 255 },
               { type: "autodate", name: "created", onCreate: true, onUpdate: false },
             ],
             indexes: [
               "CREATE UNIQUE INDEX idx_files_file ON files (file)",
               "CREATE INDEX idx_files_pending ON files (created) WHERE ready = FALSE",
               "CREATE INDEX idx_files_unsized ON files (created) WHERE sized = FALSE",
+              "CREATE INDEX idx_files_unmoved ON files (created) WHERE src != ''",
             ],
           }),
         ),
@@ -211,146 +234,142 @@
         ),
       );
 
-      const filesDir = app.findCollectionByNameOrId("files").id;
       const messagesDir = app.findCollectionByNameOrId("messages").id;
       const itemsDir = app.findCollectionByNameOrId("collection_items").id;
-      const fs = app.newFilesystem();
-      try {
-        // Each message's files, with their names, shapes and where they came from under the new names when renamed.
-        /** @type {Map<string, string>} "message/name" → files row id */
-        const ofMessage = new Map();
-        const msgs = arrayOf(new DynamicModel({ id: "", files: "", file_names: "", file_dims: "", file_sources: "", created: "" }));
-        app
-          .db()
-          .newQuery(
-            `SELECT id, COALESCE(files, '') AS files, COALESCE(file_names, '') AS file_names, COALESCE(file_dims, '') AS file_dims,
-                  COALESCE(file_sources, '') AS file_sources, created
-           FROM messages WHERE files != '' AND files != '[]' AND files IS NOT NULL`,
-          )
-          .all(msgs);
-        // On S3 each file is several requests, and nothing is served until this is done: say how far it is.
-        let done = 0;
-        for (const m of msgs) {
-          if (++done % 200 === 0) console.log(`shared files: message ${done} of ${msgs.length}`);
-          const list = parse(m.files, []);
-          if (!Array.isArray(list) || !list.length) continue;
-          const names = parse(m.file_names, {});
-          const dims = parse(m.file_dims, {});
-          const sources = parse(m.file_sources, {});
-          /** @type {string[]} */
-          const out = [];
-          let renamed = false;
-          /** @type {Record<string, any>} */
-          const outNames = {};
-          /** @type {Record<string, any>} */
-          const outDims = {};
-          /** @type {Record<string, any>} */
-          const outSources = {};
-          for (const name of list) {
-            if (typeof name !== "string" || !name) continue;
-            const as = freeName(app, name);
-            if (as !== name) renamed = true;
-            const id = addRow(app, fs, filesDir, {
-              from: `${messagesDir}/${m.id}`,
-              name,
-              as,
-              original: typeof names[name] === "string" ? names[name] : "",
-              dims: dims[name],
-              created: m.created,
-            });
-            ref(app, id);
-            ofMessage.set(`${m.id}/${name}`, id);
-            out.push(as);
-            if (names[name] !== undefined) outNames[as] = names[name];
-            if (dims[name] !== undefined) outDims[as] = dims[name];
-            if (sources[name] !== undefined) outSources[as] = sources[name];
-          }
-          if (renamed) {
-            app
-              .db()
-              .newQuery("UPDATE messages SET files = {:f}, file_names = {:n}, file_dims = {:d}, file_sources = {:s} WHERE id = {:id}")
-              .bind({
-                id: m.id,
-                f: JSON.stringify(out),
-                n: JSON.stringify(outNames),
-                d: JSON.stringify(outDims),
-                s: JSON.stringify(outSources),
-              })
-              .execute();
-            // The media index names the new ones.
-            for (let i = 0; i < list.length; i++) {
-              if (list[i] !== out[i]) {
-                app
-                  .db()
-                  .newQuery("UPDATE media SET file = {:to} WHERE source = {:m} AND file = {:from}")
-                  .bind({ m: m.id, from: list[i], to: out[i] })
-                  .execute();
-              }
-            }
-          }
-          cleanupLater(app, `${messagesDir}/${m.id}`);
-        }
-
-        // Each item, oldest first: one saved from a message file or an item still there names that file instead.
-        /** @type {Map<string, string>} item id → files row id */
-        const ofItem = new Map();
-        const items = arrayOf(new DynamicModel({ id: "", collection: "", file: "", name: "", origin: "", created: "" }));
-        app
-          .db()
-          .newQuery(
-            "SELECT id, collection, COALESCE(file, '') AS file, name, COALESCE(origin, '') AS origin, created FROM collection_items ORDER BY created, id",
-          )
-          .all(items);
-        done = 0;
-        for (const it of items) {
-          if (++done % 200 === 0) console.log(`shared files: collection item ${done} of ${items.length}`);
-          let id = "";
-          const m = /^m:([a-z0-9]+)\/(.+)$/.exec(it.origin);
-          const i = /^i:([a-z0-9]+)$/.exec(it.origin);
-          if (m) id = ofMessage.get(`${m[1]}/${m[2]}`) ?? "";
-          else if (i) id = ofItem.get(i[1]) ?? "";
-          // The same file in this collection already (one saved twice, by two ways): this one goes.
-          if (
-            id &&
-            count(app, "SELECT COUNT(*) AS n FROM collection_items WHERE collection = {:c} AND origin = {:o} AND id != {:id}", {
-              c: it.collection,
-              o: id,
-              id: it.id,
-            })
-          ) {
-            app.db().newQuery("DELETE FROM collection_items WHERE id = {:id}").bind({ id: it.id }).execute();
-            app.db().newQuery("UPDATE collections SET items = MAX(0, items - 1) WHERE id = {:c}").bind({ c: it.collection }).execute();
-            cleanupLater(app, `${itemsDir}/${it.id}`);
-            continue;
-          }
-          let name = it.file;
-          if (id) {
-            name = count(app, "SELECT COUNT(*) AS n FROM files WHERE id = {:id}", { id }) ? fileOf(app, id) : "";
-          }
-          if (!id || !name) {
-            const as = freeName(app, it.file);
-            id = addRow(app, fs, filesDir, {
-              from: `${itemsDir}/${it.id}`,
-              name: it.file,
-              as,
-              original: it.name,
-              dims: null,
-              created: it.created,
-            });
-            name = as;
-          }
+      // Each message's files, with their names, shapes and where they came from under the new names when renamed.
+      /** @type {Map<string, string>} "message/name" → files row id */
+      const ofMessage = new Map();
+      const msgs = arrayOf(new DynamicModel({ id: "", files: "", file_names: "", file_dims: "", file_sources: "", created: "" }));
+      app
+        .db()
+        .newQuery(
+          `SELECT id, COALESCE(files, '') AS files, COALESCE(file_names, '') AS file_names, COALESCE(file_dims, '') AS file_dims,
+                COALESCE(file_sources, '') AS file_sources, created
+         FROM messages WHERE files != '' AND files != '[]' AND files IS NOT NULL`,
+        )
+        .all(msgs);
+      for (const m of msgs) {
+        const list = parse(m.files, []);
+        if (!Array.isArray(list) || !list.length) continue;
+        const names = parse(m.file_names, {});
+        const dims = parse(m.file_dims, {});
+        const sources = parse(m.file_sources, {});
+        /** @type {string[]} */
+        const out = [];
+        let renamed = false;
+        /** @type {Record<string, any>} */
+        const outNames = {};
+        /** @type {Record<string, any>} */
+        const outDims = {};
+        /** @type {Record<string, any>} */
+        const outSources = {};
+        for (const name of list) {
+          if (typeof name !== "string" || !name) continue;
+          const as = freeName(app, name);
+          if (as !== name) renamed = true;
+          const id = addRow(app, {
+            from: `${messagesDir}/${m.id}`,
+            name,
+            as,
+            original: typeof names[name] === "string" ? names[name] : "",
+            dims: dims[name],
+            created: m.created,
+            done: doneOfMessage(app, m.id, name),
+          });
           ref(app, id);
-          ofItem.set(it.id, id);
-          const poster = count(app, "SELECT COUNT(*) AS n FROM files WHERE id = {:id} AND poster = TRUE", { id }) > 0;
+          ofMessage.set(`${m.id}/${name}`, id);
+          out.push(as);
+          if (names[name] !== undefined) outNames[as] = names[name];
+          if (dims[name] !== undefined) outDims[as] = dims[name];
+          if (sources[name] !== undefined) outSources[as] = sources[name];
+        }
+        if (renamed) {
           app
             .db()
-            .newQuery("UPDATE collection_items SET file = {:file}, origin = {:origin}, poster = {:poster} WHERE id = {:id}")
-            .bind({ id: it.id, file: name, origin: id, poster })
+            .newQuery("UPDATE messages SET files = {:f}, file_names = {:n}, file_dims = {:d}, file_sources = {:s} WHERE id = {:id}")
+            .bind({
+              id: m.id,
+              f: JSON.stringify(out),
+              n: JSON.stringify(outNames),
+              d: JSON.stringify(outDims),
+              s: JSON.stringify(outSources),
+            })
             .execute();
-          cleanupLater(app, `${itemsDir}/${it.id}`);
+          // The media index names the new ones.
+          for (let i = 0; i < list.length; i++) {
+            if (list[i] !== out[i]) {
+              app
+                .db()
+                .newQuery("UPDATE media SET file = {:to} WHERE source = {:m} AND file = {:from}")
+                .bind({ m: m.id, from: list[i], to: out[i] })
+                .execute();
+            }
+          }
         }
-      } finally {
-        fs.close();
+      }
+
+      // Each item, oldest first: one saved from a message file or an item still there names that file instead.
+      /** @type {Map<string, string>} item id → files row id */
+      const ofItem = new Map();
+      const savedItems = arrayOf(
+        new DynamicModel({ id: "", collection: "", file: "", name: "", origin: "", created: "", ready: false, poster: false }),
+      );
+      app
+        .db()
+        .newQuery(
+          `SELECT id, collection, COALESCE(file, '') AS file, COALESCE(name, '') AS name, COALESCE(origin, '') AS origin, created,
+                  COALESCE(ready, FALSE) AS ready, COALESCE(poster, FALSE) AS poster
+           FROM collection_items ORDER BY created, id`,
+        )
+        .all(savedItems);
+      for (const it of savedItems) {
+        let id = "";
+        const m = /^m:([a-z0-9]+)\/(.+)$/.exec(it.origin);
+        const i = /^i:([a-z0-9]+)$/.exec(it.origin);
+        if (m) id = ofMessage.get(`${m[1]}/${m[2]}`) ?? "";
+        else if (i) id = ofItem.get(i[1]) ?? "";
+        // The same file in this collection already (one saved twice, by two ways): this one goes.
+        if (
+          id &&
+          count(app, "SELECT COUNT(*) AS n FROM collection_items WHERE collection = {:c} AND origin = {:o} AND id != {:id}", {
+            c: it.collection,
+            o: id,
+            id: it.id,
+          })
+        ) {
+          app.db().newQuery("DELETE FROM collection_items WHERE id = {:id}").bind({ id: it.id }).execute();
+          app.db().newQuery("UPDATE collections SET items = MAX(0, items - 1) WHERE id = {:c}").bind({ c: it.collection }).execute();
+          cleanupLater(app, `${itemsDir}/${it.id}`);
+          continue;
+        }
+        let name = it.file;
+        if (id) {
+          name = count(app, "SELECT COUNT(*) AS n FROM files WHERE id = {:id}", { id }) ? fileOf(app, id) : "";
+        }
+        const own = !id || !name;
+        if (own) {
+          const as = freeName(app, it.file);
+          id = addRow(app, {
+            from: `${itemsDir}/${it.id}`,
+            name: it.file,
+            as,
+            original: it.name,
+            dims: null,
+            created: it.created,
+            done: { ready: !!it.ready, poster: !!it.poster },
+          });
+          name = as;
+        }
+        ref(app, id);
+        ofItem.set(it.id, id);
+        const poster = count(app, "SELECT COUNT(*) AS n FROM files WHERE id = {:id} AND poster = TRUE", { id }) > 0;
+        app
+          .db()
+          .newQuery("UPDATE collection_items SET file = {:file}, origin = {:origin}, poster = {:poster} WHERE id = {:id}")
+          .bind({ id: it.id, file: name, origin: id, poster })
+          .execute();
+        // Its own copy, no longer named: the file it was saved from is.
+        if (!own) cleanupLater(app, `${itemsDir}/${it.id}`);
       }
 
       // The fields: plain names now.
@@ -406,19 +425,24 @@
       // Every file back in each message's and item's own folder.
       const fs = app.newFilesystem();
       try {
+        // A file the worker hasn't moved yet is still where it was (src): perhaps the very place it goes back to.
+        const at = (/** @type {string} */ name) => {
+          const row = rowOf(app, name);
+          return row ? row.src || `${filesDir}/${row.id}/${name}` : "";
+        };
         const rows = arrayOf(new DynamicModel({ id: "", files: "" }));
         app.db().newQuery("SELECT id, files FROM messages WHERE files != '[]' AND files != '' AND files IS NOT NULL").all(rows);
         for (const m of rows) {
           for (const name of parse(m.files, [])) {
-            const id = idOf(app, name);
-            if (id) copyFile(fs, `${filesDir}/${id}`, `${messagesDir}/${m.id}`, name);
+            const from = at(name);
+            if (from) copyKey(fs, from, `${messagesDir}/${m.id}/${name}`);
           }
         }
         const items = arrayOf(new DynamicModel({ id: "", file: "" }));
         app.db().newQuery("SELECT id, file FROM collection_items").all(items);
         for (const it of items) {
-          const id = idOf(app, it.file);
-          if (id) copyFile(fs, `${filesDir}/${id}`, `${itemsDir}/${it.id}`, it.file);
+          const from = at(it.file);
+          if (from) copyKey(fs, from, `${itemsDir}/${it.id}/${it.file}`);
         }
       } finally {
         fs.close();
@@ -463,14 +487,14 @@
     return row.file;
   }
 
-  /** @param {MigrationApp} app @param {string} name */
-  function idOf(app, name) {
-    const row = new DynamicModel({ id: "" });
+  /** @param {MigrationApp} app @param {string} name @returns {{ id: string, src: string } | null} */
+  function rowOf(app, name) {
+    const row = new DynamicModel({ id: "", src: "" });
     try {
-      app.db().newQuery("SELECT id FROM files WHERE file = {:name}").bind({ name }).one(row);
+      app.db().newQuery("SELECT id, COALESCE(src, '') AS src FROM files WHERE file = {:name}").bind({ name }).one(row);
     } catch {
-      return "";
+      return null;
     }
-    return row.id;
+    return { id: row.id, src: row.src };
   }
 })();

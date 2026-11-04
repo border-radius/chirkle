@@ -11,14 +11,15 @@
 //   video. PocketBase otherwise makes a thumbnail on its first request: a grid opened over old images made dozens at
 //   once. Each file once, as a `files` row (§37), whichever messages and collection items name it. Then it records
 //   each video's shape (its poster's) on its row and in the `file_dims` of the messages that show it, and those of
-//   files sent before there were any (§17.5): a new image's the upload already has. Last, it deletes what the move to
-//   shared files left in the messages' and items' old folders (`storage_cleanup`).
+//   files sent before there were any (§17.5): a new image's the upload already has. Between the two, it moves the files
+//   the move to shared files (§37.5) left in the messages' and items' old folders to their own, and last, it deletes
+//   what is left in the old places (`storage_cleanup`).
 // - GET /api/chat/posters/{message}/{file}: a video's poster, for whoever has the video's URL (§37.3).
 
 const { gridAuthor } = require(`${__hooks}/lib/anonymous.js`);
 const { visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { HEADER_BYTES, shownSize } = require(`${__hooks}/lib/images.js`);
-const { ext, isMedia, isVideo, keyOf, posterKeyOf, shownBy } = require(`${__hooks}/lib/files.js`);
+const { cleanupLater, ext, homeKeyOf, isMedia, isVideo, keyOf, posterKeyOf, shownBy, thumbsDirOf } = require(`${__hooks}/lib/files.js`);
 
 /** The images PocketBase makes thumbnails of (avif it serves as it is). */
 const THUMB_EXT = ["jpg", "jpeg", "png", "gif", "webp"];
@@ -388,8 +389,9 @@ function markPoster(app, row) {
  * @param {boolean} [rest]
  */
 function pass(app, beat, rest = true) {
-  const rows = app.findRecordsByFilter("files", "ready = false", "-created", BATCH, 0);
-  if (!rows.length) return sizePass(app, beat, rest) || cleanupPass(app, beat);
+  // A file not moved yet (src) once it is: its thumbnails are made in its own folder.
+  const rows = app.findRecordsByFilter("files", "ready = false && src = ''", "-created", BATCH, 0);
+  if (!rows.length) return movePass(app, beat, rest) || sizePass(app, beat, rest) || cleanupPass(app, beat);
   const fs = app.newFilesystem();
   try {
     for (const row of rows) {
@@ -419,7 +421,7 @@ function pass(app, beat, rest = true) {
  * @param {boolean} [rest]
  */
 function sizePass(app, beat, rest = true) {
-  const rows = app.findRecordsByFilter("files", "sized = false", "-created", BATCH, 0);
+  const rows = app.findRecordsByFilter("files", "sized = false && src = ''", "-created", BATCH, 0);
   if (!rows.length) return 0;
   const fs = app.newFilesystem();
   try {
@@ -445,8 +447,82 @@ function sizePass(app, beat, rest = true) {
 }
 
 /**
- * What the move to shared files (§37) left in the old folders of messages and collection items: deleted a few at a
- * time, once the move is committed. Returns how many it looked at.
+ * Files the move to shared files (§37.5) left where they were (`src`): each copied to its own folder with what is
+ * beside it (thumbnails, poster), then its row points there and the old place is left to cleanupPass. Until then it is
+ * served from where it is (lib/files.js serve). Returns how many it looked at.
+ * @param {core.App} app
+ * @param {() => void} [beat]
+ * @param {boolean} [rest]
+ */
+function movePass(app, beat, rest = true) {
+  const rows = app.findRecordsByFilter("files", "src != ''", "created", BATCH, 0);
+  if (!rows.length) return 0;
+  const fs = app.newFilesystem();
+  try {
+    for (const row of rows) {
+      if (!row) continue;
+      const start = Date.now();
+      try {
+        move(app, fs, row);
+      } catch (err) {
+        app.logger().warn("media: move", "file", row.getString("file"), "from", row.getString("src"), "error", String(err));
+      }
+      beat?.();
+      if (rest) sleep(Math.min(2000, Date.now() - start));
+    }
+  } finally {
+    fs.close();
+  }
+  return rows.length;
+}
+
+/**
+ * One file's move (movePass). A file not there any more (gone before the move) is left as it is: its row keeps
+ * pointing at nothing, as the message's did. A file renamed by the migration (a name two records had) gets new
+ * thumbnails: those beside it carry the old name.
+ * @param {core.App} app
+ * @param {filesystem.System} fs
+ * @param {core.Record} row
+ */
+function move(app, fs, row) {
+  const src = row.getString("src");
+  const home = homeKeyOf(row);
+  const renamed = src.slice(src.lastIndexOf("/") + 1) !== row.getString("file");
+  const there = fs.exists(src);
+  if (there) {
+    fs.copy(src, home);
+    if (!renamed) {
+      const from = thumbsDirOf(src);
+      const to = thumbsDirOf(home);
+      for (const obj of fs.list(from)) {
+        if (obj && !obj.key.endsWith(".attrs")) fs.copy(obj.key, to + obj.key.slice(from.length));
+      }
+    }
+  }
+  let moved = false;
+  app.runInTransaction((tx) => {
+    let now;
+    try {
+      now = tx.findRecordById("files", row.id);
+    } catch {
+      return; // deleted meanwhile: unlink left its old place to cleanupPass
+    }
+    if (now.getString("src") !== src) return;
+    tx.db()
+      .newQuery("UPDATE files SET src = '', ready = ready AND {:keep}, poster = poster AND {:keep} WHERE id = {:id}")
+      .bind({ id: row.id, keep: there && !renamed })
+      .execute();
+    if (there) cleanupLater(tx, src);
+    moved = true;
+  });
+  // Deleted while it was copied: PocketBase removed its folder before the copy was there.
+  if (!moved && there) fs.deletePrefix(`${home.slice(0, home.lastIndexOf("/"))}/`);
+}
+
+/**
+ * What the move to shared files (§37) left in the old places of messages' and collection items' files: deleted a
+ * few at a time, once the move is committed. A prefix is a record's folder, or a file (which goes with its
+ * thumbnails). Returns how many it looked at.
  * @param {core.App} app
  * @param {() => void} [beat]
  */
@@ -457,10 +533,21 @@ function cleanupPass(app, beat) {
   const fs = app.newFilesystem();
   try {
     for (const row of rows) {
-      // A folder of its own (collection/record), never a shorter one.
+      // A folder of its own (collection/record), never a shorter one; or one file in one.
       if (/^[a-z0-9_]+\/[a-z0-9]+$/i.test(row.prefix)) {
         const errs = fs.deletePrefix(`${row.prefix}/`);
         for (const err of errs ?? []) if (err) app.logger().warn("media: cleanup", "prefix", row.prefix, "error", String(err));
+      } else if (/^[a-z0-9_]+\/[a-z0-9]+\/[^/]+$/i.test(row.prefix)) {
+        try {
+          if (fs.exists(row.prefix)) fs.delete(row.prefix);
+          const errs = fs.deletePrefix(thumbsDirOf(row.prefix));
+          for (const err of errs ?? []) if (err) app.logger().warn("media: cleanup", "prefix", row.prefix, "error", String(err));
+          // The record's old folder, once its last file has gone (an empty folder stays on a local disk).
+          const dir = `${row.prefix.slice(0, row.prefix.lastIndexOf("/"))}/`;
+          if (!fs.list(dir).length) fs.deletePrefix(dir);
+        } catch (err) {
+          app.logger().warn("media: cleanup", "prefix", row.prefix, "error", String(err));
+        }
       }
       app.db().newQuery("DELETE FROM storage_cleanup WHERE id = {:id}").bind({ id: row.id }).execute();
       beat?.();
