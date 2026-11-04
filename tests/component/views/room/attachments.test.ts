@@ -1,6 +1,6 @@
 // Room view: attachments (§17.4, §17.5).
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { ApiError } from "../../../../web/src/api.ts";
 import { newId } from "../../../../web/src/lib/id.ts";
 import { instrument, intercept, signedUp } from "../../../support/api.ts";
@@ -49,7 +49,7 @@ describe("room view", () => {
       await vi.waitFor(() => expect(msgEl(id)!.classList.contains("pending")).toBe(false));
       const img = msgEl(id)!.querySelector<HTMLImageElement>(".att-tile img")!;
       expect(img.getAttribute("src")).toMatch(/thumb=800x480f/);
-      expect(img.getAttribute("src")).toMatch(/token=/);
+      expect(img.getAttribute("src")).not.toMatch(/token=/); // the URL alone opens it (§37.3)
       // Takes the preview's shape before it loads, so the tile doesn't narrow and widen again.
       expect(img.style.aspectRatio).toBe("600 / 300");
       expect(chips(id).map((a) => a.textContent)).toEqual(["doc.pdf"]);
@@ -155,7 +155,7 @@ describe("room view", () => {
       const [chip] = chips(many.id);
       expect(chip!.textContent).toBe("report.pdf");
       expect(chip!.getAttribute("download")).toBe("report.pdf");
-      expect(chip!.getAttribute("href")).toMatch(/token=/);
+      expect(chip!.getAttribute("href")).toBe(`${inject("pbUrl")}/api/files/messages/${many.id}/${many.files!.at(-1)}`);
     });
 
     it("more than 4 images and videos: 4 tiles, the 4th saying how many more", async () => {
@@ -180,25 +180,23 @@ describe("room view", () => {
       const poster = (t: HTMLElement) => t.querySelector("img")!;
       [a!, b!].forEach((t, i) => {
         expect(t.querySelector("video")).toBeNull();
-        expect(poster(t).getAttribute("src")).toContain(`/api/chat/posters/${m.id}/${m.files![i]}?token=`);
+        expect(poster(t).getAttribute("src")).toBe(`${inject("pbUrl")}/api/chat/posters/${m.id}/${m.files![i]}`);
         expect(poster(t).loading).toBe("lazy");
         expect(t.getAttribute("aria-label")).toMatch(/^[ab]\.mp4, video$/);
       });
-      // a has a poster; b hasn't (not made yet): its tile falls back to the video, at once and without a new token.
-      const ctl = instrument(me.api);
+      // a has a poster; b hasn't (not made yet): its tile falls back to the video, at once.
       poster(a!).style.aspectRatio = "4 / 3";
       poster(b!).style.aspectRatio = "4 / 3";
       poster(b!).dispatchEvent(new Event("error"));
       const video = b!.querySelector("video")!;
       expect(b!.querySelector("img")).toBeNull();
-      expect(video.getAttribute("src")).toContain(`/api/files/messages/${m.id}/${m.files![1]}?token=`);
+      expect(video.getAttribute("src")).toBe(`${inject("pbUrl")}/api/files/messages/${m.id}/${m.files![1]}#t=0.001`);
       expect(video.getAttribute("src")).toMatch(/#t=0\.001$/);
       expect(video.style.aspectRatio).toBe("4 / 3");
-      expect(ctl.calls("fileToken")).toBe(0);
       expect(a!.querySelector("img")).not.toBeNull();
-      // The video failing too goes on as before: once more with a new token.
+      // The video failing too offers Retry.
       video.dispatchEvent(new Event("error"));
-      await vi.waitFor(() => expect(ctl.calls("fileToken")).toBe(1));
+      expect(msgEl(m.id)!.querySelector(".att-broken")!.textContent).toContain("Couldn't load video");
     });
 
     it("a sending message shows how much of its attachments has been uploaded", async () => {
@@ -269,7 +267,7 @@ describe("room view", () => {
       const player = audio()!;
       expect(player.hasAttribute("controls")).toBe(true);
       expect(player.getAttribute("aria-label")).toBe("Song.mp3");
-      expect(player.getAttribute("src")).toMatch(/token=/);
+      expect(player.getAttribute("src")).toBe(`${inject("pbUrl")}/api/files/messages/${m.id}/${m.files![0]}`);
       expect(tiles(m.id)).toHaveLength(0);
       expect(chips(m.id).map((a) => a.getAttribute("download"))).toEqual(["Song.mp3"]);
       const pause = vi.spyOn(player, "pause");
@@ -285,34 +283,11 @@ describe("room view", () => {
       expect(pause).toHaveBeenCalled();
     });
 
-    it("an audio file that fails to load gets a new token once and goes on where it was", async () => {
-      const room = await newRoom();
-      const m = await me.api.send({ id: newId(), room: room.id, text: "", files: [new File(["OggS"], "voice_1.ogg")] });
-      const ctl = instrument(me.api);
-      await mount(room);
-      const player = msgEl(m.id)!.querySelector("audio")!;
-      const before = ctl.calls("fileToken");
-      player.currentTime = 42;
-      player.dispatchEvent(new Event("error"));
-      await vi.waitFor(() => expect(ctl.calls("fileToken")).toBe(before + 1));
-      await vi.waitFor(() => expect(player.currentTime).toBe(42));
-      player.dispatchEvent(new Event("error"));
-      expect(ctl.calls("fileToken")).toBe(before + 1);
-      // Loading again resets it: the next expired token gets a new one too.
-      player.dispatchEvent(new Event("loadedmetadata"));
-      player.dispatchEvent(new Event("error"));
-      await vi.waitFor(() => expect(ctl.calls("fileToken")).toBe(before + 2));
-    });
-
-    it("an image that fails to load retries once with a new token, then offers Retry", async () => {
+    it("an image that fails to load offers Retry", async () => {
       const room = await newRoom();
       const m = await me.api.send({ id: newId(), room: room.id, text: "", files: [pngFile()] });
-      const ctl = instrument(me.api);
       await mount(room);
-      const before = ctl.calls("fileToken");
       const img = () => msgEl(m.id)!.querySelector<HTMLImageElement>(".att-tile img");
-      img()!.dispatchEvent(new Event("error"));
-      await vi.waitFor(() => expect(ctl.calls("fileToken")).toBe(before + 1));
       img()!.dispatchEvent(new Event("error"));
       expect(img()).toBeNull();
       const broken = msgEl(m.id)!.querySelector(".att-broken")!;

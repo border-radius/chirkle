@@ -24,7 +24,8 @@ data class PageQuery(val room: String, val kind: String, val args: Map<String, S
             else -> ""
         }
         val sort = if (kind == "changed") "updated,id" else if (descending) DESC else ASC
-        val withFiles = if (files) " && (files:length > 0 || forward_of != \"\")" else ""
+        // A file field before shared files, JSON since (DESIGN.md §37), where `:length` means nothing: both hold "[]" when empty.
+        val withFiles = if (files) " && ((files:length > 0 && files != \"[]\") || forward_of != \"\")" else ""
         // `~` treats `%` as a wildcard, so it is escaped (QA BUG-34), and so is the escape character itself (QA BUG-112).
         val words = q.split(' ').filter { it.isNotEmpty() }
         val search = words.indices.joinToString("") { " && text_key ~ {:w$it}" }

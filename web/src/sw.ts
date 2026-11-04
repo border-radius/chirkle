@@ -4,8 +4,8 @@
 // - Pages: network first, so a deploy shows on the next load; offline, the last page loaded (index.html: every page
 //   of the app is the same shell, §7.1).
 // - Content-hashed assets (/assets/*-HASH.js|css|woff2): cache first; they never change under one name.
-// - Attachment thumbnails and video posters (§30.1): cache first, kept under their URL without the file token (§17.3). The token changes every
-//   few minutes, so the browser's own cache, keyed by the whole URL, misses on every room switch.
+// - Attachment thumbnails and video posters (§30.1): cache first. They never change under one name, and are kept here
+//   so a room opens with them offline too.
 // - Everything else, the API and realtime included, is left to the browser: no stale data, no other cached files.
 // - Notifications (§34) are made by the pages (notify.ts) through this worker; a click opens the message in a tab of
 //   the app (the one in front, else any), or in a new one. No push: nothing wakes this worker but the pages.
@@ -87,8 +87,8 @@ sw.addEventListener("fetch", (e) => {
   if (req.method !== "GET" || url.origin !== location.origin) return;
   const thumb = ATTACHMENT.test(url.pathname) && url.searchParams.get("thumb");
   if (thumb || POSTER.test(url.pathname)) {
-    const user = fileTokenUser(url.searchParams.get("token") ?? "");
-    if (user) e.respondWith(thumbnail(e, `${url.origin}${url.pathname}?${thumb ? `thumb=${thumb}&` : ""}user=${user}`));
+    // Kept under the URL with nothing but the thumbnail size: an older page may still add a file token (§37.3).
+    e.respondWith(thumbnail(e, `${url.origin}${url.pathname}${thumb ? `?thumb=${encodeURIComponent(thumb)}` : ""}`));
     return;
   }
   // Files (opened in a tab) and the admin UI are not the app's pages.
@@ -132,21 +132,8 @@ async function asset(req: Request): Promise<Response> {
 }
 
 /**
- * @returns the id of the user a PocketBase file token was issued to, "" for anything else. Not verified (the server
- * does that): it only keeps one user's thumbnails from being served to another on a shared browser.
- */
-function fileTokenUser(token: string): string {
-  try {
-    const claims = JSON.parse(atob(token.split(".")[1]!.replaceAll("-", "+").replaceAll("_", "/"))) as { id?: unknown; type?: unknown };
-    return claims.type === "file" && typeof claims.id === "string" ? claims.id : "";
-  } catch {
-    return "";
-  }
-}
-
-/**
  * A thumbnail never changes under one name (a new upload gets a new file name), so a kept one is served without asking
- * the server. A miss goes out with the request's own token, and a success is kept under `key`.
+ * the server. A success is kept under `key`.
  */
 async function thumbnail(e: FetchEvent, key: string): Promise<Response> {
   const cache = await caches.open(FILES);

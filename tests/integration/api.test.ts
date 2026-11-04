@@ -206,7 +206,7 @@ describe("createApi", () => {
   });
 
   describe("attachments (§17)", () => {
-    it("send uploads files; pages list them; fileUrl signs URLs with a cached token that works", async () => {
+    it("send uploads files; pages list them; fileUrl's URLs work without a file token (§37.3)", async () => {
       const { a, b } = await setup();
       const room = await a.createRoom(`f-${uniq()}`);
       const sent = await a.send({
@@ -219,29 +219,12 @@ describe("createApi", () => {
       const [m] = await b.page(latest(room.id));
       expect(m!.files).toEqual(sent.files);
 
-      expect(b.fileUrl(m!, m!.files![0]!)).not.toContain("token="); // none cached yet
-      const token = await b.fileToken();
-      expect(await b.fileToken()).toBe(token); // cached
       const thumb = b.fileUrl(m!, m!.files![0]!, "800x480f");
-      expect(thumb).toContain(`token=${token}`);
-      expect(thumb).toContain("thumb=800x480f");
+      expect(thumb).toBe(`${inject("pbUrl")}/api/files/messages/${m!.id}/${m!.files![0]}?thumb=800x480f`);
       expect((await fetch(thumb)).status).toBe(200);
       expect((await fetch(b.fileUrl(m!, m!.files![1]!))).status).toBe(200);
-    });
-
-    it("BUG-25: a session refresh keeps the cached token, even one still being fetched", async () => {
-      const { a } = await setup();
-      const pending = a.fileToken();
-      await a.refreshAuth(); // what every page load does in the background
-      const token = await pending;
-      expect(a.fileUrl({ id: "x" } as never, "f.png")).toContain(`token=${token}`);
-    });
-
-    it("the token is dropped on logout", async () => {
-      const { a } = await setup();
-      await a.fileToken();
-      a.logOut();
-      expect(a.fileUrl({ id: "x" } as never, "f.png")).not.toContain("token=");
+      b.logOut();
+      expect((await fetch(b.fileUrl(m!, m!.files![1]!))).status).toBe(200);
     });
   });
 
@@ -294,12 +277,6 @@ describe("createApi", () => {
       expect(Object.keys(sel.expand!.writers![0]!).sort()).toEqual(["avatar", "id", "instance", "name", "no_dms"]); // never the email
       expect(await a.setAccess(room.id, "open", [])).toMatchObject({ visibility: "open", posting: "selected" });
       expect(await a.setAccess(room.id, "open", [], "everyone", [b.currentUser()!.id])).toMatchObject({ posting: "everyone", writers: [] });
-    });
-
-    it("a guest (§23.3) gets no file token, without asking the server", async () => {
-      const { anon } = await setup();
-      expect(await anon.fileToken()).toBe("");
-      expect(await anon.fileToken(true)).toBe("");
     });
 
     it("duplicate names (any case) are rejected with a name field error", async () => {

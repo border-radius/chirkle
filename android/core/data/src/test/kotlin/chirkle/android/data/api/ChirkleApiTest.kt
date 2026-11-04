@@ -183,7 +183,13 @@ class ChirkleApiTest {
         assertTrue(site.title.isNotEmpty())
     }
 
-    @Test fun `protected files need a file token`() = runBlocking {
+    @Test fun `this server opens files by URL alone, so the app asks for no file token`() = runBlocking {
+        val u = newUser()
+        assertFalse(u.api.needsFileTokens())
+        assertFalse(TestServer.client().needsFileTokens())
+    }
+
+    @Test fun `an older server's file token is still there to be asked for`() = runBlocking {
         val u = newUser()
         val token = u.api.newFileToken()
         assertTrue(token.isNotEmpty())

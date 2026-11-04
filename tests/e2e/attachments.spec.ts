@@ -91,7 +91,7 @@ test("a GIF's tile is the file itself, so it plays: its thumbnail would be the f
 
   const imgs = message(a, "moving pictures").locator(".att-tile img");
   await expect(imgs).toHaveCount(2);
-  await expect(imgs.nth(0)).toHaveAttribute("src", /\/dance_\w+\.gif\?token=[^&]+$/);
+  await expect(imgs.nth(0)).toHaveAttribute("src", /\/dance_\w+\.gif$/);
   await expect(imgs.nth(1)).toHaveAttribute("src", /thumb=480x240f/);
   await expect.poll(() => imgs.nth(0).evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
 });
@@ -134,7 +134,7 @@ test("images keep their shape: narrow ones are centred, and a sent one doesn't c
   expect(await widths()).toEqual([213, 120]);
 });
 
-test("a DM's attachments can't be fetched by others, not even with the URL (§17.3)", async ({ browser }) => {
+test("a DM's attachments open by their URL alone, which nobody else is shown (§37.3)", async ({ browser }) => {
   const tag = uniq();
   const ada = await apiUser(`Ada ${tag}`);
   const bob = await apiUser(`Bob ${tag}`);
@@ -151,9 +151,11 @@ test("a DM's attachments can't be fetched by others, not even with the URL (§17
   await attach(a, [pdf]);
   await send(a, "for your eyes only");
   const href = (await message(a, "for your eyes only").locator("a.att-file").getAttribute("href"))!;
+  expect(href).not.toMatch(/token=/);
   expect(await statusOf(a, href)).toBe(200);
-  const unsigned = href.replace(/[?&]token=[^&]*/, "");
-  expect([403, 404]).toContain(await statusOf(c, unsigned));
+  // Cat isn't shown the message, so never the URL; given it, the file opens (the URL is the secret).
+  await expect(c.getByText("for your eyes only")).toHaveCount(0);
+  expect(await statusOf(c, href)).toBe(200);
 });
 
 test("an uploaded HTML file never runs on our origin (§17, XSS)", async ({ browser }) => {

@@ -8,19 +8,18 @@
 //   page through the room's messages with the full list rule, expands and enrich hook, for a few tiles a page.
 // - The worker (a cron job, like the previews'): makes each new file's thumbnails before anyone asks for them, and a
 //   poster frame for each video with ffmpeg, so the room (§17.5) and the grid show an image instead of loading every
-//   video. PocketBase
-//   otherwise makes a thumbnail on its first request: a grid opened over old images made dozens at once. Then it
-//   records each video's shape (its poster's) in the message's `file_dims`, and those of files sent before there
-//   were any (§17.5): a new image's the create hook already set.
-// - GET /api/chat/posters/{message}/{file}: a video's poster, checked as PocketBase checks the file itself.
+//   video. PocketBase otherwise makes a thumbnail on its first request: a grid opened over old images made dozens at
+//   once. Each file once, as a `files` row (§37), whichever messages and collection items name it. Then it records
+//   each video's shape (its poster's) on its row and in the `file_dims` of the messages that show it, and those of
+//   files sent before there were any (§17.5): a new image's the upload already has. Last, it deletes what the move to
+//   shared files left in the messages' and items' old folders (`storage_cleanup`).
+// - GET /api/chat/posters/{message}/{file}: a video's poster, for whoever has the video's URL (§37.3).
 
 const { gridAuthor } = require(`${__hooks}/lib/anonymous.js`);
 const { visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { HEADER_BYTES, shownSize } = require(`${__hooks}/lib/images.js`);
+const { ext, isMedia, isVideo, keyOf, posterKeyOf, shownBy } = require(`${__hooks}/lib/files.js`);
 
-/** As web/src/lib/files.ts says. */
-const IMAGE_EXT = ["jpg", "jpeg", "png", "gif", "webp", "avif"];
-const VIDEO_EXT = ["mp4", "m4v", "webm", "mov", "ogv"];
 /** The images PocketBase makes thumbnails of (avif it serves as it is). */
 const THUMB_EXT = ["jpg", "jpeg", "png", "gif", "webp"];
 /** The grid's tiles (§30.1). */
@@ -33,7 +32,7 @@ const POSTER_FIT = { w: 800, h: 480 };
 const POSTER = "poster.jpg";
 /** ffmpeg is stopped after this long (s): a file that takes longer gets no poster. */
 const FFMPEG_SECONDS = 20;
-/** A message this recent is still being read in the room: all of its thumbnails are made, not just the grid's. */
+/** A file this recent is still being read in the room: all of its thumbnails are made, not just the grid's. */
 const RECENT_MS = 7 * 86_400_000;
 
 const LOCK = "media.worker";
@@ -44,23 +43,10 @@ const BATCH = 10;
 const PAGE = 60;
 const MAX_PAGE = 100;
 
-/** @param {string} name */
-const ext = (name) => (name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "");
-/** @param {string} name */
-const isVideo = (name) => VIDEO_EXT.includes(ext(name));
-/** @param {string} name */
-const isMedia = (name) => IMAGE_EXT.includes(ext(name)) || isVideo(name);
-
-/** The storage folder of a message's files. @param {core.App} app @param {string} id */
-const dirOf = (app, id) => `${app.findCollectionByNameOrId("messages").id}/${id}`;
-/** Where a video's poster is kept: with its thumbnails, which PocketBase deletes with the file. */
-const posterKey = (/** @type {string} */ dir, /** @type {string} */ file) => `${dir}/thumbs_${file}/${POSTER}`;
-
 // ---------------------------------------------------------------- the index
 
 /**
- * A message just saved (created): its rows, in the save's transaction. A forward's are its original's files, already
- * done by the worker (the original's rows), poster and all.
+ * A message just saved (created): its rows, in the save's transaction. A forward's are its original's files.
  * @param {core.App} app
  * @param {core.Record} rec
  */
@@ -81,9 +67,8 @@ function add(app, rec) {
     app
       .db()
       .newQuery(
-        `INSERT INTO media (id, room, message, source, file, pos, video, sent, ready, sized, poster)
-         VALUES ({:id}, {:room}, {:message}, {:source}, {:file}, {:pos}, {:video}, {:sent}, {:ready}, {:sized},
-                 COALESCE((SELECT poster FROM media WHERE message = {:source} AND file = {:file}), FALSE))`,
+        `INSERT INTO media (id, room, message, source, file, pos, video, sent)
+         VALUES ({:id}, {:room}, {:message}, {:source}, {:file}, {:pos}, {:video}, {:sent})`,
       )
       .bind({
         id: $security.randomStringWithAlphabet(15, "abcdefghijklmnopqrstuvwxyz0123456789"),
@@ -94,8 +79,6 @@ function add(app, rec) {
         pos,
         video: isVideo(file),
         sent: rec.getString("created"),
-        ready: !!forward,
-        sized: !!forward || !isVideo(file), // an image's shape is the create hook's (§17.5)
       })
       .execute();
   });
@@ -144,11 +127,12 @@ function list(e) {
   e.app
     .db()
     .newQuery(
-      `SELECT md.message, md.source, md.file, md.pos, md.video, md.poster, md.sent, COALESCE(s.file_names, '') AS names,
-              m.author, COALESCE(u.name, '') AS name, m.anonymous
+      `SELECT md.message, md.source, md.file, md.pos, md.video, COALESCE(f.poster, FALSE) AS poster, md.sent,
+              COALESCE(s.file_names, '') AS names, m.author, COALESCE(u.name, '') AS name, m.anonymous
        FROM media md
        JOIN messages m ON m.id = md.message
        JOIN messages s ON s.id = md.source
+       LEFT JOIN files f ON f.file = md.file
        LEFT JOIN users u ON u.id = m.author
        WHERE md.room = {:room} ${before} AND m.deleted = FALSE AND s.deleted = FALSE
        ORDER BY md.sent DESC, md.message DESC, md.pos DESC
@@ -182,56 +166,36 @@ function list(e) {
 // ---------------------------------------------------------------- posters
 
 /**
- * GET /api/chat/posters/{message}/{file}?token=: a video's poster frame, for whoever may see the video: the same file
- * token and the message's view rule, as PocketBase checks for the file itself (§17.3). 404 for anything else, and
- * until the worker has made it.
+ * GET /api/chat/posters/{message}/{file}: a video's poster frame, for whoever has the video's URL (§37.3): the message
+ * (or as a forward, its original) shows the file. A `token` is ignored. 404 for anything else, and until the worker
+ * has made it.
  * @param {core.RequestEvent} e
  */
 function poster(e) {
-  servePoster(e, "messages", "files", e.request?.pathValue("message") ?? "");
+  servePoster(e, "messages", e.request?.pathValue("message") ?? "");
 }
 
 /**
- * GET /api/chat/posters/items/{item}/{file}?token=: a collection item's poster (§31), checked the same way against the
- * item's view rule.
+ * GET /api/chat/posters/items/{item}/{file}: a collection item's poster (§31), as the item's file is served.
  * @param {core.RequestEvent} e
  */
 function itemPoster(e) {
-  servePoster(e, "collection_items", "file", e.request?.pathValue("item") ?? "");
+  servePoster(e, "collection_items", e.request?.pathValue("item") ?? "");
 }
 
 /**
- * The poster of the video `file` of record `id`, served as PocketBase serves the file (its view rule, the file token).
+ * The poster of the video `file` that record `id` of `collection` shows.
  * @param {core.RequestEvent} e
  * @param {string} collection
- * @param {string} field
  * @param {string} id
  */
-function servePoster(e, collection, field, id) {
+function servePoster(e, collection, id) {
   const file = e.request?.pathValue("file") ?? "";
-  let msg;
-  try {
-    msg = e.app.findRecordById(collection, id);
-  } catch {
-    throw new NotFoundError();
-  }
-  if (!isVideo(file) || !msg.getStringSlice(field).includes(file)) throw new NotFoundError();
-  const info = e.requestInfo();
-  const token = e.request?.url?.query().get("token") ?? "";
-  /** @type {core.Record | null} */
-  let auth = null;
-  if (token) {
-    try {
-      auth = e.app.findAuthRecordByToken(token, "file");
-    } catch {
-      auth = null;
-    }
-  }
-  /** @type {any} */ (info).auth = auth;
-  if (!e.app.canAccessRecord(msg, info, msg.collection().viewRule ?? "")) throw new NotFoundError();
+  const row = isVideo(file) ? shownBy(e.app, collection, id, file) : null;
+  if (!row) throw new NotFoundError();
   const fs = e.app.newFilesystem();
   try {
-    const key = posterKey(`${msg.collection().id}/${id}`, file);
+    const key = posterKeyOf(row);
     if (!fs.exists(key)) throw new NotFoundError();
     // Never changes under one name: a new upload gets a new file name.
     e.response.header().set("Cache-Control", "private, max-age=2592000");
@@ -361,19 +325,20 @@ function frame(bin, path, file) {
 }
 
 /**
- * The thumbnails one file needs: the grid's, and for a recent message the room's too (§17.5). Made only if missing.
+ * The thumbnails one file needs: the grid's, and for a recent file the room's too (§17.5); a video, its poster. Made
+ * only if missing.
  * @param {core.App} app
  * @param {filesystem.System} fs
- * @param {{ source: string, file: string, sent: string }} row
+ * @param {core.Record} row a `files` row
  */
 function thumbs(app, fs, row) {
-  const dir = dirOf(app, row.source);
-  const key = `${dir}/${row.file}`;
+  const file = row.getString("file");
+  const key = keyOf(row);
   if (!fs.exists(key)) return; // deleted meanwhile
-  if (isVideo(row.file)) {
-    const target = posterKey(dir, row.file);
+  if (isVideo(file)) {
+    const target = posterKeyOf(row);
     if (fs.exists(target)) return markPoster(app, row);
-    const bytes = posterOf(app, fs, key, row.file);
+    const bytes = posterOf(app, fs, key, file);
     if (!bytes) return;
     fs.uploadFile($filesystem.fileFromBytes(bytes, POSTER), target);
     // Deleted while ffmpeg ran: PocketBase has already removed its folder, and would leave this one behind.
@@ -381,49 +346,62 @@ function thumbs(app, fs, row) {
     markPoster(app, row);
     return;
   }
-  if (!THUMB_EXT.includes(ext(row.file))) return;
-  const all = /** @type {any} */ (app.findCollectionByNameOrId("messages").fields.getByName("files")).thumbs ?? [];
-  const recent = Date.now() - new Date(row.sent.replace(" ", "T")).getTime() < RECENT_MS;
+  if (!THUMB_EXT.includes(ext(file))) return;
+  const all = /** @type {any} */ (row.collection().fields.getByName("file")).thumbs ?? [];
+  const recent = Date.now() - new Date(row.getString("created").replace(" ", "T")).getTime() < RECENT_MS;
   // A GIF shows itself in the room (§17.5): only the grid shows its thumbnail.
-  const sizes = recent && ext(row.file) !== "gif" ? all : all.filter((/** @type {string} */ s) => s === GRID_THUMB);
+  const sizes = recent && ext(file) !== "gif" ? all : all.filter((/** @type {string} */ s) => s === GRID_THUMB);
   for (const size of sizes) {
-    const thumb = `${dir}/thumbs_${row.file}/${size}_${row.file}`;
+    const thumb = `${row.baseFilesPath()}/thumbs_${file}/${size}_${file}`;
     if (!fs.exists(thumb)) fs.createThumb(key, thumb, size);
   }
 }
 
-/** The file's poster is there: its rows say so, its forwards' too. */
-function markPoster(/** @type {core.App} */ app, /** @type {{ source: string, file: string }} */ row) {
-  app.db().newQuery("UPDATE media SET poster = TRUE WHERE source = {:source} AND file = {:file}").bind(row).execute();
+/**
+ * A file's poster is there: its row says so, and the collection items naming it; their collections are saved again
+ * (unchanged), so the room lists showing their tiles (GET /api/chat/collections' `preview`) hear of it live and ask
+ * again, as they do when an item is added (QA BUG-207).
+ * @param {core.App} app
+ * @param {core.Record} row
+ */
+function markPoster(app, row) {
+  const file = row.getString("file");
+  app.db().newQuery("UPDATE files SET poster = TRUE WHERE id = {:id}").bind({ id: row.id }).execute();
+  app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE file = {:file}").bind({ file }).execute();
+  const ids = arrayOf(new DynamicModel({ collection: "" }));
+  app.db().newQuery("SELECT DISTINCT collection FROM collection_items WHERE file = {:file}").bind({ file }).all(ids);
+  for (const { collection } of ids) {
+    try {
+      app.save(app.findRecordById("collections", collection));
+    } catch (err) {
+      app.logger().warn("media: item poster", "collection", collection, "error", String(err));
+    }
+  }
 }
 
 /**
- * One pass: the newest files not done yet (a new upload goes before the old ones the migration found). After each
- * file the worker rests as long as it worked, so it never takes more than half of one CPU. `beat`, if given, is called
- * after each one (the worker renews its lock). Returns how many it looked at.
+ * One pass: the newest files not done yet (a new upload goes before the old ones). After each file the worker rests
+ * as long as it worked, so it never takes more than half of one CPU. `beat`, if given, is called after each one (the
+ * worker renews its lock). Returns how many it looked at.
  * @param {core.App} app
  * @param {() => void} [beat]
  * @param {boolean} [rest]
  */
 function pass(app, beat, rest = true) {
-  const rows = arrayOf(new DynamicModel({ id: "", source: "", file: "", sent: "" }));
-  app
-    .db()
-    .newQuery("SELECT id, source, file, sent FROM media WHERE ready = FALSE ORDER BY sent DESC LIMIT {:n}")
-    .bind({ n: BATCH })
-    .all(rows);
-  if (!rows.length) return itemPass(app, beat, rest) || sizePass(app, beat, rest);
+  const rows = app.findRecordsByFilter("files", "ready = false", "-created", BATCH, 0);
+  if (!rows.length) return sizePass(app, beat, rest) || cleanupPass(app, beat);
   const fs = app.newFilesystem();
   try {
     for (const row of rows) {
+      if (!row) continue;
       const start = Date.now();
       try {
-        thumbs(app, fs, /** @type {any} */ (row));
+        thumbs(app, fs, row);
       } catch (err) {
-        app.logger().warn("media: thumbnails", "message", row.source, "file", row.file, "error", String(err));
+        app.logger().warn("media: thumbnails", "file", row.getString("file"), "error", String(err));
       }
       // Tried once: a file that fails now would fail again.
-      app.db().newQuery("UPDATE media SET ready = TRUE WHERE id = {:id}").bind({ id: row.id }).execute();
+      app.db().newQuery("UPDATE files SET ready = TRUE WHERE id = {:id}").bind({ id: row.id }).execute();
       beat?.();
       if (rest) sleep(Math.min(2000, Date.now() - start));
     }
@@ -431,85 +409,6 @@ function pass(app, beat, rest = true) {
     fs.close();
   }
   return rows.length;
-}
-
-/**
- * As pass, for collection items (§31) once the messages are done: the grid's thumbnail, or a video's poster.
- * @param {core.App} app
- * @param {() => void} [beat]
- * @param {boolean} [rest]
- */
-function itemPass(app, beat, rest = true) {
-  const rows = arrayOf(new DynamicModel({ id: "", file: "" }));
-  app
-    .db()
-    .newQuery("SELECT id, file FROM collection_items WHERE ready = FALSE ORDER BY created DESC LIMIT {:n}")
-    .bind({ n: BATCH })
-    .all(rows);
-  if (!rows.length) return 0;
-  const dir = `${app.findCollectionByNameOrId("collection_items").id}`;
-  const fs = app.newFilesystem();
-  try {
-    for (const row of rows) {
-      const start = Date.now();
-      try {
-        itemThumbs(app, fs, `${dir}/${row.id}`, row.id, row.file);
-      } catch (err) {
-        app.logger().warn("media: item thumbnails", "item", row.id, "file", row.file, "error", String(err));
-      }
-      app.db().newQuery("UPDATE collection_items SET ready = TRUE WHERE id = {:id}").bind({ id: row.id }).execute();
-      beat?.();
-      if (rest) sleep(Math.min(2000, Date.now() - start));
-    }
-  } finally {
-    fs.close();
-  }
-  return rows.length;
-}
-
-/**
- * An item's grid thumbnail, or its video's poster (unless it came along from the file it was saved from).
- * @param {core.App} app
- * @param {filesystem.System} fs
- * @param {string} dir
- * @param {string} id
- * @param {string} file
- */
-function itemThumbs(app, fs, dir, id, file) {
-  const key = `${dir}/${file}`;
-  if (!fs.exists(key)) return;
-  const mark = () => {
-    app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE id = {:id}").bind({ id }).execute();
-    posterReady(app, id);
-  };
-  if (isVideo(file)) {
-    const target = posterKey(dir, file);
-    if (fs.exists(target)) return mark();
-    const bytes = posterOf(app, fs, key, file);
-    if (!bytes) return;
-    fs.uploadFile($filesystem.fileFromBytes(bytes, POSTER), target);
-    if (!fs.exists(key)) return fs.delete(target);
-    mark();
-    return;
-  }
-  if (!THUMB_EXT.includes(ext(file))) return;
-  const thumb = `${dir}/thumbs_${file}/${GRID_THUMB}_${file}`;
-  if (!fs.exists(thumb)) fs.createThumb(key, thumb, GRID_THUMB);
-}
-
-/**
- * A collection item's poster is ready: its collection is saved again (unchanged), so the room lists showing its tile
- * (GET /api/chat/collections' `preview`) hear of it live and ask again, as they do when an item is added (QA BUG-207).
- * @param {core.App} app
- * @param {string} id the item's
- */
-function posterReady(app, id) {
-  try {
-    const item = app.findRecordById("collection_items", id);
-    app.save(app.findRecordById("collections", item.getString("collection")));
-  } catch (err) {
-    app.logger().warn("media: item poster", "item", id, "error", String(err));
-  }
 }
 
 /**
@@ -520,24 +419,51 @@ function posterReady(app, id) {
  * @param {boolean} [rest]
  */
 function sizePass(app, beat, rest = true) {
-  const rows = arrayOf(new DynamicModel({ source: "", file: "", video: false }));
-  app.db().newQuery("SELECT source, file, video FROM media WHERE sized = FALSE ORDER BY sent DESC LIMIT {:n}").bind({ n: BATCH }).all(rows);
+  const rows = app.findRecordsByFilter("files", "sized = false", "-created", BATCH, 0);
   if (!rows.length) return 0;
   const fs = app.newFilesystem();
   try {
     for (const row of rows) {
+      if (!row) continue;
       const start = Date.now();
+      const file = row.getString("file");
       try {
-        const dir = dirOf(app, row.source);
-        const size = shapeOf(fs, row.video ? posterKey(dir, row.file) : `${dir}/${row.file}`);
-        if (size) setDims(app, row.source, row.file, size);
+        const size = isMedia(file) ? shapeOf(fs, isVideo(file) ? posterKeyOf(row) : keyOf(row)) : null;
+        if (size) setDims(app, row, size);
       } catch (err) {
-        app.logger().warn("media: shape", "message", row.source, "file", row.file, "error", String(err));
+        app.logger().warn("media: shape", "file", file, "error", String(err));
       }
       // Once: without a poster (no ffmpeg) or a readable header, the room shows it as before.
-      app.db().newQuery("UPDATE media SET sized = TRUE WHERE source = {:source} AND file = {:file}").bind(row).execute();
+      app.db().newQuery("UPDATE files SET sized = TRUE WHERE id = {:id}").bind({ id: row.id }).execute();
       beat?.();
       if (rest) sleep(Math.min(2000, Date.now() - start));
+    }
+  } finally {
+    fs.close();
+  }
+  return rows.length;
+}
+
+/**
+ * What the move to shared files (§37) left in the old folders of messages and collection items: deleted a few at a
+ * time, once the move is committed. Returns how many it looked at.
+ * @param {core.App} app
+ * @param {() => void} [beat]
+ */
+function cleanupPass(app, beat) {
+  const rows = arrayOf(new DynamicModel({ id: "", prefix: "" }));
+  app.db().newQuery("SELECT id, prefix FROM storage_cleanup LIMIT {:n}").bind({ n: BATCH }).all(rows);
+  if (!rows.length) return 0;
+  const fs = app.newFilesystem();
+  try {
+    for (const row of rows) {
+      // A folder of its own (collection/record), never a shorter one.
+      if (/^[a-z0-9_]+\/[a-z0-9]+$/i.test(row.prefix)) {
+        const errs = fs.deletePrefix(`${row.prefix}/`);
+        for (const err of errs ?? []) if (err) app.logger().warn("media: cleanup", "prefix", row.prefix, "error", String(err));
+      }
+      app.db().newQuery("DELETE FROM storage_cleanup WHERE id = {:id}").bind({ id: row.id }).execute();
+      beat?.();
     }
   } finally {
     fs.close();
@@ -561,23 +487,29 @@ function shapeOf(fs, key) {
 }
 
 /**
- * Record a file's shape in its message's `file_dims`. Not a save: no hooks, no realtime event, `updated` unchanged
- * (clients have it from the next load; until then the tile takes its width once loaded, as before).
+ * Record a file's shape on its row, and in the `file_dims` of every message that has it (the media index knows
+ * them). Not a save: no hooks, no realtime event, `updated` unchanged (clients have it from the next load; until then
+ * the tile takes its width once loaded, as before).
  * @param {core.App} app
- * @param {string} id
- * @param {string} file
+ * @param {core.Record} row
  * @param {[number, number]} size
  */
-function setDims(app, id, file, size) {
+function setDims(app, row, size) {
+  const file = row.getString("file");
+  app
+    .db()
+    .newQuery("UPDATE files SET dims = json_array({:w}, {:h}) WHERE id = {:id}")
+    .bind({ id: row.id, w: size[0], h: size[1] })
+    .execute();
   app
     .db()
     .newQuery(
       `UPDATE messages SET file_dims = json_set(
          CASE WHEN json_valid(file_dims) THEN (CASE WHEN json_type(file_dims) = 'object' THEN file_dims ELSE '{}' END) ELSE '{}' END,
          {:path}, json_array({:w}, {:h}))
-       WHERE id = {:id}`,
+       WHERE id IN (SELECT DISTINCT source FROM media WHERE file = {:file})`,
     )
-    .bind({ id, path: `$."${file}"`, w: size[0], h: size[1] })
+    .bind({ file, path: `$."${file}"`, w: size[0], h: size[1] })
     .execute();
 }
 
@@ -597,7 +529,7 @@ function run(app) {
 }
 
 /**
- * A message with files, or a collection item, was saved (committed): the worker looks at it now.
+ * A message with files, or a collection item, was saved (committed): the worker looks at its files now.
  * @param {core.App} app
  */
 function wake(app) {
@@ -613,4 +545,4 @@ function tick(e) {
   return e.noContent(204);
 }
 
-module.exports = { add, drop, list, poster, itemPoster, run, wake, tick, isMedia, isVideo, tempCopy, posterKey, posterReady };
+module.exports = { add, drop, list, poster, itemPoster, run, wake, tick };

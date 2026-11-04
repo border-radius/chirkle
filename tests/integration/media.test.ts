@@ -1,7 +1,7 @@
 // The media grid's server side (§30.1): the `media` index kept by the messages hooks, GET /api/chat/media/{room}, the
 // worker's thumbnails and video posters (POST /api/media/tick), and GET /api/chat/posters/{message}/{file}.
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -48,13 +48,26 @@ async function media(u: TestUser | null, room: string, query: Record<string, str
 }
 
 let admin: Awaited<ReturnType<typeof adminClient>>;
-let messagesId = "";
+let filesId = "";
 const tick = () => admin.send("/api/media/tick", { method: "POST" });
-const stored = (id: string, path: string) => existsSync(join(inject("pbDataDir"), "storage", messagesId, id, path));
+/** The `files` row of a stored name (§37), "" when there is none. */
+function rowOf(file: string) {
+  const db = rawDb();
+  try {
+    return (db.prepare("SELECT id FROM files WHERE file = ?").get(file) as { id: string } | undefined)?.id ?? "";
+  } finally {
+    db.close();
+  }
+}
+/** Is `path` stored in the folder of file `file`'s row (false once the row is gone)? */
+function stored(file: string, path: string) {
+  const id = rowOf(file);
+  return !!id && existsSync(join(inject("pbDataDir"), "storage", filesId, id, path));
+}
 
 beforeAll(async () => {
   admin = await adminClient();
-  messagesId = (await admin.collections.getOne("messages")).id;
+  filesId = (await admin.collections.getOne("files")).id;
 });
 
 describe("GET /api/chat/media/{room} (§30.1)", () => {
@@ -139,65 +152,60 @@ describe("the media worker (§30.1)", () => {
     const old = await send(a, room.id, [png("old.png")]);
     const db = rawDb({ write: true });
     try {
-      db.prepare("UPDATE media SET sent = '2025-01-01 00:00:00.000Z' WHERE message = ?").run(old.id);
+      db.prepare("UPDATE files SET created = '2025-01-01 00:00:00.000Z' WHERE file = ?").run(old.files[0]);
     } finally {
       db.close();
     }
     const f = m.files[0];
     const o = old.files[0];
-    expect(stored(m.id, `thumbs_${f}/240x240_${f}`)).toBe(false);
+    expect(stored(f, `thumbs_${f}/240x240_${f}`)).toBe(false);
     await tick();
-    for (const size of ["240x240", "800x480f", "480x240f"]) expect(stored(m.id, `thumbs_${f}/${size}_${f}`)).toBe(true);
-    expect(stored(old.id, `thumbs_${o}/240x240_${o}`)).toBe(true);
-    expect(stored(old.id, `thumbs_${o}/800x480f_${o}`)).toBe(false);
+    for (const size of ["240x240", "800x480f", "480x240f"]) expect(stored(f, `thumbs_${f}/${size}_${f}`)).toBe(true);
+    expect(stored(o, `thumbs_${o}/240x240_${o}`)).toBe(true);
+    expect(stored(o, `thumbs_${o}/800x480f_${o}`)).toBe(false);
   });
 
-  it.skipIf(!mp4 && !process.env.CI)("makes a video's poster, served to whoever may see the video, its forwards' readers too", async () => {
-    const a = await newUser();
-    const b = await newUser();
-    const room = await newRoom(a);
-    const m = await send(a, room.id, [video("clip.mp4")]);
-    const file = m.files[0] as string;
-    const url = (token: string, id = m.id) => `${inject("pbUrl")}/api/chat/posters/${id}/${file}${token ? `?token=${token}` : ""}`;
-    expect((await fetch(url(await a.pb.files.getToken()))).status).toBe(404); // not made yet
-    expect(m.file_dims).toEqual({}); // nor its shape, which is the poster's
+  it.skipIf(!mp4 && !process.env.CI)(
+    "makes a video's poster, served by its URL alone (§37.3), under a forward's original's id too",
+    async () => {
+      const a = await newUser();
+      const b = await newUser();
+      const room = await newRoom(a);
+      const m = await send(a, room.id, [video("clip.mp4")]);
+      const file = m.files[0] as string;
+      const url = (token = "", id = m.id) => `${inject("pbUrl")}/api/chat/posters/${id}/${file}${token ? `?token=${token}` : ""}`;
+      expect((await fetch(url())).status).toBe(404); // not made yet
+      expect(m.file_dims).toEqual({}); // nor its shape, which is the poster's
 
-    await tick();
-    expect((await a.pb.collection("messages").getOne(m.id)).file_dims).toEqual({ [file]: [64, 48] });
-    expect((await media(a, room.id)).items[0]).toMatchObject({ video: true, poster: true });
-    const res = await fetch(url(await a.pb.files.getToken()));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("image/jpeg");
-    expect(res.headers.get("cache-control")).toBe("private, max-age=2592000");
-    const jpeg = new Uint8Array(await res.arrayBuffer());
-    expect([jpeg[0], jpeg[1]]).toEqual([0xff, 0xd8]);
-    // In the video's own shape, for the room's tiles (§17.5), and never enlarged: the clip is 64×48.
-    expect(jpegSize(jpeg)).toEqual({ width: 64, height: 48 });
-    // A public room: any signed-in user's file token, never none.
-    expect((await fetch(url(await b.pb.files.getToken()))).status).toBe(200);
-    expect((await fetch(url(""))).status).toBe(404);
+      await tick();
+      expect((await a.pb.collection("messages").getOne(m.id)).file_dims).toEqual({ [file]: [64, 48] });
+      expect((await media(a, room.id)).items[0]).toMatchObject({ video: true, poster: true });
+      const res = await fetch(url());
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("image/jpeg");
+      expect(res.headers.get("cache-control")).toBe("private, max-age=2592000");
+      const jpeg = new Uint8Array(await res.arrayBuffer());
+      expect([jpeg[0], jpeg[1]]).toEqual([0xff, 0xd8]);
+      // In the video's own shape, for the room's tiles (§17.5), and never enlarged: the clip is 64×48.
+      expect(jpegSize(jpeg)).toEqual({ width: 64, height: 48 });
+      // A token is ignored.
+      expect((await fetch(url(await b.pb.files.getToken()))).status).toBe(200);
 
-    // A forward shows the poster from the start, and its readers get it under the original's id, as the file (§17.3).
-    const dm = await b.pb.send<RecordModel>("/api/chat/dms", { method: "POST", body: { user: a.user.id } });
-    await a.pb.send("/api/chat/forward", { method: "POST", body: { messages: [m.id], room: dm.id } });
-    expect((await media(b, dm.id)).items[0]).toMatchObject({ source: m.id, poster: true });
+      // A forward shows the poster from the start, and its readers get it under the original's id, as the file (§17.3).
+      const dm = await b.pb.send<RecordModel>("/api/chat/dms", { method: "POST", body: { user: a.user.id } });
+      await a.pb.send("/api/chat/forward", { method: "POST", body: { messages: [m.id], room: dm.id } });
+      expect((await media(b, dm.id)).items[0]).toMatchObject({ source: m.id, poster: true });
+      const [fwd] = await b.pb.collection("messages").getFullList({ filter: `room = "${dm.id}"` });
+      expect((await fetch(url("", fwd!.id))).status).toBe(200);
 
-    // Deleted: the poster goes with the file.
-    await a.pb.collection("messages").update(m.id, { deleted: true });
-    expect((await fetch(url(await a.pb.files.getToken()))).status).toBe(404);
-    expect(stored(m.id, `thumbs_${file}/poster.jpg`)).toBe(false);
-  });
-
-  it.skipIf(!mp4 && !process.env.CI)("keeps a private room's poster to its members", async () => {
-    const a = await newUser();
-    const b = await newUser();
-    const priv = await a.pb.collection("rooms").create({ name: `p-${Date.now()}`, created_by: a.user.id, visibility: "private" });
-    const m = await send(a, priv.id, [video("clip.mp4")]);
-    await tick();
-    const url = async (u: TestUser) => `${inject("pbUrl")}/api/chat/posters/${m.id}/${m.files[0]}?token=${await u.pb.files.getToken()}`;
-    expect((await fetch(await url(a))).status).toBe(200);
-    expect((await fetch(await url(b))).status).toBe(404);
-  });
+      // Deleted: the poster goes with the file.
+      expect(stored(file, `thumbs_${file}/poster.jpg`)).toBe(true);
+      await a.pb.collection("messages").update(m.id, { deleted: true });
+      expect((await fetch(url())).status).toBe(404);
+      expect((await fetch(url("", fwd!.id))).status).toBe(404);
+      expect(rowOf(file)).toBe("");
+    },
+  );
 
   it("records the shapes of files sent before messages kept them (§17.5), each file once", async () => {
     const a = await newUser();
@@ -209,7 +217,7 @@ describe("the media worker (§30.1)", () => {
     const db = rawDb({ write: true });
     try {
       db.prepare("UPDATE messages SET file_dims = 'null' WHERE id = ?").run(m.id);
-      db.prepare("UPDATE media SET sized = FALSE WHERE message = ?").run(m.id);
+      db.prepare("UPDATE files SET sized = FALSE, dims = NULL WHERE file IN (?, ?, ?)").run(...(m.files as string[]));
     } finally {
       db.close();
     }
@@ -221,7 +229,12 @@ describe("the media worker (§30.1)", () => {
     expect(after.updated).toBe(before.updated); // not a save: nothing else changes
     const check = rawDb();
     try {
-      expect(check.prepare("SELECT sized FROM media WHERE message = ?").all(m.id)).toEqual([{ sized: 1 }, { sized: 1 }]);
+      expect(check.prepare("SELECT sized FROM files WHERE file IN (?, ?, ?) ORDER BY file").all(...(m.files as string[]))).toEqual([
+        { sized: 1 },
+        { sized: 1 },
+        { sized: 1 },
+      ]);
+      expect(check.prepare("SELECT dims FROM files WHERE file = ?").get(f0!)).toEqual({ dims: "[64,48]" });
     } finally {
       check.close();
     }
@@ -231,15 +244,14 @@ describe("the media worker (§30.1)", () => {
     const a = await newUser();
     const room = await newRoom(a);
     const m = await send(a, room.id, [png("p.png")]);
-    const token = await a.pb.files.getToken();
     for (const path of [`${m.id}/${m.files[0]}`, `${m.id}/other_abcdefghij.mp4`, `nope/${m.files[0]}`]) {
-      expect((await fetch(`${inject("pbUrl")}/api/chat/posters/${path}?token=${token}`)).status).toBe(404);
+      expect((await fetch(`${inject("pbUrl")}/api/chat/posters/${path}`)).status).toBe(404);
     }
   });
 });
 
-describe("migration 1760000029_media.js", () => {
-  it("indexes the messages there already are: media only, a forward's from its original, none of deleted ones", async () => {
+describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => {
+  it("index the messages there are: media only, a forward's from its original, none of deleted ones", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "media-migration-"));
     let server = await startPocketBase({ dataDir });
     try {
@@ -259,25 +271,24 @@ describe("migration 1760000029_media.js", () => {
       await pb.send("/api/chat/forward", { method: "POST", body: { messages: [a.id], room: other.id } });
       await server.stop();
 
-      migrate(dataDir, "down", "1");
+      // Down past the media index, and up again: it is filled from the messages.
+      migrate(dataDir, "down", "2");
       migrate(dataDir, "up");
       const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
       try {
-        const rows = db.prepare("SELECT room, message, source, file, pos, video, sent, ready, poster, length(id) AS n FROM media").all();
+        const rows = db.prepare("SELECT room, message, source, file, pos, video, sent, length(id) AS n FROM media").all();
         const fwd = (db.prepare("SELECT id FROM messages WHERE forward_of = ?").get(a.id) as { id: string }).id;
-        const row = (r: string, message: string, pos: number, ready: number) => ({
+        const row = (r: string, message: string, pos: number) => ({
           room: r,
           message,
           source: a.id,
           file: a.files[pos],
           pos,
           video: pos === 2 ? 1 : 0,
-          ready,
-          poster: 0,
           n: 15,
         });
         expect(rows.map(({ sent, ...r }) => r)).toEqual(
-          expect.arrayContaining([row(room.id, a.id, 0, 0), row(room.id, a.id, 2, 0), row(other.id, fwd, 0, 1), row(other.id, fwd, 2, 1)]),
+          expect.arrayContaining([row(room.id, a.id, 0), row(room.id, a.id, 2), row(other.id, fwd, 0), row(other.id, fwd, 2)]),
         );
         expect(rows).toHaveLength(4);
         expect(rows.filter((r) => r.message === a.id).map((r) => r.sent)).toEqual([a.created, a.created]);
@@ -290,4 +301,101 @@ describe("migration 1760000029_media.js", () => {
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("move every file into `files` once: an item saved from a message file or an item names that file, its copy goes", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "files-migration-"));
+    let server = await startPocketBase({ dataDir });
+    try {
+      const pb = new PocketBase(server.url);
+      pb.autoCancellation(false);
+      const email = "files-mig@test.local";
+      const su = new PocketBase(server.url);
+      await su.collection("_superusers").authWithPassword(SUPERUSER.email, SUPERUSER.password);
+      await su.collection("users").create({ email, password: "password-123", passwordConfirm: "password-123", name: "Mig" });
+      const { record: me } = await pb.collection("users").authWithPassword(email, "password-123");
+      const room = await pb.collection("rooms").create({ name: "files-mig", created_by: me.id });
+      const a = await pb.collection("messages").create({ room: room.id, author: me.id, files: [png("a.png"), pdf("a.pdf")] });
+      const c1 = await pb.collection("collections").create({ owner: me.id, name: "One" });
+      const c2 = await pb.collection("collections").create({ owner: me.id, name: "Two" });
+      const i1 = await pb.send<RecordModel>("/api/chat/items", {
+        method: "POST",
+        body: { collection: c1.id, message: a.id, file: a.files[0] },
+      });
+      const form = new FormData();
+      form.append("collection", c1.id);
+      form.append("file", png("up.png"));
+      const i2 = await pb.send<RecordModel>("/api/chat/items", { method: "POST", body: form });
+      const i3 = await pb.send<RecordModel>("/api/chat/items", { method: "POST", body: { collection: c2.id, item: i1.id } });
+      await su.send("/api/media/tick", { method: "POST" });
+      await server.stop();
+
+      // Down: each message and item has its own copy in its own folder again, as before shared files.
+      migrate(dataDir, "down", "1");
+      const storage = join(dataDir, "storage");
+      const ids = (() => {
+        const db = new DatabaseSync(join(dataDir, "data.db"));
+        try {
+          const id = (name: string) => (db.prepare("SELECT id FROM _collections WHERE name = ?").get(name) as { id: string }).id;
+          // As the copies were made before: where each came from.
+          db.prepare("UPDATE collection_items SET origin = ? WHERE id = ?").run(`m:${a.id}/${a.files[0]}`, i1.id);
+          db.prepare("UPDATE collection_items SET origin = '' WHERE id = ?").run(i2.id);
+          db.prepare("UPDATE collection_items SET origin = ? WHERE id = ?").run(`i:${i1.id}`, i3.id);
+          return { messages: id("messages"), items: id("collection_items") };
+        } finally {
+          db.close();
+        }
+      })();
+      expect(existsSync(join(storage, ids.messages, a.id, a.files[0]))).toBe(true);
+      expect(existsSync(join(storage, ids.items, i1.id, i1.file))).toBe(true);
+      expect(existsSync(join(storage, ids.items, i3.id, i3.file))).toBe(true);
+
+      migrate(dataDir, "up");
+      const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
+      let filesId = "";
+      try {
+        filesId = (db.prepare("SELECT id FROM _collections WHERE name = 'files'").get() as { id: string }).id;
+        const refs = Object.fromEntries(
+          (db.prepare("SELECT file, refs FROM files").all() as { file: string; refs: number }[]).map((r) => [r.file, r.refs]),
+        );
+        expect(refs).toEqual({ [a.files[0]]: 3, [a.files[1]]: 1, [i2.file]: 1 });
+        const items = db.prepare("SELECT id, file FROM collection_items ORDER BY created, id").all() as { id: string; file: string }[];
+        expect(Object.fromEntries(items.map((i) => [i.id, i.file]))).toEqual({
+          [i1.id]: a.files[0],
+          [i2.id]: i2.file,
+          [i3.id]: a.files[0],
+        });
+        expect((db.prepare("SELECT files FROM messages WHERE id = ?").get(a.id) as { files: string }).files).toBe(JSON.stringify(a.files));
+        expect(db.prepare("SELECT COUNT(*) AS n FROM storage_cleanup").get()).toEqual({ n: 4 });
+      } finally {
+        db.close();
+      }
+
+      server = await startPocketBase({ dataDir });
+      pb.baseURL = server.url;
+      su.baseURL = server.url;
+      // Signed in again: starting it upserts the superuser.
+      await su.collection("_superusers").authWithPassword(SUPERUSER.email, SUPERUSER.password);
+      await pb.collection("users").authWithPassword(email, "password-123");
+      const at = (path: string) => fetch(`${server.url}${path}`).then((r) => r.status);
+      expect(await at(`/api/files/messages/${a.id}/${a.files[0]}?thumb=240x240`)).toBe(200);
+      expect(await at(`/api/files/messages/${a.id}/${a.files[1]}`)).toBe(200);
+      expect(await at(`/api/files/collection_items/${i3.id}/${a.files[0]}`)).toBe(200);
+      expect(await at(`/api/files/collection_items/${i2.id}/${i2.file}`)).toBe(200);
+      await su.send("/api/media/tick", { method: "POST" });
+      // The old folders are gone, the files' are there.
+      expect(existsSync(join(storage, ids.messages, a.id))).toBe(false);
+      expect(existsSync(join(storage, ids.items, i1.id))).toBe(false);
+      expect(existsSync(join(storage, ids.items, i2.id))).toBe(false);
+      expect(await at(`/api/files/collection_items/${i1.id}/${a.files[0]}`)).toBe(200);
+      expect(readdirSync(join(storage, filesId))).toHaveLength(3);
+      // The message deleted: its image stays for the items, its PDF goes.
+      await pb.collection("messages").update(a.id, { deleted: true });
+      expect(await at(`/api/files/messages/${a.id}/${a.files[0]}`)).toBe(404);
+      expect(await at(`/api/files/collection_items/${i1.id}/${a.files[0]}`)).toBe(200);
+      expect(readdirSync(join(storage, filesId))).toHaveLength(2);
+    } finally {
+      await server.stop();
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, 90_000);
 });

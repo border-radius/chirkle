@@ -40,10 +40,8 @@ export interface ViewerOptions {
   name: (m: Message, file: string) => string;
   /** When a message was sent, for the caption. */
   when: (m: Message) => string;
-  /** Signed URL of the full file (§17.3). */
+  /** URL of the full file (§37.3). */
   fileUrl: (m: Message, file: string) => string;
-  /** Get a new file token (an image failed to load, maybe because its token expired). */
-  refreshFileToken: () => Promise<unknown>;
   /**
    * Show in chat: go to this message in the room (the viewer has closed). Its tile gets focus once it's there. None
    * for a collection's items (§31).
@@ -154,8 +152,6 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
   const more = [...o.more];
   const fetching: (Promise<void> | null)[] = [null, null];
   let index = o.start;
-  /** The shown image failed once already: the next failure is final (until Retry). */
-  let retried = false;
   let closed = false;
 
   /**
@@ -194,7 +190,7 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
     title.textContent = name;
     meta.textContent = m.author ? `${m.expand?.author?.name ?? "Unknown"} · ${o.when(m)}` : o.when(m);
     download.download = name;
-    sign();
+    download.href = o.fileUrl(m, file);
     update();
     load();
     // The neighbouring images, so stepping to them is instant (not videos: they load when shown).
@@ -250,7 +246,6 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
 
   function load() {
     const { message: m, file, video: isVideo } = shown();
-    retried = false;
     failure.hidden = true;
     stage.classList.add("loading");
     img.hidden = !!isVideo;
@@ -312,52 +307,10 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
     }
     if (list[index + step]) show(index + step);
   }
-  /** The download link gets a fresh token whenever it is about to be used. */
-  const sign = () => (download.href = o.fileUrl(shown().message, shown().file));
-
   img.addEventListener("load", () => stage.classList.remove("loading"), { signal });
   video.addEventListener("loadeddata", () => stage.classList.remove("loading"), { signal });
-  // A video's token can expire while it plays (the browser fetches it in ranges): carry on with a new one from where
-  // it was.
-  video.addEventListener(
-    "error",
-    () => {
-      if (!video.getAttribute("src")) return;
-      if (retried) return failed();
-      const at = shown();
-      const time = video.currentTime;
-      const playing = !video.paused;
-      void o.refreshFileToken().then(
-        () => {
-          if (at !== shown() || closed) return;
-          retried = true;
-          video.src = o.fileUrl(shown().message, shown().file);
-          video.currentTime = time;
-          if (playing) video.play().catch(() => {});
-        },
-        () => at === shown() && failed(),
-      );
-    },
-    { signal },
-  );
-  img.addEventListener(
-    "error",
-    () => {
-      if (!img.getAttribute("src")) return;
-      if (retried) return failed();
-      const at = shown();
-      void o.refreshFileToken().then(
-        () => {
-          if (at !== shown() || closed) return;
-          retried = true;
-          img.src = o.fileUrl(shown().message, shown().file);
-        },
-        () => at === shown() && failed(),
-      );
-    },
-    { signal },
-  );
-  for (const type of ["pointerenter", "focus", "click"] as const) download.addEventListener(type, sign, { signal });
+  video.addEventListener("error", () => video.getAttribute("src") && failed(), { signal });
+  img.addEventListener("error", () => img.getAttribute("src") && failed(), { signal });
 
   // Escape (the dialog's own cancel) and anything else that closes it.
   dialog.addEventListener("close", () => close(true), { signal });

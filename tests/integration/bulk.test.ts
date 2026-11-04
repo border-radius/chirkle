@@ -198,13 +198,14 @@ describe("forward messages (§21.3)", () => {
     expect(copy!.files).toEqual(msg.files);
     expect(Object.values(copy!.file_names)).toEqual(["holiday.png"]);
     expect(stored(copy!.id)).toMatchObject({ files: "[]" });
-    const fileStatus = async (u: TestUser) => {
-      const token = await u.pb.files.getToken();
-      const res = await fetch(u.pb.files.getURL(msg, msg.files[0], { token }));
+    // By URL (§37.3): the original's, or the forward's own, whoever has it.
+    const fileStatus = async (u: TestUser, of = msg) => {
+      const res = await fetch(u.pb.files.getURL(of, msg.files[0]));
       return [res.status, res.status === 200 ? res.headers.get("content-type") : null];
     };
     expect(await fileStatus(b)).toEqual([200, "image/png"]);
-    expect(await fileStatus(c)).toEqual([404, null]);
+    expect(await fileStatus(c)).toEqual([200, "image/png"]);
+    expect(await fileStatus(b, copy!)).toEqual([200, "image/png"]);
 
     // In an Open Air room, guests too.
     const open = await a.pb.collection("rooms").create({ name: `open-${uniq()}`, created_by: a.user.id, visibility: "open" });

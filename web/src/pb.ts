@@ -146,7 +146,7 @@ export interface PbClient {
   send<T>(path: string, opts?: RequestOptions): Promise<T>;
   /** Bind `{:name}` placeholders in a filter expression, quoting and escaping the values. */
   filter(expr: string, params: Record<string, string | number | boolean | null>): string;
-  /** URL of a record's file (`query`: thumb, token). */
+  /** URL of a record's file (`query`: thumb). */
   fileUrl(collection: string, recordId: string, filename: string, query?: Query): string;
 }
 

@@ -20,7 +20,7 @@ export interface MediaOptions {
   room: string;
   /** The room's name, in the title ("Media in #design"); none for a DM. */
   label?: string | undefined;
-  api: Pick<Api, "media" | "fileUrl" | "posterUrl" | "fileToken">;
+  api: Pick<Api, "media" | "fileUrl" | "posterUrl">;
   h: typeof h;
   /** What to call a file (`attachmentName`). */
   name: (m: Message, file: string) => string;
@@ -159,22 +159,8 @@ export function openMedia(o: MediaOptions): void {
     const src = () => (video ? api.posterUrl(m, file) : api.fileUrl(m, file, "240x240"));
     // A video without a poster (not made yet, or no ffmpeg on the server) is a plain tile with ▶.
     const pic = (!video || row.poster) && h("img", { src: src(), alt: "", loading: "lazy", decoding: "async" });
-    let retried = false;
-    if (pic) {
-      pic.addEventListener(
-        "error",
-        () => {
-          // Again, with a new token (it may have expired); a poster that fails twice leaves the plain tile.
-          if (retried) return video && pic.remove();
-          retried = true;
-          void api.fileToken(true).then(
-            () => (pic.src = src()),
-            () => {},
-          );
-        },
-        { signal },
-      );
-    }
+    // A poster that fails leaves the plain tile.
+    if (pic && video) pic.addEventListener("error", () => pic.remove(), { signal });
     const label = `${name}${video ? ", video" : ""}, ${m.expand?.author?.name ?? "Unknown"}, ${d.toLocaleDateString()}`;
     const index = items.push({ message: m, file, video }) - 1;
     const tile = h(

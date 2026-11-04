@@ -84,7 +84,6 @@ describe("app boot (§7.1)", () => {
     expect(items).toEqual(["Jump to beginning"]);
     await tick();
     expect(ctl.calls("usersById")).toBe(0);
-    expect(ctl.calls("fileToken")).toBeLessThanOrEqual(1); // answered "" without a request
     await api.unsubscribeAll();
   });
 

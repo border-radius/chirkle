@@ -156,9 +156,10 @@ class UiCollectionsTest {
         compose.onNodeWithContentDescription("Save to collection").performClick()
         tapInList(to)
         ui.waitFor("Saved.")
-        ui.until { a.api.savedIn(SaveFrom.Item(item.id)).keys == setOf(toId) }
+        // The file is one (DESIGN.md §37): it is in the collection it was opened from, and now in To.
+        ui.until { a.api.savedIn(SaveFrom.Item(item.id)).keys == setOf(from, toId) }
         tapInList(to)
         ui.waitFor("Removed.")
-        ui.until { a.api.savedIn(SaveFrom.Item(item.id)).isEmpty() }
+        ui.until { a.api.savedIn(SaveFrom.Item(item.id)).keys == setOf(from) }
     }
 }

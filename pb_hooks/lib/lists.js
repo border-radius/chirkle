@@ -78,7 +78,8 @@ function messages(e) {
     "room = {:room}",
     ...searchWhere(q.q ?? "", params),
     kind.where,
-    q.files === "1" ? `(files:length > 0 || forward_of != "")` : "",
+    // `files` is JSON (§37): `:length` means nothing on it, and every message has at least [].
+    q.files === "1" ? `(files != "[]" || forward_of != "")` : "",
   ];
   return tagged(e, list(e, where, kind.sort, q, params, [roomId]));
 }

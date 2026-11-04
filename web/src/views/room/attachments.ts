@@ -17,12 +17,10 @@ export type Attachments = ((m: Message) => HTMLElement | null) & {
 };
 
 export function createAttachments(opts: {
-  /** Signed URL of an attachment (§17.3). */
+  /** URL of an attachment (§37.3). */
   fileUrl: (m: Message, filename: string, thumb?: string) => string;
-  /** Signed URL of a video's poster frame (§30.1): 404 until the server has made one. */
+  /** URL of a video's poster frame (§30.1): 404 until the server has made one. */
   posterUrl: (m: Message, filename: string) => string;
-  /** Get a new file token (an image failed to load, maybe because its token expired). */
-  refreshFileToken: () => Promise<unknown>;
   /** A thumbnail was clicked: show the image or video in the viewer (§17.7). */
   onOpenImage: (m: Message, file: string, opener: HTMLElement) => void;
   /** How much of a sending message's attachments has been uploaded, 0 to 1 (§17.4). */
@@ -162,43 +160,21 @@ export function createAttachments(opts: {
     return h("span", { class: "att-cell" }, [tile, badge, save]);
   }
 
-  /** A link to the full file, re-signed with the current token whenever it is about to be used. */
+  /** A link to the full file. */
   function fileLink(m: Message, name: string, cls: string, children: Child[]): HTMLAnchorElement {
-    const a = h(
+    return h(
       "a",
       { class: cls, href: opts.fileUrl(m, name), target: "_blank", rel: "noopener", download: attachmentName(m, name) },
       children,
     );
-    const sign = () => (a.href = opts.fileUrl(m, name));
-    for (const type of ["pointerenter", "focus", "click"] as const) a.addEventListener(type, sign, { signal });
-    return a;
   }
 
-  /**
-   * An audio file's player. Its URL's token expires (§17.3), so playing or seeking long after it loaded fails: then it
-   * gets a new token once and carries on where it was. A file it still can't load leaves the player's own error state.
-   */
+  /** An audio file's player, kept across redraws (it keeps playing). A file it can't load shows the player's own error state. */
   function player(m: Message, name: string): HTMLAudioElement {
     const key = `${m.id}/${name}`;
     const kept = players.get(key);
     if (kept) return kept;
     const el = h("audio", { src: opts.fileUrl(m, name), controls: true, preload: "metadata", "aria-label": attachmentName(m, name) });
-    let retried = false;
-    el.addEventListener("loadedmetadata", () => (retried = false), { signal });
-    el.addEventListener(
-      "error",
-      () => {
-        if (retried) return;
-        retried = true;
-        const [t, playing] = [el.currentTime, !el.paused];
-        void opts.refreshFileToken().then(() => {
-          el.src = opts.fileUrl(m, name);
-          el.currentTime = t;
-          if (playing) void el.play().catch(() => {});
-        });
-      },
-      { signal },
-    );
     players.set(key, el);
     return el;
   }
@@ -220,7 +196,7 @@ export function createAttachments(opts: {
    * An image's thumbnail or a video's first frame: a click opens the viewer, a click that asks for a new tab or window
    * (or a middle click) gets the full file there. A video shows the poster the server made of it (§30.1), so the
    * browser fetches nothing of the video; without one (not made yet, no ffmpeg there) it shows the video's own first
-   * frame. A failed load retries once with a new token, then offers Retry.
+   * frame. A failed load offers Retry.
    */
   function mediaTile(m: Message, name: string, thumb: string, ratio?: string): HTMLElement {
     const video = isVideo(name);
@@ -242,7 +218,6 @@ export function createAttachments(opts: {
       { signal },
     );
     const load = () => (el.src = video && !poster ? `${src()}#t=0.001` : src());
-    let retried = false;
     const failed = () => {
       // No poster: the video's first frame instead, as if there had never been one.
       if (poster) {
@@ -254,15 +229,9 @@ export function createAttachments(opts: {
         was.replaceWith(el);
         return;
       }
-      if (!retried) {
-        retried = true;
-        void opts.refreshFileToken().then(load, () => el.dispatchEvent(new Event("error")));
-        return;
-      }
       const broken = h("span", { class: "att-tile att-broken" }, [
         `Couldn't load ${video ? "video" : "image"} `,
         btn("Retry", () => {
-          retried = false;
           broken.replaceWith(tile);
           load();
         }),

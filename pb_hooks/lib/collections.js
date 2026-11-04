@@ -4,25 +4,23 @@
 // - collections hooks: a clean name, unique among the owner's (case folded), at most MAX_COLLECTIONS each; when one
 //   turns private or public, its subscribers hear of it (their own collection_subs rows are saved again). When one
 //   turns private or public, is renamed or is deleted, every client listening to BADGES_TOPIC hears its id.
-// - POST /api/chat/items: a copy of a message's image or video (or of another collection's item) in a collection of
-//   yours, or (multipart { collection, file }) an image or video uploaded straight into one. DELETE
+// - POST /api/chat/items: a message's image or video (or another collection's item) in a collection of yours, or
+//   (multipart { collection, file }) an image or video uploaded straight into one. DELETE
 //   /api/chat/items/{id}: the owner takes one out. GET /api/chat/saved?message=&file= (or ?item=): which of your
 //   collections have that file already.
-// - Messages: a create may name collection items (`items`) whose files it attaches, copied into the message
-//   (attachItems), and file_sources says which collection each came from.
+// - Messages: a create may name collection items (`items`) whose files it attaches (itemsToAttach), and file_sources
+//   says which collection each came from.
 // - GET /api/chat/collections: yours and the public ones you follow, with how many items are new in those.
 // - GET /api/chat/badges?ids=: what a message's "from collection" badge may say about each collection.
 // - POST /api/chat/subs { collection, on }: follow or stop following; POST /api/chat/subs/seen { collection, at? }:
 //   seen up to `at`, as POST /api/chat/reads does for a room (§18.2).
 //
-// Files are copied by Go, never through JS. A save copies the stored file straight to the new item's folder (fs.copy: in
-// S3 the bucket copies it, CopyObject, so it isn't downloaded and uploaded again). An attach adds uploads to a message
-// being created: PocketBase reads the stored file from its path, or, kept in S3, from a copy in the temp folder
-// (media.js tempCopy), removed once the save is done.
+// Nothing is copied (§37): an item names the same `files` row as the message it was saved from, and a message the
+// same as the item it attached (lib/files.js). An item's `origin` is its file's row: a file is in a collection once.
 
 const { cleanName, fieldError, recordOf } = require(`${__hooks}/lib/records.js`);
 const { clipFileName, nameKey, tidy, unescapeUploadName } = require(`${__hooks}/lib/text.js`);
-const media = require(`${__hooks}/lib/media.js`);
+const files = require(`${__hooks}/lib/files.js`);
 
 const MAX_COLLECTIONS = 50;
 const MAX_ITEMS = 2000;
@@ -34,8 +32,6 @@ const PREVIEW_ITEMS = 4;
 /** The realtime topic that hears a collection's id when what its badge says may have changed (§31). */
 const BADGES_TOPIC = "chat/badges";
 const MAX_BADGES = 50;
-/** As messages.files maxSelect (§17.1). */
-const MAX_FILES = 10;
 
 /** @param {core.RequestEvent} e */
 function me(e) {
@@ -69,47 +65,6 @@ function find(app, collection, id) {
 function canView(e, rec) {
   const rule = rec.collection().viewRule;
   return rule !== null && rule !== undefined && e.app.canAccessRecord(rec, e.requestInfo(), rule);
-}
-
-/** The storage folder of a record's files. @param {core.Record} rec */
-const dirOf = (rec) => `${rec.collection().id}/${rec.id}`;
-
-/** PocketBase's stored names end in "_" and 10 random characters (QA BUG-28). @param {string} file */
-function storedName(file) {
-  const dot = file.lastIndexOf(".");
-  const stem = (dot > 0 ? file.slice(0, dot) : file).replace(/_[a-z0-9]{10}$/, "");
-  return `${stem}_${$security.randomStringWithAlphabet(10, "abcdefghijklmnopqrstuvwxyz0123456789")}${dot > 0 ? file.slice(dot) : ""}`;
-}
-
-/**
- * A new upload of a stored file, under a new stored name (`name` is its original name), for a record about to be
- * saved; `temp` is the copy to remove once it is saved ("" when PocketBase reads the stored file itself). Null when
- * the file is gone.
- * @param {core.App} app
- * @param {filesystem.System} fs
- * @param {string} dir
- * @param {string} file
- * @param {string} name
- */
-function copyOf(app, fs, dir, file, name) {
-  const key = `${dir}/${file}`;
-  if (!fs.exists(key)) return null;
-  const temp = app.settings().s3.enabled ? media.tempCopy(fs, key, file) : "";
-  const upload = $filesystem.fileFromPath(temp || `${app.dataDir()}/storage/${key}`);
-  upload.name = storedName(file);
-  upload.originalName = name || file;
-  return { upload, temp };
-}
-
-/** @param {string[]} temps */
-function removeAll(temps) {
-  for (const path of temps) {
-    try {
-      $os.remove(path);
-    } catch {
-      // already gone
-    }
-  }
 }
 
 // ---------------------------------------------------------------- collections
@@ -318,9 +273,10 @@ const itemOut = (item) => ({
 });
 
 /**
- * POST /api/chat/items { collection, message, file } or { collection, item } → the new item: a copy of a message's
- * image or video (one you can see: a forward's original too, §21.3) or of an item you can see, in a collection of
- * yours. 409 when the same file is in it already. Multipart { collection, file }: the upload itself (addUpload).
+ * POST /api/chat/items { collection, message, file } or { collection, item } → the new item: a message's image or
+ * video (one you can see: a forward's original too, §21.3) or an item you can see, in a collection of yours, naming
+ * the same file (§37). 409 when that file is in it already. Multipart { collection, file }: the upload itself
+ * (addUpload).
  * @param {core.RequestEvent} e
  */
 function saveItem(e) {
@@ -334,80 +290,58 @@ function saveItem(e) {
   const upload = uploaded(e);
   if (upload) return e.json(200, itemOut(addUpload(e.app, coll, upload)));
 
-  /** @type {{ dir: string, file: string, name: string, origin: string }} */
-  let src;
+  /** @type {string} */
+  let name;
   if (str("item")) {
     const item = find(e.app, "collection_items", str("item"));
     if (!item || !canView(e, item)) throw new NotFoundError("The item doesn't exist.");
-    const file = item.getString("file");
-    src = { dir: dirOf(item), file, name: item.getString("name"), origin: item.getString("origin") || `i:${item.id}` };
+    name = item.getString("file");
   } else {
     const msg = find(e.app, "messages", str("message"));
     if (!msg || !canView(e, msg)) throw new NotFoundError("The message doesn't exist.");
     if (msg.getBool("deleted")) throw badRequest("message", "That message was deleted.");
-    const file = str("file");
-    if (!msg.getStringSlice("files").includes(file) || !media.isMedia(file))
+    name = str("file");
+    if (!msg.getStringSlice("files").includes(name) || !files.isMedia(name))
       throw badRequest("file", "Only images and videos can be saved.");
-    const names = /** @type {Record<string, unknown>} */ (JSON.parse(msg.getString("file_names") || "{}") ?? {});
-    src = { dir: dirOf(msg), file, name: typeof names[file] === "string" ? names[file] : "", origin: `m:${msg.id}/${file}` };
   }
+  const row = files.byName(e.app, name);
+  if (!row) throw new NotFoundError("The file doesn't exist.");
   const taken = () => new ApiError(409, "This is in the collection already.", {});
-  if (e.app.countRecords("collection_items", $dbx.hashExp({ collection: coll.id, origin: src.origin }))) throw taken();
-
-  const fs = e.app.newFilesystem();
-  /** The copy, until the item that names it is saved. */
-  let copied = "";
+  if (e.app.countRecords("collection_items", $dbx.hashExp({ collection: coll.id, origin: row.id }))) throw taken();
+  const item = new Record(e.app.findCollectionByNameOrId("collection_items"));
   try {
-    if (!fs.exists(`${src.dir}/${src.file}`)) throw new NotFoundError("The file doesn't exist.");
-    const item = new Record(e.app.findCollectionByNameOrId("collection_items"));
-    // Its id first: the copy goes in its folder before it is saved, under a name of its own (as an upload's would be).
-    item.set("id", $security.randomStringWithAlphabet(15, "abcdefghijklmnopqrstuvwxyz0123456789"));
-    const file = storedName(src.file);
-    fs.copy(`${src.dir}/${src.file}`, `${dirOf(item)}/${file}`);
-    copied = `${dirOf(item)}/${file}`;
-    item.set("collection", coll.id);
-    item.set("file", file);
-    item.set("name", src.name || src.file);
-    item.set("video", media.isVideo(src.file));
-    item.set("origin", src.origin);
-    try {
-      e.app.runInTransaction((tx) => {
-        // Not validated: PocketBase takes only uploads as a new record's files, and this one is in place already.
-        // Every field here is the route's own, checked above; the unique (collection, origin) index still holds.
-        tx.saveNoValidate(item);
-        const c = tx.findRecordById("collections", coll.id);
-        c.set("items", c.getInt("items") + 1);
-        c.set("last_added", new DateTime());
-        tx.save(c);
-      });
-    } catch (err) {
-      // Lost a race with another save of the same file: the unique (collection, origin) index kept it to one.
-      if (e.app.countRecords("collection_items", $dbx.hashExp({ collection: coll.id, origin: src.origin }))) throw taken();
-      throw err;
-    }
-    copied = "";
-    // A video saved from one that has its poster: the poster comes along, ffmpeg needn't run again.
-    if (item.getBool("video")) {
-      const from = media.posterKey(src.dir, src.file);
-      if (fs.exists(from)) {
-        fs.copy(from, media.posterKey(dirOf(item), item.getString("file")));
-        e.app.db().newQuery("UPDATE collection_items SET poster = TRUE WHERE id = {:id}").bind({ id: item.id }).execute();
-        item.set("poster", true);
-        media.posterReady(e.app, item.id);
-      }
-    }
-    return e.json(200, itemOut(item));
-  } finally {
-    // Not saved (a race lost, an error): no file is left behind without its item.
-    if (copied) {
-      try {
-        fs.delete(copied);
-      } catch {
-        // already gone
-      }
-    }
-    fs.close();
+    e.app.runInTransaction((tx) => addItem(tx, coll.id, item, row));
+  } catch (err) {
+    // Lost a race with another save of the same file: the unique (collection, origin) index kept it to one.
+    if (e.app.countRecords("collection_items", $dbx.hashExp({ collection: coll.id, origin: row.id }))) throw taken();
+    throw err;
   }
+  return e.json(200, itemOut(item));
+}
+
+/**
+ * Save `item`, new, in collection `collection` naming file `row` (linked), and count it in the collection.
+ * @param {core.App} tx
+ * @param {string} collection
+ * @param {core.Record} item
+ * @param {core.Record} row
+ */
+function addItem(tx, collection, item, row) {
+  // Found before the transaction: the message may have been deleted since, and the file with it.
+  if (!files.byName(tx, row.getString("file"))) throw new NotFoundError("The file doesn't exist.");
+  item.set("collection", collection);
+  item.set("file", row.getString("file"));
+  item.set("name", row.getString("name") || row.getString("file"));
+  item.set("video", row.getBool("video"));
+  // A video whose poster is made already (saved from a message that has one) shows it at once.
+  item.set("poster", row.getBool("poster"));
+  item.set("origin", row.id);
+  tx.save(item);
+  files.link(tx, [row.id]);
+  const c = tx.findRecordById("collections", collection);
+  c.set("items", c.getInt("items") + 1);
+  c.set("last_added", new DateTime());
+  tx.save(c);
 }
 
 /**
@@ -418,46 +352,38 @@ function saveItem(e) {
 function uploaded(e) {
   if (!(e.request?.header.get("Content-Type") ?? "").startsWith("multipart/")) return null;
   /** @type {(filesystem.File | undefined)[]} */
-  let files = [];
+  let list = [];
   try {
-    files = e.findUploadedFiles("file");
+    list = e.findUploadedFiles("file");
   } catch {
-    files = [];
+    list = [];
   }
-  if (files.length !== 1 || !files[0]) throw badRequest("file", "Upload one image or video.");
-  return files[0];
+  if (list.length !== 1 || !list[0]) throw badRequest("file", "Upload one image or video.");
+  return list[0];
 }
 
 /**
- * An image or video uploaded straight into a collection (§31.2): a new item of its own (no `origin`, so it is never
- * taken for a copy of something else). The field's limits (20 MB) are checked by the save; the media worker makes its
- * grid thumbnail or poster, as for a saved one.
+ * An image or video uploaded straight into a collection (§31.2): a new file (§37) and an item naming it. Its name is
+ * cleaned as an attachment's is (no bidi overrides, "cat‮gpj.exe"; capped in length with the extension kept, QA
+ * BUG-149): subscribers of a public collection see it. Held to an attachment's limits (20 MB; an image's size, QA
+ * BUG-140); the media worker makes its grid thumbnail or poster, as for any file.
  * @param {core.App} app
  * @param {core.Record} coll
  * @param {filesystem.File} upload
  */
 function addUpload(app, coll, upload) {
-  // Cleaned as an attachment's name is (records.js originalNames): no bidi overrides ("cat‮gpj.exe"), capped in length
-  // with the extension kept (QA BUG-149). Subscribers of a public collection see it.
   const name = clipFileName(tidy(unescapeUploadName(upload.originalName))) || upload.name;
-  upload.originalName = name;
-  if (!media.isMedia(name)) throw badRequest("file", "Only images and videos can be added.");
+  if (!files.isMedia(name) || !files.isMedia(upload.name)) throw badRequest("file", "Only images and videos can be added.");
   const item = new Record(app.findCollectionByNameOrId("collection_items"));
-  item.set("collection", coll.id);
-  item.set("file", upload);
-  item.set("name", name.slice(0, 200));
-  item.set("video", media.isVideo(name));
   app.runInTransaction((tx) => {
-    tx.save(item);
-    const c = tx.findRecordById("collections", coll.id);
-    c.set("items", c.getInt("items") + 1);
-    c.set("last_added", new DateTime());
-    tx.save(c);
+    const [row] = files.fromUploads(tx, [upload], "file");
+    addItem(tx, coll.id, item, row);
   });
   return item;
 }
 
 /**
+ * GET /api/chat/saved?message=/**
  * GET /api/chat/saved?message=&file= (or ?item=) → { "<collection id>": "<item id>" }: your collections that have the
  * file (a message's, or an item's) already. The save menu ticks them.
  * @param {core.RequestEvent} e
@@ -469,10 +395,17 @@ function saved(e) {
   const itemId = q?.get("item") ?? "";
   if (itemId) {
     const item = find(e.app, "collection_items", itemId);
-    if (item && canView(e, item)) origin = item.getString("origin") || `i:${item.id}`;
-    // Not one you may see: in none of yours. An empty origin would match every upload of yours (QA BUG-148).
-    if (!origin) return e.json(200, {});
-  } else origin = `m:${q?.get("message") ?? ""}/${q?.get("file") ?? ""}`;
+    if (item && canView(e, item)) origin = item.getString("origin");
+  } else {
+    // The message's file, which you can see (a forward's original's too, §21.3).
+    const msg = find(e.app, "messages", q?.get("message") ?? "");
+    const name = q?.get("file") ?? "";
+    if (msg && canView(e, msg) && !msg.getBool("deleted") && msg.getStringSlice("files").includes(name)) {
+      origin = files.byName(e.app, name)?.id ?? "";
+    }
+  }
+  // Not one you may see: in none of yours. An empty origin would match nothing anyway (QA BUG-148).
+  if (!origin) return e.json(200, {});
   const rows = arrayOf(new DynamicModel({ collection: "", id: "" }));
   e.app
     .db()
@@ -486,7 +419,8 @@ function saved(e) {
 }
 
 /**
- * DELETE /api/chat/items/{id}: the owner takes an item out of their collection (its file goes with it).
+ * DELETE /api/chat/items/{id}: the owner takes an item out of their collection (its file goes with it, unless a
+ * message or another item still names it: the item's delete hook unlinks it, §37).
  * @param {core.RequestEvent} e
  */
 function removeItem(e) {
@@ -505,18 +439,17 @@ function removeItem(e) {
 }
 
 /**
- * A message create through the API that names collection items (`items`: their ids, as a JSON list in a form):
- * their files are added after the uploads, copied, and `file_sources` says which collection each came from. Items
- * of a collection of yours or a public one only. Returns the temp copies to remove once the save is done.
+ * The collection items a message create through the API names (`items`: their ids, as a JSON list in a form), as the
+ * `files` rows to attach after the `uploads` uploads, and which collection each came from (`sources`, by stored
+ * name). Items of a collection of yours or a public one only.
  * @param {core.RecordRequestEvent} e
- * @returns {string[]}
+ * @param {number} uploads
+ * @returns {{ rows: core.Record[], sources: Record<string, string> }}
  */
-function attachItems(e) {
-  const rec = recordOf(e);
+function itemsToAttach(e, uploads) {
   const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
-  rec.set("file_sources", {});
   let ids = body.items;
-  if (ids === undefined || ids === "" || ids === null) return [];
+  if (ids === undefined || ids === "" || ids === null) return { rows: [], sources: {} };
   if (typeof ids === "string") {
     try {
       ids = JSON.parse(ids);
@@ -525,38 +458,30 @@ function attachItems(e) {
     }
   }
   if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !id)) throw fieldError("items", "Must be a list of item ids.");
-  // The create rule would refuse it anyway: copy nothing first.
+  // The create rule would refuse it anyway.
   if (!e.auth) throw new ForbiddenError("Only signed-in users can post.");
   const list = [.../** @type {Set<string>} */ (new Set(ids))];
-  if (!list.length) return [];
-  if (list.length + rec.getUnsavedFiles("files").length > MAX_FILES) throw fieldError("files", `At most ${MAX_FILES} files.`);
+  if (!list.length) return { rows: [], sources: {} };
+  if (list.length + uploads > files.MAX_FILES) throw fieldError("files", `At most ${files.MAX_FILES} files.`);
+  const gone = () => fieldError("items", "A collection item is no longer available.");
   const items = list.map((id) => {
     const item = find(e.app, "collection_items", id);
-    if (!item || !canView(e, item)) throw fieldError("items", "A collection item is no longer available.");
+    if (!item || !canView(e, item)) throw gone();
     return item;
   });
-  const fs = e.app.newFilesystem();
-  /** @type {string[]} */
-  const temps = [];
+  const rows = files.byNames(
+    e.app,
+    items.map((i) => i.getString("file")),
+  );
   /** @type {Record<string, string>} */
   const sources = {};
-  try {
-    const uploads = items.map((item) => {
-      const copy = copyOf(e.app, fs, dirOf(item), item.getString("file"), item.getString("name"));
-      if (!copy) throw fieldError("items", "A collection item is no longer available.");
-      if (copy.temp) temps.push(copy.temp);
-      sources[copy.upload.name] = item.getString("collection");
-      return copy.upload;
-    });
-    rec.set("files+", uploads);
-  } catch (err) {
-    removeAll(temps);
-    throw err;
-  } finally {
-    fs.close();
-  }
-  rec.set("file_sources", sources);
-  return temps;
+  const out = items.map((item) => {
+    const row = rows.get(item.getString("file"));
+    if (!row) throw gone();
+    if (!sources[item.getString("file")]) sources[item.getString("file")] = item.getString("collection");
+    return row;
+  });
+  return { rows: out, sources };
 }
 
 // ---------------------------------------------------------------- subscriptions
@@ -656,7 +581,7 @@ module.exports = {
   saveItem,
   saved,
   removeItem,
-  attachItems,
+  itemsToAttach,
   subscribe,
   markSeen,
 };

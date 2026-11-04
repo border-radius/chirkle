@@ -1,8 +1,8 @@
-// Message attachments (§17): rules, hooks, protected access, serving headers.
+// Message attachments (§17): rules, hooks, access by URL (§37.3), serving headers.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, inject, it } from "vitest";
 import { gifHeader, jpegHeader, pngOf, webpHeader } from "../support/images.ts";
-import { expectRejected, newRoom, newUser, openDm, pngFile, post, type TestUser } from "./helpers.ts";
+import { adminClient, expectRejected, newRoom, newUser, openDm, pngFile, post, type TestUser } from "./helpers.ts";
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -15,17 +15,10 @@ async function withFiles(u: TestUser, room: string, files: File[], text = "") {
   return u.pb.collection("messages").create({ room, author: u.user.id, text, files });
 }
 
-/** Status of a file download as `u` (with a fresh file token), or anonymously without one. */
-async function fetchFile(
-  u: TestUser | null,
-  owner: TestUser,
-  record: { id: string; collectionName: string },
-  name: string,
-  thumb?: string,
-) {
-  const token = u ? await u.pb.files.getToken() : "";
-  const url = owner.pb.files.getURL(record, name, { ...(token ? { token } : {}), ...(thumb ? { thumb } : {}) });
-  return fetch(url);
+/** A file download by its URL alone, as anyone (§37.3): no session, no file token unless `token` (ignored). */
+async function fetchFile(record: { id: string }, name: string, thumb?: string, token?: string) {
+  const q = new URLSearchParams({ ...(thumb ? { thumb } : {}), ...(token ? { token } : {}) }).toString();
+  return fetch(`${inject("pbUrl")}/api/files/messages/${record.id}/${encodeURIComponent(name)}${q ? `?${q}` : ""}`);
 }
 
 describe("attachments (§17.1)", () => {
@@ -110,10 +103,11 @@ describe("attachments (§17.1)", () => {
     const a = await newUser();
     const room = await newRoom(a);
     const m = await withFiles(a, room.id, [pngFile()], "bye");
-    expect((await fetchFile(a, a, m, m.files[0])).status).toBe(200);
+    expect((await fetchFile(m, m.files[0])).status).toBe(200);
     const deleted = await a.pb.collection("messages").update(m.id, { deleted: true });
     expect(deleted.files).toEqual([]);
-    expect((await fetchFile(a, a, m, m.files[0])).status).toBe(404);
+    expect((await fetchFile(m, m.files[0])).status).toBe(404);
+    expect((await fetchFile(m, m.files[0], "240x240")).status).toBe(404);
   });
 
   it("archived rooms take no attachments", async () => {
@@ -124,23 +118,43 @@ describe("attachments (§17.1)", () => {
   });
 });
 
-describe("protected access (§17.3)", () => {
-  it("needs a file token; a non-member's token can't open a DM's file", async () => {
-    const [a, b, c] = await Promise.all([newUser(), newUser(), newUser()]);
+describe("access by URL (§37.3)", () => {
+  it("opens with the URL alone, a DM's too, thumbnails as well; a token is ignored", async () => {
+    const [a, b] = await Promise.all([newUser(), newUser()]);
     const dm = await openDm(a, b);
     const m = await withFiles(a, dm.id, [pngFile()], "just us");
     const name = m.files[0] as string;
-    expect([403, 404]).toContain((await fetchFile(null, a, m, name)).status);
-    expect((await fetchFile(a, a, m, name)).status).toBe(200);
-    expect((await fetchFile(b, a, m, name, "800x480f")).status).toBe(200);
-    expect([403, 404]).toContain((await fetchFile(c, a, m, name)).status);
+    expect((await fetchFile(m, name)).status).toBe(200);
+    expect((await fetchFile(m, name, "800x480f")).status).toBe(200);
+    expect((await fetchFile(m, name, "240x240", "not-a-token")).status).toBe(200);
+    expect((await fetchFile(m, name, undefined, await a.pb.files.getToken())).status).toBe(200);
   });
 
-  it("public-room files open for any logged-in user with a token", async () => {
+  it("only the message's own names: another message's file, a made-up one, or the files rows directly are 404", async () => {
+    const a = await newUser();
+    const room = await newRoom(a);
+    const m = await withFiles(a, room.id, [pngFile("one.png")]);
+    const other = await withFiles(a, room.id, [pngFile("two.png")]);
+    expect((await fetchFile(m, other.files[0])).status).toBe(404);
+    expect((await fetchFile(m, "nope_abcdefghij.png")).status).toBe(404);
+    expect((await fetchFile({ id: "aaaaaaaaaaaaaaa" }, m.files[0])).status).toBe(404);
+    const admin = await adminClient();
+    const [row] = await admin.collection("files").getFullList({ filter: `file = "${m.files[0]}"` });
+    expect((await fetch(`${inject("pbUrl")}/api/files/files/${row!.id}/${m.files[0]}`)).status).toBe(404);
+    expect((await fetch(`${inject("pbUrl")}/api/files/${row!.collectionId}/${row!.id}/${m.files[0]}`)).status).toBe(404);
+  });
+
+  it("a forward's readers open the original's URL; it goes once the original is deleted", async () => {
     const [a, b] = await Promise.all([newUser(), newUser()]);
     const room = await newRoom(a);
     const m = await withFiles(a, room.id, [pngFile()]);
-    expect((await fetchFile(b, a, m, m.files[0], "480x240f")).status).toBe(200);
+    const dm = await openDm(b, a);
+    await a.pb.send("/api/chat/forward", { method: "POST", body: { messages: [m.id], room: dm.id } });
+    const [fwd] = await b.pb.collection("messages").getFullList({ filter: `room = "${dm.id}"` });
+    expect((await fetchFile(fwd!, m.files[0])).status).toBe(200);
+    await a.pb.collection("messages").update(m.id, { deleted: true });
+    expect((await fetchFile(fwd!, m.files[0])).status).toBe(404);
+    expect((await fetchFile(m, m.files[0])).status).toBe(404);
   });
 
   it("an uploaded .html or .svg is served inert: sandbox CSP and nosniff", async () => {
@@ -151,7 +165,7 @@ describe("protected access (§17.3)", () => {
       file("pic.svg", "image/svg+xml", '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),
     ]);
     for (const name of m.files as string[]) {
-      const res = await fetchFile(a, a, m, name);
+      const res = await fetchFile(m, name);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-security-policy")).toMatch(/sandbox/);
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");

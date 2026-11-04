@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -23,6 +23,12 @@ routerUse((e) => {
   if (/author|forwarded_from/i.test(e.request?.url?.query().encode() ?? "")) require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   return e.next();
 });
+// A message's or collection item's file is its shared `files` row's (§37): served without a file token.
+routerUse((e) => {
+  if (e.request?.url?.path.startsWith("/api/files/")) require(`${__hooks}/lib/files.js`).serve(e);
+  return e.next();
+});
+
 onRealtimeSubscribeRequest((e) => {
   require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
   e.next();
@@ -166,20 +172,15 @@ onRecordDelete((e) => {
 }, "rooms");
 
 onRecordCreateRequest((e) => {
-  require(`${__hooks}/lib/messages.js`).beforeMessageCreateRequest(e);
-  // Files attached from collections (§31): copies, some in the temp folder (S3) until the save is done.
-  const temps = require(`${__hooks}/lib/collections.js`).attachItems(e);
-  try {
+  const messages = require(`${__hooks}/lib/messages.js`);
+  messages.beforeMessageCreateRequest(e);
+  // One transaction for the attachments' `files` rows (uploads, and files attached from collections, §31, §37) and
+  // the message: refused, nothing is left stored.
+  e.app.runInTransaction((tx) => {
+    e.app = tx;
+    messages.setRequestFiles(e);
     e.next();
-  } finally {
-    for (const path of temps) {
-      try {
-        $os.remove(path);
-      } catch {
-        // already gone
-      }
-    }
-  }
+  });
 }, "messages");
 
 onRecordCreate((e) => {
@@ -207,12 +208,21 @@ onRecordAfterDeleteSuccess((e) => {
   e.next();
 }, "collections");
 
-// An image uploaded into a collection is held to the size messages and avatars are (QA BUG-24, BUG-140): its
-// thumbnails decode it whole. A saved copy has no upload; its file was checked where it came from.
-onRecordCreate((e) => {
-  if (e.record) require(`${__hooks}/lib/images.js`).assertImagesFit(e.record, "file");
+// An item taken out (or its collection, or its owner, deleted): its file is named once less (§37).
+onRecordDelete((e) => {
+  const files = require(`${__hooks}/lib/files.js`);
+  const names = e.record ? files.namedBy(e.app, "collection_items", e.record.id) : [];
   e.next();
+  files.unlink(e.app, names);
 }, "collection_items");
+
+// A message deleted for good (a superuser, its room): its files are named once less (§37). A deleted one has none.
+onRecordDelete((e) => {
+  const files = require(`${__hooks}/lib/files.js`);
+  const names = e.record ? files.namedBy(e.app, "messages", e.record.id) : [];
+  e.next();
+  files.unlink(e.app, names);
+}, "messages");
 
 onRecordCreate((e) => {
   const messages = require(`${__hooks}/lib/messages.js`);
@@ -232,8 +242,6 @@ onRecordCreate((e) => {
 onRecordAfterCreateSuccess((e) => {
   require(`${__hooks}/lib/messages.js`).afterMessageCreate(e);
   e.next();
-  // Committed: the media worker looks at its files now (lib/worker.js wake).
-  if (e.record?.getStringSlice("files").length) require(`${__hooks}/lib/media.js`).wake(e.app);
 }, "messages");
 
 // Committed (with the message that queued it): the workers look at it now, not on their next look round.
@@ -242,10 +250,12 @@ onRecordAfterCreateSuccess((e) => {
   require(`${__hooks}/lib/previews.js`).wake(e.app);
 }, "link_queue");
 
+// A new file (an attachment, an upload into a collection) is committed: the media worker looks at it now
+// (lib/worker.js wake).
 onRecordAfterCreateSuccess((e) => {
   e.next();
   require(`${__hooks}/lib/media.js`).wake(e.app);
-}, "collection_items");
+}, "files");
 
 onRecordUpdate((e) => {
   const rec = e.record;
@@ -261,12 +271,15 @@ onRecordUpdate((e) => {
   const touch = messages.changesForwards(rec);
   const edited = rec.getString("text") !== rec.original().getString("text");
   const deleted = rec.getBool("deleted") && !rec.original().getBool("deleted");
+  // As stored, not as loaded: another delete of it may have been committed since (QA BUG-223).
+  const files = deleted ? require(`${__hooks}/lib/files.js`).namedBy(e.app, "messages", rec.id) : [];
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(rec) : "";
   e.next();
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
-  // Saved: a deleted message's media leave the grid, its forwards' too (§30.1).
+  // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);
+  if (deleted) require(`${__hooks}/lib/files.js`).unlink(e.app, files);
   // Saved: forwards of it tell their readers (§21.3).
   if (touch) messages.touchForwards(e.app, rec);
   if (edited) require(`${__hooks}/lib/previews.js`).queue(e.app, rec);

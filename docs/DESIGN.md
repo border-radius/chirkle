@@ -176,7 +176,6 @@ chat/
 │       │   ├── files.ts        # attachment names and limits (§17)
 │       │   ├── emoji.ts        # the picker's emoji, recently used (§20.4)
 │       │   ├── reactions.ts    # optimistic reaction changes, who reacted (§20.3)
-│       │   └── token.ts        # file token cache (§17.3)
 │       ├── ui/                 # small reusable components
 │       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts (a lazy chunk: §20.4)
 │       └── views/
@@ -946,7 +945,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Who can DM whom | Any logged-in user can DM any other user. No blocking in this round. No DMs with yourself. |
 | Closing a DM | Reuses `hidden_rooms`. A new message in the DM reopens it for the recipient (§16.4). |
 | Avatar storage | The built-in `users.avatar` file field: public, raster images only (no SVG), always displayed through thumbnails (§15.1). |
-| Attachment access | `protected` file field: downloads need a short-lived file token and pass the message's view rule, so DM files stay private (§17.3). |
+| Attachment access | By URL alone since §37.3 (2026-11-04): the URL holds the message id and the stored name's random part, which only readers see; 404 once deleted. Before: a `protected` field and a short-lived file token (§17.3). |
 | Attachment layout | Images render at a fixed height, so loading them never moves the scroll position (§17.5). |
 | Attachment aspect ratio | Images keep their aspect ratio, uncropped: fixed height, width from the image, capped (a too-wide image is narrowed and letterboxed in its fixed-height box rather than shortened, §17.5). |
 | Metadata stripping | The client re-encodes JPEG/PNG/WebP images (PNG as PNG, the rest as JPEG) before upload, which drops EXIF (including GPS). Best effort, protecting honest users only (§15.3). |
@@ -1373,8 +1372,8 @@ non-empty **or** at least one file is attached". A message with neither is still
 false`, and the update hook rejects any change to `files` (including the `files+` / `files-` modifiers) except the
 soft-delete wipe below.
 
-**Soft delete wipes the files.** When `deleted` becomes true, the hook also sets `files = []`. PocketBase deletes
-the stored files after the update commits, so the content is really gone (§5.3), and the old URLs return 404.
+**Soft delete wipes the files.** When `deleted` becomes true, the hook also sets `files = []`. Each file nothing else
+names any more (§37.1) is deleted, and PocketBase deletes it from storage after the update commits, so the content is really gone (§5.3), and the old URLs return 404.
 PocketBase serves files with `Cache-Control: max-age=2592000`, so a browser that already loaded an attachment may
 keep it in its own cache after the delete; the server copy is gone.
 
@@ -1389,6 +1388,9 @@ with `Content-Disposition: attachment`, on top of the sandbox CSP, so opening on
 - No per-user quota in this round (§13, still open).
 
 ### 17.3 Access control and file tokens
+
+**Superseded by §37.3 (2026-11-04):** files are shared rows opened by URL alone, with no file token. What follows is
+how it was, for servers and apps from before.
 
 Because the field is `protected`, `GET /api/files/messages/:id/:file` requires `?token=` with a **file token**
 (`pb.files.getToken()`), and PocketBase checks the **message's view rule** for the token's user. Therefore:
@@ -1513,7 +1515,7 @@ server as you get near them.
   deleted; the one shown gives way to the next (else the one before), and with none left the viewer closes (QA BUG-120).
 - **Beyond the window:** when the image shown is within 3 of the first or last one it has, and the room has messages
   beyond the window on that side (`hasOlder`/`hasNewer`), it fetches the next page of the room's messages that have
-  attachments (`withFiles` in `lib/cursor.ts`: `files:length > 0`, the usual `(created, id)` cursor from its first or
+  attachments (`withFiles` in `lib/cursor.ts`: `files=1` on the route, the usual `(created, id)` cursor from its first or
   last image), and the next while a page has none to show (only other files). Stepping past the end waits for it;
   a failed fetch is tried again by the next step. Previous/Next stay while there may be more. The count shows once the
   viewer has the whole room's images (at once in a room that fits the window), since it can't know the total before.
@@ -1925,7 +1927,7 @@ Every room member gets the usual realtime `update` per message. The client shows
 - *Live.* A reader of the forward can't subscribe to the original's room, so after an edit or delete of a message
   (`changesForwards`), `touchForwards` saves its forwards again (nothing changes but `updated`), which sends them out
   with the original as it is now. Forwards in archived rooms can't be saved: they show it when loaded.
-- *The viewer* pages through `files:length > 0 || forward_of != ""`: a filter can't see the original's files (relation
+- *The viewer* pages through `files != "[]" || forward_of != ""` (`files:length > 0` before §37: JSON has no length in filters, QA BUG-222): a filter can't see the original's files (relation
   filters apply the original room's rules), so forwards without media are skipped in the client.
 - `forward_of` is set only by the route: the create and update rules add `@request.body.forward_of:isset = false`,
   and `beforeMessageCreateRequest` / `beforeMessageUpdate` back that up against field modifiers, superusers included.
@@ -3431,3 +3433,69 @@ The QA pass that followed (QA.md, BUG-210..218) changed:
 - **Service messages:** they can't be deleted.
 
 The access dialog's budget went to 3.10 KB.
+
+## 37. Shared files, opened by URL (2026-11-04)
+
+The user asked: "can we move all files into one table and link to them everywhere? so we don't need to duplicate files
+on saving to collection, etc", then "can we also drop access tokens for files?", and for the apps: "change apps to
+remove token from url".
+
+### 37.1 Data (`pb_migrations/1760000041_shared_files.js`, `pb_hooks/lib/files.js`)
+
+- **`files`**: one row per stored file: `file` (a file field, 20 MB, not protected, the thumbnails of §17.1), `name`
+  (the original name), `video`, `dims` (its shape, §17.5), `poster` (a video's poster is made), `ready` (thumbnails or
+  poster made), `sized` (shape known), `refs`, `created`. No API rules: only superusers list or read it.
+- **`messages.files`** is JSON now: the stored names of its files, as it held as a file field, so every client builds
+  the same URLs. Its `maxSize` is 10 × 20 MB: PocketBase holds a create's body to its fields' sizes, and the uploads
+  come in that body.
+- **`collection_items.file`** is text: a stored name too.
+- **`refs`** counts the messages and items that name a file. Each save that adds or drops a name changes it in the same
+  transaction (`link`, `unlink`). A file nothing names is deleted, and PocketBase deletes what is stored once that is
+  committed (in the background, with S3).
+- **Uploads** to `messages` are still sent as `files`. The create hook makes the rows (`fromUploads`), with the checks
+  the field made (size, an image's decodable size, the original name cleaned), and names them. Items attached from
+  collections (`items`, §31.2) add their rows' names: nothing is copied. Edits can't change `files` (`files+`, `files-`,
+  uploads: "Attachments can't be changed.").
+- **Saving to a collection** gives the item the message's stored name (`origin` = the row's id), and **Upload** makes a
+  row. A message deleted, or an item taken out, unlinks its names. *Saved in* (`GET /api/chat/saved`) lists every
+  collection of yours that has the file, the one an item was opened from included (before, only those holding a copy
+  of it), so its menu shows that one ticked too.
+- **The media worker** (§30.1) makes thumbnails, posters and shapes per `files` row, once, whoever names it. The `media`
+  index keeps `file` and joins `files` for the poster.
+- **Federation and Telegram** make rows from the files they receive (`attachUploads`) and send each row's stored file.
+
+The migration moves every message's files, with their thumbnails, into rows, and gives every item the row of the file it
+was saved from (`origin` `m:…` or `i:…`), so copies saved before become one file. Two items of one collection that turn
+out to be the same file become one. The old folders are deleted by the media worker after the migration is committed
+(`storage_cleanup`). It reverses: the down migration copies each file back into its messages and items.
+
+### 37.2 URLs
+
+Unchanged: `/api/files/messages/{message}/{name}` and `/api/files/collection_items/{item}/{name}`, with `?thumb=`.
+A router middleware (`files.serve`) answers them: if the message shows that name (its own, or a forward's original's,
+§21.3; not deleted) or the item has it, the path is pointed at the `files` row and PocketBase's own handler serves it
+(thumbnails, ranges, `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…` itself.
+Posters (`/api/chat/posters/{message}/{file}`, `/api/chat/posters/items/{item}/{file}`) are checked the same way.
+
+### 37.3 Access by URL
+
+No file token. Whoever has an attachment's URL has the file; a `?token=` is ignored. The URL can't be guessed: it holds
+the message's id and the stored name's random suffix, and only those who may read the message see either. Once the
+message is deleted, or the item taken out, the URL is 404 (the file may still be named elsewhere).
+
+What changed with it: a leaked URL keeps working until the message is deleted (before, 3 minutes). Thumbnails keep one
+URL, so the browser cache and the service worker (§27.2) keep them as they are, and the app no longer waits for a token
+before showing a room.
+
+**Clients.** The web builds URLs without a token (`api.fileUrl`, `api.itemUrl`); `lib/token.ts`, the token cache, the
+re-signing of links and the retry with a new token are gone: an image that fails shows "Couldn't load image" with
+Retry. The Android app asks a server once whether it wants tokens (`ChirkleApi.needsFileTokens`: listing `files` is a
+403 here, a 404 on a server from before) and sends none to this one; it still fetches them for an older server. Apps
+from before (Android 0.1.2) send tokens, which are ignored.
+
+### 37.4 Tests
+
+`messages.files.test.ts` (access by URL, forwards, deleted), `collections.test.ts` (one file for a message and its
+items; `refs`; a race), `media.test.ts` (the worker per row; the migration down and up, merging copies),
+`media.s3.test.ts` (the bucket keeps one file, gone once nothing names it), the access matrix and room access tests
+(every viewer opens an attachment by URL). Android: `ChirkleApiTest` (no token here).

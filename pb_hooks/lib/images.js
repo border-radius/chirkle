@@ -126,9 +126,10 @@ function shownSize(b) {
  * shape each image upload is shown in (shownSize), by its stored name.
  * @param {core.Record} record
  * @param {string} field
+ * @param {string} [key] the field errors name (default `field`)
  * @returns {Record<string, [number, number]>}
  */
-function assertImagesFit(record, field) {
+function assertImagesFit(record, field, key = field) {
   /** @type {Record<string, [number, number]>} */
   const dims = {};
   for (const f of record.getUnsavedFiles(field)) {
@@ -147,7 +148,7 @@ function assertImagesFit(record, field) {
     if (!size) continue;
     if ("unreadable" in size || size.width * size.height > MAX_PIXELS) {
       throw new BadRequestError("Failed to save record.", {
-        [field]: new ValidationError("validation_image_too_large", `Images can be at most ${MAX_PIXELS / 1_000_000} megapixels.`),
+        [key]: new ValidationError("validation_image_too_large", `Images can be at most ${MAX_PIXELS / 1_000_000} megapixels.`),
       });
     }
     const shown = shownSize(bytes);

@@ -176,9 +176,13 @@ function file(e) {
     }
   }
   if (!src.getStringSlice("files").includes(name)) throw new NotFoundError();
+  // Its shared file (§37).
+  const files = require(`${__hooks}/lib/files.js`);
+  const row = files.byName(e.app, name);
+  if (!row) throw new NotFoundError();
   const fs = e.app.newFilesystem();
   try {
-    fs.serve(e.response, /** @type {any} */ (e.request), `${src.baseFilesPath()}/${name}`, name);
+    fs.serve(e.response, /** @type {any} */ (e.request), files.keyOf(row), name);
   } finally {
     fs.close();
   }

@@ -304,7 +304,7 @@ function bringOver(app, link, room, msgs) {
       rec.set("room", room.id);
       rec.set("author", author.id);
       rec.set("text", pieces[0]);
-      if (files.length) rec.set("files", files);
+      if (files.length) require(`${__hooks}/lib/files.js`).attachUploads(tx, rec, files);
       if (withReply && known && reply) rec.set("reply_to", reply.id);
       tx.save(rec);
       msgs.forEach((m, i) => {

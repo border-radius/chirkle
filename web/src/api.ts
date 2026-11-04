@@ -1,7 +1,6 @@
 // The only module that talks to PocketBase (§6). Views depend on the `Api` interface, never on the client.
 
 import { type Cursor, PAGE_SIZE, type PageQuery } from "./lib/cursor.ts";
-import { createTokenCache } from "./lib/token.ts";
 import {
   type Badge,
   type CollectionItem,
@@ -175,18 +174,10 @@ export interface Api {
   /** Copy messages into `room` as yours, saying who first wrote them, all or none (§21.3). Resolves to the copies. */
   forward(ids: readonly string[], room: string): Promise<Message[]>;
 
-  // attachments (§17.3)
-  /**
-   * A fresh file token for protected attachments (cached; one request shared by concurrent callers). "" without a
-   * session: a guest reads Open Air rooms' attachments without one (§23.3).
-   */
-  fileToken(force?: boolean): Promise<string>;
-  /**
-   * URL of an attachment (a thumbnail with `thumb`, e.g. "480x360"), signed with the cached file token.
-   * Starts a refresh in the background when the token is getting old.
-   */
+  // attachments (§17.3, §37.3): a file's URL is all it takes to open it, no file token
+  /** URL of an attachment (a thumbnail with `thumb`, e.g. "480x360"). */
   fileUrl(m: Message, filename: string, thumb?: string): string;
-  /** URL of a video's poster frame (§30.1), signed like `fileUrl`: 404 until the server has made it. */
+  /** URL of a video's poster frame (§30.1): 404 until the server has made it. */
   posterUrl(m: Message, filename: string): string;
 
   // media grid (§30.1)
@@ -199,9 +190,9 @@ export interface Api {
   markSeen(collection: string, at?: string): Promise<void>;
   /** What each collection's badge may say. */
   badges(ids: readonly string[], signal?: AbortSignal): Promise<Record<string, Badge>>;
-  /** Signed URL of an item's file (a thumbnail with `thumb`), as fileUrl. */
+  /** URL of an item's file (a thumbnail with `thumb`), as fileUrl. */
   itemUrl(item: Pick<CollectionItem, "id" | "file">, thumb?: string): string;
-  /** Signed URL of an item's video poster: 404 until there is one. */
+  /** URL of an item's video poster: 404 until there is one. */
   itemPosterUrl(item: Pick<CollectionItem, "id" | "file">): string;
   /** Changes of these collections (yours, and those you follow), and of your own subscriptions. */
   subscribeCollections(ids: readonly string[], fn: () => void): Promise<Unsubscribe>;
@@ -433,18 +424,6 @@ export function createApi(client: PbClient): Api {
         query,
       ),
     );
-  const tokens = createTokenCache(() =>
-    wrap(pb.send<{ token?: string }>("/api/files/token", { method: "POST" })).then((d) => d.token || ""),
-  );
-  // A file token belongs to a user: drop it when the user changes, but not on a session refresh of the same user
-  // (every page load does one, often while the first token request is in flight: QA BUG-25).
-  const sessionUser = () => (pb.authStore.isValid ? (pb.authStore.record?.id ?? "") : "");
-  let tokenUser = sessionUser();
-  pb.authStore.onChange(() => {
-    if (sessionUser() === tokenUser) return;
-    tokenUser = sessionUser();
-    tokens.reset();
-  });
   const me = () => {
     const u = api.currentUser();
     if (!u) throw new ApiError("Not logged in.", 401);
@@ -605,27 +584,16 @@ export function createApi(client: PbClient): Api {
     setBanned: async (user, banned) => void (await wrap(pb.send("/api/chat/ban", { method: "POST", body: { user, banned } }))),
     forward: (ids, room) =>
       wrap(pb.send<Message[]>("/api/chat/forward", { method: "POST", body: { messages: ids, room }, query: MSG_OPTS })),
-    fileToken: async (force) => (api.currentUser() ? tokens.ensure(force) : ""),
-    fileUrl(m, filename, thumb) {
-      const user = api.currentUser();
-      if (user && !tokens.fresh()) void tokens.ensure().catch(() => {});
-      const token = user ? tokens.current() : "";
-      // A forward's attachments are its original's (§21.3).
-      return pb.fileUrl("messages", m.forward_of || m.id, filename, { token: token || undefined, thumb });
-    },
-    // The file's own URL and token, on the poster route.
+    // A forward's attachments are its original's (§21.3).
+    fileUrl: (m, filename, thumb) => pb.fileUrl("messages", m.forward_of || m.id, filename, { thumb }),
+    // The file's own URL, on the poster route.
     posterUrl: (m, filename) => api.fileUrl(m, filename).replace("/api/files/messages/", "/api/chat/posters/"),
     collections: (signal) => wrap(pb.send<Collections>("/api/chat/collections", { signal })),
     markSeen: async (collection, at) => {
       await wrap(pb.send("/api/chat/subs/seen", { method: "POST", body: { collection, ...(at ? { at } : {}) } }));
     },
     badges: (ids, signal) => wrap(pb.send<Record<string, Badge>>("/api/chat/badges", { query: { ids: ids.join(",") }, signal })),
-    itemUrl(item, thumb) {
-      const user = api.currentUser();
-      if (user && !tokens.fresh()) void tokens.ensure().catch(() => {});
-      const token = user ? tokens.current() : "";
-      return pb.fileUrl("collection_items", item.id, item.file, { token: token || undefined, thumb });
-    },
+    itemUrl: (item, thumb) => pb.fileUrl("collection_items", item.id, item.file, { thumb }),
     itemPosterUrl: (item) => api.itemUrl(item).replace("/api/files/collection_items/", "/api/chat/posters/items/"),
     async subscribeCollections(ids, fn) {
       // One topic per collection followed: a filter naming them all could be longer than a topic may be.

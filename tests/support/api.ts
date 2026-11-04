@@ -137,13 +137,13 @@ export async function seedMessages(
       sql: "INSERT INTO messages (id, room, author, text, text_key, files, edited_at, deleted, deleted_at, created, updated) VALUES ({:id}, {:room}, {:author}, {:text}, {:key}, {:files}, '', 0, '', {:ts}, {:ts})",
       params: { id: m.id, room, author, text: m.text, key: foldKey(m.text), files: JSON.stringify(m.files ?? []), ts: m.created },
     })),
-    // The media grid's index (§30.1), as the messages hooks keep it: done, no poster (no files on disk).
+    // The media grid's index (§30.1), as the messages hooks keep it. No files rows (§37): no poster (no files on disk).
     ...out.flatMap((m) =>
       (m.files ?? []).flatMap((file, pos) =>
         isMedia(file)
           ? [
               {
-                sql: "INSERT INTO media (id, room, message, source, file, pos, video, sent, ready, poster) VALUES ({:id}, {:room}, {:message}, {:message}, {:file}, {:pos}, {:video}, {:ts}, 1, 0)",
+                sql: "INSERT INTO media (id, room, message, source, file, pos, video, sent) VALUES ({:id}, {:room}, {:message}, {:message}, {:file}, {:pos}, {:video}, {:ts})",
                 params: { id: newId(), room, message: m.id, file, pos, video: isVideo(file) ? 1 : 0, ts: m.created },
               },
             ]

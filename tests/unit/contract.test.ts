@@ -38,13 +38,13 @@ describe("shared contract", () => {
     expect(hookConst("lib/access.js", "MAX_MEMBERS")).toBe(contract.limits.roomMembers);
   });
 
-  it("the web and the media grid's index (pb_hooks/lib/media.js) show the same files inline", () => {
+  it("the web and the server's shared files (pb_hooks/lib/files.js: the media grid, the worker) show the same files inline", () => {
     for (const e of contract.files.image) expect(isImage(`a.${e}`)).toBe(true);
     for (const e of contract.files.video) expect(isVideo(`a.${e}`)).toBe(true);
     for (const e of contract.files.audio) expect(isAudio(`a.${e}`)).toBe(true);
     for (const e of ["pdf", "txt", "svg", "html"]) expect(isImage(`a.${e}`) || isVideo(`a.${e}`) || isAudio(`a.${e}`)).toBe(false);
-    expect(hookConst("lib/media.js", "IMAGE_EXT")).toEqual(contract.files.image);
-    expect(hookConst("lib/media.js", "VIDEO_EXT")).toEqual(contract.files.video);
+    expect(hookConst("lib/files.js", "IMAGE_EXT")).toEqual(contract.files.image);
+    expect(hookConst("lib/files.js", "VIDEO_EXT")).toEqual(contract.files.video);
   });
 
   it("collections take the images and videos (their chunk has its own list: it can't import lib/files.ts)", () => {

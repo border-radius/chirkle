@@ -2,10 +2,9 @@
 // messages hooks (DESIGN.md §5.6, §17, §19, §20, §21, §28): text, attachments, replies, forwards, soft delete, edit stamps.
 // A forward (§21.3) has no text or files of its own: it shows those of the message in `forward_of` (showOriginal).
 
-const { assertImagesFit } = require(`${__hooks}/lib/images.js`);
 const { accessOf, canSee, canWrite, visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { inCheckedRoom, markChecked } = require(`${__hooks}/lib/enrich.js`);
-const { fieldError, originalNames, recordOf } = require(`${__hooks}/lib/records.js`);
+const { fieldError, recordOf } = require(`${__hooks}/lib/records.js`);
 const { dmRefusal } = require(`${__hooks}/lib/dms.js`);
 const { isDm } = require(`${__hooks}/lib/rooms.js`);
 const { cleanText, isBlank, searchKey } = require(`${__hooks}/lib/text.js`);
@@ -56,10 +55,10 @@ function setTextKey(record) {
 }
 
 /**
- * Attachment names: those already stored plus those uploaded with this request.
+ * Attachment names: the stored names of its `files` rows (§37).
  * @param {core.Record} record
  */
-const fileNames = (record) => [...record.getStringSlice("files"), ...record.getUnsavedFiles("files").map((f) => (f ? f.name : ""))];
+const fileNames = (record) => record.getStringSlice("files");
 
 /**
  * Is this message a forward (§21.3)? A forward's text may be blank: it shows the original's, or nothing once that is gone.
@@ -93,6 +92,12 @@ function postService(app, roomId, text) {
  */
 function beforeMessageCreate(e) {
   const rec = recordOf(e);
+  // Set with their rows (setRequestFiles, lib/files.js setMessageFiles); a message without files says so, never null.
+  if (!fileNames(rec).length) {
+    rec.set("files", []);
+    rec.set("file_names", {});
+    rec.set("file_dims", {});
+  }
   if (isService(rec)) {
     // Made only by postService (no request can leave out the author): text alone, in any room that isn't archived.
     assertText(rec);
@@ -102,9 +107,6 @@ function beforeMessageCreate(e) {
     return;
   }
   assertText(rec, fileNames(rec).length > 0 || isForward(rec));
-  // Images' shapes, from the headers just read (§17.5); the media worker adds videos' (pb_hooks/lib/media.js).
-  rec.set("file_dims", assertImagesFit(rec, "files"));
-  rec.set("file_names", originalNames(rec, "files")); // whatever the client sent is replaced
   rec.set("reactions", []); // only POST /api/chat/reactions adds them (§20.2)
   rec.set("previews", []); // only the previews worker sets them (§28)
   const room = activeRoom(e.app, rec.getString("room"));
@@ -237,6 +239,31 @@ function beforeMessageCreateRequest(e) {
 }
 
 /**
+ * messages create through the API, in the request's transaction: the attachments are this request's uploads
+ * (`files`) and the collection items it names (`items`, §31), each a `files` row (§37), in that order. Names in
+ * the body are never taken: whatever it says of `files`, `file_names`, `file_dims` or `file_sources` is replaced.
+ * @param {core.RecordRequestEvent} e
+ */
+function setRequestFiles(e) {
+  const rec = recordOf(e);
+  /** @type {filesystem.File[]} */
+  const uploads = [];
+  for (const key of ["files", "files+"]) {
+    try {
+      for (const f of e.findUploadedFiles(key)) if (f) uploads.push(f);
+    } catch {
+      // none under this key
+    }
+  }
+  const files = require(`${__hooks}/lib/files.js`);
+  const { rows: items, sources } = require(`${__hooks}/lib/collections.js`).itemsToAttach(e, uploads.length);
+  if (uploads.length + items.length > files.MAX_FILES) throw fieldError("files", `At most ${files.MAX_FILES} files.`);
+  // The create rule would refuse it anyway: store nothing first.
+  if (uploads.length && !e.auth) throw new ForbiddenError("Only signed-in users can post.");
+  files.setMessageFiles(e.app, rec, [...files.fromUploads(e.app, uploads), ...items], sources);
+}
+
+/**
  * messages, after a create is committed: a DM records its latest activity (sorts the DM list) and reopens
  * itself for members who had closed it (§16.4).
  * @param {core.RecordEvent} e
@@ -280,7 +307,7 @@ function beforeMessageUpdate(e) {
 
   if (rec.getBool("deleted")) {
     rec.set("text", "");
-    rec.set("files", []); // PocketBase deletes the stored files once the update commits (§17.1)
+    rec.set("files", []); // unlinked once saved: a file nothing else names is deleted (§17.1, §37)
     rec.set("file_names", {});
     rec.set("file_sources", {});
     rec.set("file_dims", {});
@@ -324,6 +351,18 @@ function beforeMessageUpdate(e) {
  */
 function beforeMessageUpdateRequest(e) {
   const rec = recordOf(e);
+  // Uploads and modifiers aren't a file field's any more (§37), so the update rule doesn't see them all: refused
+  // here, not dropped.
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  for (const key of ["files", "+files", "files+", "files-"]) {
+    let n = 0;
+    try {
+      n = e.findUploadedFiles(key).length;
+    } catch {
+      n = 0;
+    }
+    if (n || key in body) throw fieldError("files", "Attachments can't be changed.");
+  }
   for (const f of ["reactions", "previews", "file_dims"]) {
     if (rec.getString(f) !== rec.original().getString(f)) throw fieldError(f, "This field can't be changed.");
   }
@@ -465,6 +504,7 @@ module.exports = {
   enrichInRooms,
   isService,
   setTextKey,
+  setRequestFiles,
   beforeUserDelete,
   postService,
   beforeMessageCreate,

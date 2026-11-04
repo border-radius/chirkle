@@ -328,7 +328,8 @@ The app declares the server's host for `/r/*`, so a link to a room or a message 
   database and the token.
 - HTTPS only (network security config); cleartext is allowed for `127.0.0.1` and `10.0.2.2` in debug builds only.
 - Message text is shown as text. Links follow the web's allow-list (§7.6.3) and open in Custom Tabs, never in the app.
-- File tokens as in §7.3; a URL with a token is never written to the disk cache key.
+- File tokens as in §7.3, only for a server from before shared files (§47); a URL with a token is never written to the
+  disk cache key.
 - Log out clears the database, Coil's caches, pending work, notifications and the check's state, as the web clears
   IndexedDB and the service worker's cache. So does a session found expired at start (the app not opened before it
   ran out): it is forgotten and its data cleared before anything shows, its rooms and DMs included (QA BUG-145, as
@@ -1393,3 +1394,20 @@ that fits and 480p, too long refused, MP4 names). Transformer itself doesn't run
 been tried on the emulator yet.
 
 **Version** 0.1.3 (`versionCode` 4), changelog `4.txt` (video compression and moderators), F-Droid recipe updated.
+
+## 47. Shared files, no file tokens; 0.1.4 (2026-11-04)
+
+The server keeps each file once and opens attachments and collection items by URL alone (DESIGN.md §37). The URLs
+are the same, and a `?token=` is ignored, so 0.1.2 and 0.1.3 keep working unchanged.
+
+- **No token for this server:** `FileTokens` asks the server once (`ChirkleApi.needsFileTokens`: listing the
+  `files` collection is 403 here, 404 on a server from before) and then answers "" without a request, so the URL
+  builders add no token, nothing is fetched before a room shows, and Coil's cache keys are the URLs themselves. A
+  server from before still gets a token, kept fresh as before (§7.3): an account can be on either.
+- **Collections:** saving or attaching names the same file on the server; the app sends the same requests. The save
+  sheet of an item opened from a collection shows that collection ticked: the server lists it as having the file
+  (`UiCollectionsTest`).
+
+Tests: `ChirkleApiTest` (this server wants no token; the token route is still there for older apps).
+
+**Version** 0.1.4 (`versionCode` 5), changelog `5.txt`, F-Droid recipe updated.

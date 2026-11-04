@@ -118,12 +118,10 @@ export function createMessageList(opts: {
   /** A moderator's author menu (§36): whether they are banned, and Ban or Unban. */
   isBanned?: (userId: string) => Promise<boolean>;
   onBan?: (userId: string, banned: boolean) => void;
-  /** Signed URL of an attachment (§17.3). */
+  /** URL of an attachment (§37.3). */
   fileUrl: (m: Message, filename: string, thumb?: string) => string;
-  /** Signed URL of a video's poster frame (§30.1). */
+  /** URL of a video's poster frame (§30.1). */
   posterUrl: (m: Message, filename: string) => string;
-  /** Get a new file token (an image failed to load, maybe because its token expired). */
-  refreshFileToken: () => Promise<unknown>;
   /** A thumbnail was clicked: show the image or video in the viewer (§17.7). */
   onOpenImage: (m: Message, file: string, opener: HTMLElement) => void;
   /** What the badge of a file from collection `id` says (§31); undefined until known. */

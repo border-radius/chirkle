@@ -214,15 +214,13 @@ describe("Open Air rooms and guests (§23.3)", () => {
     expect((await c.pb.collection("messages").getOne(m.id)).text).toBe("old news");
   });
 
-  it("guests can download attachments of open rooms without a token, not of other rooms", async () => {
+  it("guests can download attachments of open rooms: no token, by the URL alone (§37.3)", async () => {
     const { a } = await trio();
     const open = await roomWith(a, "open");
-    const pub = await newRoom(a);
     const inOpen = await a.pb.collection("messages").create({ room: open.id, author: a.user.id, text: "", files: [pngFile()] });
-    const inPub = await a.pb.collection("messages").create({ room: pub.id, author: a.user.id, text: "", files: [pngFile()] });
-    expect((await fetch(a.pb.files.getURL(inOpen, inOpen.files[0]))).status).toBe(200);
-    expect((await fetch(a.pb.files.getURL(inOpen, inOpen.files[0], { thumb: "480x240f" }))).status).toBe(200);
-    expect((await fetch(a.pb.files.getURL(inPub, inPub.files[0]))).status).toBe(404);
+    const shown = await client().collection("messages").getOne(inOpen.id);
+    expect((await fetch(a.pb.files.getURL(shown, shown.files[0]))).status).toBe(200);
+    expect((await fetch(a.pb.files.getURL(shown, shown.files[0], { thumb: "480x240f" }))).status).toBe(200);
   });
 
   it("guests get open rooms' messages live, and nothing from other rooms", async () => {
@@ -319,15 +317,21 @@ describe("losing access is pushed (§23.4)", () => {
 });
 
 describe("probing a private room from outside (§23.1)", () => {
-  it("its attachments can't be downloaded by non-members, nor by a member once taken out", async () => {
-    const { a, b, c } = await trio();
-    const room = await roomWith(a, "private", [b]);
+  it("its attachments open only by their URL (§37.3), which outsiders never see, and not once deleted", async () => {
+    const { a, c } = await trio();
+    const room = await roomWith(a, "private");
     const m = await a.pb.collection("messages").create({ room: room.id, author: a.user.id, text: "", files: [pngFile()] });
-    const get = async (u: TestUser) => (await fetch(a.pb.files.getURL(m, m.files[0], { token: await u.pb.files.getToken() }))).status;
-    expect(await get(b)).toBe(200);
-    expect(await get(c)).toBe(404);
-    await a.pb.collection("rooms").update(room.id, { members: [] });
-    expect(await get(b)).toBe(404);
+    expect(await status(c.pb.collection("messages").getOne(m.id))).toBe(404);
+    const name = m.files[0] as string;
+    expect((await fetch(a.pb.files.getURL(m, name))).status).toBe(200);
+    // The stored name's random part is the secret: the original name, or another suffix, finds nothing.
+    expect((await fetch(a.pb.files.getURL(m, "image.png"))).status).toBe(404);
+    expect((await fetch(a.pb.files.getURL(m, name.replace(/_[a-z0-9]+\./, "_aaaaaaaaaa.")))).status).toBe(404);
+    // Nor through another message, nor the files collection itself.
+    const other = await post(a, room.id, "no files");
+    expect((await fetch(a.pb.files.getURL(other, name))).status).toBe(404);
+    await a.pb.collection("messages").update(m.id, { deleted: true });
+    expect((await fetch(a.pb.files.getURL(m, name))).status).toBe(404);
   });
 
   it("subscribing to it by id gets nothing, signed in or not", async () => {

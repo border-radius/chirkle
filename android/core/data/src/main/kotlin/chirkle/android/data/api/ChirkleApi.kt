@@ -511,15 +511,29 @@ class ChirkleApi(val pb: PbClient) {
         call("/api/chat/forward", "POST", MSG_OPTS, Body.Json(JsonObject(mapOf("messages" to JsonArray(ids.map { JsonPrimitive(it) }), "room" to JsonPrimitive(room))))),
     )
 
-    // ---- files (§17.3)
+    // ---- files (§17.3, §37.3)
 
-    /** A new file token for protected attachments; "" for a guest, who reads Open Air rooms without one (§23.3). */
+    /**
+     * Does this server want a file token in file URLs? Only one from before shared files (DESIGN.md §37.3): ours open
+     * by the URL alone. That one has no `files` collection, so listing it is a 404; ours refuses it (403, superusers
+     * only).
+     */
+    suspend fun needsFileTokens(): Boolean =
+        try {
+            call(records("files"), query = mapOf("perPage" to 1, "skipTotal" to true, "fields" to "id"))
+            false
+        } catch (e: ApiError) {
+            if (e.status != 404 && e.status != 403) throw e
+            e.status == 404
+        }
+
+    /** A new file token for a server that wants one ([needsFileTokens]); "" for a guest, who reads Open Air rooms without one (§23.3). */
     suspend fun newFileToken(): String {
         if (currentUser() == null) return ""
         return (call("/api/files/token", "POST").obj["token"] as? JsonPrimitive)?.content.orEmpty()
     }
 
-    /** An attachment's URL without a token: a forward's attachments are its original's (§21.3). */
+    /** An attachment's URL, with [token] only for a server that wants one: a forward's attachments are its original's (§21.3). */
     fun fileUrl(m: Message, filename: String, thumb: String? = null, token: String? = null): HttpUrl =
         pb.fileUrl("messages", m.forwardOf.ifEmpty { m.id }, filename, mapOf("thumb" to thumb, "token" to token?.ifEmpty { null }))
 

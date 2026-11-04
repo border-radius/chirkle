@@ -301,7 +301,6 @@ export function createRoomView({
     onDiscard: (id) => now(() => ctl.discard(id)),
     fileUrl: api.fileUrl,
     posterUrl: api.posterUrl,
-    refreshFileToken: () => api.fileToken(true),
     onOpenImage: (m, file, opener) => void viewImage(m, file, opener),
     badge,
     ...(me() ? { onSave: saveFile } : {}),
@@ -685,7 +684,6 @@ export function createRoomView({
         name: attachmentName,
         when: (x) => formatFull(parsePb(x.created)),
         fileUrl: api.fileUrl,
-        refreshFileToken: () => api.fileToken(true),
         onJump: (x) => {
           leave?.();
           return now(() => ctl.goTo(x.id));

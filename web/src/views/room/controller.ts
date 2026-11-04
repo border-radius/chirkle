@@ -353,8 +353,6 @@ export function createRoomController(opts: {
   async function open() {
     const g = ++gen;
     const roomP = api.getRoom(roomId, signal).then((r) => store.set(upsertRoom(r)));
-    // Attachment URLs need a file token: have one before the first render, so images don't fail first.
-    const tokenP = api.fileToken().catch(() => "");
     // With unread messages (the room list showed a badge), the room opens at the first of them (§18.5). Before the
     // counts are in (a reload), only the server knows.
     const { unread } = store.get();
@@ -386,7 +384,7 @@ export function createRoomController(opts: {
       return { win: applyPage(emptyWindow(), page, "latest").win, target: null, unread: f };
     })();
     pageP.catch(() => {}); // handled below; but we may return early (room not found) without awaiting it
-    if (!msgId) void showKept(g, roomP, tokenP, firstP);
+    if (!msgId) void showKept(g, roomP, firstP);
     try {
       await roomP;
     } catch (e) {
@@ -396,7 +394,6 @@ export function createRoomController(opts: {
       return emit({ render: {} });
     }
     const loaded = await pageP.catch(() => null);
-    await tokenP;
     if (!scope.active) return;
     const current = g === gen;
     // Never show a failed load as an empty room ("Beginning of #room"): say so and offer Retry.
@@ -436,13 +433,12 @@ export function createRoomController(opts: {
   }
 
   /**
-   * Show the room as it was last time while its first page loads, if that is still to come. Nothing is waited for but
-   * the file token, and that only for attachments: just after a reload, the kept room stands in for the room list. A
-   * room the list lacks waits for the server to say it is yours to see.
+   * Show the room as it was last time while its first page loads, if that is still to come. Nothing is waited for:
+   * just after a reload, the kept room stands in for the room list. A room the list lacks waits for the server to say
+   * it is yours to see.
    */
-  async function showKept(g: number, roomP: Promise<unknown>, token: Promise<unknown>, firstP: Promise<Cursor | null> | null) {
+  async function showKept(g: number, roomP: Promise<unknown>, firstP: Promise<Cursor | null> | null) {
     const kept = await opts.cache?.get(owner, roomId);
-    if (kept?.items.some((m) => m.files?.length)) await token; // attachment URLs need it, as for the first page
     if (!room() && kept?.room && store.get().roomsStatus !== "ready") store.set(upsertRoom(kept.room));
     if (!room()) await roomP.catch(() => {});
     if (!kept?.items.length || g !== gen || phase !== "loading" || !room() || !scope.active) return;
@@ -657,9 +653,6 @@ export function createRoomController(opts: {
           revokeLocal(m);
         }
       });
-      // Keep a fresh file token for attachment URLs (§17.3); it only fetches when the cached one is old.
-      const keepToken = setInterval(() => void api.fileToken().catch(() => {}), 30_000);
-      scope.defer(() => clearInterval(keepToken));
       // Leaving the page (a reload, the tab closed) before the timer: kept now.
       addEventListener("pagehide", keep, { signal });
       // Back online: a first load that failed tries again, even if realtime never noticed (QA BUG-123).

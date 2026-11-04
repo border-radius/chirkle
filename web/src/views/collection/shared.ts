@@ -87,24 +87,17 @@ export function asMessage(it: CollectionItem): Message {
   };
 }
 
-/** A square tile's picture: the grid thumbnail, a video's poster, or nothing (a plain tile with ▶). Retries once with a new token. */
+/** A square tile's picture: the grid thumbnail, a video's poster, or nothing (a plain tile with ▶). */
 export function picture(b: Base, it: CollectionItem, signal: AbortSignal): HTMLImageElement | null {
   if (it.video && !it.poster) return null;
-  const src = () => (it.video ? b.api.itemPosterUrl(it) : b.api.itemUrl(it, "240x240"));
-  const img = b.h("img", { src: src(), alt: "", loading: "lazy", decoding: "async" });
-  let retried = false;
-  img.addEventListener(
-    "error",
-    () => {
-      if (retried) return void (it.video && img.remove());
-      retried = true;
-      void b.api.fileToken(true).then(
-        () => (img.src = src()),
-        () => {},
-      );
-    },
-    { signal },
-  );
+  const img = b.h("img", {
+    src: it.video ? b.api.itemPosterUrl(it) : b.api.itemUrl(it, "240x240"),
+    alt: "",
+    loading: "lazy",
+    decoding: "async",
+  });
+  // A poster that fails leaves the plain tile.
+  if (it.video) img.addEventListener("error", () => img.remove(), { signal });
   return img;
 }
 

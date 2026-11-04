@@ -1,4 +1,4 @@
-// Small services: file tokens (§17.3), the room cache (§7.5), drafts (§22.3), the site record (§24).
+// Small services: file tokens for older servers (§17.3, §37.3), the room cache (§7.5), drafts (§22.3), the site record (§24).
 package chirkle.android.data.repo
 
 import chirkle.android.data.api.ChirkleApi
@@ -18,26 +18,34 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
-/** Protected attachments need a short-lived token in their URL (§17.3): one kept fresh, one request shared. */
+/**
+ * A server from before shared files wants a short-lived token in attachment URLs (§17.3): one kept fresh, one request
+ * shared. Ours open by the URL alone (DESIGN.md §37.3): learnt once ([ChirkleApi.needsFileTokens]), then the token is
+ * always "", so the URLs have none and nothing is asked again.
+ */
 class FileTokens(private val api: ChirkleApi, private val scope: CoroutineScope, private val now: () -> Long = System::currentTimeMillis) {
     @Volatile private var token = ""
     @Volatile private var at = 0L
     private var inflight: Deferred<String>? = null
     private var generation = 0
+    /** Whether the server wants tokens; null until known. */
+    @Volatile private var needed: Boolean? = null
 
     val current: String get() = token
 
-    fun fresh(): Boolean = token.isNotEmpty() && now() - at < MAX_AGE_MS
+    fun fresh(): Boolean = needed == false || (token.isNotEmpty() && now() - at < MAX_AGE_MS)
 
-    /** A fresh token: the cached one, the one being fetched, or ([force]) a new one. "" for a guest. */
+    /** A fresh token: the cached one, the one being fetched, or ([force]) a new one. "" for a guest, and for a server that wants none. */
     @Synchronized
     fun ensureAsync(force: Boolean = false): Deferred<String> {
+        if (needed == false) return CompletableDeferred("")
         if (!force && fresh()) return CompletableDeferred(token)
         inflight?.let { if (it.isActive) return it }
         val gen = generation
         val started = now()
         val d = scope.async {
-            val t = api.newFileToken()
+            if (needed == null) needed = api.needsFileTokens()
+            val t = if (needed == true) api.newFileToken() else ""
             synchronized(this@FileTokens) {
                 if (gen == generation) {
                     token = t
@@ -52,7 +60,7 @@ class FileTokens(private val api: ChirkleApi, private val scope: CoroutineScope,
 
     suspend fun ensure(force: Boolean = false): String = ensureAsync(force).await()
 
-    /** Forget the token (the user changed). */
+    /** Forget the token (the user changed). Whether the server wants one stays known. */
     @Synchronized
     fun reset() {
         generation++

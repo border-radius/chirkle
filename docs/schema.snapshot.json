@@ -37,24 +37,6 @@
           "collection": "collections"
         },
         {
-          "help": "",
-          "hidden": false,
-          "maxSelect": 1,
-          "maxSize": 20971520,
-          "mimeTypes": [],
-          "name": "file",
-          "presentable": false,
-          "protected": true,
-          "required": true,
-          "system": false,
-          "thumbs": [
-            "800x480f",
-            "480x240f",
-            "240x240"
-          ],
-          "type": "file"
-        },
-        {
           "autogeneratePattern": "",
           "help": "",
           "hidden": false,
@@ -87,15 +69,6 @@
           "type": "bool"
         },
         {
-          "help": "",
-          "hidden": true,
-          "name": "ready",
-          "presentable": false,
-          "required": false,
-          "system": false,
-          "type": "bool"
-        },
-        {
           "autogeneratePattern": "",
           "help": "",
           "hidden": true,
@@ -117,12 +90,25 @@
           "presentable": false,
           "system": false,
           "type": "autodate"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 255,
+          "min": 0,
+          "name": "file",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": true,
+          "system": false,
+          "type": "text"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_collection_items_collection ON collection_items (collection, created)",
-        "CREATE UNIQUE INDEX idx_collection_items_origin ON collection_items (collection, origin) WHERE origin != ''",
-        "CREATE INDEX idx_collection_items_pending ON collection_items (created) WHERE ready = FALSE"
+        "CREATE UNIQUE INDEX idx_collection_items_origin ON collection_items (collection, origin) WHERE origin != ''"
       ]
     },
     {
@@ -1034,6 +1020,135 @@
       ]
     },
     {
+      "name": "files",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "maxSize": 20971520,
+          "mimeTypes": [],
+          "name": "file",
+          "presentable": false,
+          "protected": false,
+          "required": true,
+          "system": false,
+          "thumbs": [
+            "800x480f",
+            "480x240f",
+            "240x240"
+          ],
+          "type": "file"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 200,
+          "min": 0,
+          "name": "name",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": false,
+          "system": false,
+          "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "video",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSize": 64,
+          "name": "dims",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "json"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "poster",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "ready",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "sized",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": null,
+          "name": "refs",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "hidden": false,
+          "name": "created",
+          "onCreate": true,
+          "onUpdate": false,
+          "presentable": false,
+          "system": false,
+          "type": "autodate"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_files_file ON files (file)",
+        "CREATE INDEX idx_files_pending ON files (created) WHERE ready = FALSE",
+        "CREATE INDEX idx_files_unsized ON files (created) WHERE sized = FALSE"
+      ]
+    },
+    {
       "name": "hidden_rooms",
       "type": "base",
       "listRule": "user = @request.auth.id",
@@ -1257,41 +1372,13 @@
           "required": true,
           "system": false,
           "type": "date"
-        },
-        {
-          "help": "",
-          "hidden": false,
-          "name": "ready",
-          "presentable": false,
-          "required": false,
-          "system": false,
-          "type": "bool"
-        },
-        {
-          "help": "",
-          "hidden": false,
-          "name": "poster",
-          "presentable": false,
-          "required": false,
-          "system": false,
-          "type": "bool"
-        },
-        {
-          "help": "",
-          "hidden": false,
-          "name": "sized",
-          "presentable": false,
-          "required": false,
-          "system": false,
-          "type": "bool"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_media_room ON media (room, sent, message, pos)",
         "CREATE INDEX idx_media_message ON media (message)",
         "CREATE INDEX idx_media_source ON media (source, file)",
-        "CREATE INDEX idx_media_pending ON media (sent) WHERE ready = FALSE",
-        "CREATE INDEX `idx_media_unsized` ON `media` (sent) WHERE sized = FALSE"
+        "CREATE INDEX `idx_media_file` ON `media` (file)"
       ]
     },
     {
@@ -1327,7 +1414,6 @@
         "@request.body.edited_at:isset = false",
         "@request.body.deleted_at:isset = false",
         "(@request.body.deleted:isset = false || @request.body.deleted = true)",
-        "@request.body.files:isset = false",
         "@request.body.reply_to:isset = false",
         "@request.body.reactions:isset = false",
         "@request.body.forwarded_from:isset = false",
@@ -1339,7 +1425,8 @@
         "@request.body.remote_id:isset = false",
         "@request.body.file_dims:isset = false",
         "@request.body.anonymous:isset = false",
-        "@request.body.forwarded_anonymous:isset = false"
+        "@request.body.forwarded_anonymous:isset = false",
+        "@request.body.files:isset = false"
       ],
       "deleteRule": null,
       "fields": [
@@ -1445,24 +1532,6 @@
           "presentable": false,
           "system": false,
           "type": "autodate"
-        },
-        {
-          "help": "",
-          "hidden": false,
-          "maxSelect": 10,
-          "maxSize": 20971520,
-          "mimeTypes": [],
-          "name": "files",
-          "presentable": false,
-          "protected": true,
-          "required": false,
-          "system": false,
-          "thumbs": [
-            "800x480f",
-            "480x240f",
-            "240x240"
-          ],
-          "type": "file"
         },
         {
           "help": "",
@@ -1598,6 +1667,16 @@
           "required": false,
           "system": false,
           "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSize": 209715200,
+          "name": "files",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "json"
         }
       ],
       "indexes": [
@@ -2064,6 +2143,46 @@
           "required": false,
           "system": false,
           "type": "bool"
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "storage_cleanup",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 255,
+          "min": 0,
+          "name": "prefix",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": true,
+          "system": false,
+          "type": "text"
         }
       ],
       "indexes": []

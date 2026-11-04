@@ -67,7 +67,7 @@ against a current server and one without the routes (or an old release's hooks, 
 **Custom routes** (`pb_hooks/main.pb.js`, `federation.pb.js`):
 `/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `ban`, `forward`, `media/{room}`,
 `posters/{message}/{file}`, `posters/items/{item}/{file}`, `collections`, `badges`, `items`, `items/{id}`, `saved`,
-`subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (with a file token), `/api/health` and
+`subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
 `/.well-known/assetlinks.json`.
 
 **Realtime** (`/api/realtime`): `rooms`, `messages` (one room's, expanding `author,forwarded_from` but not

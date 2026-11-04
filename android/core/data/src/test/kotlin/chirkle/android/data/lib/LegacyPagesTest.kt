@@ -13,7 +13,7 @@ class LegacyPagesTest {
         assertEquals(FilterQuery("room = {:room}", mapOf("room" to "r"), "created,id"), Pages.first("r").legacy())
         assertEquals(
             FilterQuery(
-                "room = {:room} && (created < {:created} || (created = {:created} && id < {:id})) && (files:length > 0 || forward_of != \"\")",
+                "room = {:room} && (created < {:created} || (created = {:created} && id < {:id})) && ((files:length > 0 && files != \"[]\") || forward_of != \"\")",
                 mapOf("room" to "r", "created" to c.created, "id" to c.id),
                 "-created,-id",
             ),

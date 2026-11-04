@@ -2407,3 +2407,77 @@ user's call ("raise budget if needed").
 - the build is within every budget (`app.js` 48.62 KB).
 - Android: all 168 tests pass. In the first full run `UiFeaturesTest` "hiding a room" timed out under load. It passed
   alone twice and in the full rerun.
+
+# QA pass 30 — shared files, no file tokens
+
+2026-11-04, user: "go ahead. also change apps to remove token from url. bump android version. after you're done test
+apps and server heavily. list all bugs. fix them", about shared files (DESIGN.md §37, ANDROID.md §47). The checks:
+- the whole integration suite, with the token and access tests rewritten for access by URL;
+- new tests: the migration down and up, locally and in S3;
+- hand probes of every way a client could name a file it doesn't have;
+- a concurrency stress run of saves, unsaves, attaches, forwards and deletes, then the refs checked against every
+  name in the database and every folder in storage;
+- component tests, Chromium e2e and the Android tests against a real server.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-219 | High | Server | A message with 10 files of 20 MB was refused (413). PocketBase holds a create's body to its fields' sizes, and `files`, now JSON, was small | Fixed |
+| BUG-220 | Medium | Server | New images lost their shape (`file_dims` came back `{}`): a JSON field's `get` gives raw bytes | Fixed |
+| BUG-221 | High | Server | An edit could change a message's files (`files-`, `files+`, an upload): the field no longer refused it once JSON | Fixed |
+| BUG-222 | Medium | Server, Android | Pages with `files=1` (the viewer's paging, §17.7) listed every message: `files:length` means nothing on a JSON field | Fixed |
+| BUG-223 | High | Server | Deleting one message (or item, or collection) twice at once unlinked its files twice: a file was deleted while a collection item still named it, and the item showed nothing | Fixed |
+| BUG-224 | Low | Server | Saving to a collection while the message was being deleted could give the item a file just deleted (found reading the code; not reproduced) | Fixed |
+
+**BUG-219:** `messages.files` has `maxSize` 10 × 20 MB, so the body limit fits the most a message may carry. Each file
+is still held to 20 MB (`files.fromUploads`). Test: `messages.files.test.ts` (10 files of 20 MB).
+
+**BUG-220:** `setMessageFiles` reads `dims` with `getString` and parses it.
+
+**BUG-221:** `beforeMessageUpdateRequest` refuses uploads and any of `files`, `+files`, `files+`, `files-` in the
+body ("Attachments can't be changed.").
+
+**BUG-222:** the route filters `files != "[]"` (every message has at least `[]`). The app's records API filter, for
+servers from before the routes, had the same fault on a server with this schema. It is now
+`(files:length > 0 && files != "[]")`, which was checked against both schemas (a server migrated down and one up).
+Tests: `lists.test.ts`, `LegacyServerTest`, `LegacyPagesTest`.
+
+**BUG-223:** the stress run left two items naming files that were gone. Two `deleted: true` updates of one message
+had both loaded it with its files, and both unlinked them. What is unlinked is now read in the save's transaction
+(`files.namedBy`): nothing for a message deleted already or a record that is gone. The same applies to items and
+messages deleted outright. Test: `collections.test.ts` (8 deletes at once, then items and collections). The stress run
+then left refs equal to the names in the database, 4 runs of 120 operations, with no folder in storage without a row.
+
+**BUG-224:** `addItem` finds the file again in its transaction, and answers 404 if it is gone.
+
+**Checked and fine**
+- **Claims:** a client can't make a message or item name a file it doesn't have:
+  - JSON `files` and form `files` with a stored name are ignored;
+  - `files+` is ignored too;
+  - edits are refused;
+  - a `file_names` edit is put back;
+  - `collection_items` and `files` refuse records API writes and reads;
+  - `/api/files/files/…` is 404;
+  - a stored name under another message's URL is 404.
+- **URLs:**
+  - the original name, or another suffix, is 404;
+  - an attachment opens through a forward's own id or the original's;
+  - a deleted message's URL is 404 while an item keeps the file;
+  - a `?token=` from an old page or app changes nothing.
+- **Storage:** with S3 a deleted file leaves the bucket a moment after the answer (PocketBase deletes in the
+  background). The migration moves files within the bucket, merges a saved copy into its message's file, and the
+  media worker removes the old folders.
+- **Android:** 0.1.4 asks a server once whether it wants tokens. This one answers 403 for `files`, an older one 404.
+  0.1.2 and 0.1.3 still get tokens from `/api/files/token`, which are ignored.
+
+**Suites:**
+- typecheck, lint and the HTML sinks check;
+- 761 unit and component tests;
+- 490 integration tests, the S3 ones included;
+- E2E Chromium: 82 of 83 pass. The image viewer's final Ctrl-click to a new tab is the flake known since 2026-11-03
+  (1 in 4 alone, also before these changes); the attachments and PWA specs pass twice over apart from it;
+- the build is within every budget: `app.js` 48.10 KB, down from 48.6 KB without the token cache.
+- Android: all 175 tests pass, and the release build works. Two failures in the first full run:
+  - `RoomScenariosTest` hit a load flake: it passed alone and in the rerun, and 300 concurrent sends to a server all
+    answered 200;
+  - `UiCollectionsTest` expected *Saved in* without the collection the item was opened from. That collection has the
+    file now (§37.1), so the test was updated.

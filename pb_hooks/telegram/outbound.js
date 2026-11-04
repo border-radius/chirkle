@@ -173,16 +173,19 @@ function remember(app, messageId, chatId, sent, kind) {
 
 /**
  * A message's files as Telegram takes them: photos and videos (shown, and sent together as an album), and documents
- * (an album of their own: Telegram doesn't mix them).
+ * (an album of their own: Telegram doesn't mix them). Each is its shared file (§37); one that is gone is left out.
+ * @param {core.App} app
  * @param {filesystem.System} fsys
  * @param {core.Record} source
  */
-function filesOf(fsys, source) {
+function filesOf(app, fsys, source) {
+  const shared = require(`${__hooks}/lib/files.js`);
   const names = /** @type {Record<string, string>} */ (JSON.parse(source.getString("file_names") || "{}") || {});
   const dims = /** @type {Record<string, number[]>} */ (JSON.parse(source.getString("file_dims") || "{}") || {});
-  const all = source.getStringSlice("files");
+  const rows = shared.byNames(app, source.getStringSlice("files"));
+  const all = source.getStringSlice("files").filter((name) => rows.has(name));
   return all.map((name) => {
-    const key = `${source.baseFilesPath()}/${name}`;
+    const key = shared.keyOf(/** @type {core.Record} */ (rows.get(name)));
     const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
     const size = fsys.attributes(key).size;
     const [w, h] = Array.isArray(dims[name]) ? dims[name] : [];
@@ -223,7 +226,7 @@ function send(app, messageId, chatId) {
 
   const fsys = app.newFilesystem();
   try {
-    const files = filesOf(fsys, source);
+    const files = filesOf(app, fsys, source);
     const groups = [files.filter((f) => f.kind !== "document"), files.filter((f) => f.kind === "document")].filter((g) => g.length);
     // A sticker takes no caption: its text goes before it.
     const captioned = groups.length && files[0].kind !== "sticker";

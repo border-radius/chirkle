@@ -1,0 +1,1 @@
+Pictures and videos open without a file token on servers that no longer use them, so they load sooner and stay cached. Fixes.

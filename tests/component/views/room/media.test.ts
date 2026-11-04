@@ -44,7 +44,7 @@ describe("room view: media grid (§30)", () => {
     expect(grid()!.querySelector("video")).toBeNull();
     expect(tiles()[0]!.querySelector("img")).toBeNull();
     expect(tiles()[0]!.querySelector("span")!.textContent).toBe("▶");
-    expect(tiles()[2]!.querySelector("img")!.getAttribute("src")).toMatch(/\/api\/chat\/posters\/[a-z0-9]+\/p68_abcdefghij\.png\?token=/);
+    expect(tiles()[2]!.querySelector("img")!.getAttribute("src")).toMatch(/\/api\/chat\/posters\/[a-z0-9]+\/p68_abcdefghij\.png$/);
     expect(tiles()[1]!.querySelector("img")!.getAttribute("src")).toMatch(/\/api\/files\/messages\/.*thumb=240x240/);
     expect(tiles()[0]!.getAttribute("aria-label")).toMatch(/^b\.mp4, video, Me, /);
     const months = () => [...grid()!.querySelectorAll("h3")].map((h) => h.textContent);

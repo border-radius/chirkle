@@ -69,15 +69,20 @@ describe("schema (§5)", () => {
     );
   });
 
-  it("messages.files: up to 10 protected files of 20 MB, with image thumbnails (§17.1)", () => {
-    expect(fieldsOf(cols.messages!).files).toMatchObject({
+  it("messages.files: the stored names of shared files (§37), each up to 20 MB, with image thumbnails (§17.1)", () => {
+    // JSON, as big as 10 files of 20 MB: PocketBase holds a create's body to its fields' sizes, and the uploads come in it.
+    expect(fieldsOf(cols.messages!).files).toMatchObject({ type: "json", maxSize: LIMITS.attachments * LIMITS.attachmentBytes });
+    expect(fieldsOf(cols.files!).file).toMatchObject({
       type: "file",
-      maxSelect: LIMITS.attachments,
+      maxSelect: 1,
       maxSize: LIMITS.attachmentBytes,
-      protected: true,
+      protected: false,
       thumbs: ["800x480f", "480x240f", "240x240"],
       mimeTypes: [],
     });
+    // Only superusers list or read files rows: clients reach a file through a message or item that names it (§37.3).
+    expect(cols.files).toMatchObject({ listRule: null, viewRule: null, createRule: null, updateRule: null, deleteRule: null });
+    expect(fieldsOf(cols.collection_items!).file).toMatchObject({ type: "text" });
     expect(cols.messages!.updateRule).toContain("@request.body.files:isset = false");
     expect(fieldsOf(cols.messages!).file_names).toMatchObject({ type: "json" }); // QA BUG-28
   });

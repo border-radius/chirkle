@@ -498,7 +498,6 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
         name: (m, f) => m.file_names?.[f] ?? f,
         when: (m) => `Added ${o.when(m.created)}`,
         fileUrl: (m, f) => api.itemUrl({ id: m.id, file: f }),
-        refreshFileToken: () => api.fileToken(true),
         ...(me ? { onSave: (m: Message, _f: string, b: HTMLElement) => openSave({ ...o, from: { item: m.id }, opener: b }) } : {}),
         opener,
         follow: () => {},

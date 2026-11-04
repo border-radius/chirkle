@@ -87,7 +87,6 @@ describe("room access matrix (§23.1)", () => {
     await Promise.all(
       viewers.map(async (v) => {
         const unread = v.user ? (await v.pb.send<{ rooms: Record<string, number> }>("/api/chat/unread", {})).rooms : {};
-        const token = v.user ? await v.pb.files.getToken() : "";
         const listedHere = (await v.pb.send<{ id: string }[]>("/api/chat/rooms", {})).map((r) => r.id);
         await Promise.all(
           fixtures.map(async (f) => {
@@ -110,9 +109,9 @@ describe("room access matrix (§23.1)", () => {
               const notifiable = await v.pb.send<unknown[]>("/api/chat/notifiable", { query });
               check(f, v, "GET /api/chat/notifiable", can, notifiable.length > 0);
             }
-            const url = creator.pb.files.getURL(f.probe, f.probe.files[0], token ? { token } : {});
-            const file = (await fetch(url)).status;
-            check(f, v, "attachment", can, ok(file), ` (got ${file})`);
+            // An attachment opens by its URL alone, for whoever has it (§37.3): the URL is the secret.
+            const file = (await fetch(creator.pb.files.getURL(f.probe, f.probe.files[0]))).status;
+            check(f, v, "attachment by URL", true, ok(file), ` (got ${file})`);
             if (v.user) check(f, v, "unread count", can, (unread[roomId] ?? 0) > 0);
           }),
         );

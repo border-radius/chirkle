@@ -284,7 +284,7 @@ function applyMessage(app, sender, ev, files) {
     const from = userOf(app, sender, m.forwarded_from, people);
     if (from) rec.set("forwarded_from", from);
   }
-  if (files?.length) rec.set("files", files);
+  if (files?.length) require(`${__hooks}/lib/files.js`).attachUploads(app, rec, files);
   if (ev.backfill && typeof m.created === "string" && /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d/.test(m.created)) {
     rec.setRaw("created", m.created);
     rec.setRaw("updated", m.created);

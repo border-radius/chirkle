@@ -37,7 +37,7 @@ test("the manifest and its icons load; the service worker serves the app's shell
   await context.setOffline(false);
 });
 
-test("thumbnails are kept by the service worker across file tokens, and dropped on logout (§27.2)", async ({ page }) => {
+test("thumbnails are kept by the service worker under their URL, and dropped on logout (§27.2, §37.3)", async ({ page }) => {
   const ada = await apiUser("Ada");
   const room = await apiRoom(ada);
   await login(page, ada);
@@ -53,18 +53,12 @@ test("thumbnails are kept by the service worker across file tokens, and dropped 
   expect(src.searchParams.get("thumb")).toBeTruthy();
   await expect.poll(() => page.evaluate(async () => (await (await caches.open("chat-files")).keys()).length)).toBe(1);
 
+  expect(src.searchParams.get("token")).toBeNull();
   const status = (url: string) => page.evaluate((u) => fetch(u, { cache: "no-store" }).then((r) => r.status), url);
-  // Another token of the same user (here one the server refuses: a bad signature) gets the kept thumbnail.
-  const token = src.searchParams.get("token")!;
-  src.searchParams.set("token", token.replace(/\.[^.]+$/, ".bad"));
-  expect((await page.request.get(src.href)).ok()).toBe(false);
+  // A page from before still adds a token: the same kept thumbnail, not another copy.
+  src.searchParams.set("token", "old.page.token");
   expect(await status(src.href)).toBe(200);
-  // Another user's token never gets it: the worker passes the request on, and the server refuses it.
-  const [head, payload] = token.split(".");
-  const claims = JSON.parse(Buffer.from(payload!, "base64url").toString());
-  const other = Buffer.from(JSON.stringify({ ...claims, id: "someoneelse0000" })).toString("base64url");
-  src.searchParams.set("token", `${head}.${other}.bad`);
-  expect(await status(src.href)).not.toBe(200);
+  expect(await page.evaluate(async () => (await (await caches.open("chat-files")).keys()).length)).toBe(1);
 
   await logOut(page);
   await expect.poll(() => page.evaluate(() => caches.has("chat-files"))).toBe(false);

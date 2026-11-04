@@ -1,7 +1,7 @@
 // Media collections (§31): the collections rules and hooks, saving copies (POST /api/chat/items), attaching items to
 // messages, badges, subscriptions and their new counts, and the worker's thumbnails and posters for items.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { RecordModel } from "pocketbase";
 import { beforeAll, describe, expect, inject, it } from "vitest";
@@ -46,13 +46,30 @@ const mp4 = makeMp4();
 const video = (name: string) => new File([new Uint8Array(mp4 ?? [0])], name, { type: "video/mp4" });
 
 let admin: Awaited<ReturnType<typeof adminClient>>;
-let itemsId = "";
+let filesId = "";
 const tick = () => admin.send("/api/media/tick", { method: "POST" });
-const stored = (id: string, path: string) => existsSync(join(inject("pbDataDir"), "storage", itemsId, id, path));
+/** The `files` row (§37) of a stored name: its id and how many messages and items name it; null when gone. */
+function rowOf(file: string) {
+  const db = rawDb();
+  try {
+    return (
+      (db.prepare("SELECT id, refs, poster FROM files WHERE file = ?").get(file) as
+        | { id: string; refs: number; poster: number }
+        | undefined) ?? null
+    );
+  } finally {
+    db.close();
+  }
+}
+/** Is `path` stored in the folder of file `file`'s row? */
+const stored = (file: string, path: string) => {
+  const row = rowOf(file);
+  return !!row && existsSync(join(inject("pbDataDir"), "storage", filesId, row.id, path));
+};
 
 beforeAll(async () => {
   admin = await adminClient();
-  itemsId = (await admin.collections.getOne("collection_items")).id;
+  filesId = (await admin.collections.getOne("files")).id;
 });
 
 const newCollection = (u: TestUser, extra: Record<string, unknown> = {}) =>
@@ -63,8 +80,8 @@ const save = (u: TestUser, body: Record<string, unknown>) => u.pb.send<Item>("/a
 const listed = (u: TestUser) => u.pb.send<Listed>("/api/chat/collections", {});
 const sub = (u: TestUser, collection: string, on = true) =>
   u.pb.send<{ on: boolean; seen_at: string }>("/api/chat/subs", { method: "POST", body: { collection, on } });
-const fileUrl = (rec: { collectionId: string; id: string }, file: string, token = "") =>
-  `${inject("pbUrl")}/api/files/${rec.collectionId}/${rec.id}/${file}${token ? `?token=${token}` : ""}`;
+const fileUrl = (rec: { collectionId: string; id: string }, file: string) =>
+  `${inject("pbUrl")}/api/files/${rec.collectionId}/${rec.id}/${file}`;
 
 /** A message with an image in a new room of `u`'s, and an item saved from it into a new collection of theirs. */
 async function savedItem(u: TestUser, extra: Record<string, unknown> = {}) {
@@ -135,18 +152,52 @@ describe("collections (§31)", () => {
 });
 
 describe("POST /api/chat/items (§31)", () => {
-  it("saves a copy of a message's image under its original name, which outlives the message", async () => {
+  it("saves a message's image under its original name, the same file (§37), which outlives the message", async () => {
     const a = await newUser();
     const { msg, coll, item } = await savedItem(a);
     expect(item).toMatchObject({ collection: coll.id, name: "cat.png", video: false, poster: false });
-    expect(item.file).not.toBe(msg.files[0]);
+    expect(item.file).toBe(msg.files[0]);
+    expect(rowOf(item.file)?.refs).toBe(2);
     expect((item as unknown as Record<string, unknown>).origin).toBeUndefined();
     expect((await a.pb.collection("collections").getOne(coll.id)).items).toBe(1);
 
     await a.pb.collection("messages").update(msg.id, { deleted: true });
-    const res = await fetch(fileUrl(item, item.file, await a.pb.files.getToken()));
+    expect(rowOf(item.file)?.refs).toBe(1);
+    expect((await fetch(fileUrl(msg, item.file))).status).toBe(404);
+    const res = await fetch(fileUrl(item, item.file));
     expect(res.status).toBe(200);
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(pngOf(64, 48)));
+    // Taken out of its last collection, nothing names it: it goes.
+    await a.pb.send(`/api/chat/items/${item.id}`, { method: "DELETE" });
+    expect(rowOf(item.file)).toBeNull();
+    expect((await fetch(fileUrl(item, item.file))).status).toBe(404);
+  });
+
+  it("names a file once whatever happens to the messages and items naming it: refs follow, the file goes with the last", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const room = await newRoom(a);
+    const msg = await send(a, room.id, { files: [png("shared.png")] });
+    const name = msg.files[0] as string;
+    const c1 = await newCollection(a, { public: true });
+    const i1 = await save(a, { collection: c1.id, message: msg.id, file: name });
+    const c2 = await newCollection(b);
+    const i2 = await save(b, { collection: c2.id, item: i1.id });
+    const again = await send(b, (await newRoom(b)).id, { items: [i1.id] });
+    expect(again.files).toEqual([name]);
+    expect(again.file_sources).toEqual({ [name]: c1.id });
+    expect(rowOf(name)?.refs).toBe(4);
+    // A collection deleted takes its items' names with it; a user's messages and collections deleted by a superuser too.
+    await a.pb.collection("collections").delete(c1.id);
+    expect(rowOf(name)?.refs).toBe(3);
+    await a.pb.collection("messages").update(msg.id, { deleted: true });
+    expect(rowOf(name)?.refs).toBe(2);
+    expect((await fetch(fileUrl(again, name))).status).toBe(200);
+    await admin.collection("messages").delete(again.id);
+    expect(rowOf(name)?.refs).toBe(1);
+    await b.pb.collection("collections").delete(c2.id);
+    expect(rowOf(name)).toBeNull();
+    expect((await fetch(fileUrl(i2, name))).status).toBe(404);
   });
 
   it("uploads an image or video straight into a collection of yours, which can then be saved and attached", async () => {
@@ -156,7 +207,7 @@ describe("POST /api/chat/items (§31)", () => {
     const up = (u: TestUser, body: Record<string, unknown>) => u.pb.send<Item>("/api/chat/items", { method: "POST", body });
     const item = await up(a, { collection: coll.id, file: png("dog.png") });
     expect(item).toMatchObject({ collection: coll.id, name: "dog.png", video: false });
-    const res = await fetch(fileUrl(item, item.file, await a.pb.files.getToken()));
+    const res = await fetch(fileUrl(item, item.file));
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(pngOf(64, 48)));
     const after = await a.pb.collection("collections").getOne(coll.id);
     expect(after.items).toBe(1);
@@ -171,22 +222,23 @@ describe("POST /api/chat/items (§31)", () => {
     expect((await a.pb.collection("collections").getOne(coll.id)).items).toBe(2);
     // As any item: saved into another collection, and attached to a message.
     const copy = await save(a, { collection: (await newCollection(a)).id, item: item.id });
-    expect(copy.name).toBe("dog.png");
+    expect(copy).toMatchObject({ name: "dog.png", file: item.file });
     const msg = await send(a, (await newRoom(a)).id, { items: [item.id] });
+    expect(msg.files).toEqual([item.file]);
     expect(msg.file_names[msg.files[0]]).toBe("dog.png");
+    expect(msg.file_dims).toEqual({ [item.file]: [64, 48] });
     await tick();
-    expect(stored(item.id, `thumbs_${item.file}/240x240_${item.file}`)).toBe(true);
+    expect(stored(item.file, `thumbs_${item.file}/240x240_${item.file}`)).toBe(true);
   });
 
-  it("keeps a private collection's files to its owner, a public one's to anyone (guests too)", async () => {
+  it("keeps a private collection's items to its owner (the records); a file opens by its URL alone (§37.3)", async () => {
     const a = await newUser();
     const b = await newUser();
     const { coll, item } = await savedItem(a);
-    expect((await fetch(fileUrl(item, item.file, await a.pb.files.getToken()))).status).toBe(200);
-    expect((await fetch(fileUrl(item, item.file, await b.pb.files.getToken()))).status).toBe(404);
-    expect((await fetch(fileUrl(item, item.file))).status).toBe(404);
+    expect(await status(b.pb.collection("collection_items").getOne(item.id))).toBe(404);
+    expect((await fetch(fileUrl(item, item.file))).status).toBe(200);
+    expect((await fetch(fileUrl(item, "other_abcdefghij.png"))).status).toBe(404);
     await a.pb.collection("collections").update(coll.id, { public: true });
-    expect((await fetch(fileUrl(item, item.file, await b.pb.files.getToken()))).status).toBe(200);
     expect((await fetch(fileUrl(item, item.file))).status).toBe(200);
     expect((await b.pb.collection("collection_items").getFullList({ filter: `collection = "${coll.id}"` })).map((i) => i.id)).toEqual([
       item.id,
@@ -212,22 +264,39 @@ describe("POST /api/chat/items (§31)", () => {
     expect(await status(save(b, { collection: coll.id, message: msg.id, file: msg.files[0] }))).toBe(403);
   });
 
-  it("keeps one copy when the same file is saved at once: the others' copies are removed", async () => {
+  it("unlinks a message's files once when it is deleted several times at once, an item or a collection too (QA BUG-223)", async () => {
+    const a = await newUser();
+    const room = await newRoom(a);
+    const msg = await send(a, room.id, { files: [png("twice.png")] });
+    const name = msg.files[0] as string;
+    const keep = await newCollection(a);
+    await save(a, { collection: keep.id, message: msg.id, file: name });
+    const other = await newCollection(a);
+    const item = await save(a, { collection: other.id, message: msg.id, file: name });
+    expect(rowOf(name)?.refs).toBe(3);
+    await Promise.all(Array.from({ length: 8 }, () => status(a.pb.collection("messages").update(msg.id, { deleted: true }))));
+    await Promise.all(Array.from({ length: 8 }, () => status(a.pb.send(`/api/chat/items/${item.id}`, { method: "DELETE" }))));
+    // The item in `keep` still names it, and opens.
+    expect(rowOf(name)?.refs).toBe(1);
+    const [kept] = await a.pb.collection("collection_items").getFullList({ filter: `collection = "${keep.id}"` });
+    expect((await fetch(fileUrl(kept!, name))).status).toBe(200);
+    await Promise.all(Array.from({ length: 4 }, () => status(a.pb.collection("collections").delete(keep.id))));
+    expect(rowOf(name)).toBeNull();
+  });
+
+  it("keeps one item when the same file is saved at once, and counts it once", async () => {
     const a = await newUser();
     const room = await newRoom(a);
     const msg = await send(a, room.id, { files: [png("race.png")] });
     const coll = await newCollection(a);
-    const dir = join(inject("pbDataDir"), "storage", itemsId);
-    const before = new Set(existsSync(dir) ? readdirSync(dir) : []);
     const codes = await Promise.all(
       Array.from({ length: 20 }, () => status(save(a, { collection: coll.id, message: msg.id, file: msg.files[0] }))),
     );
     expect(codes.filter((c) => c === 200)).toHaveLength(1);
     expect(codes.filter((c) => c !== 200).every((c) => c === 409)).toBe(true);
-    const [item] = await a.pb.collection("collection_items").getFullList({ filter: `collection = "${coll.id}"` });
-    // Of the new folders (other tests add theirs), only the saved item's has a copy of race.png.
-    const copies = readdirSync(dir).filter((id) => !before.has(id) && readdirSync(join(dir, id)).some((f) => f.startsWith("race_")));
-    expect(copies).toEqual([item?.id]);
+    expect(await a.pb.collection("collection_items").getFullList({ filter: `collection = "${coll.id}"` })).toHaveLength(1);
+    expect((await a.pb.collection("collections").getOne(coll.id)).items).toBe(1);
+    expect(rowOf(msg.files[0])?.refs).toBe(2);
   });
 
   it("saves only what you can see: not a private room's file, but a forward's original you read", async () => {
@@ -307,8 +376,8 @@ describe("attaching items to a message (§31)", () => {
     expect(m.file_names[m.files[0]]).toBe("up.png");
     expect(m.file_names[m.files[1]]).toBe("cat.png");
     expect(m.file_sources).toEqual({ [m.files[1]]: coll.id });
-    // The room's readers see it with the room's rules, though the collection is private.
-    const res = await fetch(fileUrl(m as unknown as { collectionId: string; id: string }, m.files[1], await b.pb.files.getToken()));
+    // The room's readers see it by the message's URL, though the collection is private.
+    const res = await fetch(fileUrl(m as unknown as { collectionId: string; id: string }, m.files[1]));
     expect(res.status).toBe(200);
     // JSON bodies too, items alone.
     const only = await a.pb.send<RecordModel>("/api/collections/messages/records", {
@@ -499,37 +568,34 @@ describe("the media worker and items (§31)", () => {
     const a = await newUser();
     const { item } = await savedItem(a);
     await tick();
-    expect(stored(item.id, `thumbs_${item.file}/240x240_${item.file}`)).toBe(true);
+    expect(stored(item.file, `thumbs_${item.file}/240x240_${item.file}`)).toBe(true);
   });
 
-  it.skipIf(!mp4 && !process.env.CI)(
-    "gives a video its poster, from the message's when it has one, served by the item's rules",
-    async () => {
-      const a = await newUser();
-      const b = await newUser();
-      const room = await newRoom(a);
-      const coll = await newCollection(a);
-      const m = await send(a, room.id, { files: [video("clip.mp4")] });
-      const fresh = await save(a, { collection: coll.id, message: m.id, file: m.files[0] });
-      expect(fresh).toMatchObject({ video: true, poster: false });
-      const events = await collect(a.pb, "collections");
-      try {
-        await tick();
-        expect((await a.pb.collection("collection_items").getOne(fresh.id)).poster).toBe(true);
-        // The room list's tile hears of it and shows the poster (QA BUG-207).
-        await eventually(() => expect(events.events.some((e) => e.action === "update" && e.record.id === coll.id)).toBe(true));
-        expect((await listed(a)).mine.find((c) => c.id === coll.id)!.preview[0]).toMatchObject({ id: fresh.id, poster: true });
-      } finally {
-        await events.stop();
-      }
-      const later = await save(a, { collection: (await newCollection(a)).id, message: m.id, file: m.files[0] });
-      expect(later.poster).toBe(true); // copied along: the message has its poster now
-      const url = async (u: TestUser) =>
-        `${inject("pbUrl")}/api/chat/posters/items/${fresh.id}/${fresh.file}?token=${await u.pb.files.getToken()}`;
-      const res = await fetch(await url(a));
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toBe("image/jpeg");
-      expect((await fetch(await url(b))).status).toBe(404);
-    },
-  );
+  it.skipIf(!mp4 && !process.env.CI)("gives a video its poster once, whoever names it, served by the item's URL alone", async () => {
+    const a = await newUser();
+    const room = await newRoom(a);
+    const coll = await newCollection(a);
+    const m = await send(a, room.id, { files: [video("clip.mp4")] });
+    const fresh = await save(a, { collection: coll.id, message: m.id, file: m.files[0] });
+    expect(fresh).toMatchObject({ video: true, poster: false });
+    const events = await collect(a.pb, "collections");
+    try {
+      await tick();
+      expect((await a.pb.collection("collection_items").getOne(fresh.id)).poster).toBe(true);
+      // The room list's tile hears of it and shows the poster (QA BUG-207).
+      await eventually(() => expect(events.events.some((e) => e.action === "update" && e.record.id === coll.id)).toBe(true));
+      expect((await listed(a)).mine.find((c) => c.id === coll.id)!.preview[0]).toMatchObject({ id: fresh.id, poster: true });
+    } finally {
+      await events.stop();
+    }
+    const later = await save(a, { collection: (await newCollection(a)).id, message: m.id, file: m.files[0] });
+    expect(later.poster).toBe(true); // the file has its poster now
+    const url = `${inject("pbUrl")}/api/chat/posters/items/${fresh.id}/${fresh.file}`;
+    const res = await fetch(url);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/jpeg");
+    expect((await fetch(`${inject("pbUrl")}/api/chat/posters/items/${fresh.id}/other_abcdefghij.mp4`)).status).toBe(404);
+    await a.pb.send(`/api/chat/items/${fresh.id}`, { method: "DELETE" });
+    expect((await fetch(url)).status).toBe(404);
+  });
 });
