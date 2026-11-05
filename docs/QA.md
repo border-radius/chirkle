@@ -2499,3 +2499,63 @@ moment came back as `ApiError(status 0)` inside a cancelled coroutine. Coroutine
 handler, which ends the app. It only happened when a request was in flight at that moment, which is why the crash was
 intermittent. `toApiError()` now rethrows a cancellation instead of wrapping it. Test: `UiAccountsTest` (switching
 accounts while requests are in flight), which failed every run before the fix.
+
+# QA pass 31 — server, web and Android
+
+2026-11-05, user: "test server, web app and android app heavily, list all bugs. then fix them. raise budgets if
+needed." The checks:
+- every suite first, on the unchanged tree: typecheck, lint, 761 unit and component tests, 485 integration tests,
+  the build, E2E Chromium (82 passed, 1 skipped) and the Android tests;
+- anonymous rooms probed for leaks: back-relation expands from rooms and messages (`messages_via_room`,
+  `messages_via_reply_to`), nested expands, `fields`, an upper-case `AUTHOR` filter, the list routes and the media grid;
+- 1,886 requests with odd parameters (empty, huge, negative, NUL, quotes, paths, wrong JSON types) to every custom
+  route, signed in and as a guest;
+- 200 sign-ups at once, 40 at a time;
+- the web app driven in Chromium at 1280 and 390 px wide, light and dark, as a member and as a moderator, with axe
+  run on the moderator's menus, the collections, Settings and an anonymous room;
+- Android screens (Robolectric shots) of an anonymous room and a moderator's message sheet.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-227 | Medium | Web | An author's menu on the last messages opened under the composer: a moderator's *Ban…* was hidden there | Fixed |
+| BUG-228 | Low | Web | A room opened from a link, Jump to or Back could be far down the sidebar, its row out of sight | Fixed |
+| BUG-229 | Low | Web (a11y) | A collection's month headings were `h3` under the page's `h1` (axe: heading-order) | Fixed |
+| BUG-230 | Medium | Web, Android | A moderator couldn't ban someone who takes no DMs: their name had no menu on the web, and the app's sheet had no Ban | Fixed |
+
+**BUG-227:** `ui/menu.ts` `place()` opens a menu upwards (`.up`) when its items would run past the bottom of the
+nearest scrolling box (the message list ends at the composer) and there is more room above. It is placed again when
+its items change (Ban arrives once the ban state is known) or a confirm step shows.
+
+**BUG-228:** `views/rooms.ts` `reveal()` scrolls the sidebar once when the open room or collection changes, just enough
+to show its row. A row not listed yet, or out of sight (a folded section, the narrow layout's room page), is tried
+again on the next render.
+
+**BUG-229:** month headings on a collection's page are `h2` (the media dialog's stay `h3`, under its `h2` title).
+
+**BUG-230:** both clients hid the name's menu (web) or the Ban item (app) for anyone with `no_dms`, which covers Telegram
+stand-ins and also people who turned DMs off. A moderator now gets a menu with Ban alone for such a person (no
+*Message*). For a Telegram stand-in the server still refuses and says why ("Only people who sign in here can be banned.").
+Tests: `tests/component/views/room/moderators.test.ts`, `UiModeratorsTest`.
+
+`app.css` went from 11.04 KB to 11.05 KB with BUG-227 and was then over its 11.05 KB budget. The budget is raised to
+11.15 KB (the user's call: "raise budgets if needed").
+
+**Checked and fine**
+- **Anonymous rooms:** messages reached through any expand, filter or route show the room as their author. A
+  moderator's author menu and the app's sheet offer no Ban on the room stand-in.
+- **Robustness:** no route answered 5xx to the odd parameters, and the server log shows only the expected refusals.
+  All 200 concurrent sign-ups succeeded.
+- **Shared files:** a file being moved by the media worker while it is deleted is cleaned up (`move` checks the row
+  in its transaction).
+
+**Suites:**
+- typecheck, lint and the HTML sinks check;
+- 762 unit and component tests;
+- E2E Chromium: 82 passed, 1 skipped, in the full run with every fix. A first run with the fixes failed two collections specs: the code that drops an
+  emptied month still looked for `H3`. Fixed, and the spec passes 5 of 5.
+- the build is within every budget: `app.js` 48.37 KB, `app.css` 11.05/11.15 KB.
+- Android, all 177 tests:
+  - in two full runs, `ServicesTest` "a live reply to a message beyond the window" (waiting 10 s for the room) and
+    `CollectionsTest` (a sign-up's login hit network trouble, status 0) each failed once;
+  - each passed alone (the first 3 of 3), and the `core:data` suite then passed twice in a row in full;
+  - the 200 concurrent sign-ups above didn't reproduce the second.

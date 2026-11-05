@@ -378,12 +378,12 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
       );
     }
     if (!added) {
-      if (mo !== month) grid.append(h("h3", {}, mo));
+      if (mo !== month) grid.append(h("h2", {}, mo));
       month = mo;
       grid.append(cell);
     } else if (grid.firstElementChild?.textContent === mo) grid.firstElementChild.after(cell);
     else {
-      grid.prepend(h("h3", {}, mo), cell);
+      grid.prepend(h("h2", {}, mo), cell);
       month ||= mo;
     }
   }
@@ -415,7 +415,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
       const [before, after] = [cell.previousElementSibling, cell.nextElementSibling];
       if (cell.contains(document.activeElement)) (after?.querySelector<HTMLElement>("button") ?? actions.querySelector("button"))?.focus();
       cell.remove();
-      if (before?.tagName === "H3" && (!after || after.tagName === "H3")) {
+      if (before?.tagName === "H2" && (!after || after.tagName === "H2")) {
         before.remove();
         if (!after) month = "";
       }

@@ -283,6 +283,13 @@
   transform-origin: top left;
 }
 
+/* Too near the composer (the last message's author): it opens upwards (QA BUG-227). */
+.author-menu.up .menu-items {
+  top: auto;
+  bottom: calc(100% + 4px);
+  transform-origin: bottom left;
+}
+
 .meta time,
 .permalink,
 .edited,

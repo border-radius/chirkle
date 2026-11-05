@@ -258,7 +258,7 @@ test("collections: the page follows changes; renaming, removing and the dialogs 
   // BUG-128: removing the last ones leaves no month heading, says it is empty, and keeps focus on the page.
   await remove.click();
   await a.getByRole("button", { name: /^Remove cat\.png/ }).click();
-  await expect(a.locator(".coll-grid h3")).toHaveCount(0);
+  await expect(a.locator(".coll-grid h2")).toHaveCount(0);
   await expect(a.locator(".collection .media-status")).toHaveText(/Nothing here yet/);
   await expect(a.getByRole("button", { name: "Upload" })).toBeFocused();
   await a.getByRole("button", { name: "Delete" }).click();
@@ -321,7 +321,7 @@ test("collections: the page drops what is taken out elsewhere: the save menu, an
   expect(res.ok).toBe(true);
   for (const p of [a, b]) {
     await expect(p.locator(".coll-grid .media-tile")).toHaveCount(0);
-    await expect(p.locator(".coll-grid h3")).toHaveCount(0);
+    await expect(p.locator(".coll-grid h2")).toHaveCount(0);
     await expect(p.locator(".collection .media-status")).toHaveText(/Nothing here yet/);
   }
 });

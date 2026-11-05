@@ -368,7 +368,7 @@ export function createMessageList(opts: {
         authorMenus.set(d, menu);
       }
       const user = d.dataset.user!;
-      const items: MenuItem[] = [{ label: "Message", run: () => opts.onMessageUser(user) }];
+      const items: MenuItem[] = d.dataset.nodm ? [] : [{ label: "Message", run: () => opts.onMessageUser(user) }];
       menu.update(items);
       const { isBanned, onBan } = opts;
       if (!d.dataset.ban || !isBanned || !onBan) return;
@@ -663,20 +663,30 @@ export function createMessageList(opts: {
   }
 
   /**
-   * The author's name: for other (known) users a menu offering "Message" (§16.5), unless they take no DMs (§16.7). Guests
-   * can't message (§23.3). The menu is drawn as ui/menu.ts draws it, and made to work when first opened (the `toggle`
-   * listener above).
+   * The author's name: for other (known) users a menu offering "Message" (§16.5), unless they take no DMs (§16.7), and
+   * to a moderator Ban (§36). Guests can't message (§23.3). The menu is drawn as ui/menu.ts draws it, and made to work
+   * when first opened (the `toggle` listener above).
    */
   function authorEl(author: User, me: User | null, known: boolean, room: string): HTMLElement {
     // Someone on a linked instance says where (§33.4).
     const where = author.instance ? `On ${author.instance}` : undefined;
-    if (!me || author.id === me.id || !known || author.no_dms) return h("span", { class: "author", title: where }, author.name);
-    // A moderator bans this instance's people (§36); an anonymous room's author is the room (§35), no one to ban.
+    if (!me || author.id === me.id || !known) return h("span", { class: "author", title: where }, author.name);
+    // A moderator bans this instance's people (§36), those who take no DMs too (QA BUG-230); an anonymous room's author
+    // is the room (§35), no one to ban.
     const ban = me.moderator && !author.instance && author.id !== room;
-    const data = { user: author.id, ...(where ? { note: where } : {}), ...(ban ? { ban: "1" } : {}) };
+    if (author.no_dms && !ban) return h("span", { class: "author", title: where }, author.name);
+    const data = {
+      user: author.id,
+      ...(where ? { note: where } : {}),
+      ...(ban ? { ban: "1" } : {}),
+      ...(author.no_dms ? { nodm: "1" } : {}),
+    };
     return h("details", { class: "menu author-menu", dataset: data }, [
       h("summary", { class: "author" }, author.name),
-      h("div", { class: "menu-items" }, [where ? h("p", {}, where) : null, h("button", { type: "button" }, "Message")]),
+      h("div", { class: "menu-items" }, [
+        where ? h("p", {}, where) : null,
+        author.no_dms ? null : h("button", { type: "button" }, "Message"),
+      ]),
     ]);
   }
 

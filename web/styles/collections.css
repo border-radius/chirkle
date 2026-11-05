@@ -182,7 +182,7 @@
   padding: 6px 28px 0;
 }
 
-.coll-grid h3 {
+.coll-grid h2 {
   grid-column: 1 / -1;
   margin: 14px 0 4px;
   font-size: 0.8125rem;

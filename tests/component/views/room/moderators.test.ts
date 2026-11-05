@@ -74,6 +74,24 @@ describe("moderators in the room view (§36)", () => {
     await vi.waitFor(async () => expect(await me.api.isBanned(other.user.id)).toBe(false));
   });
 
+  it("QA BUG-230: someone who takes no DMs can be banned: their menu has Ban alone, and for others no menu", async () => {
+    const other = await signedUp("Other");
+    await runSql(inject("pbUrl"), [{ sql: "UPDATE users SET no_dms = 1 WHERE id = {:id}", params: { id: other.user.id } }]);
+    const room = await newRoom(other);
+    await other.api.send({ id: newId(), room: room.id, text: "hi" });
+    await mount(room);
+    expect(root().querySelector("details.author-menu")).toBeNull();
+    await makeModerator();
+    await mount(room);
+    const menu = () => root().querySelector<HTMLDetailsElement>("details.author-menu")!;
+    menu().open = true;
+    await vi.waitFor(() => expect(button(menu(), "Ban…")).not.toBeNull());
+    expect(button(menu(), "Message")).toBeNull();
+    button(menu(), "Ban…")!.click();
+    button(menu(), "Ban")!.click();
+    await vi.waitFor(async () => expect(await me.api.isBanned(other.user.id)).toBe(true));
+  });
+
   it("QA: delete their own message where they can't post (by the delete route)", async () => {
     const other = await signedUp("Other");
     const room = await newRoom(other);

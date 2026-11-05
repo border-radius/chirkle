@@ -61,8 +61,10 @@ export function createActionMenu(opts: {
   el.addEventListener(
     "toggle",
     () => {
-      if (el.open) watchOutside();
-      else {
+      if (el.open) {
+        watchOutside();
+        place();
+      } else {
         outside?.abort();
         outside = null;
         if (confirming) setConfirming(null);
@@ -163,10 +165,29 @@ export function createActionMenu(opts: {
     return null;
   }
 
+  /**
+   * Open upwards when the items would run past the bottom of what shows them (the message list ends at the composer:
+   * an author's menu on the last message) and there is more room above (QA BUG-227). Again when the items change.
+   */
+  function place() {
+    el.classList.remove("up");
+    if (!el.open) return;
+    let clip = { top: 0, bottom: innerHeight };
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      if (getComputedStyle(p).overflowY === "visible") continue;
+      clip = p.getBoundingClientRect();
+      break;
+    }
+    const at = summary.getBoundingClientRect();
+    if (body.getBoundingClientRect().bottom > clip.bottom && at.top - clip.top > clip.bottom - at.bottom) el.classList.add("up");
+  }
+
   /** Enter or leave the confirm step; returns the Cancel button when entering one. */
   function setConfirming(label: string | null) {
     confirming = label;
-    return render();
+    const cancel = render();
+    place();
+    return cancel;
   }
 
   function close() {
@@ -187,6 +208,7 @@ export function createActionMenu(opts: {
       if (nextShape === shape && !stale) return; // same buttons; they look their item up when clicked
       shape = nextShape;
       render();
+      place();
     },
     close,
   };

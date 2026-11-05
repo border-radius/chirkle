@@ -91,6 +91,21 @@ class UiModeratorsTest {
         ui.until { !m.api.isBanned(a.user.id) }
     }
 
+    @Test fun `QA BUG-230 - someone who takes no DMs can be banned`() {
+        val a = newUser("nd-${uniq()}")
+        TestServer.admin("PATCH", "/api/collections/users/records/${a.user.id}", """{"no_dms":true}""")
+        val room = runBlocking { a.api.createRoom("md-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "no dms here")) }
+        val m = newModerator()
+        ui.signedIn(m)
+        ui.openRoom(room.name)
+        longPress("no dms here")
+        ui.waitFor("Ban ${a.user.name}")
+        compose.onNodeWithText("Ban ${a.user.name}").performClick()
+        compose.onNodeWithText("Ban").performClick()
+        ui.until { m.api.isBanned(a.user.id) }
+    }
+
     @Test fun `QA - the access screen names someone else's room's creator and who keeps a private room`() {
         val a = newUser("cr-${uniq()}")
         val room = runBlocking { a.api.createRoom("mc-${uniq()}") }

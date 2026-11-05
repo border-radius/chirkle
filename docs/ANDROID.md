@@ -1420,3 +1420,10 @@ ended the app (QA BUG-226). `toApiError()` now rethrows a cancellation instead o
 Tests: `UiAccountsTest` (switching accounts while requests are in flight).
 
 **Version** 0.1.5 (`versionCode` 6), changelog `6.txt`, F-Droid recipe updated.
+
+## 49. A moderator bans someone who takes no DMs (2026-11-05)
+
+The message sheet left out Ban for anyone with `no_dms`, so a moderator couldn't ban a person who had turned DMs off
+(QA BUG-230). Ban is offered to them now. A Telegram stand-in is refused by the server, which says why.
+
+Tests: `UiModeratorsTest` (someone who takes no DMs can be banned).

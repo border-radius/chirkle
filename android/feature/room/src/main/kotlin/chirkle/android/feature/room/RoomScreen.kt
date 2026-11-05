@@ -400,7 +400,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
 
     sheetFor?.let { m ->
         val author = m.expand?.author
-        val bannable = me?.moderator == true && author != null && m.author != me.id && m.author != m.room && author.instance.isEmpty() && !author.noDms
+        val bannable = me?.moderator == true && author != null && m.author != me.id && m.author != m.room && author.instance.isEmpty()
         val banned by produceState<Boolean?>(null, m.id, bannable) {
             value = if (bannable) runCatching { services.api.isBanned(m.author) }.getOrNull() else null
         }
@@ -414,7 +414,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             if (me != null && c.selectable(m)) add(MenuItem("Forward", ChirkleIcons.Forward) { sheetFor = null; forwarding = listOf(m.id) })
             if (c.selectable(m)) add(MenuItem("Select", ChirkleIcons.Check) { sheetFor = null; vm.toggleSelect(m) })
             if (c.deletable(m)) add(MenuItem("Delete", ChirkleIcons.Delete, danger = true) { sheetFor = null; confirmDelete = listOf(m.id) })
-            // A moderator bans this instance's people; an anonymous room's author is the room (§35), no one to ban.
+            // A moderator bans this instance's people, those who take no DMs too (QA BUG-230); an anonymous room's author
+            // is the room (§35), no one to ban. The server refuses a Telegram stand-in, and says so.
             val name = author?.name.orEmpty()
             when (banned) {
                 false -> add(MenuItem("Ban $name", ChirkleIcons.Lock, danger = true) { sheetFor = null; banning = m.author to name })

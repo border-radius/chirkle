@@ -452,6 +452,24 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       b.setAttribute("aria-expanded", String(!folded.has(b.dataset.fold as string)));
     if (focused?.isConnected && document.activeElement !== focused) focused.focus();
     forget();
+    reveal(s.activeRoomId ?? s.activeCollectionId ?? null);
+  }
+
+  /**
+   * The open room's (or collection's) row is brought into sight once when that changes: opened from a link, Jump to or
+   * Back, it may be far down the list (QA BUG-228). Not listed yet, or out of sight (a folded section, the narrow
+   * layout's room page), it is tried again on the next render.
+   */
+  let revealed: string | null = null;
+  function reveal(id: string | null) {
+    if (id === revealed) return;
+    const row = nav.querySelector<HTMLElement>('a[aria-current="page"]');
+    if (id && !row?.offsetParent) return;
+    revealed = id;
+    if (!row) return;
+    const r = row.getBoundingClientRect();
+    const n = nav.getBoundingClientRect();
+    nav.scrollTop += Math.min(0, r.top - n.top) || Math.max(0, r.bottom - n.bottom);
   }
 
   /** Drop the rows of rooms no longer listed. */
