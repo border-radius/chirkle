@@ -255,7 +255,8 @@ label.button.disabled {
   cursor: pointer;
 }
 
-.notify-choice input {
+.notify-choice input,
+input.switch {
   appearance: none;
   flex: none;
   width: 36px;
@@ -269,7 +270,8 @@ label.button.disabled {
   transition: background-position 0.15s;
 }
 
-.notify-choice input:checked {
+.notify-choice input:checked,
+input.switch:checked {
   background-color: var(--fill);
   background-position: 14px 0;
 }
@@ -281,5 +283,19 @@ label.button.disabled {
 
   .profile-password {
     grid-template-columns: 1fr;
+  }
+}
+
+/* A phone: Auto / Light / Dark under the hint, not squeezing it into a narrow column. */
+@media (max-width: 480px) {
+  .profile-theme:not(.profile-notify) {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-theme .segmented {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-top: 10px;
   }
 }

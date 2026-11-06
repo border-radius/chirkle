@@ -1427,3 +1427,16 @@ The message sheet left out Ban for anyone with `no_dms`, so a moderator couldn't
 (QA BUG-230). Ban is offered to them now. A Telegram stand-in is refused by the server, which says why.
 
 Tests: `UiModeratorsTest` (someone who takes no DMs can be banned).
+
+## 50. UI review: Jump to beginning, the reaction row, the profile's headings (2026-11-06)
+
+From the UI/UX review of 2026-11-06 (docs/QA.md "QA pass 32"):
+- **Jump to beginning** (BUG-233): the room menu has it last, as the web's does, and a guest's menu has only it
+  (DESIGN.md §23.3). It loads the first page (`RoomController.jump(PageKind.First)`) and shows the top.
+- **The message sheet's reactions** (BUG-232): six quick reactions and "+" need 368dp. On a narrower screen (320dp,
+  or a larger display size) Compose squeezed "+" to nothing, so a reaction outside the six couldn't be added. The row
+  now holds as many quick ones as fit next to "+".
+- **Profile** (BUG-241): one "Profile" section holds the picture and the name, as the web's Settings does, instead of a
+  "Display name" heading over a field also labelled "Display name".
+
+Tests: `UiPortsTest` (Jump to beginning shows the first message; a 320dp sheet keeps a full-size "Add reaction").

@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { atPath, test } from "./fixtures.ts";
+import { apiRoom, apiUser, atPath, login, test, uniq } from "./fixtures.ts";
 
 test("app boots to the guest home (Open Air rooms) without console errors; Log in is one click away", async ({ page }) => {
   const errors: string[] = [];
@@ -32,4 +32,16 @@ test("text is set in the app's own Inter, fetched from the app (§7.7), only the
   expect(loaded).toBeGreaterThan(0);
   expect(fonts.some((p) => /^\/assets\/inter-latin-[A-Z0-9]{8}\.woff2$/.test(p))).toBe(true);
   expect(fonts.some((p) => p.includes("cyrillic"))).toBe(false);
+});
+
+test("a long room name is cut short in its row; the sidebar keeps its width", async ({ page }) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada, `quarterly-planning-and-roadmap-discussion-${uniq()}`.slice(0, 48));
+  await login(page, ada);
+  const row = page.locator("aside.sidebar").getByRole("link", { name: room.name });
+  await expect(row).toBeVisible();
+  // It widened the sidebar (a flex item's min-width is its content's), squeezing the room next to it.
+  expect((await page.locator("aside.sidebar").boundingBox())!.width).toBe(280);
+  const name = row.locator("span").first();
+  expect(await name.evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true);
 });

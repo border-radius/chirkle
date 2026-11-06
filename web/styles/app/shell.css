@@ -28,6 +28,11 @@ html {
   background: var(--surface);
 }
 
+/* Log in and Sign up are already the login page's own tabs. */
+#app:has(.auth-form) .guest-links {
+  display: none;
+}
+
 /* Next to the sidebar, which has the same (and on a phone's room page, which has its own header). */
 @media (min-width: 721px) {
   #app:has(.layout) > .app-bar {
@@ -152,6 +157,8 @@ html {
   display: flex;
   flex: 0 0 280px;
   flex-direction: column;
+  /* A long room name is cut short in its row instead of widening the sidebar. */
+  min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--surface);

@@ -2559,3 +2559,59 @@ Tests: `tests/component/views/room/moderators.test.ts`, `UiModeratorsTest`.
     `CollectionsTest` (a sign-up's login hit network trouble, status 0) each failed once;
   - each passed alone (the first 3 of 3), and the `core:data` suite then passed twice in a row in full;
   - the 200 concurrent sign-ups above didn't reproduce the second.
+
+# QA pass 32 — a UI/UX review of the web and the app
+
+2026-11-06, user: "investigate ui/ux defects in web and android app. list them", then "fix all defects". The web
+app was driven in headless Chromium at 1280, 390 and 320 px, light and dark, signed in and as a guest, with long
+room and person names, long words and URLs, right-to-left text and blank lines, and axe run on the main screens. The
+app was looked at in Robolectric screenshots at 411dp, 360dp, 320dp (dark) and font scale 1.5.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-231 | Medium | Web | A long room name widened the sidebar (280 → 454 px) for everyone who could see the room | Fixed |
+| BUG-232 | Low | Android | Under ~330dp the message sheet's "Add reaction" (+) was squeezed to nothing | Fixed |
+| BUG-233 | Low | Android | No "Jump to beginning" in the room menu (the web has it; PARITY.md didn't say) | Fixed |
+| BUG-234 | Low | Web | On a phone the selection bar's Cancel wrapped onto a line of its own | Fixed |
+| BUG-235 | Low | Web | On a phone a message's delete confirmation wrapped Cancel onto a line of its own | Fixed |
+| BUG-236 | Low | Web | The composer's placeholder was cut off mid-word for a long room or person name | Fixed |
+| BUG-237 | Low | Web | The collection dialogs had a text "×" close, a plain checkbox and a quiet Create, unlike the others | Fixed |
+| BUG-238 | Low | Web | On a phone Settings › Appearance squeezed its hint into a five-line column | Fixed |
+| BUG-239 | Low | Web | The login page's top bar repeated Log in and Sign up, the page's own tabs | Fixed |
+| BUG-240 | Low | Web (a11y) | A phone's home (the room list) had no level-one heading (axe: page-has-heading-one) | Fixed |
+| BUG-241 | Low | Android | Profile: a "Display name" heading over a field labelled "Display name" | Fixed |
+
+**BUG-231:** `.sidebar` is `flex: 0 0 280px`, but a flex item's minimum width is its content's, so a row's name never
+got its "…". `min-width: 0` on it. E2E: `smoke.spec.ts`.
+
+**BUG-232, 233, 241:** ANDROID.md §50.
+
+**BUG-234, 235:** the buttons are in one `.bar-actions` group, so a narrow screen wraps them together under the count
+or the question. Under 400 px the selection bar's buttons drop their icons, and the count and buttons fit one line at
+390 px. E2E: `mobile.spec.ts`.
+
+**BUG-236:** browsers ignore `text-overflow` on a textarea's placeholder. `composer.ts` measures it with a canvas, in
+the textarea's font, and cuts it with "…" to the box, again when the box is resized. The font comes from the longhands:
+the `font` shorthand reads "" while `font-feature-settings` is set (BUG-191). E2E: `mobile.spec.ts`.
+
+**BUG-237:** the close button is the icon others have (New collection, Save to collection, the picker), Create is
+primary, and Public is a switch styled like Settings' (`input.switch`). A segmented Private/Public choice, like New
+room's, would have put the collections chunk over its budget.
+
+**BUG-238:** under 480 px Auto / Light / Dark goes under the hint.
+
+**BUG-239:** the app bar's Log in and Sign up are hidden on the login page.
+
+**BUG-240:** on a phone the home's pane is clipped out of sight instead of `display: none`, so its "Welcome" stays
+the page's `h1`; its text (a guest's links) is still hidden.
+
+Not changed: runs of blank lines in a message keep their height on both clients (people may mean them).
+
+**Suites:**
+- typecheck, lint (only the warnings from before) and the HTML sinks check;
+- 762 unit and component tests;
+- E2E Chromium: 83 passed, 1 skipped, 1 failed: `attachments.spec.ts:186` at its Ctrl-click (a new tab), the
+  container's known Chromium flake there (QA pass 28). Alone it passed 2 of 3, failing at the same line.
+- the build is within every budget: `app.js` 48.58 KB, `app.css` 11.15/11.15 KB (no room left), the collections chunk
+  6.72/6.75 KB and 1.98/2.00 KB;
+- Android: all 179 tests (2 new).

@@ -589,8 +589,8 @@ export function createMessageList(opts: {
       parts.push(
         h("div", { class: "confirm", role: "group", "aria-label": "Confirm delete" }, [
           "Delete this message? ",
-          btn("Delete message", "confirm", "danger"),
-          btn("Cancel", "cancel", "cancel"),
+          // Together, so that a narrow screen wraps both under the question rather than Cancel alone.
+          h("span", { class: "bar-actions" }, [btn("Delete message", "confirm", "danger"), btn("Cancel", "cancel", "cancel")]),
         ]),
       );
     } else if (editing !== m.id && (reactable || repliable || deletable || selectable)) {

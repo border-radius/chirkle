@@ -49,7 +49,7 @@ export async function openSave(o: SaveOptions): Promise<void> {
   const dialog = h("dialog", { class: "coll-dialog coll-save", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "link", "aria-label": "Close", on: { click: () => close() }, signal }, "×"),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
     ]),
     h("div", { class: "coll-body" }, [list, status, form]),
   ]);

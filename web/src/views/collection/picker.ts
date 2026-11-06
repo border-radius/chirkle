@@ -43,7 +43,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
   const dialog = h("dialog", { class: "coll-dialog coll-pick", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "link", "aria-label": "Close", on: { click: () => close() }, signal }, "×"),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
     ]),
     all.length ? row : null,
     body,

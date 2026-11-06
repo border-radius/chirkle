@@ -109,6 +109,28 @@ export function createComposer(opts: {
 }): Composer {
   const { signal } = opts;
   const textarea = h("textarea", { name: "text", rows: 1, id: opts.id, autocomplete: "off" });
+  // The placeholder as given, and cut to the box with "…": browsers ignore text-overflow on a textarea's placeholder,
+  // so a long room or person name was cut off mid-word.
+  let placeholder = "";
+  let measure: CanvasRenderingContext2D | null | undefined;
+  function fitPlaceholder() {
+    let text = placeholder;
+    measure ??= document.createElement("canvas").getContext?.("2d");
+    const width = textarea.clientWidth - 12;
+    if (measure && width > 0) {
+      // Not the `font` shorthand: it reads "" while font-feature-settings is set (BUG-191).
+      const css = getComputedStyle(textarea);
+      measure.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
+      while (text.length > 1 && measure.measureText(text === placeholder ? text : `${text}…`).width > width) text = text.slice(0, -1);
+      if (text !== placeholder) text = `${text.trimEnd()}…`;
+    }
+    if (textarea.placeholder !== text) textarea.placeholder = text;
+  }
+  if (typeof ResizeObserver === "function") {
+    const resizes = new ResizeObserver(fitPlaceholder);
+    resizes.observe(textarea);
+    signal.addEventListener("abort", () => resizes.disconnect());
+  }
   const counter = h("span", { class: "counter", "aria-live": "polite" });
   const sendBtn = h("button", { type: "submit", class: "send ic i-send", "aria-label": "Send", title: "Send", disabled: true });
   const fileInput = h("input", {
@@ -357,7 +379,8 @@ export function createComposer(opts: {
       onInput();
     },
     setPlaceholder(text) {
-      textarea.placeholder = text;
+      placeholder = text;
+      fitPlaceholder();
     },
     focus() {
       textarea.focus();

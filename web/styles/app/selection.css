@@ -85,6 +85,17 @@
   background: none;
 }
 
+/* A phone: the buttons without their icons, on one line with the count. */
+@media (max-width: 400px) {
+  .selection-bar {
+    padding-left: 16px;
+  }
+
+  .selection-bar .ic::before {
+    display: none;
+  }
+}
+
 /* Dialogs: a raised card over a dimmed page. */
 dialog.forward,
 dialog.access {

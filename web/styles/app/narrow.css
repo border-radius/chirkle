@@ -19,7 +19,13 @@
     border: 0;
   }
 
+  /* Out of sight, but its heading stays the page's h1 for a screen reader; not its text (a guest's links). */
   .layout.home .pane {
+    position: absolute;
+    clip-path: inset(50%);
+  }
+
+  .layout.home .welcome p {
     display: none;
   }
 

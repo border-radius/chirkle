@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { PNG } from "../support/files.ts";
-import { apiRoom, apiSend, apiUser, atPath, attach, login, message, send, test } from "./fixtures.ts";
+import { apiRoom, apiSend, apiUser, atPath, attach, login, message, send, test, uniq } from "./fixtures.ts";
 
 // No isMobile: Firefox does not support it, and CI runs all three engines. Viewport + touch is what matters here.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
@@ -50,7 +50,10 @@ test("on a phone: list → room → send → back to the list", async ({ page })
   await page.getByRole("link", { name: "Back to rooms" }).tap();
   await expect(page).toHaveURL(atPath("/"));
   await expect(page.getByRole("navigation", { name: "Rooms" })).toBeVisible();
-  await expect(page.locator("section.welcome")).toBeHidden(); // a phone shows only the list
+  // A phone shows only the list; the welcome is out of sight, its heading kept as the page's h1 for a screen reader.
+  await expect(page.locator("section.welcome p")).toBeHidden();
+  await expect(page.locator(".layout.home .pane")).toHaveCSS("clip-path", "inset(50%)");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Welcome/);
 });
 
 test("on a phone, a tapped message's buttons: on screen, gone when you're done, only on messages that have some", async ({ page }) => {
@@ -113,4 +116,25 @@ test("on a phone, focusing a text field can't zoom the page in: fields are 16px,
   await expect(page.locator("html")).toHaveCSS("touch-action", "manipulation");
   const viewport = await page.locator('meta[name="viewport"]').getAttribute("content");
   expect(viewport).not.toMatch(/user-scalable\s*=\s*no|maximum-scale/);
+});
+
+test("on a phone, a long room name in the composer's placeholder ends in …, and the selection bar is one line", async ({ page }) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada, `quarterly-planning-and-roadmap-${uniq()}`);
+  await apiSend(ada, room, "pick me");
+  await login(page, ada);
+  await page.getByRole("link", { name: room.name }).tap();
+  // Browsers ignore text-overflow on a textarea's placeholder: it was cut off mid-word (composer.ts fits it).
+  const box = page.locator("form.composer textarea");
+  await expect(box).toHaveAttribute("placeholder", /^Message #quarterly.*…$/);
+
+  // Selecting: the count and Forward, Delete and Cancel on one line (Cancel wrapped onto a line of its own).
+  const mine = message(page, "pick me");
+  await mine.locator(".body").tap();
+  await mine.getByRole("button", { name: "Select" }).tap();
+  const bar = page.getByRole("toolbar", { name: "Selected messages" });
+  const tops = await bar
+    .locator("span, button:visible")
+    .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)));
+  expect(new Set(tops.map((t) => Math.round(t / 10))).size).toBe(1);
 });

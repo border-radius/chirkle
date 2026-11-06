@@ -17,9 +17,10 @@ export async function openCreate(o: CreateOptions): Promise<void> {
   o.signal.addEventListener("abort", () => close(), { signal });
   const title = h("h2", { id: "coll-create-title" }, [icon(h), " New collection"]);
   const input = h("input", { required: true, autocomplete: "off", "aria-label": "Name", placeholder: "Name" });
-  const pub = h("input", { type: "checkbox" });
+  // A switch, as Settings' choices are.
+  const pub = h("input", { type: "checkbox", role: "switch", class: "switch" });
   const err = h("p", { class: "coll-status", role: "alert" });
-  const submit = h("button", { type: "submit" }, "Create");
+  const submit = h("button", { type: "submit", class: "primary" }, "Create");
   const form = h(
     "form",
     {
@@ -44,12 +45,16 @@ export async function openCreate(o: CreateOptions): Promise<void> {
       },
       signal,
     },
-    [h("p", { class: "coll-new-form" }, [input, submit]), h("label", {}, [pub, " Public: anyone can see it and subscribe"]), err],
+    [
+      h("p", { class: "coll-new-form" }, [input, submit]),
+      h("label", { class: "coll-public" }, [pub, "Public: anyone can see it and subscribe"]),
+      err,
+    ],
   );
   const dialog = h("dialog", { class: "coll-dialog coll-create", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "link", "aria-label": "Close", on: { click: () => close() }, signal }, "×"),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
     ]),
     form,
   ]);

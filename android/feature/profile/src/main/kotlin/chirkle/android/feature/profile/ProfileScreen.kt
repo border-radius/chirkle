@@ -147,7 +147,8 @@ fun ProfileScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Section("Picture")
+                // Picture and name together, as the web's Settings has them: the field says what it is.
+                Section("Profile")
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Avatar(me, 96.dp)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -162,9 +163,6 @@ fun ProfileScreen(onBack: () -> Unit) {
                     }
                 }
                 if (avatarError.isNotEmpty()) Text(avatarError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                HorizontalDivider(color = Chirkle.colors.border)
-
-                Section("Display name")
                 OutlinedTextField(
                     name,
                     { name = it; nameStatus = ""; nameError = false },

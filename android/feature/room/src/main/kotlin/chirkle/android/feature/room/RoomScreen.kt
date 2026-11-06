@@ -327,10 +327,10 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     actions = {
                         if (room != null) IconButton(onClick = { nav.media(roomId) }) { Icon(ChirkleIcons.Image, contentDescription = "Media") }
                         if (room != null) IconButton(onClick = vm::openSearch) { Icon(ChirkleIcons.Search, contentDescription = "Search messages") }
-                        if (room != null && me != null) {
+                        if (room != null) {
                             Box {
                                 IconButton(onClick = { roomMenu = true }) { Icon(ChirkleIcons.More, contentDescription = "Room actions") }
-                                RoomMenu(roomMenu, { roomMenu = false }, room, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar)
+                                RoomMenu(roomMenu, { roomMenu = false }, room, me != null, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar) { c.jump(PageKind.First) }
                             }
                         }
                     },
@@ -466,7 +466,7 @@ private fun FocusRequester.requestFocusSafely() {
 }
 
 @Composable
-private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, manage: Boolean, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState) {
+private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, signedIn: Boolean, manage: Boolean, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState, toBeginning: () -> Unit) {
     val services = LocalServices.current
     val scope = rememberCoroutineScope()
     var archive by remember { mutableStateOf(false) }
@@ -476,12 +476,15 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
         scope.launch { runCatching { block() }.onFailure { snackbar.showSnackbar("That didn't work. ${chirkle.android.data.api.errorMessage(it)}") } }
     }
     DropdownMenu(open, onDismissRequest = close) {
-        if (!room.isDm) DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
-        if (room.isDm) DropdownMenuItem(text = { Text("Close conversation") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
-        else if (hidden) DropdownMenuItem(text = { Text("Unhide room") }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
-        else DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
+        // A guest gets only Jump to beginning (DESIGN.md §23.3).
+        if (signedIn) {
+            if (!room.isDm) DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
+            if (room.isDm) DropdownMenuItem(text = { Text("Close conversation") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
+            else if (hidden) DropdownMenuItem(text = { Text("Unhide room") }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
+            else DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
+        }
         // Every message of this room notifies, on this device (§24); DMs all do already.
-        if (!room.isDm && (!room.archived || room.id in every)) {
+        if (signedIn && !room.isDm && (!room.archived || room.id in every)) {
             val on = room.id in every
             DropdownMenuItem(
                 text = { Text(if (on) "Stop notifying of every message" else "Notify of every message") },
@@ -494,6 +497,8 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
             if (room.archived) DropdownMenuItem(text = { Text("Unarchive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { act("unarchive") { services.actions.setArchived(room.id, false) } })
             else DropdownMenuItem(text = { Text("Archive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { close(); archive = true })
         }
+        // The first page, at the top (DESIGN.md §7.1), as the web's menu has it.
+        DropdownMenuItem(text = { Text("Jump to beginning") }, leadingIcon = { Icon(ChirkleIcons.Top, contentDescription = null) }, onClick = { close(); toBeginning() })
     }
     if (archive) {
         AlertDialog(

@@ -86,16 +86,21 @@ fun MessageSheet(
             )
         }
         if (reactable) {
-            val quick = (recent + QUICK_REACTIONS).distinct().take(6)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                for (e in quick) {
-                    Box(
-                        Modifier.size(48.dp).clip(CircleShape).clickable { onReact(e) }.semantics { contentDescription = "React with $e" },
-                        contentAlignment = Alignment.Center,
-                    ) { Text(e, fontSize = 26.sp) }
-                }
-                Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onMoreEmoji), contentAlignment = Alignment.Center) {
-                    Icon(ChirkleIcons.Add, contentDescription = "Add reaction")
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                // As many quick ones as fit next to "+" (six on most phones): seven 48dp buttons need 368dp, and on a
+                // narrower screen the last, "+", was squeezed to nothing.
+                val fit = (maxWidth / 48.dp).toInt() - 1
+                val quick = (recent + QUICK_REACTIONS).distinct().take(fit.coerceIn(0, 6))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    for (e in quick) {
+                        Box(
+                            Modifier.size(48.dp).clip(CircleShape).clickable { onReact(e) }.semantics { contentDescription = "React with $e" },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(e, fontSize = 26.sp) }
+                    }
+                    Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onMoreEmoji), contentAlignment = Alignment.Center) {
+                        Icon(ChirkleIcons.Add, contentDescription = "Add reaction")
+                    }
                 }
             }
         }

@@ -53,25 +53,31 @@ export function createSelection(opts: {
     h("button", { type: "button", class: cls, on: { click: run }, signal }, label);
   const count = h("span", { class: "sel-count", role: "status" });
   const deleteBtn = button("Delete", () => setConfirm(true), "danger ic i-trash");
+  // The buttons wrap together: on a narrow screen they go under the count, Cancel never on a line of its own.
+  const group = (...b: HTMLElement[]) => h("div", { class: "bar-actions" }, b);
   const actions = [
     count,
-    button("Forward", () => opts.onForward([...(selected ?? [])]), "primary ic i-fwd"),
-    deleteBtn,
-    button("Cancel", () => end(true)),
+    group(
+      button("Forward", () => opts.onForward([...(selected ?? [])]), "primary ic i-fwd"),
+      deleteBtn,
+      button("Cancel", () => end(true)),
+    ),
   ];
   const confirmText = h("span");
   const confirmActions = [
     confirmText,
-    button(
-      "Delete",
-      () => {
-        const ids = [...(selected ?? [])];
-        end(true);
-        opts.onDelete(ids);
-      },
-      "danger confirm-delete",
+    group(
+      button(
+        "Delete",
+        () => {
+          const ids = [...(selected ?? [])];
+          end(true);
+          opts.onDelete(ids);
+        },
+        "danger confirm-delete",
+      ),
+      button("Cancel", () => setConfirm(false), "cancel"),
     ),
-    button("Cancel", () => setConfirm(false), "cancel"),
   ];
 
   /** Every selected message is mine (and may still be deleted). */

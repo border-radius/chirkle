@@ -19,7 +19,7 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | `avatar` | — | Not yet (the photo picker can't be driven on Robolectric; changed by hand on the emulator, ANDROID.md §22.3) |
 | `realtime` | `UiFlowTest`: a live message; `ServicesTest`, `ChirkleApiTest`: realtime events | Covered |
 | `reconnect` | `ChirkleApiTest`: reconnect after a pause says events may have been missed | Partial: gap fill after it |
-| `history` | `ServicesTest`: opens around a message far back, jumps to the latest | Partial: scrolling the edges |
+| `history` | `ServicesTest`: opens around a message far back, jumps to the latest; `UiPortsTest`: Jump to beginning from the room menu (QA pass 32) | Partial: scrolling the edges |
 | `unread` | `ServicesTest`: live counts, read on the server; `UiPortsTest`: unread rooms listed first, a folded section lists only them; `UiFeaturesTest`: what came while the app was in the background is read on coming back (QA BUG-157); `UiPortsTest`: opening a room reads only what is on screen, scrolling down the rest (ANDROID.md §25); `ServicesTest`: a read that fails is sent again by itself (QA BUG-162); `ServicesTest`: an open room not read to the end keeps its count, coming down as it is read (ANDROID.md §41); `RoomSectionsTest` | Partial: the badge and the "New" line on screen |
 | `edit` | `UiFeaturesTest`: edit, delete, a message's menu closing when it is deleted meanwhile (QA BUG-156); `ServicesTest`: edit, delete | Covered |
 | `reactions` | `UiFeaturesTest`: quick reactions; `ServicesTest`; `HelpersTest`: the web's reaction cases | Covered |

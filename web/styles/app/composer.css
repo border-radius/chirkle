@@ -11,6 +11,13 @@
   font-size: 0.85rem;
 }
 
+/* A confirm's buttons (and the selection bar's) wrap as one. */
+.bar-actions {
+  display: flex;
+  gap: inherit;
+  align-items: center;
+}
+
 .confirm button,
 .send-error button,
 .msg-error button {

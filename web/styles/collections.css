@@ -315,11 +315,6 @@ dialog.coll-dialog::backdrop {
   font-size: 1rem;
 }
 
-.coll-dialog .media-bar .link {
-  font-size: 1.4rem;
-  line-height: 1;
-}
-
 /* The picker's collections: a row of chips that scrolls sideways, as the app's. */
 .coll-chips {
   display: flex;
@@ -381,10 +376,16 @@ dialog.coll-dialog::backdrop {
 }
 
 /* Not app.css's full-width inputs: a box before its label, a name field next to its button. */
-.coll-dialog input[type="checkbox"] {
+.coll-dialog input[type="checkbox"]:not(.switch) {
   flex: none;
   width: auto;
   accent-color: var(--accent);
+}
+
+.coll-public {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .coll-new-form input {

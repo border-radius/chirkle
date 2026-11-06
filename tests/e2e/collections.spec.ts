@@ -56,7 +56,7 @@ test("collections: make one, save from the chat, follow, see what's new, attach 
   await a.getByRole("button", { name: "New collection" }).click();
   const create = a.getByRole("dialog", { name: "New collection" });
   await create.getByRole("textbox", { name: "Name" }).fill("Pets");
-  await create.getByRole("checkbox", { name: /Public/ }).check();
+  await create.getByRole("switch", { name: /Public/ }).check();
   await create.getByRole("button", { name: "Create" }).click();
   await expect(a.getByRole("heading", { level: 1, name: "Pets" })).toBeVisible();
   await expect(a.getByText("Nothing here yet.", { exact: false })).toBeVisible();

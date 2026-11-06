@@ -15,6 +15,12 @@ import androidx.compose.ui.test.performKeyPress
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.unit.dp
 import chirkle.android.data.api.NewMessage
 import chirkle.android.data.lib.newId
 import chirkle.android.data.pb.UploadFile
@@ -216,5 +222,37 @@ class UiPortsTest {
         compose.onNode(hasText("Rooms") and hasClickAction()).performScrollTo().performClick()
         ui.until { "rooms" !in services.settings.folded.value }
         ui.showRoom(quiet.name)
+    }
+
+    @Test fun `Jump to beginning in the room menu shows the first message (web parity)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("jb-${uniq()}") }
+        runBlocking {
+            a.api.send(NewMessage(newId(), room.id, "the very first words"))
+            repeat(120) { a.api.send(NewMessage(newId(), room.id, "filler $it")) }
+        }
+        ui.signedIn(newUser())
+        ui.openRoom(room.name)
+        ui.waitFor("filler 119")
+        assertTrue(compose.onAllNodes(hasText("the very first words")).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        compose.onNodeWithText("Jump to beginning").performClick()
+        ui.waitFor("the very first words")
+        ui.waitFor("Beginning of #${room.name}")
+    }
+
+    @Test @Config(qualifiers = "w320dp-h640dp")
+    fun `a narrow phone's message sheet keeps Add reaction, with fewer quick ones`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("nr-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "react to me")) }
+        ui.signedIn(newUser())
+        ui.openRoom(room.name)
+        ui.waitFor("react to me")
+        compose.onNode(hasText("react to me") and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick)).performTouchInput { longClick() }
+        ui.waitFor(hasContentDescription("Add reaction"))
+        // Seven 48dp buttons need 368dp: here five quick reactions and "+", at full size.
+        compose.onNodeWithContentDescription("Add reaction").assertWidthIsAtLeast(48.dp)
+        assertEquals(5, compose.onAllNodes(hasContentDescription("React with", substring = true)).fetchSemanticsNodes().size)
     }
 }
