@@ -41,6 +41,11 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
 - A native Android app (Kotlin, Jetpack Compose) with the same features, notifications and a 3 MB download — see
   [Android app](#android-app)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/collections-dark.png">
+  <img alt="A collection in Chirkle: the private Moodboard's pictures by month, with Upload, Rename and Make public; the sidebar lists your collections with their counts and a followed one with 3 new" src="docs/collections-light.png">
+</picture>
+
 Design: [`docs/DESIGN.md`](docs/DESIGN.md) · Android app: [`docs/ANDROID.md`](docs/ANDROID.md) · QA: [`docs/QA.md`](docs/QA.md) · Refactoring plan: [`docs/REFACTOR.md`](docs/REFACTOR.md) · Archived plans: [MVP build](docs/history/BUILD_PLAN.md), [avatars, DMs, attachments](docs/history/NEXT_FEATURES_PLAN.md)
 
 ## Requirements
@@ -98,7 +103,7 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 | `npm run test:int` | Integration tests: schema, API rules, hooks, realtime, pagination |
 | `npm run test:e2e` | Playwright end-to-end tests against the production build |
 | `npm run schema:snapshot` | Rewrite `docs/schema.snapshot.json` (every collection's API rules, fields and indexes, and the rate limits) after a migration changes them; `test:int` fails while it is out of date |
-| `npm run screenshots` | Rewrite the README screenshots (`docs/screenshot-*.png`): a throwaway server with made-up people and messages, photographed in Chromium after `npm run build` |
+| `npm run screenshots` | Rewrite the README screenshots (`docs/screenshot-*.png`, `docs/collections-*.png`): a throwaway server with made-up people, messages and collections, photographed in Chromium after `npm run build` |
 | `npm run check` | typecheck + lint + lint:sinks + test + test:int + build (what CI runs before e2e) |
 
 Every test run starts its own PocketBase on a free port with a temp data dir — nothing to clean up, and no fakes

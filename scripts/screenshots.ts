@@ -1,5 +1,6 @@
-// README screenshots: a throwaway server (as the tests start one) filled with made-up people, rooms and messages, then
-// the built app (pb_public/) photographed in Chromium, light and dark, into docs/.
+// README screenshots: a throwaway server (as the tests start one) filled with made-up people, rooms, messages and
+// collections, then the built app (pb_public/) photographed in Chromium, light and dark, into docs/: a room
+// (screenshot-*.png) and a collection's page (collections-*.png).
 //
 //   npm run build && npm run screenshots
 //
@@ -159,6 +160,22 @@ const DMS: { with: string; lines: Line[] }[] = [
   { with: "maya", lines: [{ by: "maya", ago: 20, text: "Sent you the deck" }] },
 ];
 
+/** Made-up pictures for the collections: hills under a sky, or soft shapes on a ground. */
+const SCENES: { name: string; sky: string[]; sun: string; hills?: string[]; shapes?: string[] }[] = [
+  { name: "lagoon", sky: ["#0f3057", "#00587a", "#7fd1c7"], sun: "#e7fff9", hills: ["#00587a", "#08435e", "#04293a"] },
+  { name: "meadow", sky: ["#a8e6ff", "#d9f5ff", "#fff7d6"], sun: "#fffbe8", hills: ["#9ccc65", "#689f38", "#33691e"] },
+  { name: "terracotta", sky: ["#f6d5b8"], sun: "#f0a35e", shapes: ["#d9734e", "#9c4a3a", "#f2c094", "#5e7d6b"] },
+  { name: "dunes", sky: ["#ffd89b", "#f7a35c", "#e86f51"], sun: "#fff3c4", hills: ["#e9a15a", "#c97b3f", "#8e4f2a"] },
+  { name: "blueprint", sky: ["#e8eefc"], sun: "#4c6ef5", shapes: ["#364fc7", "#91a7ff", "#ffd43b", "#1c2a5c"] },
+  { name: "fjord", sky: ["#1b2a49", "#465881", "#c9d1e5"], sun: "#f5f7ff", hills: ["#3a4a6b", "#26334f", "#121a2c"] },
+  { name: "sorbet", sky: ["#ffe3ec"], sun: "#ff8fab", shapes: ["#ffb3c6", "#a0c4ff", "#caffbf", "#ffd6a5"] },
+  { name: "highlands", sky: ["#cfd9df", "#e2ebf0", "#f5f0e1"], sun: "#ffffff", hills: ["#8fa38a", "#62775e", "#3b4a39"] },
+  { name: "ember", sky: ["#2d0a0a", "#7a1f1f", "#ff7a3d"], sun: "#ffd8a8", hills: ["#5a1515", "#3a0d0d", "#1a0505"] },
+  { name: "moss", sky: ["#eef3e2"], sun: "#7a9e5a", shapes: ["#4f6f3a", "#a3c585", "#e0b75a", "#2f4426"] },
+  { name: "aurora", sky: ["#04151f", "#0b4f4a", "#3ddc97"], sun: "#e0fff1", hills: ["#0d3b3a", "#082827", "#031312"] },
+  { name: "citrus", sky: ["#fff4cc"], sun: "#ffb703", shapes: ["#fb8500", "#8ecae6", "#219ebc", "#023047"] },
+];
+
 const pb = await startPocketBase({ publicDir: join(root, "pb_public"), fixtureRoute: true });
 let browser: Browser | undefined;
 try {
@@ -230,39 +247,62 @@ try {
     })),
   ]);
 
-  // ---- Alex's collections, the photo saved to one so the sidebar shows a count
+  // ---- collections: Alex's Moodboard (the room's photo and made-up pictures over two months), and Maya's public
+  // Inspiration, which Alex follows, with three pictures new since
   const json = { "content-type": "application/json" };
-  const auth = await fetch(`${pb.url}/api/collections/users/auth-with-password`, {
-    method: "POST",
-    headers: json,
-    body: JSON.stringify({ identity: "alex@example.com", password: PASSWORD }),
-  });
-  const asAlex = { ...json, authorization: ((await auth.json()) as { token: string }).token };
+  const token = async (key: string) => {
+    const auth = await fetch(`${pb.url}/api/collections/users/auth-with-password`, {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ identity: `${key}@example.com`, password: PASSWORD }),
+    });
+    return { ...json, authorization: ((await auth.json()) as { token: string }).token };
+  };
+  const asAlex = await token("alex");
+  const asMaya = await token("maya");
+  async function call<T>(headers: Record<string, string>, path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${pb.url}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+    return (await res.json()) as T;
+  }
+  const create = (headers: Record<string, string>, owner: string, name: string, isPublic: boolean) =>
+    call<{ id: string }>(headers, "/api/collections/collections/records", { owner, name, public: isPublic }).then((c) => c.id);
+  const itemTimes: { id: string; at: number }[] = [];
+  /** Uploads SCENES[i]; `ago` (minutes) backdates it, otherwise it is new now. */
+  async function upload(headers: Record<string, string>, collection: string, i: number, ago?: number) {
+    const form = new FormData();
+    form.set("collection", collection);
+    form.set("file", new File([await render(browser!, sceneHtml(i), 1200, 900)], `${SCENES[i]!.name}.png`, { type: "image/png" }));
+    const res = await fetch(`${pb.url}/api/chat/items`, { method: "POST", headers: { authorization: headers.authorization! }, body: form });
+    if (!res.ok) throw new Error(`uploading ${SCENES[i]!.name}: ${res.status} ${await res.text()}`);
+    const { id } = (await res.json()) as { id: string };
+    if (ago !== undefined) itemTimes.push({ id, at: now - ago * MINUTE });
+  }
+
   const shot = await fetch(`${pb.url}/api/collections/messages/records?perPage=1&filter=${encodeURIComponent("files ~ 'dusk'")}`, {
     headers: asAlex,
   });
   const [withPhoto] = ((await shot.json()) as { items: { id: string; files: string[] }[] }).items;
-  for (const [name, isPublic] of [
-    ["Moodboard", false],
-    ["Screenshots", true],
-    ["Brand assets", true],
-  ] as const) {
-    const res = await fetch(`${pb.url}/api/collections/collections/records`, {
-      method: "POST",
-      headers: asAlex,
-      body: JSON.stringify({ owner: alex, name, public: isPublic }),
-    });
-    const { id } = (await res.json()) as { id: string };
-    if (!res.ok) throw new Error(`collection ${name}: ${res.status} ${JSON.stringify({ id })}`);
-    if (name !== "Moodboard") continue;
-    if (!withPhoto) throw new Error("no message with the photo to save");
-    const saved = await fetch(`${pb.url}/api/chat/items`, {
-      method: "POST",
-      headers: asAlex,
-      body: JSON.stringify({ collection: id, message: withPhoto.id, file: withPhoto.files[0] }),
-    });
-    if (!saved.ok) throw new Error(`saving the photo: ${saved.status} ${await saved.text()}`);
-  }
+  if (!withPhoto) throw new Error("no message with the photo to save");
+  const moodboard = await create(asAlex, alex, "Moodboard", false);
+  await create(asAlex, alex, "Screenshots", true);
+  await create(asAlex, alex, "Brand assets", true);
+  const DAY = 24 * 60;
+  for (let i = 0; i < 9; i++) await upload(asAlex, moodboard, i, (i < 7 ? 30 - i * 2 : 11 - i) * DAY);
+  const saved = await call<{ id: string }>(asAlex, "/api/chat/items", {
+    collection: moodboard,
+    message: withPhoto.id,
+    file: withPhoto.files[0],
+  });
+  itemTimes.push({ id: saved.id, at: now - 19 * MINUTE });
+  const inspiration = await create(asMaya, ids.get("maya")!, "Inspiration", true);
+  await upload(asMaya, inspiration, 9, 3 * DAY);
+  await call(asAlex, "/api/chat/subs", { collection: inspiration, on: true });
+  for (const i of [10, 11, 0]) await upload(asMaya, inspiration, i);
+  await runSql(
+    pb.url,
+    itemTimes.map(({ id, at }) => ({ sql: "UPDATE collection_items SET created = {:at} WHERE id = {:id}", params: { id, at: toPb(at) } })),
+  );
 
   // ---- photographs
   await mkdir(OUT, { recursive: true });
@@ -288,8 +328,16 @@ try {
     await page.waitForLoadState("networkidle");
     await page.mouse.move(0, 0);
     await page.screenshot({ path: join(OUT, `screenshot-${scheme}.png`) });
-    await ctx.close();
     console.log(`docs/screenshot-${scheme}.png`);
+
+    await page.goto(`${pb.url}/c/${moodboard}`);
+    await page.locator(".coll-cell img").nth(9).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>(".coll-cell img")].every((i) => i.complete));
+    await page.waitForLoadState("networkidle");
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: join(OUT, `collections-${scheme}.png`) });
+    await ctx.close();
+    console.log(`docs/collections-${scheme}.png`);
   }
 } finally {
   await browser?.close();
@@ -336,6 +384,26 @@ function avatarHtml([a, b, angle]: [string, string, number]): string {
   return `<body style="margin:0;width:256px;height:256px;background:linear-gradient(${angle}deg,${a},${b});overflow:hidden">
 <div style="position:absolute;left:78px;top:46px;width:100px;height:100px;border-radius:50%;background:rgb(255 255 255/.85)"></div>
 <div style="position:absolute;left:28px;top:160px;width:200px;height:180px;border-radius:50%;background:rgb(255 255 255/.85)"></div></body>`;
+}
+
+/** SCENES[i] as a 1200×900 page. */
+function sceneHtml(i: number): string {
+  const { sky, sun, hills, shapes } = SCENES[i]!;
+  const stops = sky.map((c, k) => `<stop offset="${sky.length > 1 ? k / (sky.length - 1) : 0}" stop-color="${c}"/>`).join("");
+  const x = 300 + ((i * 263) % 600);
+  const body = hills
+    ? `<circle cx="${x}" cy="${380 + (i % 3) * 40}" r="${110 + (i % 4) * 20}" fill="${sun}" opacity=".9"/>
+<path d="M0 ${560 - (i % 3) * 30} L${180 + i * 7} 420 L340 520 L${520 - i * 5} 360 L700 540 L860 430 L1020 560 L1200 440 V900 H0Z" fill="${hills[0]}"/>
+<path d="M0 700 L160 600 L330 670 L500 560 L690 690 L870 600 L1050 700 L1200 620 V900 H0Z" fill="${hills[1]}"/>
+<path d="M0 800 L220 730 L450 790 L680 720 L900 800 L1100 740 L1200 780 V900 H0Z" fill="${hills[2]}"/>`
+    : `<circle cx="${x}" cy="330" r="190" fill="${sun}"/>
+<rect x="${120 + (i % 2) * 520}" y="420" width="440" height="360" rx="220" fill="${shapes![0]}"/>
+<circle cx="${900 - (i % 2) * 560}" cy="620" r="170" fill="${shapes![1]}"/>
+<rect x="${480 + (i % 3) * 60}" y="140" width="210" height="210" rx="36" fill="${shapes![2]}" transform="rotate(18 585 245)"/>
+<path d="M0 820 Q300 740 600 820 T1200 820 V900 H0Z" fill="${shapes![3]}"/>`;
+  return `<body style="margin:0"><svg width="1200" height="900" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">${stops}</linearGradient></defs>
+<rect width="1200" height="900" fill="url(#sky)"/>${body}</svg></body>`;
 }
 
 /** A made-up dusk landscape, standing in for a photo. */
