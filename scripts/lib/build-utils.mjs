@@ -81,6 +81,8 @@ export const BASE_OPTIONS = {
   // Inter (web/fonts/), referenced by web/styles/app/fonts.css: copied next to the bundles under hashed names.
   loader: { ".woff2": "file" },
   assetNames: "assets/[name]-[hash]",
+  // The app icon (web/public/icons/, copied as is), which the logo in shell.css and login.css draws.
+  external: ["/icons/*"],
 };
 
 /**

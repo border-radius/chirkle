@@ -51,14 +51,13 @@ html {
   letter-spacing: -0.01em;
 }
 
-/* The logo: a speech bubble in the grape-to-pink gradient. */
+/* The logo (/icons/icon.svg, the favicon too): a round speech bubble in the violet-to-pink gradient. */
 .brand::before {
   content: "";
   flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 50% 50% 50% 28%;
-  background: linear-gradient(135deg, #7a5af8, #a43fd0 55%, #d2389e);
+  background: url("/icons/icon.svg") center / contain no-repeat;
 }
 
 /* The site's own logo (§24) replaces it. */

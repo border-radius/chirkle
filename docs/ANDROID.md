@@ -1440,3 +1440,15 @@ From the UI/UX review of 2026-11-06 (docs/QA.md "QA pass 32"):
   "Display name" heading over a field also labelled "Display name".
 
 Tests: `UiPortsTest` (Jump to beginning shows the first message; a 320dp sheet keeps a full-size "Add reaction").
+
+## 51. The new logo (2026-11-06)
+
+The logo is now `logo.svg` (the repo root), traced from the designer's `logo.jpeg`: a round speech bubble (a
+slightly tall ellipse) with a soft tail at its bottom left, in a violet-to-pink gradient at 45° (#7E46FD → #D3267A).
+It replaces §39's bubble with the tighter corner everywhere.
+
+- **Launcher icon**: `ic_launcher_foreground` is the new logo, its farthest point 32 dp from the centre (inside the
+  66 dp safe zone), still on the lavender `ic_launcher_background`; `ic_launcher_monochrome` is its shape alone.
+- **Brand mark** (`BrandMark`): the vector `core/ui/src/main/res/drawable/brand_mark.xml` (the logo filling its
+  box) instead of a `RoundedCornerShape` filled with a gradient; `ChirkleColors.gradient` is gone with it.
+- **F-Droid**: `fastlane/metadata/android/en-US/images/icon.png` re-rendered from the new layers (512 px).

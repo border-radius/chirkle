@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The logo (web/public/icons/icon.svg, from logo.svg), filling its box: BrandMark. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="32dp" android:height="32dp" android:viewportWidth="64" android:viewportHeight="64">
+    <path android:pathData="M3.44,29.57A28.56,29.57 0 1 1 30.97,59.12C24.44,58.88 17.12,66.59 11.34,62.89C10.12,62.11 9.25,60.83 8.95,59.41C8.14,55.65 11.58,52.34 10.45,48.55C9.96,46.87 8.85,45.53 7.94,44.07C5.32,39.83 3.44,34.38 3.44,29.57Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="11.69" android:startY="9.26" android:endX="52.31" android:endY="49.88">
+                <item android:offset="0" android:color="#FF7E46FD" />
+                <item android:offset="0.25" android:color="#FF8E43ED" />
+                <item android:offset="0.5" android:color="#FFAA38C0" />
+                <item android:offset="0.75" android:color="#FFC32D97" />
+                <item android:offset="1" android:color="#FFD3267A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

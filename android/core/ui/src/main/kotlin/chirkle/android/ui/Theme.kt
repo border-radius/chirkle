@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -40,20 +39,16 @@ data class ChirkleColors(
     val fill: Color,
     /** The NEW line above the first unread message. */
     val new: Color,
-    val gradient: Brush,
 )
 
 val LocalChirkleColors = staticCompositionLocalOf {
     ChirkleColors(
         Color.Gray, Color.Gray, Color.LightGray, Color.LightGray, Color.Yellow, Color.Transparent, Color.LightGray, Color.Blue, Color.Magenta,
-        Brush.linearGradient(listOf(Color.Gray, Color.Gray)),
     )
 }
 
 private val Accent = Color(0xFF5B3DF5)
 private val Accent2 = Color(0xFFC42A7C)
-/** The logo's grape-to-pink (web/styles/app/shell.css .brand::before). */
-private val Gradient = Brush.linearGradient(listOf(Color(0xFF7A5AF8), Color(0xFFA43FD0), Color(0xFFD2389E)))
 
 private val Light: ColorScheme = lightColorScheme(
     primary = Accent,
@@ -119,7 +114,6 @@ private val LightChirkle = ChirkleColors(
     own = Color(0xFFEDE8FF),
     fill = Accent,
     new = Color(0xFFC0267A),
-    gradient = Gradient,
 )
 
 private val DarkChirkle = ChirkleColors(
@@ -132,7 +126,6 @@ private val DarkChirkle = ChirkleColors(
     own = Color(0xFF8B6CFF).copy(alpha = 0.10f),
     fill = DarkFill,
     new = Color(0xFFF9A8D4),
-    gradient = Gradient,
 )
 
 /** The avatar palette (§15.4): white text on each, at least 4.5:1, in both themes (web/styles/app/avatars.css). */

@@ -2448,7 +2448,8 @@ a room's last page while it loads; it isn't used offline).
   are the site's title (§24), so the installed app is named like the site. `start_url` and `scope` are `/`,
   `display: standalone`; `theme_color` is the app bar's (`--surface`) and `background_color` the page's (`--bg`),
   light theme (a manifest has one of each). `application/manifest+json`, `no-cache`, like every page (§5.6).
-- **Icons** (`web/public/icons/`, copied to `pb_public/icons/` by `build` and `dev`): the speech bubble as `icon.svg`,
+- **Icons** (`web/public/icons/`, copied to `pb_public/icons/` by `build` and `dev`): the logo as `icon.svg` (the same
+  as `logo.svg` at the repo root, traced from `logo.jpeg`, 2026-11-06; the app bar and the login page draw it too),
   192 and 512 px PNGs, a 512 px maskable one (the bubble inside the safe zone, on `--surface`) and a 180 px
   `apple-touch-icon.png` for iOS (opaque: iOS fills transparency with black). The site's logo isn't used: it may be
   any image, an SVG or a small one, and an installed app needs square PNGs.

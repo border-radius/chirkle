@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The themed icon (Android 13+): the logo's shape alone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FF000000" android:pathData="M54,26A28,28 0,0 1,82,54A28,28 0,0 1,54,82L41.68,82A15.68,15.68 0,0 1,26,66.32L26,54A28,28 0,0 1,54,26Z" />
+    <path android:fillColor="#FF000000" android:pathData="M29.73,51.94A24.27,25.13 0 1 1 53.12,77.05C47.58,76.84 41.35,83.39 36.45,80.25C35.41,79.59 34.67,78.5 34.41,77.29C33.73,74.1 36.64,71.29 35.69,68.06C35.27,66.63 34.32,65.5 33.55,64.26C31.33,60.66 29.73,56.02 29.73,51.94Z" />
 </vector>

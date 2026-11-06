@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The web logo (.brand::before in shell.css): a speech bubble, round but for its tighter bottom-left corner
-     (border-radius 50% 50% 50% 28%), in the grape-to-pink gradient at 135deg. 56dp, inside the 66dp safe zone. -->
+<!-- The logo (web/public/icons/icon.svg, from logo.svg): a round speech bubble with a soft tail at its bottom left, in the
+     violet-to-pink gradient. Within 32dp of the centre: inside the 66dp safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:pathData="M54,26A28,28 0,0 1,82,54A28,28 0,0 1,54,82L41.68,82A15.68,15.68 0,0 1,26,66.32L26,54A28,28 0,0 1,54,26Z">
+    <path android:pathData="M29.73,51.94A24.27,25.13 0 1 1 53.12,77.05C47.58,76.84 41.35,83.39 36.45,80.25C35.41,79.59 34.67,78.5 34.41,77.29C33.73,74.1 36.64,71.29 35.69,68.06C35.27,66.63 34.32,65.5 33.55,64.26C31.33,60.66 29.73,56.02 29.73,51.94Z">
         <aapt:attr name="android:fillColor">
-            <gradient android:type="linear" android:startX="26" android:startY="26" android:endX="82" android:endY="82">
-                <item android:offset="0" android:color="#FF7A5AF8" />
-                <item android:offset="0.55" android:color="#FFA43FD0" />
-                <item android:offset="1" android:color="#FFD2389E" />
+            <gradient android:type="linear" android:startX="36.74" android:startY="34.67" android:endX="71.26" android:endY="69.2">
+                <item android:offset="0" android:color="#FF7E46FD" />
+                <item android:offset="0.25" android:color="#FF8E43ED" />
+                <item android:offset="0.5" android:color="#FFAA38C0" />
+                <item android:offset="0.75" android:color="#FFC32D97" />
+                <item android:offset="1" android:color="#FFD3267A" />
             </gradient>
         </aapt:attr>
     </path>

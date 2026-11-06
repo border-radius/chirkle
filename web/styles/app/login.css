@@ -29,8 +29,7 @@
   content: "";
   width: 56px;
   height: 56px;
-  border-radius: 50% 50% 50% 28%;
-  background: linear-gradient(135deg, #7a5af8, #a43fd0 55%, #d2389e);
+  background: url("/icons/icon.svg") center / contain no-repeat;
 }
 
 .auth .brand-by {
