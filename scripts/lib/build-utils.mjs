@@ -96,7 +96,7 @@ export function latinFont(metafile, outdir) {
 /** Gzipped size budget in bytes (DESIGN.md §7.7). */
 export const BUDGET = Object.freeze({
   js: 49.75 * 1024,
-  css: 11.15 * 1024,
+  css: 11.25 * 1024,
   html: 1536,
   viewerJs: 4 * 1024,
   viewerCss: 1.5 * 1024,

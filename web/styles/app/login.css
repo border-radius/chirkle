@@ -33,6 +33,11 @@
   background: linear-gradient(135deg, #7a5af8, #a43fd0 55%, #d2389e);
 }
 
+.auth .brand-by {
+  margin: -18px 0 0;
+  text-align: center;
+}
+
 .auth h1 .brand-logo {
   display: block;
   height: 4rem;

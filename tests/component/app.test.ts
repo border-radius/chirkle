@@ -180,6 +180,27 @@ describe("app boot (§7.1)", () => {
     expect(root.querySelector('input[name="invite_code"]')).not.toBeNull();
   });
 
+  it("the sidebar and the login page say the site chirps on Chirkle, linked, unless it is called Chirkle", async () => {
+    const { api } = await signedUp();
+    let title = "Acme";
+    intercept(api, "site", () => async () => ({ title, logo: "", inviteOnly: false }));
+    app = startApp({ api, root });
+    const top = () => root.querySelector("aside.sidebar .side-top")!;
+    await vi.waitFor(() => expect(top().querySelector(".brand-by")?.textContent).toBe("chirps on Chirkle"));
+    expect(top().querySelector<HTMLAnchorElement>(".brand-by a")!.href).toBe("https://chirkle.com/");
+    expect(top().querySelector<HTMLAnchorElement>("a.brand-title")!.getAttribute("href")).toBe("/");
+    expect(root.querySelector("header.app-bar .brand-by")).toBeNull(); // no room for it there
+    app.logOut();
+    visit("/login");
+    await vi.waitFor(() => expect(root.querySelector(".auth h1 + p.brand-by")?.textContent).toBe("chirps on Chirkle"));
+    app.stop();
+    title = "Chirkle";
+    app = startApp({ api, root });
+    visit("/login");
+    await vi.waitFor(() => expect(root.querySelector(".auth h1")?.textContent).toBe("Chirkle"));
+    expect(root.querySelector(".brand-by")).toBeNull();
+  });
+
   it("/ shows the room list as a sidebar and a greeting where the room would be", async () => {
     const { api } = await signedUp("Ada Lovelace");
     app = startApp({ api, root });

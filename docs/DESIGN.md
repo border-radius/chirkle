@@ -590,7 +590,7 @@ while its first page loads.
 | Asset | Budget (gzipped) |
 |---|---|
 | `app.js` (including the PocketBase client) | **≤ 49.75 KB** (25 KB for the MVP; raised for §15–§17, §19, §22, §23, §24, video attachments, the QA pass 8 and 9 fixes, bigger attachments, audio attachments, §27, the room cache and its prefetching, opening at the first unread message, the QA pass 11 fixes, service messages, the room cache without waiting for the network, the QA pass 12 fixes, prefetching rooms not yet kept, the QA pass 13 fixes, thumbnail caching, the QA pass 14 fixes, Ctrl+Up/Down to pick the reply, link previews, the room access dialog fix, who can post, message search, message permalinks, the media grid, the QA pass 16 fixes, video posters in the room, the QA pass 17 fixes, media collections, Jump to, Appearance, the room in the tab title, the QA pass 19 fixes, live collection badges, the security audit fixes, the room kept as the page goes, the prefetch herd fix, the QA pass 23 fixes, live replies quoted by the room, the 2026-10-31 redesign, taps on touch screens that also have a mouse, the new version line (§27.4), taps on WebKit and Android touch screens, see §13) |
-| `app.css` | **≤ 11.15 KB** (11.05 KB until QA pass 31, 10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
+| `app.css` | **≤ 11.25 KB** (11.15 KB until "chirps on Chirkle" (§24.3), 11.05 KB until QA pass 31, 10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
 | `index.html` | ≤ 1.5 KB |
 | Image viewer (§17.7), loaded on first use | ≤ 4 KB script, ≤ 1.5 KB stylesheet |
 | Message search (§29), loaded on first use | ≤ 2 KB script (its styles are in `app.css`) |
@@ -2242,13 +2242,19 @@ at once; a failed load keeps what is shown. On the Sign up tab of an invite-only
 last, and its errors show next to it. A site made invite-only after the page loaded still refuses the signup, with the
 server's message above the button.
 
+A site with its own name (anything but "Chirkle") says where it runs: **chirps on Chirkle**, small and muted, with
+"Chirkle" a link to https://chirkle.com in a new tab. It sits under the title in the sidebar (where the title, not the
+whole brand, is then the link home, stretched over the logo and title so the line's link stays its own) and under the
+login page's heading; not in the narrow app bar, which has no room for a second line (`byLine()`, `header.ts`).
+
 ### 24.4 Tests
 
 - **Integration** (`site.test.ts`): one public record without its code; only superusers change it; the logo is a public
   image and an SVG one is sandboxed; signups open, needing the code (missing, wrong, wrong case, padded), and closed;
   existing accounts still log in and superusers still create accounts.
 - **Unit**: loading, caching and failing to load the site (`site.test.ts`); the app bar, login page and tab title with
-  a custom site, kept after logging out; the invite code field, what it sends and its errors (`login.test.ts`).
+  a custom site, kept after logging out; "chirps on Chirkle" in the sidebar and on the login page, not for a site
+  called Chirkle (`app.test.ts`); the invite code field, what it sends and its errors (`login.test.ts`).
 
 ---
 

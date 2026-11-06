@@ -3,6 +3,7 @@
 
 import { type Api, ApiError, errorMessage, SIGNUP_LOGIN_FAILED } from "../api.ts";
 import { clear, h, uniqueId } from "../dom.ts";
+import { byLine } from "../header.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
 import { DEFAULT_SITE, type User } from "../lib/types.ts";
 import type { View } from "../router.ts";
@@ -122,6 +123,7 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
     root.append(
       h("section", { class: "auth" }, [
         h("h1", { class: logo ? "has-logo" : "" }, [logo ? h("img", { src: logo, alt: "", class: "brand-logo" }) : null, title]),
+        byLine(site(), "p"),
         h("div", { class: "auth-card" }, [h("div", { role: "tablist", class: "tabs" }, tabs), form]),
         h("p", { class: "auth-skip" }, h("a", { href: "/" }, "Just looking? Read the Open Air rooms")),
       ]),

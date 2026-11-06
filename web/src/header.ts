@@ -9,11 +9,24 @@ import type { Site } from "./lib/types.ts";
 import type { AppState, Store } from "./store.ts";
 import { avatar } from "./ui/avatar.ts";
 
-/** The site's logo and title, a link home. */
-export function brand({ title, logo }: Site): HTMLElement {
-  return h("a", { href: "/", class: logo ? "brand has-logo" : "brand" }, [
-    logo ? h("img", { src: logo, alt: "", class: "brand-logo" }) : null,
-    h("span", { class: "brand-title" }, title),
+/** The site's logo and title, a link home. `by`: with "chirps on Chirkle" under the title (byLine), the title then
+ *  being the link home, stretched over the whole brand, so that line can hold a link of its own. */
+export function brand(site: Site, by = false): HTMLElement {
+  const { title, logo } = site;
+  const cls = logo ? "brand has-logo" : "brand";
+  const img = logo ? h("img", { src: logo, alt: "", class: "brand-logo" }) : null;
+  const line = by ? byLine(site) : null;
+  if (!line) return h("a", { href: "/", class: cls }, [img, h("span", { class: "brand-title" }, title)]);
+  return h("div", { class: cls }, [img, h("span", { class: "brand-name" }, [h("a", { href: "/", class: "brand-title" }, title), line])]);
+}
+
+/** "chirps on Chirkle", linking to chirkle.com: the small print under a site's own name in the sidebar and on the login
+ *  page. None for a site still called Chirkle, which would say it twice. */
+export function byLine({ title }: Site, tag: "span" | "p" = "span"): HTMLElement | null {
+  if (title.trim().toLowerCase() === "chirkle") return null;
+  return h(tag, { class: "brand-by" }, [
+    "chirps on ",
+    h("a", { href: "https://chirkle.com", target: "_blank", rel: "noopener" }, "Chirkle"),
   ]);
 }
 

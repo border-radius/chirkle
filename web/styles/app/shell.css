@@ -79,6 +79,33 @@ html {
   white-space: nowrap;
 }
 
+/* With "chirps on Chirkle" under the title (the sidebar's): the title is the link home, stretched over the brand. */
+.brand-name {
+  display: grid;
+  min-width: 0;
+}
+
+div.brand {
+  position: relative;
+}
+
+div.brand .brand-title::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.brand-by {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.brand-by a {
+  position: relative;
+  color: inherit;
+}
+
 .bar-end {
   display: flex;
   gap: 0.25rem;

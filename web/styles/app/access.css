@@ -1,8 +1,9 @@
 /* ---- Room access (§23): the guest's links and the banners in place of the composer. The access dialog's styles are
    web/styles/access.css, linked by its chunk. ---- */
 
-/* The logo links home (a guest's way back from the login page). */
-a.brand {
+/* The logo links home (a guest's way back from the login page); in the sidebar, the title does. */
+a.brand,
+.brand-title {
   color: var(--fg);
   text-decoration: none;
 }

@@ -83,7 +83,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const { site, user } = store.get();
     if (drawn[0] === site && drawn[1] === user) return;
     drawn = [site, user];
-    top.replaceChildren(brand(site), jumpButton(true));
+    top.replaceChildren(brand(site, true), jumpButton(true));
     foot.replaceChildren(
       ...(user
         ? [
