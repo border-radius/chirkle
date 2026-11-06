@@ -46,10 +46,32 @@ Design: [`docs/DESIGN.md`](docs/DESIGN.md) · Android app: [`docs/ANDROID.md`](d
 ## Requirements
 
 - Node.js ≥ 22 and npm ≥ 11
-- Linux or macOS (x64/arm64) — `npm run setup` downloads the matching PocketBase binary
+- Linux or macOS (x64/arm64) — `npm start` and `npm run setup` download the matching PocketBase binary (Windows: WSL or Docker)
+- Optional, for the server's workers: `ffmpeg` (video posters) and `curl` (link previews) on the `PATH`
 - For e2e tests: Playwright's Chromium (`npx playwright install chromium`)
 
-## Getting started
+## Quick start
+
+```sh
+npm install
+npm start          # builds the web app, downloads PocketBase on the first run, serves http://127.0.0.1:8090
+```
+
+Or without a clone, from npm (the package ships the built web app and the server's hooks and migrations):
+
+```sh
+npx chirkle                     # data in ./pb_data
+npx chirkle chat.example.com    # HTTPS with Let's Encrypt on ports 80/443
+```
+
+Open the page and sign up. The first run prints a link to create the admin (superuser) account, or create one with
+`npx chirkle superuser upsert you@example.com <password>` (`npm start -- superuser upsert …` in a clone).
+`HOST` and `PORT` choose the address (default `127.0.0.1:8090`; `HOST=0.0.0.0` to reach it from other machines),
+`CHIRKLE_DATA` the data directory (default `./pb_data`), and any other `pocketbase serve` flags can follow
+(`npx chirkle --http=0.0.0.0:80`). The settings of [Deploying](#deploying) (`TRUSTED_PROXY` behind a reverse proxy, …)
+apply as they are. PocketBase is kept in the package's `bin/` (or `~/.cache/chirkle/` when that isn't writable).
+
+## Getting started (development)
 
 ```sh
 npm ci
@@ -65,6 +87,7 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 
 | Script | What it does |
 |---|---|
+| `npm start` | Production build, then the server (`scripts/start.mjs`, the package's `chirkle` command): PocketBase on http://127.0.0.1:8090 with `pb_data/` |
 | `npm run dev` | Unminified watch build into `pb_public/` + `pocketbase serve --dev` |
 | `npm run build` | Production build (hashed assets) into `pb_public/`; fails if over the size budget |
 | `npm run typecheck` | `tsc` (strict) for the frontend, tests and scripts, plus `pb_hooks/` + `pb_migrations/` against PocketBase's generated types (`types/pocketbase.d.ts`, written by `scripts/pb-types.sh`) |

@@ -1,13 +1,45 @@
 {
   "name": "chirkle",
-  "private": true,
+  "version": "0.1.0",
+  "description": "A small, fast, real-time group chat: one PocketBase server, a vanilla TypeScript web app",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/border-radius/chirkle.git"
+  },
+  "homepage": "https://github.com/border-radius/chirkle#readme",
+  "keywords": [
+    "chat",
+    "pocketbase",
+    "self-hosted",
+    "realtime"
+  ],
   "type": "module",
+  "bin": {
+    "chirkle": "scripts/start.mjs"
+  },
+  "files": [
+    "pb_public/",
+    "pb_hooks/",
+    "pb_migrations/",
+    "scripts/start.mjs",
+    "scripts/fetch-pocketbase.sh"
+  ],
   "engines": {
     "node": ">=22",
     "npm": ">=11"
   },
+  "os": [
+    "linux",
+    "darwin"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "scripts": {
+    "start": "node scripts/start.mjs",
+    "prepack": "npm run build",
     "setup": "sh scripts/fetch-pocketbase.sh",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",

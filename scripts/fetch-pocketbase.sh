@@ -1,12 +1,12 @@
 #!/bin/sh
-# Download the pinned PocketBase release into ./bin and verify its checksum.
+# Download the pinned PocketBase release into ./bin (or $PB_BIN_DIR) and verify its checksum.
 # No-op when the pinned version is already installed.
 set -eu
 
 PB_VERSION="0.40.4"
 
 cd "$(dirname "$0")/.."
-BIN_DIR="bin"
+BIN_DIR="${PB_BIN_DIR:-bin}"
 PB="$BIN_DIR/pocketbase"
 
 if [ -x "$PB" ] && "$PB" --version 2>/dev/null | grep -q "$PB_VERSION"; then
