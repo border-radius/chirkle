@@ -1,5 +1,5 @@
 // Your accounts (ANDROID.md §17.2), opened from the brand at the top of the room list or by swiping the list left
-// (§44): switch to another one, or add one on this server or another. Swiped right, it goes back to the rooms.
+// (§44): switch to another one, or add one on this server or another. Swiped left, it goes back to the rooms.
 package chirkle.android.feature.profile
 
 import androidx.compose.foundation.clickable
@@ -43,7 +43,7 @@ fun AccountsScreen(onAddAccount: () -> Unit, onBack: () -> Unit) {
     val accounts = LocalAccounts.current
     val all = accounts?.list?.collectAsStateWithLifecycle()?.value.orEmpty().filter { it.user != null }
 
-    Scaffold(modifier = Modifier.swipeAway(enabled = true, toRight = true, onSwipe = onBack), topBar = {
+    Scaffold(modifier = Modifier.swipeAway(enabled = true, toRight = false, onSwipe = onBack), topBar = {
         TopAppBar(
             navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back to rooms") } },
             title = { Text("Accounts") },

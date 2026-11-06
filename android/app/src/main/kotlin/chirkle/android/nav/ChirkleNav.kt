@@ -109,10 +109,11 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
         backStack = stack,
         onBack = { if (stack.size > 1) stack.removeAt(stack.lastIndex) },
         entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
-        // Material's shared X axis: the next screen slides in a little from the end and fades in; back reverses it.
-        transitionSpec = { forward(true) },
-        popTransitionSpec = { forward(false) },
-        predictivePopTransitionSpec = { forward(false) },
+        // Material's shared X axis: the next screen slides in a little from the end and fades in; back reverses it. Your
+        // accounts, opened by a swipe to the right, come from the start instead (§52).
+        transitionSpec = { forward(FROM_START !in targetState.metadata) },
+        popTransitionSpec = { forward(FROM_START in initialState.metadata) },
+        predictivePopTransitionSpec = { forward(FROM_START in initialState.metadata) },
         entryProvider = entryProvider {
             entry<Login> { AuthScreen(AuthMode.LogIn, onChangeServer = { stack += ChooseServer }) { guest = true; stack.reset(Rooms) } }
             entry<SignUp> { AuthScreen(AuthMode.SignUp, onChangeServer = { stack += ChooseServer }) { guest = true; stack.reset(Rooms) } }
@@ -156,7 +157,7 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
             entry<RoomAccess> { key -> RoomAccessScreen(key.id) { stack.removeAt(stack.lastIndex) } }
             entry<Viewer> { key -> ViewerScreen(key.roomId, key.msgId, key.file) { stack.removeAt(stack.lastIndex) } }
             entry<Profile> { ProfileScreen { stack.removeAt(stack.lastIndex) } }
-            entry<AccountList> { AccountsScreen(onAddAccount = { stack += ChooseServer }) { stack.removeAt(stack.lastIndex) } }
+            entry<AccountList>(metadata = mapOf(FROM_START to true)) { AccountsScreen(onAddAccount = { stack += ChooseServer }) { stack.removeAt(stack.lastIndex) } }
             entry<SharePicker> {
                 SharePickerScreen(forwardTargets(s), s.user?.id, onPick = { room ->
                     ShareInbox.pending = ShareInbox.pending?.copy(target = room)
@@ -170,6 +171,9 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
         },
     )
 }
+
+/** Entry metadata: the screen slides in from the start, not the end. */
+private const val FROM_START = "chirkle.fromStart"
 
 private val Ease = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 

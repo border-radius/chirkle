@@ -1,7 +1,7 @@
 // The room list (DESIGN.md §5, §16.5, §18.4; web/src/views/rooms.ts): DMs, rooms, your media collections and those you
 // follow (§31.3), and the hidden and archived rooms folded away; unread badges, unread rows first; a row's menu (hide,
 // close, archive). A section's heading folds it, as on the web: then only its unread rows stay listed. A guest sees the
-// Open Air rooms (§23.3). The brand at the top, or a swipe to the left, opens your accounts (ANDROID.md §17.2, §44). The look (2026-10-31 redesign): a
+// Open Air rooms (§23.3). The brand at the top, or a swipe to the right, opens your accounts (ANDROID.md §17.2, §44). The look (2026-10-31 redesign): a
 // search pill on top (brand, Jump to, your avatar), Rooms, Direct messages and Collections each with its "+", then one
 // folded Hidden & archived section, on the sidebar's darker surface.
 package chirkle.android.feature.rooms
@@ -148,8 +148,8 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 true
             } else false
         }
-            // Dragged to the left, the list opens your accounts, as the brand does (§44).
-            .swipeAway(enabled = !jumping, toRight = false, onSwipe = onAccounts),
+            // Dragged to the right, the list opens your accounts, as the brand does (§44, §52).
+            .swipeAway(enabled = !jumping, toRight = true, onSwipe = onAccounts),
         topBar = {
             if (jumping) {
                 val focus = remember { FocusRequester() }

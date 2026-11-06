@@ -8,6 +8,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -78,6 +81,18 @@ class UiCollectionsTest {
         // Its tile shows what is in it (the newest four).
         val item = runBlocking { a.api.savedIn(SaveFrom.File(msg.id, msg.files.single())) }.getValue(coll)
         ui.until { ui.services!!.store.get().collections!!.mine.single { it.id == coll }.preview.map { it.id } == listOf(item) }
+    }
+
+    @Test fun `swiping a collection to the right goes back to the rooms (ANDROID §52)`() {
+        val a = newUser()
+        val name = "Swipe ${uniq()}"
+        runBlocking { a.api.createCollection(name, false) }
+        ui.signedIn(a)
+        tapInList(name)
+        ui.waitFor("Nothing here yet. Upload images and videos")
+        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
+        ui.waitGone("Nothing here yet. Upload images and videos")
+        ui.waitFor(hasContentDescription("Profile"))
     }
 
     @Test fun `a badge links to a public collection, which another user subscribes to and sees what is new`() {

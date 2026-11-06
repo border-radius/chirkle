@@ -99,19 +99,23 @@ class UiAccountsTest {
         assertEquals(TestServer.url, ui.services!!.server)
     }
 
-    @Test fun `swiping the room list to the left opens your accounts, a short swipe stays, right goes back (ANDROID §44)`() {
+    @Test fun `swiping the room list to the right opens your accounts, a short swipe stays, left goes back (ANDROID §44, §52)`() {
         val u = newUser()
         ui.signedIn(u)
         ui.waitFor(hasContentDescription("Profile"))
         // A short, slow drag springs back.
-        compose.onRoot().performTouchInput { swipe(center + Offset(width * 0.2f, 0f), center, durationMillis = 600) }
+        compose.onRoot().performTouchInput { swipe(center - Offset(width * 0.2f, 0f), center, durationMillis = 600) }
         repeat(5) { ui.pump() }
         assertTrue(compose.onAllNodes(hasText("Add account")).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithContentDescription("Profile").assertExists()
+        // The old way, to the left, does nothing.
         compose.onRoot().performTouchInput { swipeLeft(startX = width * 0.9f, endX = width * 0.1f) }
+        repeat(5) { ui.pump() }
+        assertTrue(compose.onAllNodes(hasText("Add account")).fetchSemanticsNodes().isEmpty())
+        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
         ui.waitFor("Add account")
         // And back, the other way.
-        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
+        compose.onRoot().performTouchInput { swipeLeft(startX = width * 0.9f, endX = width * 0.1f) }
         ui.waitGone("Add account")
         ui.waitFor(hasContentDescription("Profile"))
     }

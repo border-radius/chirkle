@@ -332,7 +332,8 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
         }
     }
 
-    Scaffold(topBar = {
+    // Dragged to the right, the collection goes back, as a room does (§40, §52).
+    Scaffold(modifier = Modifier.swipeBack(enabled = true, onBack = onBack), topBar = {
         TopAppBar(
             navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back") } },
             title = {
