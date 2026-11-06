@@ -1453,7 +1453,7 @@ It replaces §39's bubble with the tighter corner everywhere.
   box) instead of a `RoundedCornerShape` filled with a gradient; `ChirkleColors.gradient` is gone with it.
 - **F-Droid**: `fastlane/metadata/android/en-US/images/icon.png` re-rendered from the new layers (512 px).
 
-## 52. Swipe right for your accounts; swipe back from a collection (2026-11-06)
+## 52. Swipe right for your accounts; swipe back from a collection; 0.1.6 (2026-11-06)
 
 - **Your accounts**: the room list now opens them when dragged to the **right** (was left, §44), and they come in from
   the start of the screen (entry metadata `FROM_START` in `ChirkleNav` reverses the shared X axis for them, both
@@ -1462,3 +1462,5 @@ It replaces §39's bubble with the tighter corner everywhere.
 
 Tests: `UiAccountsTest` "swiping the room list to the right opens your accounts", `UiCollectionsTest` "swiping a
 collection to the right goes back".
+
+**Version** 0.1.6 (`versionCode` 7, with §50 and §51), changelog `7.txt`, F-Droid recipe updated.
