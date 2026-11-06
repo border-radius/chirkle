@@ -1,9 +1,9 @@
-# Chirkle
+# <img src="logo.svg" alt="" width="36" height="36" align="top"> Chirkle
 
 A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) binary is the whole backend
 (auth, data, realtime, static files); the frontend is vanilla TypeScript bundled by esbuild — no framework,
-~49 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 49.10 KB of JS,
-11.05 KB of CSS; rarer screens such as the image viewer, search, room access and collections load on first use).
+~49 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 49.75 KB of JS,
+11.25 KB of CSS; rarer screens such as the image viewer, search, room access and collections load on first use).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
@@ -91,6 +91,7 @@ pb_hooks/        server-side hooks: trimming, soft delete, edit/archive stamps, 
 web/src/         frontend: api.ts (the only module that talks to PocketBase, through pb.ts, a minimal client), router,
                  store, cache.ts (the room cache), sw.ts (the service worker), views/, lib/ (pure logic)
 web/styles/      app.css (bundles app/*.css, one file per part) and viewer.css
+web/public/      icons/: the logo (logo.svg) as icon.svg and the PNG app icons, served as they are
 scripts/         build, dev, fetch-pocketbase, pb-types (PocketBase's types for the hooks), html-sink check
 tests/           unit/, integration/, e2e/, perf/ (scale measurements), support/ (PocketBase harness, Telegram stub, helpers)
 android/         the Android app (docs/ANDROID.md): core/data (API, realtime, database, sync), core/ui, feature/*, app
