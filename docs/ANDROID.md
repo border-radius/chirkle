@@ -1464,3 +1464,24 @@ Tests: `UiAccountsTest` "swiping the room list to the right opens your accounts"
 collection to the right goes back".
 
 **Version** 0.1.6 (`versionCode` 7, with §50 and §51), changelog `7.txt`, F-Droid recipe updated.
+
+## 53. Emoji by name (2026-11-06)
+
+The web's emoji search and ":name" in the composer (DESIGN.md §20.6), ported the same day.
+
+- **Names**: `core/data` `lib/EmojiNames.kt` holds the web's lines (`web/src/lib/emoji-names.ts`: the emoji, its short
+  name, more words), with `findEmoji` (the same order: exact names, then names beginning so, shorter first, then the
+  rest), `emojiNamed`, `emojiToken` and `wholeEmojiName`. The regexes end in `\z`: Java's `$` also matches before a
+  last line break.
+- **Composer**: `RoomViewModel` works out `suggestions` (up to 8) from the text before the caret on every change.
+  They show as a row of chips over the field ("🔥 :fire:", the chosen one tinted); a tap puts the emoji in place of
+  ":name", with a space after when it ends the text. With a hardware keyboard, Enter or Tab puts in the chosen one,
+  ↑/↓ choose (round the row), Escape hides them until another ":name" is typed. A whole ":name:" becomes its emoji
+  when the text grows to end in it (a keyboard may commit several characters at once). Picked emoji join Recent.
+- **Emoji sheet**: a search field over the tabs ("Search emoji"); what it finds replaces the categories ("Found", "No
+  emoji found"), a tab empties it, and the keyboard's Done picks the first found. It isn't focused when the sheet
+  opens, so the keyboard doesn't cover the emoji.
+
+Tests: `EmojiTest` (the web's lines and its finding and token cases), `UiPortsTest` "typing a colon and a name offers
+emoji…" (the row, a tap, a whole ":fire:", sending; the sheet's search and a tab emptying it). Robolectric draws no
+emoji (`Glyphs` leaves every grid empty), so what the sheet finds is checked on `EmojiTest` only.

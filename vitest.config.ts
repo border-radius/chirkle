@@ -9,6 +9,7 @@ const define = {
   MEDIA_CSS: JSON.stringify("/assets/media.css"),
   COLLECTIONS_CSS: JSON.stringify("/assets/collections.css"),
   ACCESS_CSS: JSON.stringify("/assets/access.css"),
+  EMOJI_CSS: JSON.stringify("/assets/emoji.css"),
 };
 
 export default defineConfig({

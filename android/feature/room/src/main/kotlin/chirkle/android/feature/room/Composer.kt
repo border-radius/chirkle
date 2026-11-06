@@ -1,6 +1,7 @@
 // The composer (ANDROID.md §7.2, DESIGN.md §22.3): a multi-line field with the 2,000-character limit counted in code
 // points, emoji, attach and send. Enter makes a new line; with a hardware keyboard Enter sends, Shift+Enter is a new
-// line, Up in an empty field edits your last message and Ctrl+Up/Down pick the reply, as on the web.
+// line, Up in an empty field edits your last message and Ctrl+Up/Down pick the reply, as on the web. Typing ":name"
+// offers emoji by name in a strip over the field (DESIGN.md §20.6).
 package chirkle.android.feature.room
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -49,7 +51,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -155,6 +159,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
             if (error.isNotEmpty()) {
                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
+            if (vm.suggestions.isNotEmpty()) Suggestions(vm)
             // One rounded field with emoji at its start and attach at its end, both kept at the bottom as the text
             // grows, then Send: the text gets the width, as in the messengers people know.
             Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
@@ -183,6 +188,13 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             .semantics { contentDescription = "Message" }
                             .onPreviewKeyEvent { e ->
                                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
+                                if (vm.suggestions.isNotEmpty()) when {
+                                    (e.key == Key.Enter || e.key == Key.Tab) && plain -> return@onPreviewKeyEvent true.also { vm.pickSuggestion() }
+                                    e.key == Key.DirectionDown && plain -> return@onPreviewKeyEvent true.also { vm.stepSuggestion(1) }
+                                    e.key == Key.DirectionUp && plain -> return@onPreviewKeyEvent true.also { vm.stepSuggestion(-1) }
+                                    e.key == Key.Escape -> return@onPreviewKeyEvent true.also { vm.dismissSuggestions() }
+                                }
                                 when {
                                     e.key == Key.Enter && !e.isShiftPressed -> { vm.submit(); true }
                                     e.key == Key.Escape && vm.editing != null -> { vm.cancelEdit(); true }
@@ -238,6 +250,34 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                 ) {
                     Icon(if (vm.editing != null) ChirkleIcons.Check else ChirkleIcons.Send, contentDescription = if (vm.editing != null) "Save" else "Send", modifier = Modifier.size(20.dp))
                 }
+            }
+        }
+    }
+}
+
+/** The emoji a ":name" finds, in a row over the field: a tap puts one in; the chosen one (for Enter) is tinted. */
+@Composable
+private fun Suggestions(vm: RoomViewModel) {
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(vm.suggestion) { list.animateScrollToItem(vm.suggestion) }
+    LazyRow(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp).semantics { contentDescription = "Emoji" },
+        state = list,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        itemsIndexed(vm.suggestions, key = { _, n -> n.emoji }) { i, n ->
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (i == vm.suggestion) Chirkle.colors.tint else MaterialTheme.colorScheme.surfaceContainer)
+                    .clickable(onClickLabel = "Insert") { vm.pickSuggestion(i) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .semantics(mergeDescendants = true) { contentDescription = "${n.emoji} ${n.name}" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(n.emoji, fontSize = 20.sp)
+                Spacer(Modifier.width(6.dp))
+                Text(":${n.name}:", style = MaterialTheme.typography.bodyMedium, color = Chirkle.colors.muted)
             }
         }
     }

@@ -27,10 +27,24 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expect(picker).toBeVisible();
     await expect(picker).toBeInViewport();
     expect(await seriousViolations(a), "emoji picker").toEqual([]);
-    await picker.getByRole("button", { name: "🚀" }).click();
+    // Its search box finds emoji by name (§20.6); Enter picks the first found.
+    await picker.getByRole("searchbox", { name: "Search emoji" }).fill("rock");
+    await expect(picker.getByRole("button", { name: "🚀" })).toBeVisible();
+    await expect(picker.getByRole("button", { name: "🍕" })).toBeHidden();
+    await picker.getByRole("searchbox", { name: "Search emoji" }).press("Enter");
     await expect(picker).toBeHidden();
     await expect(composer(a)).toHaveValue("ship it 🚀");
     await composer(a).press("Enter");
+
+    // Emoji by name while typing (§20.6): ":tad" offers 🎉, and Enter puts it in rather than sending.
+    await composer(a).pressSequentially("so :tad");
+    const names = a.getByRole("listbox", { name: "Emoji" });
+    await expect(names.getByRole("option", { name: "🎉 tada" })).toHaveAttribute("aria-selected", "true");
+    expect(await seriousViolations(a), "emoji by name").toEqual([]);
+    await composer(a).press("Enter");
+    await expect(names).toBeHidden();
+    await expect(composer(a)).toHaveValue("so 🎉 ");
+    await composer(a).fill("");
 
     // Bob reacts twice from the picker; Ada sees both live, then adds hers to one.
     const forBob = message(b, "ship it 🚀");
@@ -39,7 +53,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     await b.getByRole("dialog", { name: "Add reaction" }).getByRole("button", { name: "🎉" }).click();
     // Now also the ☺+ after the reactions. (Not the toolbar one: the pointer left the message, so that is hidden.)
     await forBob.getByRole("group", { name: "Reactions" }).getByRole("button", { name: "Add reaction" }).click();
-    // Keyboard: the picker opens on the first emoji (or the most recent one); arrows move, Enter picks.
+    // Keyboard: ↓ from the search box goes to the first emoji (or the most recent one); arrows move, Enter picks.
+    await b.getByRole("dialog", { name: "Add reaction" }).getByRole("searchbox").press("ArrowDown");
     await b.keyboard.press("ArrowRight");
     await b.keyboard.press("Enter");
     const bobs = forBob.locator(".reaction");

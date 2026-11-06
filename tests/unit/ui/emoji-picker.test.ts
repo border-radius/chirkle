@@ -42,6 +42,8 @@ describe("emoji picker (§20.4)", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // A touch screen: focus goes to the emoji, not the search box (which would bring up the keyboard).
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
     ac = new AbortController();
     picker = createEmojiPicker({ h, signal: ac.signal });
     opener = h("button", { type: "button" }, "☺");
@@ -52,10 +54,18 @@ describe("emoji picker (§20.4)", () => {
     ac.abort();
     document.body.replaceChildren();
     localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   const emojiButton = (e: string) => picker.el.querySelector<HTMLButtonElement>(`button.emoji[data-emoji="${e}"]`)!;
   const key = (el: Element, k: string) => el.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+  const search = () => picker.el.querySelector<HTMLInputElement>("input.emoji-search")!;
+  const type = (text: string) => {
+    search().value = text;
+    search().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const shown = () =>
+    [...picker.el.querySelectorAll<HTMLButtonElement>("button.emoji")].filter((b) => !b.closest("[hidden]")).map((b) => b.dataset.emoji);
   const tabStops = () => [...picker.el.querySelectorAll<HTMLButtonElement>("button.emoji")].filter((b) => b.tabIndex === 0);
 
   it("opens as a labelled dialog with every category, focused on the first emoji; picking closes it", () => {
@@ -146,5 +156,70 @@ describe("emoji picker (§20.4)", () => {
     expect(picker.isOpen).toBe(false);
     expect(document.activeElement).toBe(elsewhere);
     expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it("with a mouse, opens in the search box", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    picker.open(opener, { label: "x", onPick: () => {} });
+    expect(document.activeElement).toBe(search());
+  });
+
+  it("searching by name shows only what it finds (§20.6), the closest names first; Enter picks the first", () => {
+    const onPick = vi.fn();
+    picker.open(opener, { label: "Insert emoji", onPick });
+    type("fire");
+    expect(shown()[0]).toBe("🔥");
+    expect(shown()).toContain("🚒"); // fire_engine
+    expect(picker.el.querySelector(".emoji-section.found .emoji-heading")!.textContent).toBe("Found");
+    type("thumbs up");
+    expect(shown()).toEqual(["👍"]);
+    type(":heart_eyes:");
+    expect(shown()).toEqual(["😍", "😻"]);
+    type("qqqq");
+    expect(shown()).toEqual([]);
+    expect(picker.el.querySelector(".emoji-section.found .emoji-heading")!.textContent).toBe("No emoji found");
+    type("tada");
+    key(search(), "Enter");
+    expect(onPick).toHaveBeenCalledWith("🎉");
+    expect(picker.isOpen).toBe(false);
+  });
+
+  it("↓ goes from the search box to what it found, ↑ from the top row back; Escape clears, then closes", () => {
+    picker.open(opener, { label: "x", onPick: () => {} });
+    search().focus();
+    type("cat");
+    key(search(), "ArrowDown");
+    expect(document.activeElement).toBe(picker.el.querySelector(".emoji-section.found button.emoji"));
+    expect((document.activeElement as HTMLElement).dataset.emoji).toBe("🐱");
+    key(document.activeElement!, "ArrowRight");
+    key(document.activeElement!, "ArrowUp");
+    expect(document.activeElement).toBe(search());
+    key(search(), "Escape");
+    expect(search().value).toBe("");
+    expect(picker.isOpen).toBe(true);
+    expect(shown()).toContain("🍕"); // the categories again
+    key(search(), "Escape");
+    expect(picker.isOpen).toBe(false);
+  });
+
+  it("starts with an empty search box every time; a category tab clears it", () => {
+    picker.open(opener, { label: "x", onPick: () => {} });
+    type("dog");
+    picker.close();
+    picker.open(opener, { label: "x", onPick: () => {} });
+    expect(search().value).toBe("");
+    expect(shown()).toContain("🍕");
+    type("dog");
+    picker.el.querySelector<HTMLButtonElement>(".emoji-tab[aria-label='Food']")!.click();
+    expect(search().value).toBe("");
+    expect(document.activeElement).toBe(emojiButton(CATEGORIES.find((c) => c.name === "Food")!.emoji[0]!));
+  });
+
+  it("shows each emoji's short name as its tooltip, and marks chosen ones among those found", () => {
+    picker.open(opener, { label: "Add reaction", onPick: () => {}, chosen: new Set(["👍"]) });
+    expect(emojiButton("👍").title).toBe(":thumbsup:");
+    type("thumbsup");
+    const found = picker.el.querySelector<HTMLButtonElement>(".emoji-section.found button.emoji")!;
+    expect(found.getAttribute("aria-pressed")).toBe("true");
   });
 });

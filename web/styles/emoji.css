@@ -1,4 +1,7 @@
-/* ---- Emoji picker (§20.4): a popover next to its button; on phones as wide as the screen. ---- */
+/* Emoji picker (DESIGN.md §20.4) and the composer's ":name" suggestions (§20.6). Not part of app.css: the picker's
+   chunk links this file before either first shows. Uses app.css's custom properties, so it follows the theme. */
+
+/* ---- The picker: a popover next to its button; on phones as wide as the screen. ---- */
 
 .emoji-picker {
   position: fixed;
@@ -8,12 +11,18 @@
   display: flex;
   flex-direction: column;
   width: calc(8 * 2.4rem + 1.2rem);
-  height: 20rem;
+  height: 22rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--raised);
   box-shadow: var(--shadow);
   animation: pop 0.2s var(--ease);
+}
+
+.emoji-search {
+  width: auto;
+  margin: 0.5rem 0.5rem 0.25rem;
+  padding: 0.35rem 0.6rem;
 }
 
 .emoji-tabs {
@@ -69,6 +78,43 @@
     right: 8px;
     left: 8px;
     width: auto;
-    height: min(20rem, 45vh);
+    height: min(22rem, 50vh);
   }
+}
+
+/* ---- ":name" in the composer: a list over the composer's row, from the textarea's left edge. ---- */
+
+.emoji-suggest {
+  position: fixed;
+  bottom: var(--b, auto);
+  left: var(--x, auto);
+  z-index: 20;
+  width: min(18rem, calc(100vw - 16px));
+  max-height: min(18rem, 40vh);
+  margin: 0;
+  padding: 0.25rem;
+  overflow: hidden auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+
+.emoji-suggest li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.emoji-suggest .emoji {
+  font-size: 1.3rem;
+}
+
+.emoji-suggest li:hover,
+.emoji-suggest [aria-selected="true"] {
+  background: var(--hover);
 }

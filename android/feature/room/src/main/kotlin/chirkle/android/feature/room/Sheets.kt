@@ -1,10 +1,11 @@
 // What opens over the room: a message's actions (with quick reactions, §20.2), the emoji picker (§20.4: exactly the
-// emoji the server accepts as reactions) and the forward target picker (§21.3).
+// emoji the server accepts as reactions; a search field finds them by name, §20.6) and the forward target picker (§21.3).
 package chirkle.android.feature.room
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import chirkle.android.data.lib.EMOJI_CATEGORIES
+import chirkle.android.data.lib.findEmoji
 import chirkle.android.data.lib.QUICK_REACTIONS
 import chirkle.android.data.lib.canPost
 import chirkle.android.data.lib.dmClosed
@@ -133,20 +135,42 @@ fun EmojiSheet(title: String, recent: List<String>, onPick: (String) -> Unit, on
             categories.map { (_, list) -> i.also { i += 1 + list.size } }
         }
         val current by androidx.compose.runtime.remember { androidx.compose.runtime.derivedStateOf { starts.indexOfLast { it <= grid.firstVisibleItemIndex }.coerceAtLeast(0) } }
+        // What the search field finds replaces the categories until it is emptied or a tab is tapped. Not focused at
+        // first: the keyboard would cover the emoji.
+        var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+        val found = androidx.compose.runtime.remember(query) { findEmoji(query.trim().removePrefix(":").removeSuffix(":")).map { it.emoji }.filter(chirkle.android.ui.Glyphs::canDraw) }
+        androidx.compose.material3.OutlinedTextField(
+            query,
+            { query = it; scope.launch { grid.scrollToItem(0) } },
+            placeholder = { Text("Search emoji") },
+            leadingIcon = { Icon(ChirkleIcons.Search, contentDescription = null) },
+            singleLine = true,
+            shape = CircleShape,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+            // Done picks the first found, as Enter on the web.
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { found.firstOrNull()?.let(onPick) }),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = "Search emoji" },
+        )
+        val searching = query.isNotBlank()
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             EMOJI_CATEGORIES.forEachIndexed { i, c ->
                 Box(
                     Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(if (i == current) Chirkle.colors.tint else androidx.compose.ui.graphics.Color.Transparent)
-                        .clickable { scope.launch { grid.scrollToItem(starts[i]) } }
+                        .background(if (i == current && !searching) Chirkle.colors.tint else androidx.compose.ui.graphics.Color.Transparent)
+                        .clickable { query = ""; scope.launch { grid.scrollToItem(starts[i]) } }
                         .semantics { contentDescription = c.name },
                     contentAlignment = Alignment.Center,
                 ) { Text(c.icon, fontSize = 20.sp) }
             }
         }
         LazyVerticalGrid(GridCells.Adaptive(48.dp), Modifier.fillMaxWidth().height(360.dp).padding(horizontal = 8.dp), state = grid) {
+            if (searching) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "found") { CategoryTitle(if (found.isEmpty()) "No emoji found" else "Found") }
+                items(found, key = { "f$it" }) { e -> EmojiCell(e, onPick) }
+                return@LazyVerticalGrid
+            }
             if (recent.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) { CategoryTitle("Recent") }
                 items(recent, key = { "r$it" }) { e -> EmojiCell(e, onPick) }

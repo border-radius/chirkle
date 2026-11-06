@@ -33,6 +33,7 @@ import { createScope } from "../scope.ts";
 import { roomSections } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import type { EmojiPicker, PickerRequest } from "../ui/emoji-picker.ts";
+import type { EmojiSuggest } from "../ui/emoji-suggest.ts";
 import { createUserSearch, SearchError } from "../ui/user-search.ts";
 import type { RoomReader } from "../unread.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
@@ -328,6 +329,7 @@ export function createRoomView({
       reactingTo = "";
       void openPicker(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
     },
+    onEmojiName: (textarea) => void suggestEmoji(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).
     onChange: (text) => {
       if (roomId) drafts.set(roomId, text);
@@ -887,7 +889,8 @@ export function createRoomView({
    */
   async function openPicker(opener: HTMLElement, req: PickerRequest) {
     try {
-      const { createEmojiPicker } = await import("../ui/emoji-picker.ts");
+      const { createEmojiPicker, loadStylesheet } = await import("../ui/emoji-picker.ts");
+      await loadStylesheet(h);
       if (!scope.active || !opener.isConnected) return;
       if (!picker) {
         picker = createEmojiPicker({ h, signal });
@@ -897,6 +900,22 @@ export function createRoomView({
     } catch {
       if (scope.active) notice.say("Couldn't open the emoji. Check your connection.");
     }
+  }
+
+  /** Emoji by name in the composer (§20.6), from the picker's chunk: once loaded they follow the textarea. Quietly not, offline. */
+  let suggest: EmojiSuggest | Promise<unknown> | null = null;
+  function suggestEmoji(textarea: HTMLTextAreaElement) {
+    suggest ??= import("../ui/emoji-picker.ts").then(
+      async ({ createEmojiSuggest, loadStylesheet }) => {
+        await loadStylesheet(h);
+        if (!scope.active) return;
+        suggest = createEmojiSuggest({ h, textarea, signal });
+        suggest.update(true);
+      },
+      () => {
+        suggest = null;
+      },
+    );
   }
 
   // ---------------------------------------------------------------- lifecycle

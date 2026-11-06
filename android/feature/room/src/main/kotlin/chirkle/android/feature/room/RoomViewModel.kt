@@ -143,9 +143,58 @@ class RoomViewModel(
     }
 
     fun onText(v: TextFieldValue) {
-        text = v
+        // A whole ":name:" just typed becomes its emoji (DESIGN.md §20.6): when the text grew (a keyboard may commit more
+        // than one character at a time), not when the caret moves next to one.
+        val caret = v.selection.end
+        val whole = if (v.selection.collapsed && v.text.length > text.text.length) chirkle.android.data.lib.wholeEmojiName(v.text, caret) else null
+        text = whole?.let { (at, e) -> services.recentEmoji.remember(e); TextFieldValue(v.text.substring(0, at) + e + v.text.substring(caret), TextRange(at + e.length)) } ?: v
         composerError = ""
         if (editing == null) saveDraft()
+        suggest()
+    }
+
+    /** Emoji offered for the ":name" before the caret (DESIGN.md §20.6), and the one chosen. */
+    var suggestions by mutableStateOf<List<chirkle.android.data.lib.NamedEmoji>>(emptyList())
+        private set
+    var suggestion by mutableStateOf(0)
+        private set
+    private var suggestAt = -1
+    /** Where the ":name" closed with Escape starts: not offered again until another one is typed. */
+    private var dismissedAt = -1
+
+    private fun suggest() {
+        val t = if (text.selection.collapsed) chirkle.android.data.lib.emojiToken(text.text, text.selection.end) else null
+        if (t == null) dismissedAt = -1
+        val found = if (t == null || t.start == dismissedAt) emptyList() else chirkle.android.data.lib.findEmoji(t.query, chirkle.android.data.lib.SUGGEST_MAX)
+        if (found.isEmpty()) {
+            suggestAt = -1
+            suggestions = emptyList()
+            return
+        }
+        if (t!!.start != suggestAt) suggestion = 0
+        suggestAt = t.start
+        suggestions = found
+        suggestion = suggestion.coerceAtMost(found.lastIndex)
+    }
+
+    /** ↑/↓ with a hardware keyboard: round the list. */
+    fun stepSuggestion(by: Int) {
+        if (suggestions.isNotEmpty()) suggestion = (suggestion + by).mod(suggestions.size)
+    }
+
+    fun dismissSuggestions() {
+        dismissedAt = suggestAt
+        suggest()
+    }
+
+    /** Put the emoji in place of ":name", with a space after when it ends the text. */
+    fun pickSuggestion(i: Int = suggestion) {
+        val e = suggestions.getOrNull(i)?.emoji ?: return
+        val t = text
+        val caret = t.selection.end
+        val put = e + if (caret == t.text.length) " " else ""
+        services.recentEmoji.remember(e)
+        onText(TextFieldValue(t.text.substring(0, suggestAt) + put + t.text.substring(caret), TextRange(suggestAt + put.length)))
     }
 
     private fun saveDraft() {

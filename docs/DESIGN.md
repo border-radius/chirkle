@@ -175,9 +175,10 @@ chat/
 │       │   ├── image.ts        # resize + re-encode before upload (§15.3)
 │       │   ├── files.ts        # attachment names and limits (§17)
 │       │   ├── emoji.ts        # the picker's emoji, recently used (§20.4)
+│       │   ├── emoji-names.ts  # their names, finding emoji by name (§20.6)
 │       │   ├── reactions.ts    # optimistic reaction changes, who reacted (§20.3)
 │       ├── ui/                 # small reusable components
-│       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts (a lazy chunk: §20.4)
+│       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts + emoji-suggest.ts (a lazy chunk: §20.4, §20.6)
 │       └── views/
 │           ├── login.ts, rooms.ts, home.ts, profile.ts
 │           ├── room.ts         # puts the controller's changes on screen, wires the parts
@@ -598,7 +599,7 @@ while its first page loads.
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
 | Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
-| Emoji picker (§20.4) and its emoji, loaded when first opened | ≤ 4.25 KB script (its styles are in `app.css`); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
+| Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
 
@@ -1078,6 +1079,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (polish pass) | 2026-11-01, overnight polish pass against the redesign boards, the user away ("don't ask me"): `app.css` raised from 10.60 KB to 11.05 KB, the access dialog chunk from 3 KB to 3.05 KB, the collections chunk from 6.65 KB to 6.70 KB script and 1.5 KB to 1.95 KB stylesheet (§7.7). The access dialog's styles moved out of `app.css` into a stylesheet of its own (new `accessCss` budget, 1.5 KB) to keep the raise small. Confirmed by the user the same day ("raise budget"). |
 | Bundle budget (new version line) | `app.js` raised from 49.25 KB to 49.60 KB (§7.7), the user's call (2026-11-02): the line saying a new version is out (§27.4) took it from 49.19 KB to 49.56 KB. A lazy chunk was turned down: one loaded only when needed is gone from the server after the deploy it should report. |
 | Bundle budget (WebKit taps) | `app.js` raised from 49.60 KB to 49.75 KB (§7.7), the user's call (2026-11-02): two phone tap fixes found by the WebKit e2e run took it from 49.59 KB to 49.69 KB. A tap on a message's text counts for the message even when the browser's touch adjustment moves the click onto a link near it (WebKit; Chrome on Android does it too): it went to the time's permalink. And a touch ending outside the messages hides the tapped message's buttons, since WebKit (iOS Safari too) sends no click for a tap on something that takes none, such as the room's name. |
+| Bundle budget (emoji by name) | The emoji chunk raised from 4.25 KB to 13 KB (§7.7), 2026-11-06: the user asked for emoji search and ":name" in the composer on the grounds that the picker is a lazy chunk now. The names (`lib/emoji-names.ts`, one line per emoji with the emoji itself, so it can be read and kept) are about 7.4 KB of the 12.83 KB; lines without the emoji would save about 2 KB. The picker's styles moved out of `app.css` (11.19 → 11.00 KB) into `web/styles/emoji.css` (new `emojiCss` budget, 1 KB) rather than raise `app.css` for the search box and the suggestions. `app.js` grew by about 0.13 KB (the composer spotting ":na"). |
 | Bundle budget (collection chips) | The collections chunk raised from 6.70 KB to 6.75 KB script and 1.95 KB to 2 KB stylesheet (§7.7), the user's call (2026-11-02): the picker's collections as a row of chips, as the app's, instead of a select (§31.3) took them from 6.65 KB and 1.94 KB to 6.75 KB and 1.98 KB. |
 
 ### Decided (2026-10-24, linked instances)
@@ -1827,12 +1829,12 @@ older copies in `merge` (§7.5), and is picked up by the reconnect refetch of ch
 ### 20.4 Emoji picker (`ui/emoji-picker.ts`)
 
 One popover per room view, used by the composer's emoji button (it inserts at the caret, replacing a selection) and by
-reactions. It is a `role="dialog"` named for what it does ("Insert emoji", "Add reaction"). It sits next to its button
+reactions. A search box at its top finds emoji by name (§20.6). It is a `role="dialog"` named for what it does ("Insert emoji", "Add reaction"). It sits next to its button
 (above it when there is room) and spans the screen width on phones.
 
 It is a lazy chunk with the emoji list (§7.7), loaded the first time a room view opens it and given `h` by the room
-view. If it can't be loaded (offline, or a new version was deployed), the room's notice says "Couldn't open the emoji.
-Check your connection."
+view, with its stylesheet (`web/styles/emoji.css`), which it links before showing. If it can't be loaded (offline, or a
+new version was deployed), the room's notice says "Couldn't open the emoji. Check your connection."
 
 - Category tabs, then a **Recent** row (the last 24 picked, kept in `localStorage`; nothing breaks without storage),
   then the categories, in an 8-column grid. Built on first open.
@@ -1844,7 +1846,12 @@ Check your connection."
   takes the focus from the composer, which hides the keyboard.
 - The emoji are toggle buttons (`aria-pressed`) only for reactions, where picking can take one back. For the composer
   they are plain buttons.
-- Each emoji button is named by the emoji itself, which screen readers read out by name.
+- Each emoji button is named by the emoji itself, which screen readers read out by name. Its tooltip is its short
+  name (":thumbsup:"), so the names to search or type by can be learnt.
+- **Search box** (§20.6): what it finds replaces the categories ("Found", or "No emoji found"), until it is emptied or a
+  category tab is clicked. ↓ goes to the first emoji found and ↑ from the top row comes back; Enter picks the first
+  found. Escape empties it first, then closes the picker. Empty on every open. With a mouse (`pointer: fine`) the
+  picker opens in the search box; on touch screens on the first emoji, as before, so the keyboard doesn't cover it.
 
 ### 20.5 Tests
 
@@ -1859,9 +1866,37 @@ Check your connection."
   realtime missed, and where you can't react. The picker stays open on a resize and isn't a toggle when inserting. Room view: React and pick; chips toggling;
   live reactions from others, with their names looked up; taking one back from the picker; failure and Retry; a
   reaction changed again before the answer; focus, also across redraws and failures; archived and deleted messages; the composer inserting at the caret.
-- **E2E** (`reactions.spec.ts`, light and dark): Ada inserts an emoji from the composer's picker. Bob reacts twice, once
+- **E2E** (`reactions.spec.ts`, light and dark): Ada inserts an emoji from the composer's picker, found with its search
+  box, then types ":tad" and puts 🎉 in with Enter (§20.6). Bob reacts twice, once
   by keyboard. Ada sees both live, with Bob's name, and adds hers. Reactions survive a reload, and axe finds no serious
   violations in the open picker or the chips.
+
+### 20.6 Emoji by name (`lib/emoji-names.ts`, `ui/emoji-suggest.ts`)
+
+Every picker emoji has a short name, mostly the common shortcodes (`thumbsup`, `heart_eyes`, `tada`), and a few more
+words it is found by (`+1`, `like`, `yes` for 👍). The list is one line per emoji in the picker's order, checked
+against `lib/emoji.ts` by the unit tests; the Android app has the same lines (`EmojiNames.kt`, ANDROID §53).
+
+- **Finding:** each word of what is typed must begin one of an emoji's words (a short name counts whole and split at
+  `_`, so "eyes" finds 😍). Exact names come first, then names that begin with it (shorter first: ":fir" is 🔥, then
+  🎆), then the rest in the picker's order. Case doesn't matter; ":fire:" with its colons is found too.
+- **In the composer:** ":" and at least two name characters (letters, digits, `_ + -`) just before the caret, at the
+  start or after a space or "(", open a list of up to 8 over the composer's row ("12:30", "http://", ":)" and ":D"
+  don't). The first is chosen; ↑/↓ choose another (round the list), Enter or Tab puts it in place of ":name" (with a
+  space after when it ends the text), a click too. Escape closes it until another ":name" is typed, and so does the
+  textarea losing focus. A complete ":name:" that names an emoji becomes it as the second colon is typed. Picked emoji
+  join the picker's Recent row.
+- **Loading:** `app.js` only spots ":na" before the caret; the room view then loads the picker's chunk (quietly
+  nothing when it can't be), whose suggestions follow the textarea from then on. Their keys are caught on the form in
+  the capture phase, so the composer's Enter (send), ↑ (edit the last message) and Escape (cancel the reply) don't see
+  them. While an input method is composing, the list leaves every key alone.
+- **Accessibility:** the list is a `listbox` of `option`s ("🔥 fire"); while it shows, the textarea has
+  `aria-autocomplete="list"`, `aria-controls` and `aria-activedescendant` for the chosen option. The focus stays in
+  the textarea (pressing an option doesn't take it).
+- **Tests** (unit): the names match the picker's emoji, unique and typeable; finding and its order; the token rule; the
+  list's keys, picks, the whole ":name:", Escape, blur and IME; the picker's search box (results, keys, Escape, tabs,
+  tooltips, chosen marks, focus by pointer). Room view: ":tad" offers 🎉, Enter inserts it rather than sending, then
+  sends. E2E: in `reactions.spec.ts` (§20.5), with axe on the open list.
 
 ## 21. Selecting, forwarding and deleting several messages
 

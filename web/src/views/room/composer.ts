@@ -1,6 +1,7 @@
 // Message composer (§7.6, §17.4): auto-growing textarea, character counter, Enter to send, Shift+Enter for a
 // newline, Up arrow in an empty composer to edit your last message, Ctrl+Up/Down to pick the message replied to, attachments (picker, paste, drop) shown
-// in a tray above the textarea, the message being replied to (§19) above that, and an emoji button (§20.4).
+// in a tray above the textarea, the message being replied to (§19) above that, and an emoji button (§20.4). Typing
+// ":name" asks for emoji suggestions (§20.6).
 
 import { h } from "../../dom.ts";
 import { checkFiles, formatBytes, isVideo } from "../../lib/files.ts";
@@ -101,6 +102,8 @@ export function createComposer(opts: {
   onCancelReply: () => void;
   /** The emoji button: open the picker next to it; `insert` puts the chosen emoji at the caret. */
   onEmoji: (opener: HTMLElement, insert: (emoji: string) => void) => void;
+  /** ":" and two letters typed before the caret: offer emoji by name (§20.6). Those follow the textarea from then on. */
+  onEmojiName?: (textarea: HTMLTextAreaElement) => void;
   /** The text changed (typed, inserted, sent or replaced): e.g. to keep it as a draft. */
   onChange?: (text: string) => void;
   /** Attach from collections (§31): offer at most `room` items next to `opener` (they come back through addItems). */
@@ -317,6 +320,11 @@ export function createComposer(opts: {
   );
 
   textarea.addEventListener("input", onInput, { signal });
+  textarea.addEventListener(
+    "input",
+    () => /(?<=^|[\s(]):[\w+-]{2,}$/.test(textarea.value.slice(0, textarea.selectionStart)) && opts.onEmojiName?.(textarea),
+    { signal },
+  );
   textarea.addEventListener(
     "keydown",
     (e) => {

@@ -4,7 +4,24 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../../web/src/api.ts";
 import { newId } from "../../../../web/src/lib/id.ts";
 import { instrument, signedUp } from "../../../support/api.ts";
-import { button, composer, key, me, mount, msgEl, msgEls, newRoom, root, send, sendButton, sleep, type, useRoomView } from "./harness.ts";
+import {
+  bodyOf,
+  button,
+  composer,
+  ids,
+  key,
+  me,
+  mount,
+  msgEl,
+  msgEls,
+  newRoom,
+  root,
+  send,
+  sendButton,
+  sleep,
+  type,
+  useRoomView,
+} from "./harness.ts";
 
 describe("room view", () => {
   useRoomView();
@@ -230,6 +247,23 @@ describe("room view", () => {
       key(document.activeElement!, "Escape");
       expect(document.activeElement).toBe(composer());
       expect(composer()!.value).toBe("hello 🌎");
+    });
+
+    it("typing :name offers emoji by name (§20.6); Enter puts one in rather than sending", async () => {
+      const room = await newRoom();
+      await mount(room);
+      const list = () => document.querySelector<HTMLElement>(".emoji-suggest");
+      type("well :tad"); // the chunk loads on the first ":ta"
+      await vi.waitFor(() => expect(list()?.hidden).toBe(false));
+      expect(list()!.querySelector("[aria-selected=true]")!.textContent).toBe("🎉:tada:");
+      expect(composer()!.getAttribute("aria-activedescendant")).toBe(list()!.querySelector("[aria-selected=true]")!.id);
+      key(composer()!, "Enter");
+      expect(composer()!.value).toBe("well 🎉 ");
+      expect(list()!.hidden).toBe(true);
+      expect(sendButton().disabled).toBe(false);
+      key(composer()!, "Enter");
+      expect(composer()!.value).toBe("");
+      await vi.waitFor(() => expect(ids().map(bodyOf)).toContain("well 🎉"));
     });
   });
 });

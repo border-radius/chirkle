@@ -47,6 +47,7 @@ const viewerCss = await esbuild.build({
     { in: MEDIA.css, out: "media" },
     { in: COLLECTIONS.css, out: "collections" },
     { in: ACCESS.css, out: "access" },
+    { in: EMOJI.css, out: "emoji" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -55,11 +56,12 @@ const viewerCssPath = outputOf(viewerCss.metafile, OUTDIR, VIEWER.css);
 const mediaCssPath = outputOf(viewerCss.metafile, OUTDIR, MEDIA.css);
 const collCssPath = outputOf(viewerCss.metafile, OUTDIR, COLLECTIONS.css);
 const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
+const emojiCssPath = outputOf(viewerCss.metafile, OUTDIR, EMOJI.css);
 
 const result = await esbuild.build({
   ...BASE_OPTIONS,
   ...shared,
-  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath),
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath),
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
@@ -90,6 +92,7 @@ const sizes = {
   collCss: await gz(`${OUTDIR}/${collCssPath}`),
   notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
   emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
+  emojiCss: await gz(`${OUTDIR}/${emojiCssPath}`),
 };
 
 console.log(`built ${OUTDIR}/ (gzipped):\n${formatSizes(sizes)}`);

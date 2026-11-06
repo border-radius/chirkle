@@ -255,4 +255,35 @@ class UiPortsTest {
         compose.onNodeWithContentDescription("Add reaction").assertWidthIsAtLeast(48.dp)
         assertEquals(5, compose.onAllNodes(hasContentDescription("React with", substring = true)).fetchSemanticsNodes().size)
     }
+
+    @Test fun `typing a colon and a name offers emoji, a tap puts one in, and the sheet's search finds them (DESIGN §20 6)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("en-${uniq()}") }
+        ui.signedIn(a)
+        ui.openRoom(room.name)
+        val field = compose.onNode(hasContentDescription("Message"))
+        field.performTextInput("well :ta")
+        ui.waitFor(hasContentDescription("🎉 tada"))
+        field.performTextInput("da")
+        compose.onNode(hasContentDescription("🎉 tada")).performClick()
+        ui.waitFor(hasText("well 🎉 "))
+        assertTrue(compose.onAllNodes(hasContentDescription("🎉 tada")).fetchSemanticsNodes().isEmpty())
+        // A whole ":name:" becomes its emoji.
+        field.performTextInput(":fire:")
+        ui.waitFor(hasText("well 🎉 🔥"))
+        compose.onNodeWithContentDescription("Send").performClick()
+        compose.waitUntil(15_000) { ui.pump(); runBlocking { a.api.page(chirkle.android.data.lib.Pages.latest(room.id)).any { it.text == "well 🎉 🔥" } } }
+
+        compose.onNodeWithContentDescription("Insert emoji").performClick()
+        ui.waitFor(hasContentDescription("Search emoji"))
+        // What it finds replaces the categories (Robolectric draws no emoji, so Glyphs leaves every grid empty: the
+        // finding itself is EmojiTest's); a category tab empties it.
+        val search = compose.onNode(hasContentDescription("Search emoji") and hasSetTextAction())
+        search.performTextInput("pizza")
+        ui.waitFor("No emoji found")
+        compose.onNodeWithContentDescription("Food").performClick()
+        ui.waitFor("Smileys")
+        assertTrue(compose.onAllNodes(hasText("No emoji found")).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("pizza")).fetchSemanticsNodes().isEmpty())
+    }
 }
