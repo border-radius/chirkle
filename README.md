@@ -29,7 +29,7 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
   a room with unread messages opens at the first of them, under a "New" line
 - What you were typing is kept per room, even across a reload; "Jump to latest" whenever you are scrolled up
 - Your own branding (title and logo) and, if you like, invite-only signups: set by the admin in PocketBase
-- Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits and files go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [Telegram integration](#telegram-integration)
+- Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits, files and (with the bot an admin) reactions go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [Telegram integration](#telegram-integration)
 - Fast room switching: each room's latest messages are kept in the browser (IndexedDB) and shown at once while the
   server answers; unread rooms are fetched ahead. Attachment thumbnails are kept by the service worker, so going back
   to a room (or reloading) doesn't download them again. All of it is cleared on logout
@@ -257,7 +257,7 @@ go without: videos then show their first frame in the room as before, and plain 
 
 An optional bridge between rooms and Telegram groups ([`docs/DESIGN.md` §26](docs/DESIGN.md)). A bot sits in your
 groups; once a group is linked to a room, messages, replies, edits and files go both ways (deletes only from Chirkle
-to Telegram). Telegram people show in the room under stand-in users ("Ann Lee (TG)") with their names and pictures;
+to Telegram), and reactions too where the bot is a group admin. Telegram people show in the room under stand-in users ("Ann Lee (TG)") with their names and pictures;
 the bot posts Chirkle messages with the author's name above them.
 
 **Setup**
@@ -271,7 +271,8 @@ the bot posts Chirkle messages with the author's name above them.
 
    With Dokku: `dokku config:set chirkle TELEGRAM_BOT_TOKEN='…' TELEGRAM_WEBHOOK_URL='https://chat.example.com/api/telegram/webhook'`.
 3. Add the bot to a Telegram group. A row for it appears in the admin UI under *Collections → tg_links*: pick the
-   room and tick `enabled`. `/chatid` in the group says whether it is linked. Tick `anonymous` too to repost the
+   room and tick `enabled`. `/chatid` in the group says whether it is linked. Make the bot a group admin to bring
+   reactions over: Telegram tells only admins about them. Tick `anonymous` too to repost the
    room's messages to that group without their authors' names.
 
 To make a room **anonymous**, tick `anonymous` on its row under *Collections → rooms* in the admin UI. Messages

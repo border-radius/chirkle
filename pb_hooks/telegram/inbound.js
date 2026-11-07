@@ -473,6 +473,11 @@ function sayStatus(app, chatId) {
  */
 function handleUpdate(app, update) {
   if (update.my_chat_member) return memberChange(app, update.my_chat_member);
+  // Sent only where the bot is an admin (§26.9). What came before it must be there to react to.
+  if (update.message_reaction) {
+    if (update.message_reaction.chat) flushAlbums(app, String(update.message_reaction.chat.id));
+    return require(`${__hooks}/telegram/reactions.js`).reactionOver(app, update.message_reaction);
+  }
   // A channel's posts and their edits come as channel_post and edited_channel_post, sent as the channel itself.
   const posted = update.message || update.channel_post;
   const edited = update.edited_message || update.edited_channel_post;
@@ -545,4 +550,4 @@ function webhook(e) {
   return e.json(200, { ok: true });
 }
 
-module.exports = { webhook, handleUpdate, flushAlbums };
+module.exports = { webhook, handleUpdate, flushAlbums, mapped };

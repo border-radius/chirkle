@@ -138,7 +138,7 @@ describe("Telegram bridge (§26)", () => {
       url: "https://chat.example/api/telegram/webhook",
       secret_token: SECRET,
       max_connections: 1,
-      allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post", "my_chat_member"],
+      allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post", "my_chat_member", "message_reaction"],
     });
     expect((await deliver({}, "wrong")).status).toBe(401);
     expect((await deliver({})).status).toBe(200);
@@ -740,6 +740,105 @@ describe("Telegram bridge (§26)", () => {
     expect(sent()).toBe(0);
     await admin.collection("tg_queue").update(row.id, { locked_until: at(-1000) });
     await eventually(() => expect(sent()).toBe(1));
+  });
+
+  it("Telegram reactions (the bot an admin) come over as the stand-ins' own, on messages from either side (§26.9)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    const from = tgMessage(chat, { text: "react to me" });
+    await deliver({ message: from });
+    const [m] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      return l;
+    });
+    const bob = { id: 4343, is_bot: false, first_name: "Bob", last_name: "Tg" };
+    const reaction = (message_id: number, user: Record<string, unknown>, old_reaction: unknown[], new_reaction: unknown[]) =>
+      deliver({
+        message_reaction: { chat: { id: chat, type: "supergroup", title: "Group" }, message_id, user, date: 0, old_reaction, new_reaction },
+      });
+    const emoji = (e: string) => ({ type: "emoji", emoji: e });
+    const reactionsOf = async (id: string) => (await admin.collection("messages").getOne(id)).reactions;
+    const standIn = async (name: string) => (await admin.collection("users").getFirstListItem(admin.filter("name = {:n}", { n: name }))).id;
+
+    await reaction(from.message_id, bob, [], [emoji("👍"), { type: "custom_emoji", custom_emoji_id: "1" }]);
+    const bobId = await eventually(() => standIn("Bob Tg (TG)"));
+    expect(await reactionsOf(m!.id)).toEqual([{ emoji: "👍", users: [bobId] }]);
+    // Telegram's "❤" is the picker's "❤️"; a shrug of either gender is "🤷"; what the picker hasn't got is left out.
+    await reaction(from.message_id, bob, [emoji("👍")], [emoji("❤"), emoji("🤷‍♂"), emoji("🕊")]);
+    await reaction(from.message_id, ann, [], [emoji("❤")]);
+    const annId = await standIn("Ann Lee (TG)");
+    expect(await reactionsOf(m!.id)).toEqual([
+      { emoji: "❤️", users: [bobId, annId] },
+      { emoji: "🤷", users: [bobId] },
+    ]);
+    await reaction(from.message_id, bob, [emoji("❤"), emoji("🤷‍♂")], []);
+    expect(await reactionsOf(m!.id)).toEqual([{ emoji: "❤️", users: [annId] }]);
+
+    // A chat message sent to the group takes them too, on any of its Telegram messages.
+    const mine = await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "mine" });
+    await eventually(() => {
+      const c = stub.callsOf("sendMessage").find((x) => x.params.chat_id === String(chat) && String(x.params.text).endsWith("mine"));
+      expect(c).toBeDefined();
+      return c!;
+    });
+    const row = await admin.collection("tg_messages").getFirstListItem(admin.filter("message = {:m}", { m: mine.id }));
+    await reaction(row.tg_message_id, bob, [], [emoji("🔥")]);
+    expect(await reactionsOf(mine.id)).toEqual([{ emoji: "🔥", users: [bobId] }]);
+    // Stand-ins' reactions are in the group already: the bot doesn't repeat them.
+    await tick();
+    expect(stub.callsOf("setMessageReaction").filter((c) => c.params.chat_id === String(chat))).toEqual([]);
+  });
+
+  it("the bot shows the reaction most of the room's own people gave, among those Telegram offers (§26.9)", async () => {
+    const owner = await signUp();
+    const [b, c] = [await signUp(), await signUp()];
+    const { room, chat } = await linkedRoom(owner);
+    const from = tgMessage(chat, { text: "how was it?" });
+    await deliver({ message: from });
+    const [m] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      return l;
+    });
+    const react = (u: User, emoji: string, on = true) =>
+      u.pb.send("/api/chat/reactions", { method: "POST", body: { message: m!.id, emoji, on } });
+    const last = () =>
+      stub
+        .callsOf("setMessageReaction")
+        .filter((x) => x.params.chat_id === String(chat))
+        .at(-1)?.params;
+    const shows = (reaction: unknown[]) =>
+      eventually(() => expect(last()).toEqual({ chat_id: String(chat), message_id: from.message_id, reaction }));
+
+    await react(owner, "❤️");
+    await shows([{ type: "emoji", emoji: "❤" }]);
+    await react(b, "🎉");
+    await react(c, "🎉");
+    await shows([{ type: "emoji", emoji: "🎉" }]);
+    // One Telegram doesn't offer changes nothing; nor does a stand-in's (Ann's, from the group).
+    const calls = stub.callsOf("setMessageReaction").length;
+    await react(owner, "🍕");
+    await deliver({
+      message_reaction: {
+        chat: { id: chat, type: "supergroup", title: "Group" },
+        message_id: from.message_id,
+        user: ann,
+        date: 0,
+        old_reaction: [],
+        new_reaction: [
+          { type: "emoji", emoji: "❤" },
+          { type: "emoji", emoji: "👍" },
+        ],
+      },
+    });
+    await tick();
+    expect(stub.callsOf("setMessageReaction")).toHaveLength(calls);
+    await react(b, "🎉", false);
+    await react(c, "🎉", false);
+    await shows([{ type: "emoji", emoji: "❤" }]);
+    await react(owner, "❤️", false);
+    await shows([]);
   });
 
   it("nothing goes either way while a link is disabled or its room archived", async () => {

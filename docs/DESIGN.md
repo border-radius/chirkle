@@ -113,6 +113,7 @@ chat/
 │   ├── 1760000018_attachment_limits.js # §17.1
 │   ├── 1760000019_telegram.js          # §26 (tg_* collections)
 │   ├── 1760000035_telegram_anonymous.js # §26.6 (tg_links.anonymous)
+│   ├── 1760000043_telegram_reactions.js # §26.9 (tg_queue's "react" op)
 │   ├── 1760000020_service_messages.js  # §5.3 (messages.author optional: service messages)
 │   ├── 1760000032_federation.js        # §33 (fed_* collections, the core's federation fields)
 │   ├── 1760000033_federation_requests.js # §33.2–3 (site.federation, fed_peers "requested")
@@ -122,7 +123,7 @@ chat/
 ├── pb_hooks/                   # server-side JS hooks (committed)
 │   ├── main.pb.js              # registrations only; every hook on messages, rooms and users (features' parts in order, §5.6)
 │   ├── telegram.pb.js          # the Telegram bridge's routes, worker and tg_* hooks, only with TELEGRAM_BOT_TOKEN (§26)
-│   ├── telegram/               # the bridge: api, people, links, inbound, outbound, worker (§26)
+│   ├── telegram/               # the bridge: api, people, links, inbound, outbound, reactions, worker (§26)
 │   ├── federation.pb.js        # linked instances' routes, worker and fed_* hooks; on with site.federation (§33)
 │   ├── federation/             # config, net (signing, curl), people, rooms (the home's side), mirror (a mirror's side),
 │   │                           # messages, peers, inbox, worker (§33)
@@ -2350,7 +2351,7 @@ All from the environment (`telegram/api.js`):
 | `TELEGRAM_API_BASE` | the Bot API server, `https://api.telegram.org` by default (tests point it at a stub) |
 
 On `serve`, the bridge calls `setWebhook` (the URL, the secret, `max_connections: 1` so updates come one at a time
-and in order, and only `message`, `edited_message`, `channel_post`, `edited_channel_post` and `my_chat_member`), or, without a URL, `deleteWebhook` (a bot
+and in order, and only `message`, `edited_message`, `channel_post`, `edited_channel_post`, `my_chat_member` and `message_reaction`, §26.9), or, without a URL, `deleteWebhook` (a bot
 with a webhook can't poll). The bot needs **privacy mode off** (@BotFather → `/setprivacy` → Disable) or to be a group
 admin, or it sees only commands.
 
@@ -2446,7 +2447,7 @@ Telegram (`outbound.js`):
   the edit made it longer: QA BUG-87). **Deletes** delete the Telegram messages;
   bots can delete their own only for 48 hours, so an older one is edited to "*Message deleted*" instead.
 - A message from a group isn't sent back to it.
-- Not passed on: reactions, service messages (§5.3), and a forward's later changes when its original is edited.
+- Not passed on: service messages (§5.3), and a forward's later changes when its original is edited. Reactions: §26.9.
 
 ### 26.7 The worker
 
@@ -2468,7 +2469,31 @@ the developer's own `TELEGRAM_*` variables to a test server. Covered: setWebhook
 and `/chatid`; links only for rooms; a stand-in (name, picture, `no_dms`); files, an album as one message (by the next
 update, and once quiet), files too large; replies, edits and a repeated delivery; a stand-in joining a private room; a
 message, reply, edit and delete going out; an anonymous link's (no header, a whole caption); service messages for a group connected, disconnected, moved, deleted and removing the bot; files going out as an album with a caption plus documents; a room linked to
-two groups; retries in order and dropping; nothing while disabled or archived; polling.
+two groups; retries in order and dropping; nothing while disabled or archived; polling; reactions both ways (§26.9).
+
+### 26.9 Reactions
+
+`telegram/reactions.js`, on both sides. Telegram tells a bot about reactions only in groups where it is an
+**admin** (`message_reaction`, asked for in `allowed_updates`); elsewhere nothing comes and nothing changes. Neither
+side's reactions copy the other's exactly: a Telegram reaction is one person's, and the bot can show only one of its
+own on a message.
+
+- **Telegram → chat:** each update says what one person's reactions on a message were and are now. The ones added
+  are added to the message under their stand-in (§26.3; made on their first reaction if they never wrote), the ones
+  taken back are taken back, read and saved in one transaction like the reactions route (§20.2). Only the picker's
+  emoji (§20.1) come over: Telegram's "❤" is "❤️" (no variation selectors there), a shrug of either gender is "🤷";
+  others ("🕊", "🫡"), custom emoji and paid stars are left out. A reaction on any of a message's Telegram messages
+  (an album's items, a sent text and its files) is on that message; on a long message that came as several (§26.4), on
+  its first part. A reaction by an anonymous admin or a channel is the chat's stand-in's. A channel's reactions are
+  anonymous counts (`message_reaction_count`), which name nobody: they are not asked for.
+- **Chat → Telegram:** the bot sets its own reaction (`setMessageReaction`) on a message's first Telegram message
+  in each group it went to or came from: the emoji most of the room's own people reacted with, the first used of
+  those as many, among Telegram's reaction emoji ("❤️" sent as "❤"); none (an empty list) when nobody's is left.
+  Stand-ins' reactions (Telegram people's, from this or another group of the room) don't count: they are in their
+  group already. A `react` op is queued (`1760000043_telegram_reactions.js`) only when that pick changes, and not
+  again while one for the same message and group waits: it sends what the reactions are when it goes. A group that
+  doesn't allow that emoji refuses it (4xx), dropped and logged as any send (§26.7).
+- Telegram doesn't send a bot its own reactions, so nothing comes back.
 
 ---
 

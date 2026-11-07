@@ -94,6 +94,7 @@ function drain(app, renew) {
       if (op === "send") send(app, message, chat);
       else if (op === "edit") edit(app, message, chat);
       else if (op === "delete") remove(app, message, chat);
+      else if (op === "react") require(`${__hooks}/telegram/reactions.js`).react(app, message, chat);
       app.delete(row);
     } catch (err) {
       const tries = row.getInt("tries") + 1;

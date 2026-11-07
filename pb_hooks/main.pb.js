@@ -274,7 +274,7 @@ onRecordUpdate((e) => {
   // As stored, not as loaded: another delete of it may have been committed since (QA BUG-223).
   const files = deleted ? require(`${__hooks}/lib/files.js`).namedBy(e.app, "messages", rec.id) : [];
   const tg = features.telegram();
-  const change = tg ? tg.outbound.changeOf(rec) : "";
+  const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
   e.next();
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).

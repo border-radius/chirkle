@@ -46,26 +46,55 @@ function queueCreate(app, rec) {
 }
 
 /**
- * What a messages update changes for Telegram, read before it is saved.
+ * What a messages update changes for Telegram, read before it is saved: "react" when the bot's reaction on it would
+ * change (§26.9).
+ * @param {core.App} app
  * @param {core.Record} rec
- * @returns {"" | "edit" | "delete"}
+ * @returns {"" | "edit" | "delete" | "react"}
  */
-function changeOf(rec) {
+function changeOf(app, rec) {
   const orig = rec.original();
   if (rec.getBool("deleted") && !orig.getBool("deleted")) return "delete";
   if (!rec.getBool("deleted") && rec.getString("text") !== orig.getString("text")) return "edit";
+  if (rec.getString("reactions") !== orig.getString("reactions")) {
+    const { botReaction } = require(`${__hooks}/telegram/reactions.js`);
+    if (botReaction(app, rec) !== botReaction(app, orig)) return "react";
+  }
   return "";
 }
 
 /**
- * messages update (saved): queue an edit or delete for the groups of its room.
+ * messages update (saved): queue an edit, delete or reaction for the groups of its room. A reaction already waiting
+ * for a group isn't queued again: it sends the message's reactions as they are when it goes.
  * @param {core.App} app
  * @param {core.Record} rec
- * @param {"" | "edit" | "delete"} change
+ * @param {"" | "edit" | "delete" | "react"} change
  */
 function queueUpdate(app, rec, change) {
   if (!change || !rec.getString("author")) return; // a service message never went to Telegram
-  for (const link of linksOfRoom(app, rec.getString("room"))) enqueue(app, change, rec.id, link.getString("chat_id"));
+  for (const link of linksOfRoom(app, rec.getString("room"))) {
+    const chatId = link.getString("chat_id");
+    if (change === "react" && waiting(app, rec.id, chatId)) continue;
+    enqueue(app, change, rec.id, chatId);
+  }
+}
+
+/**
+ * Is a reaction of this message queued for this group and not yet taken by the worker?
+ * @param {core.App} app
+ * @param {string} messageId
+ * @param {string} chatId
+ */
+function waiting(app, messageId, chatId) {
+  try {
+    app.findFirstRecordByFilter("tg_queue", "op = 'react' && message = {:message} && chat_id = {:chat} && locked_until = ''", {
+      message: messageId,
+      chat: chatId,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------- the worker's side
