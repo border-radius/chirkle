@@ -1485,3 +1485,20 @@ The web's emoji search and ":name" in the composer (DESIGN.md §20.6), ported th
 Tests: `EmojiTest` (the web's lines and its finding and token cases), `UiPortsTest` "typing a colon and a name offers
 emoji…" (the row, a tap, a whole ":fire:", sending; the sheet's search and a tab emptying it). Robolectric draws no
 emoji (`Glyphs` leaves every grid empty), so what the sheet finds is checked on `EmojiTest` only.
+
+## 54. QA pass 33: the media grid follows deletes, wrapping albums, Jump to collections (2026-11-07)
+
+From docs/QA.md "QA pass 33":
+- **Media grid** (BUG-244): the grid subscribes to the room's messages while it is open (as the viewer does, BUG-155):
+  a message deleted meanwhile, or a forward whose original was (its files emptied), takes its tiles away. Opened, they
+  showed a broken image. A video without a poster is a dark tile there too, as in the room and on collections.
+- **Albums** (BUG-247): a message's images and videos are a `FlowRow`, as the web's wrap: in one `Row`, four tiles of
+  80–112dp next to the avatar didn't fit a 360–411dp phone, and the last ones, with their "+N", were cut off.
+- **Jump to** (BUG-245): it finds your collections and those you follow too, as the web's does (DESIGN.md §32):
+  `jumpTargets` takes the store's `Collections`; a collection's note is "Collection" or whose it is, and it is never
+  "away" (hidden or archived rooms are).
+- **Collection tiles** (BUG-248): a private collection's lock, over pictures, sat on the last quarter's play badge; it
+  now follows the name under the tile (an empty tile keeps it in its corner).
+
+Tests: `UiPortsTest` "the media grid drops a message deleted while it is open", `JumpTest` "collections are found
+too".

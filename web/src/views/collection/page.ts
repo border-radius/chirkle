@@ -343,7 +343,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
         on: { click: () => void open(it, tile) },
         signal,
       },
-      [picture(o, it, signal), it.video && h("span", { "aria-hidden": "true" }, "▶")],
+      [picture(o, it, signal), it.video && h("span", { class: "att-play", "aria-hidden": "true" })],
     );
     const cell = h("div", { class: `coll-cell${isNew ? " new" : ""}`, dataset: { item: it.id } }, [tile]);
     if (me) {

@@ -54,21 +54,29 @@
   transform: scale(1.05);
 }
 
-/* Over a video's first frame. */
+/* Over a video's first frame, and on the media grid's and collections' video tiles. A drawn triangle, not "▶", which
+   Apple's, Android's and Windows' fonts show as an emoji (QA BUG-242). */
 .att-play {
   position: absolute;
   inset: 50% auto auto 50%;
   translate: -50% -50%;
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding-left: 0.2rem;
+  width: min(2.75rem, 40%);
+  aspect-ratio: 1;
   border-radius: 50%;
   background: rgb(13 11 20 / 60%);
-  color: #fff;
-  font-size: 1.1rem;
   pointer-events: none;
+}
+
+.att-play::before {
+  content: "";
+  width: 55%;
+  height: 55%;
+  background: #fff;
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E") center
+    / contain no-repeat;
 }
 
 .att-broken {

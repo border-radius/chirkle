@@ -161,6 +161,25 @@ class UiPortsTest {
         ui.until { compose.onAllNodes(hasContentDescription("Download")).fetchSemanticsNodes().isEmpty() }
     }
 
+    @Test fun `the media grid drops a message deleted while it is open (QA BUG-244)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("gd-${uniq()}") }
+        fun send(name: String) = runBlocking {
+            a.api.send(NewMessage(newId(), room.id, "pic $name", listOf(UploadFile(name, "image/png", png.toRequestBody("image/png".toMediaType())))))
+        }
+        send("keep.png")
+        val gone = send("gone.png")
+        ui.signedIn(a)
+        ui.showRoom(room.name)
+        compose.onNodeWithText(room.name).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        ui.waitFor("pic gone.png")
+        compose.onNodeWithContentDescription("Media").performClick()
+        ui.waitFor(hasContentDescription("gone.png", substring = true))
+        runBlocking { a.api.softDelete(gone.id) }
+        ui.until { compose.onAllNodes(hasContentDescription("gone.png", substring = true)).fetchSemanticsNodes().isEmpty() }
+        ui.waitFor(hasContentDescription("keep.png", substring = true))
+    }
+
     @Test fun `an empty room's media grid says so`() {
         val a = newUser()
         val room = runBlocking { a.api.createRoom("me-${uniq()}") }

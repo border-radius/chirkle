@@ -94,6 +94,8 @@ export function createRoomView({
   let forwarding: string[] = [];
   /** Tells the open viewer that a message changed or went (§17.7). */
   let viewing: ((m: Message, gone: boolean) => void) | undefined;
+  /** And the open media grid (§30). */
+  let gridding: ((m: Message, gone: boolean) => void) | undefined;
   /** Put the caret in the composer as soon as it is shown: on entering the room (§22.5). */
   let focusComposer = true;
   /**
@@ -785,6 +787,7 @@ export function createRoomView({
           h,
           name: attachmentName,
           open: viewImage,
+          follow: (fn) => (gridding = fn),
           signal: onScreen.signal,
         }),
       () => scope.active && notice.say("Couldn't open media. Check your connection."),
@@ -800,6 +803,14 @@ export function createRoomView({
    */
   async function openSearch() {
     if (search) return search.focus();
+    // While the chunk loads: what is typed meanwhile, for the field once it shows, as Jump to keeps it (QA BUG-243).
+    let early = "";
+    const hold = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || (e.key.length !== 1 && e.key !== "Backspace")) return;
+      early = e.key === "Backspace" ? early.slice(0, -1) : early + e.key;
+      e.preventDefault();
+    };
+    document.addEventListener("keydown", hold, { capture: true, signal });
     try {
       const { createSearch } = await import("./room/search.ts");
       const toggle = shell.querySelector<HTMLElement>(".search-toggle");
@@ -824,8 +835,15 @@ export function createRoomView({
       header.el.after(search.el);
       toggle?.setAttribute("aria-expanded", "true");
       search.focus();
+      const input = search.el.querySelector("input");
+      if (early && input) {
+        input.value = early;
+        input.dispatchEvent(new Event("input"));
+      }
     } catch {
       if (scope.active) notice.say("Couldn't open search. Check your connection.");
+    } finally {
+      document.removeEventListener("keydown", hold, true);
     }
   }
 
@@ -936,7 +954,10 @@ export function createRoomView({
         onUpload: (id, fraction) => messages.setUpload(id, fraction),
         cache,
         early: params.msgId ? undefined : early?.take(roomId),
-        onEvent: (m, gone) => viewing?.(m, gone),
+        onEvent: (m, gone) => {
+          viewing?.(m, gone);
+          gridding?.(m, gone);
+        },
       });
 
       pill.addEventListener(

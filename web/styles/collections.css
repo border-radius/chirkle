@@ -98,6 +98,22 @@
   .coll-actions {
     margin-top: 10px;
   }
+
+  /* In line with the header's. */
+  .collection .media-grid.coll-grid {
+    padding-inline: 16px;
+  }
+
+  .collection .coll-head .coll-actions > button:not(:last-child) {
+    padding: 0 12px;
+  }
+
+  /* Delete (only its icon) by the back arrow: on a phone it wrapped to a line of its own (QA BUG-246). */
+  .coll-actions > .danger:last-child {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+  }
 }
 
 .coll-meta,
@@ -215,11 +231,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.coll-grid .media-tile span {
-  position: relative;
-  font-size: 1.4rem;
 }
 
 .coll-cell {

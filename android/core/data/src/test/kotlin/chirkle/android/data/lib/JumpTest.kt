@@ -1,5 +1,8 @@
 package chirkle.android.data.lib
 
+import chirkle.android.data.model.CollectionOwner
+import chirkle.android.data.model.Collections
+import chirkle.android.data.model.MediaCollection
 import chirkle.android.data.model.Room
 import chirkle.android.data.model.RoomExpand
 import chirkle.android.data.model.User
@@ -47,5 +50,19 @@ class JumpTest {
         assertEquals("Archived", jumpMatches(all, "old").single().note)
         assertEquals(listOf("Bob Été"), jumpMatches(all, "@bob ete").map { it.name })
         assertEquals(emptyList<String>(), jumpMatches(all, "zzz").map { it.name })
+    }
+
+    @Test fun `collections are found too, yours and those you follow, not as away (QA BUG-245)`() {
+        val colls = Collections(
+            mine = listOf(MediaCollection("c1", "Trip", lastAdded = "2026-10-05 10:00:00.000Z")),
+            subs = listOf(MediaCollection("c2", "General pics", owner = CollectionOwner("bob", "Bob Été"))),
+        )
+        val all = jumpTargets(sections, "me", colls) { "" }
+        assertEquals("Trip", jumpMatches(all, "").first().name)
+        val trip = jumpMatches(all, "trip").single()
+        assertEquals("Collection" to "c1", trip.note to trip.id)
+        assertEquals(null, trip.room)
+        assertEquals(listOf("general", "General pics", "old-general"), jumpMatches(all, "gen").map { it.name })
+        assertEquals("Bob Été", jumpMatches(all, "pics").single().note)
     }
 }

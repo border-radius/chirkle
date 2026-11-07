@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { intercept, seedMessages } from "../../../support/api.ts";
-import { io, me, mount, newRoom, root, useRoomView } from "./harness.ts";
+import { captureHandler, io, me, mount, newRoom, root, useRoomView } from "./harness.ts";
 
 describe("room view: media grid (§30)", () => {
   useRoomView();
@@ -43,7 +43,7 @@ describe("room view: media grid (§30)", () => {
     // A video is never loaded in the grid: its poster, or a plain tile until there is one.
     expect(grid()!.querySelector("video")).toBeNull();
     expect(tiles()[0]!.querySelector("img")).toBeNull();
-    expect(tiles()[0]!.querySelector("span")!.textContent).toBe("▶");
+    expect(tiles()[0]!.querySelector("span.att-play")).not.toBeNull(); // a drawn triangle, not "▶" (QA BUG-242)
     expect(tiles()[2]!.querySelector("img")!.getAttribute("src")).toMatch(/\/api\/chat\/posters\/[a-z0-9]+\/p68_abcdefghij\.png$/);
     expect(tiles()[1]!.querySelector("img")!.getAttribute("src")).toMatch(/\/api\/files\/messages\/.*thumb=240x240/);
     expect(tiles()[0]!.getAttribute("aria-label")).toMatch(/^b\.mp4, video, Me, /);
@@ -57,6 +57,29 @@ describe("room view: media grid (§30)", () => {
     // All there: nothing more to fetch.
     expect(io.observing(status())).toBe(false);
     expect(status().textContent).toBe("");
+  });
+
+  it("drops the tiles of a message deleted while it is open (or a forward whose original was), and an emptied month (QA BUG-244)", async () => {
+    const room = await newRoom();
+    const handlers = captureHandler(me.api);
+    const [keep, gone] = await seedMessages(room.id, me.user.id, 2, {
+      startAt: Date.UTC(2026, 5, 30, 12),
+      stepMs: 2 * DAY,
+      files: (i) => (i ? ["b_abcdefghij.png", "c_abcdefghij.mp4"] : ["a_abcdefghij.png"]),
+    });
+    await mount(room);
+    await open();
+    await vi.waitFor(() => expect(names()).toEqual(["c.mp4", "b.png", "a.png"]));
+    handlers[0]!("update", { ...gone!, deleted: true, files: [] });
+    await vi.waitFor(() => expect(names()).toEqual(["a.png"]));
+    expect([...grid()!.querySelectorAll("h3")].map((h) => h.textContent)).toEqual(["June 2026"]);
+    // An edit keeps them; a forward whose original was deleted has no files left, and goes as a deleted one does.
+    handlers[0]!("update", { ...keep!, text: "edited" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(names()).toEqual(["a.png"]);
+    handlers[0]!("update", { ...keep!, files: [] });
+    await vi.waitFor(() => expect(tiles()).toHaveLength(0));
+    expect(status().textContent).toBe("No photos or videos here yet.");
   });
 
   it("says when there are none, and offers Retry when a page fails", async () => {

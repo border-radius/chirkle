@@ -56,8 +56,14 @@ import chirkle.android.ui.Formats
 import chirkle.android.ui.Images
 import chirkle.android.ui.LocalServices
 import coil3.compose.AsyncImage
+import chirkle.android.data.api.Action
+import chirkle.android.data.api.Change
+import chirkle.android.data.model.Message
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -97,6 +103,20 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
         }
     }
     LaunchedEffect(roomId) { load() }
+    // A message deleted meanwhile takes its tiles with it: opened, they showed a broken image (QA BUG-244, as the viewer's BUG-155).
+    LaunchedEffect(roomId) {
+        val changes = Channel<Change<Message>>(Channel.UNLIMITED)
+        val off = runCatching { services.api.subscribeMessages(roomId) { changes.trySend(it) } }.getOrNull() ?: return@LaunchedEffect
+        try {
+            for (c in changes) {
+                val m = c.record
+                val has = if (c.action == Action.Delete || m.deleted) emptySet() else m.files.toSet()
+                if (items.any { it.message == m.id && it.file !in has }) items = items.filter { it.message != m.id || it.file in has }
+            }
+        } finally {
+            withContext(NonCancellable) { runCatching { off() } }
+        }
+    }
     // Near the end: the next page (not after a failure, until Retry: QA BUG-116).
     LaunchedEffect(grid) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index to grid.layoutInfo.totalItemsCount }
@@ -148,7 +168,8 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
                 Box(
                     Modifier
                         .aspectRatio(1f)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        // A video without a poster: a dark tile, as in the room and on collections.
+                        .background(if (it.video) Color(0xFF13111D) else MaterialTheme.colorScheme.surfaceContainerHigh)
                         .clickable(onClickLabel = "Open") { onOpen(it.message, it.file) }
                         .semantics { contentDescription = label },
                     contentAlignment = Alignment.Center,

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 import { PNG } from "../support/files.ts";
-import { apiRoom, apiUser, attach, composer, message, openRoom, type Room, test, type User, urlOf } from "./fixtures.ts";
+import { apiRoom, apiSend, apiUser, attach, composer, message, openRoom, type Room, test, type User, urlOf } from "./fixtures.ts";
 import { E2E_BASE } from "./paths.ts";
 
 /** A message with images, through the API. */
@@ -381,4 +381,35 @@ test("collections: the owner uploads images straight into one, with the button, 
   await b.goto(`/c/${pub.id}`);
   await expect(b.getByRole("button", { name: "Subscribe" })).toBeVisible();
   await expect(b.getByRole("button", { name: "Upload" })).toHaveCount(0);
+});
+
+test("collections: a video with no poster attaches as a tile, and the room stays at the bottom once it is sent (QA BUG-249)", async ({
+  browser,
+}) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada);
+  for (let i = 0; i < 25; i++) await apiSend(ada, room, `line ${i}`);
+  const coll = await apiCollection(ada, "Clips", false);
+  // Not a video ffmpeg can read: it never gets a poster, and the browser can't play it either.
+  const form = new FormData();
+  form.set("collection", coll.id);
+  form.set("file", new Blob([new Uint8Array(4096).fill(7)], { type: "video/mp4" }), "clip.mp4");
+  const res = await fetch(`${E2E_BASE}/api/chat/items`, { method: "POST", headers: { authorization: ada.token }, body: form });
+  expect(res.ok).toBe(true);
+  const a = await openRoom(browser, ada, room);
+  await a.locator("form.composer summary").click();
+  await a.getByRole("button", { name: "From collection" }).click();
+  const picker = a.getByRole("dialog", { name: "Attach from collections" });
+  await picker.getByRole("button", { name: "clip.mp4, video" }).click();
+  await picker.getByRole("button", { name: "Attach 1" }).click();
+  await composer(a).fill("a clip");
+  await composer(a).press("Enter");
+  // While it is on its way, and once sent: a tile (it was a file's chip, then grew into a tile under the composer).
+  const sent = message(a, "a clip");
+  await expect(sent.locator(".att-tile, .att-broken")).toHaveCount(1);
+  await expect(sent.locator(".att-file")).toHaveCount(0);
+  await expect(sent.locator(".att-broken")).toBeVisible();
+  await expect(a.getByRole("button", { name: "Jump to latest" })).toBeHidden();
+  const gap = () => a.locator("ol.messages").evaluate((l) => l.scrollHeight - l.scrollTop - l.clientHeight);
+  await expect.poll(gap).toBeLessThan(40);
 });

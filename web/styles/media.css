@@ -96,26 +96,6 @@ dialog.media::backdrop {
   opacity: 0.85;
 }
 
-.media-tile span {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  padding: 0 0.4rem;
-  border-radius: var(--pill);
-  background: rgb(0 0 0 / 60%);
-  color: #fff;
-  font-size: 0.75rem;
-}
-
-/* A video without a poster frame (§30.1): a plain tile, ▶ in the middle. */
-.media-tile:not(:has(img)) span {
-  inset: 0;
-  width: fit-content;
-  height: fit-content;
-  margin: auto;
-  font-size: 1.25rem;
-}
-
 .media-status {
   margin: 1rem 0 0;
   text-align: center;

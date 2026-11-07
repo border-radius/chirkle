@@ -4,7 +4,7 @@
 // chat" closes both. Like the viewer it adds a history entry (same URL), so Back closes it rather than leaving the room.
 //
 // Its pages come from GET /api/chat/media/{room} (§30.1): only the room's images and videos, from an index, not its
-// messages. A video's tile is its poster frame, made by the server, or a plain tile with ▶ until there is one: never
+// messages. A video's tile is its poster frame, made by the server, or a plain tile with a play badge until there is one: never
 // the video itself, which every browser would start fetching.
 //
 // A lazy chunk, like search (§29): the room view import()s it when the grid is first opened, and it links its own
@@ -29,6 +29,8 @@ export interface MediaOptions {
    * the room has more before them (and none after). `leave` closes the grid ("Show in chat").
    */
   open: (m: Message, file: string, opener: HTMLElement, images: ViewerImage[], more: [boolean, boolean], leave: () => void) => unknown;
+  /** Sets what is told of the room's messages that change or go, while it is open (the viewer's `follow`). */
+  follow: (fn: ((m: Message, gone: boolean) => void) | undefined) => void;
   /** Ends it (the room view unmounts). */
   signal: AbortSignal;
 }
@@ -89,7 +91,7 @@ export function openMedia(o: MediaOptions): void {
   ]);
 
   /** What is shown, newest first, and the last one fetched (where older ones begin). */
-  const items: ViewerImage[] = [];
+  const items: (ViewerImage & { tile: HTMLElement })[] = [];
   let last: MediaItem | undefined;
   /** The messages they come from, as the viewer takes them, by id. */
   const messages = new Map<string, Message>();
@@ -157,24 +159,40 @@ export function openMedia(o: MediaOptions): void {
     }
     const name = o.name(m, file);
     const src = () => (video ? api.posterUrl(m, file) : api.fileUrl(m, file, "240x240"));
-    // A video without a poster (not made yet, or no ffmpeg on the server) is a plain tile with ▶.
+    // A video without a poster (not made yet, or no ffmpeg on the server) is a plain tile with the play badge.
     const pic = (!video || row.poster) && h("img", { src: src(), alt: "", loading: "lazy", decoding: "async" });
     // A poster that fails leaves the plain tile.
     if (pic && video) pic.addEventListener("error", () => pic.remove(), { signal });
     const label = `${name}${video ? ", video" : ""}, ${m.expand?.author?.name ?? "Unknown"}, ${d.toLocaleDateString()}`;
-    const index = items.push({ message: m, file, video }) - 1;
-    const tile = h(
+    const tile: HTMLElement = h(
       "button",
-      { type: "button", class: "media-tile", "aria-label": label, title: label, on: { click: () => open(index, tile) }, signal },
-      [pic, video && h("span", { "aria-hidden": "true" }, "▶")],
+      { type: "button", class: "media-tile", "aria-label": label, title: label, on: { click: () => open(item) }, signal },
+      [pic, video && h("span", { class: "att-play", "aria-hidden": "true" })],
     );
+    const item = { message: m, file, video, tile };
+    items.push(item);
     grid.append(tile);
   }
 
-  function open(index: number, tile: HTMLElement) {
-    const { message, file } = items[index]!;
-    o.open(message, file, tile, [...items].reverse(), [!done, false], () => close(true, false));
+  function open({ message, file, tile }: (typeof items)[number]) {
+    const images = items.map(({ tile: _, ...i }) => i).reverse();
+    o.open(message, file, tile, images, [!done, false], () => close(true, false));
   }
+
+  /**
+   * A message deleted meanwhile (or a forward whose original was): its tiles go, and a month left empty its heading.
+   * Opened, they said "Couldn't load image" (QA BUG-244).
+   */
+  o.follow((m, gone) => {
+    const has = new Set(gone || m.deleted ? [] : (m.files ?? []));
+    for (const it of items.filter((i) => i.message.id === m.id && !has.has(i.file))) {
+      items.splice(items.indexOf(it), 1);
+      const heading = it.tile.previousElementSibling;
+      it.tile.remove();
+      if (heading?.tagName === "H3" && (!heading.nextElementSibling || heading.nextElementSibling.tagName === "H3")) heading.remove();
+    }
+    if (done && !items.length) status.textContent = "No photos or videos here yet.";
+  });
 
   const seen = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && void more(), {
     root: body,
@@ -193,6 +211,7 @@ export function openMedia(o: MediaOptions): void {
     current = false;
     scope.abort();
     seen.disconnect();
+    o.follow(undefined);
     if (dialog.open) dialog.close();
     if (back) leaving = leave().finally(() => dialog.remove());
     else dialog.remove();

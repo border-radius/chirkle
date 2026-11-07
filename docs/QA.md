@@ -2615,3 +2615,70 @@ Not changed: runs of blank lines in a message keep their height on both clients 
 - the build is within every budget: `app.js` 48.58 KB, `app.css` 11.15/11.15 KB (no room left), the collections chunk
   6.72/6.75 KB and 1.98/2.00 KB;
 - Android: all 179 tests (2 new).
+
+# QA pass 33 — media on the web and the app
+
+2026-11-07, user: "test app heavily. list all bugs. like play icon on videos in media grid. fix all bugs. raise budget
+if needed." The web app was driven in headless Chromium (1280 px, 390 px and 360 px, light and dark) against a copy of
+the emulator's seeded server with a room of images, videos (wide, tall, one ffmpeg can't read), albums of three and
+six, forwards and a collection of them; deletes and forwards' originals were removed from another client while the
+grid, the viewer and a collection page were open. The app ran on the API 28 emulator (a fresh debug build) until
+software video decoding stalled it, then in Robolectric screenshots at 360dp.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-242 | Medium | Web | Videos' play marks were the "▶" character (an emoji on Apple, Android and Windows), and differed by place: a round badge in the room, a small pill in a corner of the media grid, a bare grey glyph on collection pages and in the picker, hard to see on posters | Fixed |
+| BUG-243 | Low | Web | Keys typed just after clicking Search, while its chunk loaded, were lost ("the" came out as "" on a desktop, "e" on a phone) | Fixed |
+| BUG-244 | Medium | Web, Android | The media grid kept the tiles of a message deleted while it was open (or of a forward whose original was); opened, one said "Couldn't load image" (a 404) | Fixed |
+| BUG-245 | Low | Android | Jump to didn't find collections; the web's does (DESIGN.md §32) | Fixed |
+| BUG-246 | Low | Web | On a phone a collection page's Delete wrapped onto a line of its own (390 px), Make public too (360 px), and the grid wasn't in line with the header | Fixed |
+| BUG-247 | Medium | Android | A message with four or more images or videos was one row: on a 360–411dp phone its last tiles and their "+N" were off screen | Fixed |
+| BUG-248 | Low | Android | A private collection's lock, on its tile in the room list, covered the last quarter's play badge | Fixed |
+| BUG-249 | Medium | Web | A video attached from a collection before it had a poster was sent as a file's chip that became a 240 px tile once sent: the room was left 140 px above its bottom, "Jump to latest" showing, the message half hidden | Fixed |
+
+**BUG-242:** `.att-play` (attachments.css) is now the one play badge: a dark disc, at most 40% of the tile, with a
+triangle drawn by a mask (the app's `ChirkleIcons.Play` path), centred on the room's tiles, the media grid's, the
+collection page's and the picker's; the span is empty. media.css and collections.css lost their own `span` rules.
+Component: `media.test.ts` (the grid's video tile has `.att-play`, no text).
+
+**BUG-243:** `openSearch()` (room.ts) holds the printable keys and Backspace typed while the chunk loads, as Jump to
+does (BUG-205), and puts them in the field once it shows.
+
+**BUG-244:** the grid takes a `follow` callback as the viewer does: the room view tells it of every message event
+while it is open, and a message's tiles whose files it no longer has (deleted, gone, a forward emptied) go, with a
+month heading left empty, and "No photos or videos here yet." when none are left. The app's `MediaScreen` subscribes to
+the room's messages the same way (ANDROID.md §54). Component: `media.test.ts`; Android: `UiPortsTest`.
+
+**BUG-245, 247, 248:** ANDROID.md §54.
+
+**BUG-249:** a message on its way shows a collection's video with no poster as a plain tile with the play badge, the
+same height as the tile it becomes, so nothing moves once it is sent (attachments are drawn at a fixed height for
+that reason; the room only follows the list's own size, not its content's). The app already drew a dark tile. E2E:
+`collections.spec.ts` (fails without the fix).
+
+**BUG-246:** under 720 px Delete (only its icon) sits by the back arrow at the header's top right, the other buttons
+are 12 px narrower, and the grid has the header's 16 px sides. The collections stylesheet went from 1.97 KB to 2.01
+KB: its budget was raised from 2 KB to 2.05 KB (DESIGN.md §7.7, the user's "raise budget if needed").
+
+## Checked and fine
+
+- The Android media grid's wide posters looked like tiles with rounded corners: they are the test video's own circle,
+  centre-cropped.
+- Videos sent from the web show their first frame until the server's poster is made (the poster's 404 meanwhile is
+  expected); a video ffmpeg can't read is a plain tile with the badge in the grid and on collections, and "Couldn't
+  load video" in the room.
+- A collection page drops an item removed elsewhere, live; emoji by name (":fi", arrows, Enter) works.
+- The emulator logged out an account whose session the copied server didn't accept: the right thing (no app bug).
+- Video playback on the TCG emulator: a black viewer and a stalled guest (software decoding). Environment, not the app.
+
+## Tests
+
+- Unit and component: 782 passed (2 new cases in `media.test.ts`). One run of three failed `app.test.ts` "a refused
+  change with a good session … checks at most every 30 s" under load; alone it passed 4 of 4 (no change there).
+- E2E Chromium: `media`, `collections` (1 new, BUG-249: fails without the fix), `attachments`, `search`, `mobile`: 26
+  passed, 1 skipped (by design); `a11y`, `theme`, `smoke`, `forward`, `switcher`: 10 passed.
+- Android: all unit and Robolectric tests (2 new: `UiPortsTest`, `JumpTest`). `ServicesTest` "a private room you are
+  taken out of is kept empty" timed out once while e2e ran beside it; alone it passed.
+- Server: no change, integration tests not rerun.
+- Build: every budget met: `app.js` 49.04/49.75 KB, `app.css` 11.04/11.25 KB, collections 6.72/6.75 KB and
+  2.01/2.05 KB (raised), media 1.87/3 KB and 0.71/1 KB.

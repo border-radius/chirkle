@@ -597,7 +597,7 @@ while its first page loads.
 | Message search (§29), loaded on first use | ≤ 2 KB script (its styles are in `app.css`) |
 | Room access dialog (§23.2, §33.10), loaded on first use | ≤ 3.10 KB script (3.05 KB until the moderators QA pass, §36.6), ≤ 1.5 KB stylesheet (`web/styles/access.css`, linked before the dialog shows; in `app.css` until the 2026-11-01 polish pass); moved out of `app.js` for linked instances |
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
-| Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2 KB stylesheet |
+| Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2.05 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
 | Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
@@ -1081,6 +1081,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (WebKit taps) | `app.js` raised from 49.60 KB to 49.75 KB (§7.7), the user's call (2026-11-02): two phone tap fixes found by the WebKit e2e run took it from 49.59 KB to 49.69 KB. A tap on a message's text counts for the message even when the browser's touch adjustment moves the click onto a link near it (WebKit; Chrome on Android does it too): it went to the time's permalink. And a touch ending outside the messages hides the tapped message's buttons, since WebKit (iOS Safari too) sends no click for a tap on something that takes none, such as the room's name. |
 | Bundle budget (emoji by name) | The emoji chunk raised from 4.25 KB to 13 KB (§7.7), 2026-11-06: the user asked for emoji search and ":name" in the composer on the grounds that the picker is a lazy chunk now. The names (`lib/emoji-names.ts`, one line per emoji with the emoji itself, so it can be read and kept) are about 7.4 KB of the 12.83 KB; lines without the emoji would save about 2 KB. The picker's styles moved out of `app.css` (11.19 → 11.00 KB) into `web/styles/emoji.css` (new `emojiCss` budget, 1 KB) rather than raise `app.css` for the search box and the suggestions. `app.js` grew by about 0.13 KB (the composer spotting ":na"). |
 | Bundle budget (collection chips) | The collections chunk raised from 6.70 KB to 6.75 KB script and 1.95 KB to 2 KB stylesheet (§7.7), the user's call (2026-11-02): the picker's collections as a row of chips, as the app's, instead of a select (§31.3) took them from 6.65 KB and 1.94 KB to 6.75 KB and 1.98 KB. |
+| Bundle budget (QA pass 33) | The collections stylesheet raised from 2 KB to 2.05 KB (§7.7), 2026-11-07, the user's call ("raise budget if needed"): on a phone the collection page's Delete went up by the back arrow, as it wrapped to a line of its own, and its buttons got narrower (QA BUG-246), which took it from 1.97 KB to 2.00 KB. |
 
 ### Decided (2026-10-24, linked instances)
 
@@ -2716,10 +2717,11 @@ goes Back off its entry, and after "Show in chat" waits for the viewer's own Bac
 it (a reload while it was open, Forward after Back closed it) is passed over by the router, as the viewer's is (QA
 BUG-118). The viewer gets messages made from the rows (id, room, author, `created`, the file names, `forward_of` for a
 forward's), which is all it and "Show in chat" use. A video's tile is its poster (cropped to the square by
-`object-fit: cover`, like the images' `240x240`), or until there is one a plain tile
-with ▶ in the middle: never the video, which every browser would start fetching (`preload="metadata"`); a poster that
+`object-fit: cover`, like the images' `240x240`), or until there is one a plain tile, with the room's round play badge
+(`.att-play`, a drawn triangle, not "▶": QA BUG-242) in the middle of either: never the video, which every browser would start fetching (`preload="metadata"`); a poster that
 fails twice leaves the plain tile. A tile is a button named "file name[, video], author, date". The status line says "Loading…", "No photos or
-videos here yet." or "Couldn't load media." with Retry; until Retry, the end of the grid doesn't ask again (QA BUG-116).
+videos here yet." or "Couldn't load media." with Retry; until Retry, the end of the grid doesn't ask again (QA BUG-116). A message deleted while the grid is open, or a forward whose original was, takes its tiles
+with it (the room view's events, as the viewer's; QA BUG-244).
 
 ### 30.3 Tests
 

@@ -137,6 +137,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
     var jumping by rememberSaveable { mutableStateOf(false) }
     var jumpQuery by rememberSaveable { mutableStateOf("") }
     fun closeJump() { jumping = false; jumpQuery = "" }
+    fun open(t: chirkle.android.data.lib.JumpTarget) = if (t.room != null) onOpenRoom(t.id) else onOpenCollection(t.id)
     androidx.activity.compose.BackHandler(enabled = jumping, onBack = ::closeJump)
 
     Scaffold(
@@ -170,7 +171,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                             ),
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
                             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = {
-                                jumpMatches(jumpTargets(sections, me?.id, services.opened::get), jumpQuery).firstOrNull()?.let { closeJump(); onOpenRoom(it.room.id) }
+                                jumpMatches(jumpTargets(sections, me?.id, s.collections, services.opened::get), jumpQuery).firstOrNull()?.let { closeJump(); open(it) }
                             }),
                             modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Jump to" },
                         )
@@ -226,11 +227,11 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (jumping) {
-            val found = remember(sections, jumpQuery, me) { jumpMatches(jumpTargets(sections, me?.id, services.opened::get), jumpQuery) }
+            val found = remember(sections, s.collections, jumpQuery, me) { jumpMatches(jumpTargets(sections, me?.id, s.collections, services.opened::get), jumpQuery) }
             LazyColumn(Modifier.fillMaxSize().semantics { contentDescription = "Rooms" }, contentPadding = padding) {
                 if (found.isEmpty()) empty("Nothing found.")
-                items(found, key = { "j" + it.room.id }) { t ->
-                    JumpRow(t, s, me?.id) { closeJump(); onOpenRoom(t.room.id) }
+                items(found, key = { "j" + it.id }) { t ->
+                    JumpRow(t, s, me?.id) { closeJump(); open(t) }
                 }
             }
             return@Scaffold
@@ -340,13 +341,17 @@ private fun menuItems(
 
 @Composable
 private fun JumpRow(t: chirkle.android.data.lib.JumpTarget, s: AppState, me: String?, onOpen: () -> Unit) {
-    val badge = unreadBadge(t.room, s.unread, s.hidden.keys)
+    val badge = t.room?.let { unreadBadge(it, s.unread, s.hidden.keys) } ?: t.collection?.takeIf { it.owner != null }?.new ?: 0
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        chirkle.android.ui.RoomPicture(t.room, me)
+        val room = t.room
+        if (room != null) chirkle.android.ui.RoomPicture(room, me)
+        else Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            Icon(ChirkleIcons.Collection, contentDescription = null, tint = Chirkle.colors.dim, modifier = Modifier.size(18.dp))
+        }
         Text(t.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (badge > 0) FontWeight.Bold else FontWeight.Normal)
         if (t.note.isNotEmpty()) Text(t.note, style = MaterialTheme.typography.labelMedium, color = Chirkle.colors.muted)
         if (badge > 0) UnreadBadge(badge)
@@ -454,18 +459,13 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             .semantics(mergeDescendants = true) {},
     ) {
         val tint = hue.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.background)
+        val locked = c.owner == null && !c.public
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(tint)) {
             Preview(c.preview, tint)
-            if (c.owner == null && !c.public) {
-                if (c.preview.isEmpty()) {
-                    Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
-                } else {
-                    // Over pictures: on a dark disc, so it shows on any of them.
-                    Box(
-                        Modifier.align(Alignment.BottomEnd).padding(6.dp).size(24.dp).background(Color.Black.copy(alpha = 0.55f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Color.White, modifier = Modifier.size(13.dp)) }
-                }
+            // An empty one's lock in its corner; over pictures it covered the last quarter's play badge (QA BUG-248),
+            // so then it follows the name.
+            if (locked && c.preview.isEmpty()) {
+                Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
             }
             if (c.new > 0) {
                 Box(
@@ -482,16 +482,19 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             }
         }
         Spacer(Modifier.size(6.dp))
-        Text(
-            c.name,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
-            lineHeight = 16.sp,
-            fontWeight = if (c.new > 0) FontWeight.Bold else FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        )
+        Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                c.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                fontWeight = if (c.new > 0) FontWeight.Bold else FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (locked && c.preview.isNotEmpty()) Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
+        }
         Text(
             c.owner?.name ?: if (c.items == 1) "1 item" else "${c.items} items",
             maxLines = 1,

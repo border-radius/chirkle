@@ -82,7 +82,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
         },
         signal,
       },
-      [picture(o, it, signal), it.video && h("span", { "aria-hidden": "true" }, "▶")],
+      [picture(o, it, signal), it.video && h("span", { class: "att-play", "aria-hidden": "true" })],
     );
     return b;
   }

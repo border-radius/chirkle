@@ -87,7 +87,7 @@ export function asMessage(it: CollectionItem): Message {
   };
 }
 
-/** A square tile's picture: the grid thumbnail, a video's poster, or nothing (a plain tile with ▶). */
+/** A square tile's picture: the grid thumbnail, a video's poster, or nothing (a plain tile with the play badge). */
 export function picture(b: Base, it: CollectionItem, signal: AbortSignal): HTMLImageElement | null {
   if (it.video && !it.poster) return null;
   const img = b.h("img", {

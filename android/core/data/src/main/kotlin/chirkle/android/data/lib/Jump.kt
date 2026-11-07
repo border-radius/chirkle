@@ -1,13 +1,19 @@
-// Finding a room or DM by name (DESIGN.md §32, "Jump to"): a port of matches and score in web/src/views/switcher.ts.
+// Finding a room, DM or collection by name (DESIGN.md §32, "Jump to"): a port of matches and score in web/src/views/switcher.ts.
 // On the phone it is the room list's search; Ctrl+K opens it from a hardware keyboard.
 package chirkle.android.data.lib
 
+import chirkle.android.data.model.Collections
+import chirkle.android.data.model.MediaCollection
 import chirkle.android.data.model.Room
 import java.text.Normalizer
 
-/** A room or DM to go to. [note]: "Hidden" or "Archived" (found only when typed for), else "". */
-data class JumpTarget(val room: Room, val name: String, val note: String, val at: String) {
-    val away: Boolean get() = note.isNotEmpty()
+/**
+ * A room or DM to go to, or a collection ([room] null). [note]: "Hidden" or "Archived" (found only when typed for, [away]),
+ * a collection's "Collection" or whose it is, else "".
+ */
+data class JumpTarget(val room: Room?, val name: String, val note: String, val at: String, val collection: MediaCollection? = null) {
+    val away: Boolean get() = room != null && note.isNotEmpty()
+    val id: String get() = room?.id ?: collection!!.id
 }
 
 private const val MAX_TARGETS = 50
@@ -56,14 +62,17 @@ class RecentlyOpened {
     fun clear() = at.clear()
 }
 
-/** Everything you can jump to, from the room list's sections. [opened]: when a room was last open, "" if not yet. */
-fun jumpTargets(s: RoomSections, me: String?, opened: (String) -> String): List<JumpTarget> {
-    fun t(r: Room, note: String): JumpTarget {
-        val sent = r.lastMessageAt.ifEmpty { r.created }
-        val open = opened(r.id)
-        return JumpTarget(r, if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name, note, if (open > sent) open else sent)
-    }
-    return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, "Hidden") } + s.archived.map { t(it, "Archived") }
+/**
+ * Everything you can jump to, from the room list's sections and your collections and those you follow, as the web's
+ * (QA BUG-245). [opened]: when a room or collection was last open, "" if not yet.
+ */
+fun jumpTargets(s: RoomSections, me: String?, collections: Collections? = null, opened: (String) -> String): List<JumpTarget> {
+    fun later(at: String, id: String) = opened(id).let { if (it > at) it else at }
+    fun t(r: Room, note: String) =
+        JumpTarget(r, if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name, note, later(r.lastMessageAt.ifEmpty { r.created }, r.id))
+    fun c(c: MediaCollection) = JumpTarget(null, c.name, c.owner?.name ?: "Collection", later(c.lastAdded, c.id), c)
+    return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, "Hidden") } + s.archived.map { t(it, "Archived") } +
+        (collections?.mine.orEmpty() + collections?.subs.orEmpty()).map(::c)
 }
 
 /**

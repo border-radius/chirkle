@@ -15,7 +15,7 @@ describe("checkBudget", () => {
       mediaJs: 3 * 1024,
       mediaCss: 1024,
       collJs: 6.75 * 1024,
-      collCss: 2 * 1024,
+      collCss: 2.05 * 1024,
       notifyJs: 3 * 1024,
       emojiJs: 13 * 1024,
       emojiCss: 1024,

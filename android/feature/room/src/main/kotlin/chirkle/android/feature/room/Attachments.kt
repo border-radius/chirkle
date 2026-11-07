@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -78,7 +79,8 @@ fun Attachments(m: Message, actions: RowActions) {
     Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (media.isNotEmpty()) {
             val one = media.size == 1
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Wrapping, as the web's: in one row, a narrow phone cut off the last tiles and their "+N" (QA BUG-247).
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 media.take(MAX_TILES).forEachIndexed { i, f ->
                     val more = if (i == MAX_TILES - 1 && media.size > MAX_TILES) media.size - MAX_TILES else 0
                     Box {

@@ -61,7 +61,9 @@ export function createAttachments(opts: {
     const names = m.files ?? [];
     if (!local.length && !names.length) return null;
     // Shown as an image or video only if the server will show it as one too, so nothing changes shape once it is sent.
-    const shown = (f: LocalFile) => !!f.url && isMedia(f.file.name);
+    // A collection's video without a poster too, as a plain tile: as a file it grew into a tile once sent, and the room
+    // didn't follow it down (QA BUG-249).
+    const shown = (f: LocalFile) => (!!f.url || !!f.item) && isMedia(f.file.name);
     const imageCount = local.length ? local.filter(shown).length : names.filter(isMedia).length;
     /** The last tile shown, when more are left out: it says how many. */
     const more = (tile: HTMLElement) => {
@@ -81,9 +83,9 @@ export function createAttachments(opts: {
         }
         if (images.childElementCount === MAX_TILES) continue;
         const i = images.childElementCount;
-        // An item from a collection (§31) shows its thumbnail (or a video's poster), never as a video.
-        const el = f.item ? h("img", { src: f.url, alt: f.file.name, decoding: "async" }) : preview(f.file.name, f.url);
-        el.addEventListener(
+        // An item from a collection (§31) shows its thumbnail (or a video's poster, or nothing yet), never as a video.
+        const el = !f.item ? preview(f.file.name, f.url) : f.url ? h("img", { src: f.url, alt: f.file.name, decoding: "async" }) : null;
+        el?.addEventListener(
           el instanceof HTMLVideoElement ? "loadedmetadata" : "load",
           () => {
             const [w, ht] = el instanceof HTMLVideoElement ? [el.videoWidth, el.videoHeight] : [el.naturalWidth, el.naturalHeight];
@@ -190,7 +192,7 @@ export function createAttachments(opts: {
   }
 
   /** A video's tile shows a play badge over its first frame. */
-  const playBadge = (name: string) => isVideo(name) && h("span", { class: "att-play", "aria-hidden": "true" }, "▶");
+  const playBadge = (name: string) => isVideo(name) && h("span", { class: "att-play", "aria-hidden": "true" });
 
   /**
    * An image's thumbnail or a video's first frame: a click opens the viewer, a click that asks for a new tab or window
