@@ -109,9 +109,9 @@ export async function startPocketBase(opts: StartOptions = {}): Promise<PocketBa
   const args = ["serve", `--http=127.0.0.1:${port}`, `--publicDir=${publicDir}`, "--hooksWatch=false", "--hooksPool=100", ...dirArgs];
   const proc = spawn(bin, args, {
     stdio: opts.verbose ? "inherit" : "pipe",
-    // Never a Telegram bot from the developer's own environment: only what a test passes (the bridge, §26). No link
+    // Never a Telegram or XMPP bot from the developer's own environment: only what a test passes (§26, §38). No link
     // previews either (§28), which would fetch whatever the tests link to, unless a test turns them on.
-    env: { ...withoutTelegram(process.env), LINK_PREVIEWS: "off", MEDIA_CRON: "off", ...opts.env },
+    env: { ...withoutBridges(process.env), LINK_PREVIEWS: "off", MEDIA_CRON: "off", ...opts.env },
   });
 
   let output = "";
@@ -133,8 +133,8 @@ export async function startPocketBase(opts: StartOptions = {}): Promise<PocketBa
   return { url, dataDir, publicDir, stop };
 }
 
-function withoutTelegram(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith("TELEGRAM_")));
+function withoutBridges(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => !/^(TELEGRAM_|XMPP_|CHIRKLE_XMPP_)/.test(k)));
 }
 
 export async function freePort(): Promise<number> {

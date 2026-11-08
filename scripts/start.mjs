@@ -51,6 +51,14 @@ run("sh", [join(ROOT, "scripts/fetch-pocketbase.sh")], {
   stdio: ["inherit", "ignore", "inherit"],
 });
 
+// ---- the XMPP bridge's child (DESIGN.md §38.9), when it is built for this machine ----
+{
+  const os = /** @type {Record<string, string>} */ ({ linux: "linux", darwin: "darwin" })[process.platform];
+  const cpu = /** @type {Record<string, string>} */ ({ x64: "amd64", arm64: "arm64" })[process.arch];
+  const child = join(ROOT, "bin", "xmpp-bridge", `${os}-${cpu}`);
+  if (!process.env.CHIRKLE_XMPP_BIN && os && cpu && existsSync(child)) process.env.CHIRKLE_XMPP_BIN = child;
+}
+
 // ---- run it ----
 /** @param {string[]} argv */
 const exec = (argv) => {

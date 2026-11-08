@@ -93,7 +93,9 @@ chat/
 │   ├── fetch-pocketbase.sh     # downloads the pinned PB release into ./bin
 │   ├── build.mjs               # esbuild production build → pb_public/, size budget (§7.7)
 │   ├── dev.mjs                 # esbuild watch + spawns `pocketbase serve`
+│   ├── build-xmpp.mjs          # builds the XMPP bridge's child into bin/xmpp-bridge/<os>-<arch> (§38.9)
 │   └── pb-types.sh             # PocketBase's generated types for typechecking hooks and migrations
+├── xmpp-bridge/                # the XMPP bridge's child, in Go: holds the XMPP connection for the hooks (§38.3)
 ├── pb_migrations/              # schema + API rules (committed; never edited once applied, only added to)
 │   ├── 1760000000_init.js
 │   ├── 1760000001_qa_fixes.js
@@ -119,11 +121,15 @@ chat/
 │   ├── 1760000033_federation_requests.js # §33.2–3 (site.federation, fed_peers "requested")
 │   ├── 1760000037_file_dims.js         # §17.5 (messages.file_dims, media.sized)
 │   ├── 1760000038_drop_push.js         # push_tokens and push_queue removed (REFACTOR round 4)
-│   └── 1760000039_anonymous_rooms.js   # §35 (rooms.anonymous, messages.anonymous and forwarded_anonymous)
+│   ├── 1760000039_anonymous_rooms.js   # §35 (rooms.anonymous, messages.anonymous and forwarded_anonymous)
+│   └── 1760000044_xmpp.js              # §38 (xmpp_* collections, the /api/xmpp/ rate limit)
 ├── pb_hooks/                   # server-side JS hooks (committed)
 │   ├── main.pb.js              # registrations only; every hook on messages, rooms and users (features' parts in order, §5.6)
 │   ├── telegram.pb.js          # the Telegram bridge's routes, worker and tg_* hooks, only with TELEGRAM_BOT_TOKEN (§26)
 │   ├── telegram/               # the bridge: api, people, links, inbound, outbound, reactions, worker (§26)
+│   ├── xmpp.pb.js              # the XMPP bridge's routes, worker and xmpp_* hooks; on with XMPP_JID and the child (§38)
+│   ├── xmpp/                   # the XMPP bridge: config, child (starts and watches it), links, people, inbound,
+│   │                           # outbound, worker (§38)
 │   ├── federation.pb.js        # linked instances' routes, worker and fed_* hooks; on with site.federation (§33)
 │   ├── federation/             # config, net (signing, curl), people, rooms (the home's side), mirror (a mirror's side),
 │   │                           # messages, peers, inbox, worker (§33)
@@ -132,6 +138,7 @@ chat/
 │       ├── rooms.js            # rooms hooks: names, DM fields, members, archive stamps (§5.2, §16, §23)
 │       ├── access.js           # who can see a room: canSee, SEES_SQL, lost-access events (§23)
 │       ├── records.js          # shared record helpers: field errors, name keys, uploaded file names
+│       ├── bridges.js          # what the Telegram and XMPP bridges share: stand-ins, long messages as parts (§26, §38)
 │       ├── text.js             # pure string cleaning: invisible characters, name keys, file names (§5.2, QA BUG-38)
 │       ├── http.js             # security + cache headers, /assets/ (§5.6, §8.2)
 │       ├── dms.js              # POST /api/chat/dms (§16.2)
@@ -3600,3 +3607,349 @@ and app is not working while migrations is not done. we need to fix this before 
 Tests: `media.test.ts` (served from the old place with poster, thumbnail and ranges, then moved; one missing; the
 migration leaves storage untouched, a message deleted before the move), `media.s3.test.ts` (the same in a bucket).
 
+
+---
+
+## 38. XMPP bridge (planned, 2026-11-08)
+
+A bot account joins group chats (MUCs, XEP-0045) on any XMPP server, and each one can be linked to a room. It works
+like the Telegram bridge (§26): what is written on either side shows on the other, the room's people speak through
+the bot, and the conference's people show up in the room as stand-ins. This server doesn't become an XMPP server.
+There is no server-to-server link and no account for each of the room's people.
+
+PocketBase's JS hooks can't hold a socket, so a small Go program holds the XMPP connection: **the child**,
+`xmpp-bridge/`, which PocketBase starts and stops. BOSH (XMPP over long-polled HTTP, which `$http.send` could do)
+was the other choice. It was dropped because not every server offers it, and holding the stream from a cron worker
+that polls is fragile.
+
+### 38.1 A module apart
+
+The bridge is laid out like §26:
+
+- **Hooks:** `pb_hooks/xmpp.pb.js` (routes, worker, `xmpp_*` hooks) and `pb_hooks/xmpp/` (its code, loaded only
+  when required).
+- **Collections:** `xmpp_*` (`pb_migrations/1760000044_xmpp.js`).
+- **Core hooks:** its parts of the core's message and user hooks are reached from `main.pb.js` through
+  `lib/features.js` (`xmpp()`, called after Telegram's).
+- **The child:** `xmpp-bridge/`, a Go module at the repository root. It isn't under `pb_hooks/` because that folder
+  is for PocketBase's JS.
+
+Messages and users are saved through the same hooks as everyone else's, so limits, access checks, unread counts and
+realtime work unchanged.
+
+- **On:** `XMPP_JID` and `XMPP_PASSWORD` are set and the child's binary is there (§38.9). Otherwise `xmpp.pb.js`
+  registers nothing, and when only the binary is missing it logs one line saying so.
+- **Removed:** delete `xmpp.pb.js`, `xmpp/` and `xmpp-bridge/`. Going down the migration drops `xmpp_*`. Stand-ins
+  and their messages stay.
+- **Core change:** the " (TG)" name check (`telegram/people.js`) moves to `lib/`, so that " (XMPP)" is reserved the
+  same way while this bridge is on.
+
+### 38.2 Settings
+
+All from the environment (`xmpp/config.js`):
+
+| Variable | |
+|---|---|
+| `XMPP_JID` | the bot's account, `bot@example.org`, made on any server by hand |
+| `XMPP_PASSWORD` | its password (SASL SCRAM, over TLS only) |
+| `XMPP_NICK` | its nickname in the conferences, `Chirkle` by default |
+| `XMPP_SERVER` | `host:port` to connect to, when the domain's SRV records don't say (tests point it at a stub) |
+| `CHIRKLE_XMPP_BIN` | the child's binary; `start.mjs` and the Docker image set it (§38.9) |
+
+The test harness never passes the developer's own `XMPP_*` variables to a test server.
+
+### 38.3 The child
+
+`xmpp-bridge/main.go` uses `mellium.im/xmpp`, which handles the connection, STARTTLS or direct TLS, SASL SCRAM and
+MUC. The elements it doesn't have (corrections, replies, reactions, retractions, OOB) are a few structs of our own.
+It does only these things, and keeps no state of its own:
+
+- holds one client stream to the bot's server;
+- joins the conferences it is told to;
+- passes what arrives to PocketBase, and sends what PocketBase hands it;
+- reconnects after a drop (backoff 1 s … 5 min) and joins the same conferences again.
+
+**Talking to PocketBase:** HTTP on localhost both ways, with a secret made at each start. The secret goes with every
+request in `X-Chirkle-Bridge` and is checked in constant time.
+
+- **Starting:** in `onServe`, after `e.next()`, the hooks start the child with `$os.cmd(bin).start()`. They pass the
+  secret, the address to post to (`http://127.0.0.1:<port>/api/xmpp/in`, from `e.server.addr`) and the `XMPP_*`
+  settings in its environment. The child listens on `127.0.0.1:0` and posts `hello` with its port and version. The
+  hooks then tell it which conferences to join (§38.4).
+- **Child → PocketBase:** `POST /api/xmpp/in` carries events one at a time, in order: `hello`, `status`
+  (connected or not, conferences joined or why not), `message`, `correction`, `retraction`, `reaction`,
+  `occupant` (a nickname or avatar changed), `invite` and `kicked`.
+  - An event the hooks fail on is logged and still answered 200, as Telegram's webhook is.
+  - With no answer, or a 5xx, the child sends the same event again after a backoff, holding the later ones.
+  - It holds at most 1000 events, dropping the oldest with a log line. What is lost that way, or while the child
+    was down, comes back as the conference's history when it joins again (§38.5).
+- **PocketBase → child:** the worker posts to the child's port: `join`, `leave`, `send`, `correct`, `retract`,
+  `react`, `moderate` and `upload`.
+  - The child answers once the stanza is written, with the ids it used.
+  - A refusal says whether to retry (`transient`: not connected, timed out) or not (`permanent`: the server's
+    `cancel` or `modify` errors).
+- **Lifetime:** the hooks keep the child's stdin pipe open and never write to it. When PocketBase exits, even by
+  SIGKILL, the pipe closes, and the child exits on EOF, so no child outlives its server. `onTerminate` kills it and
+  waits for it. The `Cmd` lives in the app store: the hooks run in a pool of JS runtimes, but the store is shared.
+- **Heartbeat:** the child posts `status` every 10 s. Each worker run checks it, and when none came for 30 s it kills
+  the child, waits for it and starts it again (backoff 5 s … 5 min). A child that exits on its own is started again
+  the same way.
+
+The hooks and the child are built from the same commit (§38.9), so their protocol can't drift apart. `hello`'s
+version is only a check: on a mismatch the bridge logs it and stays off.
+
+### 38.4 Linking
+
+`xmpp_links` has a row per conference:
+
+- `muc`: the conference's address, `room@conference.example.org`;
+- `title`: its name, asked for when joining;
+- `password`: a hidden field, for conferences that ask for one;
+- `room`, `enabled`, `anonymous` (as in §26.6);
+- `status`: the last join's outcome, shown in the admin UI.
+
+**A superuser links a conference in the admin UI** (*Collections → xmpp_links*). They add the address, pick the
+room and tick `enabled`, and the bot joins. An invitation to the bot (mediated, or XEP-0249 direct) makes the row
+for them, disabled and without a room, as a new Telegram group does.
+
+- A conference open only to its members must make the bot a member first. When a join fails (`forbidden`,
+  `registration-required`, `not-authorized`, `item-not-found`, a nickname taken), the reason goes into `status` and
+  the link stays as it is. The join is tried again when the link is saved, or when the child starts.
+- A nickname taken by someone else is tried again with "2" added to it.
+- Kicked or banned from the conference, the bot disables the link.
+- The room gets service messages as in §26.5: "XMPP conference "Friends" was connected to this room.", "…
+  disconnected …", and "… disconnected from this room: the bot was removed from the conference."
+- An archived room, or a disabled link, passes nothing either way. A room can be linked to several conferences, and
+  to Telegram groups as well. What comes from one goes to the others.
+
+### 38.5 XMPP people in the chat
+
+Each person who writes in a linked conference gets a **stand-in**, as in §26.3. `xmpp_people` maps the person to
+it, by the steadiest identity the conference gives:
+
+1. **`occupant-id` (XEP-0421)**, which the conference sets per person and keeps across nickname changes, even when
+   it hides addresses. Recent Prosody and ejabberd have it.
+2. **The person's own address**, when the conference shows addresses to the bot (a non-anonymous room, or the bot
+   is a moderator).
+3. **The conference and the nickname**, when neither is there. A new nickname then means a new stand-in.
+
+The stand-in looks like a Telegram one:
+
+- named "Ann (XMPP)", or "Ann 2 (XMPP)" when that name is taken, within the 32 characters;
+- renamed when the nickname changes (presence 303);
+- an avatar from the XEP-0153 vCard hash in the person's presence, fetched once a day at most;
+- `no_dms` set;
+- an address at `xmpp.invalid` and a random password, so nobody can log in as one.
+
+### 38.6 XMPP → chat (`xmpp/inbound.js`)
+
+- **A message** in a linked conference becomes a message of its sender's stand-in.
+  - A long one is cut into several messages, as Telegram's are (§26.4, `xmpp_messages.part`).
+  - A message that is just a link, with that link also in its OOB element (XEP-0066), is a file. The file is
+    downloaded through the link previews' checked fetch (§28.1, up to 20 MB) and saved like an upload, and the link
+    comes out of the text. This is how Conversations, Gajim, Dino and others send files (XEP-0363).
+  - An encrypted message (OMEMO, `aesgcm://`) becomes the line "🔒 An encrypted message", since the bot can't read it.
+- **A reply** (XEP-0461) to a message the bridge knows replies to it in the room. Its fallback lines ("> …",
+  XEP-0428) come out of the text. A reply to a message the bridge doesn't know keeps them.
+- **A correction** (XEP-0308) edits the message, if it comes from the same person.
+- **A retraction** (XEP-0424 by its author, or XEP-0425 by a moderator) deletes the message. Unlike Telegram, XMPP
+  sends deletes.
+- **Reactions** (XEP-0444) carry the full set of one person's reactions on a message. They are added and taken back
+  under that person's stand-in, mapped to the picker's emoji by the same function as §26.9 (shared from
+  `lib/`).
+- **The same message twice** comes over once. `xmpp_messages` knows each one by the stanza id the conference gave it
+  (XEP-0359), or, when the conference gives none, by the sender's own id and their nickname.
+- **History:** the join asks for history since the newest message the link has seen
+  (`<history since=…>`), which brings back what was missed while the child was down. The first join asks for none.
+  Messages older than when the link was enabled are left out.
+- **The bot's own messages**, as the conference sends them back, aren't posted again. They are recognized by the
+  `origin-id` the bot set (XEP-0359), and their stanza id is saved for later replies, corrections and reactions.
+- Left out: the subject, joins and leaves, typing notices and anything without a body. Private messages to the bot
+  are answered "I work in conferences only".
+
+### 38.7 Chirkle → XMPP (`xmpp/outbound.js`)
+
+As with Telegram, the messages hooks only **queue** the work (`xmpp_queue`, in the save's transaction), and the
+worker sends it:
+
+- **The message** goes as the bot, in plain text, "Ann: hello". XHTML-IM is deprecated, so there's no bold. A
+  forward says "Ann (forwarded from Bob): …". An anonymous link sends the text alone.
+- **A reply** carries XEP-0461 (to the stanza id) and quotes the start of what it answers in fallback "> " lines,
+  so clients without replies still see it.
+- **Files:**
+  - The child asks the bot's server for an upload slot (XEP-0363) and PUTs the file there, reading it from
+    PocketBase on localhost. A file's URL is its secret (§37), so the worker gives the child that URL.
+  - Each file then goes as its own message, its link both as the body and in OOB, which is the form clients show
+    inline. The text goes first, in a message of its own. `xmpp_messages` maps every one of these stanzas to the
+    room's message, so a reaction or a reply to any of them is to that message, as with a Telegram album (§26.9).
+  - When the server has no uploads, or refuses one as too large, the link given is the file's address at the site's
+    App URL instead (`meta.appURL`).
+- **Edits** are corrections (XEP-0308) of the message holding the text. **Deletes** are retractions (XEP-0424), and
+  clients without retractions are left a fallback line.
+- **Reactions:** XEP-0444 lets the bot keep a set of reactions on a message, not just one as on Telegram. The bot's
+  set is every emoji the room's people reacted with, except XMPP stand-ins (theirs are in their conference already).
+  Telegram stand-ins' reactions count, just as XMPP stand-ins' count for the Telegram bot's pick: `isStandIn` in
+  §26.9 looks only at `tg_people`. A `react` op is queued only when that set changes.
+- **Moderation:** when the bot is a moderator of the conference, a room moderator deleting an XMPP person's message
+  (§36) also has it moderated there (XEP-0425). When it isn't, the message is deleted only in the room.
+- Not sent: service messages, and a message back to the conference it came from.
+
+**With Telegram on the same room**, each bridge treats the other's stand-ins as it treats the room's own people.
+Each skips only what came from its own side, so nothing loops:
+
+- Telegram → room as "Ann (TG)" → XMPP as "Ann (TG): hello".
+- XMPP → room as "Bob (XMPP)" → Telegram as "**Bob (XMPP)** hello".
+- Replies, edits and files cross through the room's message. Each bridge maps that message to its own copies, so a
+  Telegram reply to an XMPP person's message becomes an XMPP reply to the right stanza.
+- Deletes cross when the room learns of them: an XMPP retraction deletes the Telegram copy (within Telegram's 48
+  hours, §26.6). A delete in Telegram never reaches the room (§26.4), so it stays on XMPP too.
+- A Telegram album becomes one room message, and on XMPP its text plus one message per file. An XMPP message over
+  2000 characters becomes several room messages, so several Telegram messages too.
+
+### 38.8 The worker
+
+`xmpp/worker.js` runs on `lib/worker.js`, as Telegram's does: a cron job, one run at a time, items claimed before
+they are sent, woken by the saves that queue them.
+
+- **Supervision:** each pass first checks on the child (§38.3) and has it join what was linked or left since.
+- **Sending:** what is queued goes oldest first.
+  - A transient failure (the child down, the stream not connected, a timeout, `wait` errors) is retried after 2, 4,
+    8 … s, up to 8 tries. It holds that conference's later items back, so they arrive in order.
+  - A permanent one is dropped and logged.
+- `POST /api/xmpp/tick` (superusers only) runs one pass right away.
+
+### 38.9 Building and shipping the child
+
+`xmpp-bridge/` builds to one static binary with no runtime of its own:
+`CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"`. `go.mod` pins the Go version (`toolchain`), and
+`scripts/build-xmpp.mjs` builds into `bin/xmpp-bridge/<os>-<arch>`. There are no downloads and no checksums: the
+child ships the way the web app does.
+
+- **npm package:** `prepack` builds the four targets (linux and darwin, each on amd64 and arm64), and `"files"` adds
+  `bin/xmpp-bridge/`. `bin/pocketbase` is downloaded into the same `bin/`, so `"files"` must name the subfolder, not
+  `bin/`. This adds roughly 10–12 MB gzipped to the package. If that turns out too much, the binaries can move into
+  one optional package per platform, the way esbuild ships its own.
+- **`start.mjs`:**
+  - sets `CHIRKLE_XMPP_BIN` to the binary for `process.platform` and `process.arch`;
+  - in a checkout, first builds the one for this machine when `go` is installed, the way it builds the web app;
+  - without `go`, and with no binary, the bridge is off.
+- **Docker:** a `golang:<version>-alpine` stage builds the binary, next to the `web` stage. The runtime image gets
+  only `/app/xmpp-bridge` and `ENV CHIRKLE_XMPP_BIN=/app/xmpp-bridge`, so it has no Node and no Go. Dokku deploys
+  from master, so the child there always matches the hooks.
+- **CI:** `.github/actions/setup` installs Go (`actions/setup-go`, the version from `go.mod`). `ci.yml` runs
+  `go vet` and `go test` for the child. `release.yml` doesn't change: its npm job's `prepack` builds the binaries.
+- **Development:** Go goes into `~/.local/go`, as Node and the JDK do.
+
+### 38.10 What it can't do
+
+- The room's people speak through the bot: on XMPP each message comes from the bot, with the author's name in the
+  text, as on Telegram. Real XMPP accounts for them would need this server to be an XMPP server, with S2S, which is a
+  non-goal.
+- Encrypted messages can't be read (§38.6), and nothing is sent encrypted.
+- No presence: the room's people don't appear in the conference's member list.
+- Conferences that need the bot to register, solve a captcha or be invited each time aren't handled.
+- History after a long outage is only what the conference keeps for `<history>`, often the last 20 or so messages.
+  MAM (XEP-0313) can go further, if needed later.
+
+### 38.11 Clients
+
+Server only. Stand-ins are ordinary users with `no_dms`, as Telegram's already are, so the web app and the Android
+app need nothing new. A check that the Android app shows " (XMPP)" stand-ins without a **Message** action is
+enough, and if nothing changes there, `docs/ANDROID.md` and `android/PARITY.md` stay as they are.
+
+### 38.12 Tests
+
+- **The child:** `go test` in `xmpp-bridge/`, against an in-process stub XMPP server: login, joining, reconnecting
+  with joining again, each element in and out, the event buffer and its retries, exiting on stdin EOF.
+- **The hooks:** `tests/integration/xmpp.test.ts` starts PocketBase with the bridge on and `CHIRKLE_XMPP_BIN`
+  pointing at a stub child (`tests/support/xmpp.ts`, a Node script that speaks the child's protocol). The stub
+  records what it is asked and plays events on demand. Covered:
+  - links and their service messages; stand-ins chosen by each kind of identity;
+  - messages, long ones, files, replies, corrections, retractions and reactions, both ways;
+  - repeats and echoes; history after a restart;
+  - retries in order, and dropping;
+  - the child restarted after a missed heartbeat;
+  - nothing while disabled or archived.
+- **End to end:** one CI job runs the real child against Prosody (a container) with two clients. It covers a
+  message each way, a file, and the child surviving a Prosody restart.
+
+### 38.13 Milestones
+
+1. The child, its protocol and its supervision; links; stand-ins; text both ways.
+2. Replies, corrections, retractions, repeats, echoes, history.
+3. Files: OOB in, HTTP upload out (falling back to App URL links).
+4. Reactions, moderation, avatars.
+5. Packaging: npm targets, the Docker stage, CI.
+
+### 38.14 Open questions
+
+- **PocketBase served with `--https`:** the child would post to `https://127.0.0.1:443`, and the certificate names
+  the domain, not that address. The child should either connect to 127.0.0.1 with the domain as the TLS name (SNI),
+  or PocketBase should listen on a second, localhost-only port for it. To be checked when built.
+- **Library:** `mellium.im/xmpp` is the first choice. If its MUC support falls short, `github.com/xmppo/go-xmpp`
+  (which matterbridge uses) is the fallback. The protocol of §38.3 doesn't depend on which.
+
+### 38.15 As built: milestone 1 (2026-11-08)
+
+Milestone 1 is built: the child with its protocol and supervision, links, stand-ins, and text both ways. Where it
+differs from the plan above:
+
+- **Starting:** PocketBase's JS hooks have no `onServe`, so the child starts in `onBootstrap` (when the command is
+  `serve`). The address it posts to comes from the `serve` flags (`xmpp/config.js` `inbound`). With a domain (HTTPS),
+  it posts to `https://<domain>/api/xmpp/in` but connects to `127.0.0.1:443` (`CHIRKLE_XMPP_IN_ADDR`), so the
+  certificate matches. That settles the first open question in §38.14. Not tried against a real certificate yet.
+- **Ready before listening:** the child's record (secret, pipe, process) goes into the app store before `start()`,
+  since the child can post before `start()` returns. PocketBase starts it before it listens, so the child sends
+  `hello` again until it is heard, as with any event.
+- **Joining:** one request, `POST /rooms`, says which conferences the child should be in, all of them, instead of
+  separate `join` and `leave`. The worker sends it when the list changes or a new child said hello.
+  - Each conference has a `key` (the link's id and `updated`). Saving the link changes the key, so the list is sent
+    again, and a join that failed is tried again. A conference the child is in stays joined: leaving first would race
+    the join after it.
+  - What the bridge itself writes to a link (`status`, `title`, `last_seen`) is written with SQL, not saved, so
+    `updated` stays and the child isn't told to join again.
+- **History:** a link's `enabled_at` is set when it is enabled. The first join asks for history since then, and
+  later joins since `last_seen`, the newest message seen. Delayed messages from before `enabled_at` are left out.
+- **Echoes:** the bot's own messages carry their chat message's id as their id and `origin-id`. An echo with a known
+  `origin-id` stores the conference's stanza id on the outgoing row. An echo without one (from before, or a nickname
+  changed by a conflict) is left out.
+- **Stand-ins:** occupant ids belong to one conference, so the same person in two conferences of a room has two
+  stand-ins ("Ann (XMPP)", "Ann 2 (XMPP)").
+  - The stand-in name rule, `split`, `orderedIds`, `savePart` and `ensureMember` moved from `telegram/` to
+    `lib/bridges.js`, which both bridges use.
+- **Files out:** for now, files go as links at the App URL (`meta.appURL`), one per line after the text, or as
+  `[name]` without an App URL. HTTP upload comes with milestone 3.
+- **`XMPP_SERVER`** is `host[:port]` (5222 by default), dialed as given with no SRV lookup, then STARTTLS.
+- **Tests** (§38.12): the child's Go tests against an in-process server (`xmpp-bridge/bridge_test.go`).
+  `tests/integration/xmpp.test.ts` runs PocketBase with a Node stand-in for the child, `tests/support/xmpp-child.mjs`,
+  which forwards to a hub in the test (`tests/support/xmpp.ts`). `CHIRKLE_XMPP_STALE_MS` shortens the 30 s wait
+  before a quiet child is restarted, for the tests.
+- **Building:** `npm run build:xmpp` builds the child for this machine into `bin/xmpp-bridge/<os>-<arch>`.
+  `start.mjs` and `dev.mjs` set `CHIRKLE_XMPP_BIN` to it when it exists. Packaging (npm, Docker, CI) is milestone 5.
+
+### 38.16 As built: milestone 2 (2026-11-08)
+
+Milestone 2 adds replies, corrections and retractions, both ways. Repeats, echoes and history were done in milestone 1.
+
+- **Ids:** `xmpp_messages` also keeps `msg_id` (the sender's own id: its `origin-id`, else its `id`) and `nick`.
+  Corrections (XEP-0308) name `msg_id`. Replies (XEP-0461) and retractions (XEP-0424 v1) name the stanza id, falling
+  back to `msg_id` when the conference gave none. The bot's messages have their chat id as `msg_id`.
+- **Replies in:** a reply to a message the bridge knows becomes a chat reply, and the quote over it (its XEP-0428
+  fallback, cut in code points by the child) is dropped. A reply to an unknown message keeps the quote as text.
+- **Replies out:** the body starts with `> ` and up to 100 characters of what the answered message showed there,
+  then a newline, with a fallback range over that quote. `<reply>` names the conference's id for the message, and
+  `to` is the XMPP author's nickname (none when it was the bot's message). Without an id, only the quote goes.
+- **Corrections in:** only the stand-in that wrote the message can correct it. As with Telegram edits (§26.4), a
+  message that came over as several parts gets them anew: a shorter text deletes the parts left over, a longer one
+  adds parts.
+- **Edits out:** a correction, with the whole new text and its reply again, under a new id (`<message id>-<random>`)
+  that names the first message. Only to conferences the bot sent the message to.
+- **Retractions in:** by the author (v1 by stanza id, and the older `apply-to` form by origin id), or a moderator's
+  (XEP-0425, from the conference itself). The message and all its parts are deleted. A retraction of the bot's own
+  message is ignored: one of the room's people's messages stays in the room when a conference's moderators take it
+  out there.
+- **Deletes out:** a retraction carrying both forms (v1 with the stanza id, `apply-to` with the origin id), a
+  fallback, a `store` hint, and XEP-0424's text for old clients as its body. Only for messages the bot sent: an XMPP
+  person's message deleted in the room (by a room moderator, §36) is not retracted on their behalf.
+- **Queue:** `xmpp_queue` has `edit` and `delete` ops, queued by the messages update hook and kept in order per
+  conference with sends. The migration was extended in place (`1760000044`), since it hasn't shipped.

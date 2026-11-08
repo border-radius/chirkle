@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import * as esbuild from "esbuild";
+import { binary as xmppBinary } from "./build-xmpp.mjs";
 import {
   ACCESS,
   BASE_OPTIONS,
@@ -73,7 +74,8 @@ const pb = spawn(
     "--hooksDir=pb_hooks",
     "--hooksPool=100", // as in the Dockerfile: room pages enrich messages in parallel
   ],
-  { stdio: "inherit" },
+  // The XMPP bridge's child, once built (npm run build:xmpp, DESIGN.md §38.9): the bridge is on with XMPP_JID set.
+  { stdio: "inherit", env: { CHIRKLE_XMPP_BIN: xmppBinary(), ...process.env } },
 );
 
 let stopping = false;

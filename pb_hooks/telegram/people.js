@@ -4,12 +4,10 @@
 // password nobody knows) and take no direct messages (`no_dms`, §16.7).
 
 const { call, download } = require(`${__hooks}/telegram/api.js`);
-const { fieldError } = require(`${__hooks}/lib/records.js`);
-const { nameKey, tidy } = require(`${__hooks}/lib/text.js`);
+const { newStandIn, refuseSuffix, saveWithName, standInName } = require(`${__hooks}/lib/bridges.js`);
 
-/** users.name max. */
-const NAME_MAX = 32;
 const SUFFIX = " (TG)";
+const FALLBACK = "Telegram user";
 /** How often a sender's profile picture is checked for a change. */
 const PHOTO_CHECK_MS = 24 * 60 * 60 * 1000;
 
@@ -24,43 +22,6 @@ function senderOf(msg) {
   const u = msg.from || {};
   const name = [u.first_name, u.last_name].filter(Boolean).join(" ");
   return { id: String(u.id), name: name || u.username || "Telegram user", username: u.username || "", isChat: false };
-}
-
-/**
- * "Ann (TG)", or "Ann 2 (TG)" and so on when that is taken (names are unique, §22.1), within users.name's 32.
- * @param {string} name
- * @param {number} n
- */
-function displayName(name, n) {
-  const tail = `${n > 1 ? ` ${n}` : ""}${SUFFIX}`;
-  const base =
-    [...tidy(name)]
-      .slice(0, NAME_MAX - tail.length)
-      .join("")
-      .trim() || "Telegram user";
-  return `${base}${tail}`;
-}
-
-/**
- * Save `user` with the first free display name for `name`.
- * @param {core.App} app
- * @param {core.Record} user
- * @param {string} name
- */
-function saveWithName(app, user, name) {
-  for (let n = 1; n < 1000; n++) {
-    const candidate = displayName(name, n);
-    try {
-      app.findFirstRecordByFilter("users", "name_key = {:key} && id != {:id}", { key: nameKey(candidate), id: user.id });
-      continue; // taken
-    } catch {
-      // free
-    }
-    user.set("name", candidate);
-    app.save(user);
-    return;
-  }
-  throw new Error("no free display name");
 }
 
 /**
@@ -80,7 +41,7 @@ function personOf(app, msg) {
   if (row) {
     const user = app.findRecordById("users", row.getString("user"));
     if (row.getString("name") !== s.name || row.getString("username") !== s.username) {
-      saveWithName(app, user, s.name);
+      saveWithName(app, user, s.name, SUFFIX, FALLBACK);
       row.set("name", s.name);
       row.set("username", s.username);
       app.save(row);
@@ -89,11 +50,8 @@ function personOf(app, msg) {
     return user;
   }
 
-  const user = new Record(app.findCollectionByNameOrId("users"));
-  user.set("email", `tg${s.id.replace(/\D/g, "")}.${$security.randomStringWithAlphabet(6, "abcdefghijklmnopqrstuvwxyz")}@telegram.invalid`);
-  user.setPassword($security.randomString(40));
-  user.set("no_dms", true);
-  saveWithName(app, user, s.name);
+  const email = `tg${s.id.replace(/\D/g, "")}.${$security.randomStringWithAlphabet(6, "abcdefghijklmnopqrstuvwxyz")}@telegram.invalid`;
+  const user = newStandIn(app, email, s.name, SUFFIX, FALLBACK);
   row = new Record(app.findCollectionByNameOrId("tg_people"));
   row.set("tg_user_id", s.id);
   row.set("user", user.id);
@@ -148,19 +106,12 @@ function isStandIn(app, userId) {
 }
 
 /**
- * users create/update request: a name ending in "(TG)", however written ("(tg)", full-width, spaced), is a stand-in's.
- * Anyone else could pass for a Telegram person, here and in the groups (QA BUG-86). Superusers name anyone.
+ * users create/update request: a name ending in "(TG)" is a stand-in's (lib/bridges.js).
  * @param {core.RecordRequestEvent} e
  */
-function refuseStandInName(e) {
-  const rec = e.record;
-  if (!rec || e.hasSuperuserAuth()) return;
-  const name = rec.getString("name");
-  if (!rec.isNew() && name === rec.original().getString("name")) return;
-  // The name as it will be stored (cleanName tidies it after this hook): "Ann (TG)\u0001" is "Ann (TG)" (QA BUG-142).
-  if (nameKey(tidy(name)).replace(/\s+/g, "").endsWith(nameKey(SUFFIX).trim())) {
-    throw fieldError("name", "Names ending in (TG) are for people on Telegram. Choose another one.");
-  }
-}
+const refuseStandInName = (e) => refuseSuffix(e, SUFFIX, "Names ending in (TG) are for people on Telegram. Choose another one.");
+
+/** "Ann (TG)", or "Ann 2 (TG)" when that is taken. @param {string} name @param {number} n */
+const displayName = (name, n) => standInName(name, n, SUFFIX, FALLBACK);
 
 module.exports = { personOf, isStandIn, senderOf, displayName, refuseStandInName };
