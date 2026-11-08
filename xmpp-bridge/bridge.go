@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,6 +86,8 @@ type bridge struct {
 	connErr   string
 	rooms     map[string]*room // by the conference's bare address
 	answered  map[string]time.Time
+	uploads   uploadService // the server's, for sess
+	http      *http.Client  // to upload services
 
 	sync    chan struct{} // joins and leaves to do
 	changed chan struct{} // a status to send
@@ -97,6 +100,7 @@ func newBridge(cfg settings, pb *pocketbase) *bridge {
 		pb:       pb,
 		rooms:    map[string]*room{},
 		answered: map[string]time.Time{},
+		http:     &http.Client{},
 		sync:     make(chan struct{}, 1),
 		changed:  make(chan struct{}, 1),
 		in:       make(chan any, 1000),
@@ -698,6 +702,12 @@ func (b *bridge) groupMessage(r *room, nick string, m *inMessage) {
 	if m.Replace != nil {
 		ev.Replace = m.Replace.ID
 	}
+	for _, o := range m.OOB {
+		if u := strings.TrimSpace(o.URL); u != "" {
+			ev.OOB = append(ev.OOB, u)
+		}
+	}
+	ev.Encrypted = m.encrypted()
 	if m.OriginID != nil {
 		ev.OriginID = m.OriginID.ID
 	}
@@ -778,6 +788,8 @@ type sendOptions struct {
 		StanzaID string `json:"stanza_id"`
 		OriginID string `json:"origin_id"`
 	} `json:"retract"`
+	// A file's link, which is also the body: clients show it inline (XEP-0066).
+	OOB string `json:"oob"`
 }
 
 // sendGroup sends body to a joined conference, with id as both its id and its origin-id (XEP-0359): the conference's
@@ -826,6 +838,9 @@ func (b *bridge) sendGroup(ctx context.Context, muc, id, body string, opt sendOp
 		}
 		msg.Fallbacks = append(msg.Fallbacks, outFallback{For: nsRetract})
 		msg.Store = &outStore{}
+	}
+	if opt.OOB != "" {
+		msg.OOB = &outOOB{URL: opt.OOB}
 	}
 	if err := sess.Encode(ctx, msg); err != nil {
 		return &sendError{msg: err.Error(), transient: true}

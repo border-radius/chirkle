@@ -1,6 +1,7 @@
 /// <reference path="../../types/pocketbase.d.ts" />
-// What the bridges (Telegram §26, XMPP §38) do alike: their people's stand-ins ("Ann (TG)", "Ann (XMPP)"), and long
-// messages from elsewhere saved as several, under the same stand-in.
+// What the bridges (Telegram §26, XMPP §38) do alike: their people's stand-ins ("Ann (TG)", "Ann (XMPP)"), long
+// messages from elsewhere saved as several, under the same stand-in, and the names files from elsewhere are stored
+// under.
 
 const { fieldError } = require(`${__hooks}/lib/records.js`);
 const { isBlank, nameKey, tidy } = require(`${__hooks}/lib/text.js`);
@@ -161,4 +162,24 @@ function ensureMember(app, room, userId) {
   app.save(room);
 }
 
-module.exports = { MAX_TEXT, standInName, saveWithName, newStandIn, refuseSuffix, split, orderedIds, savePart, ensureMember };
+/**
+ * A stored name as PocketBase makes them ("report_k3j2h1g0f9.pdf"): the client tells images and videos by its
+ * extension, so it is the original's, or else that of `path` (where the file was served from).
+ * @param {string} name
+ * @param {string} path
+ */
+function storedName(name, path) {
+  const ext = (/** @type {string} */ s) => (/\.([a-z0-9]{1,8})$/i.exec(s) || ["", ""])[1].toLowerCase();
+  const base =
+    name
+      .replace(/\.[^.]*$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "file";
+  const suffix = $security.randomStringWithAlphabet(10, "abcdefghijklmnopqrstuvwxyz0123456789");
+  const e = ext(name) || ext(path);
+  return `${base}_${suffix}${e ? `.${e}` : ""}`;
+}
+
+module.exports = { MAX_TEXT, storedName, standInName, saveWithName, newStandIn, refuseSuffix, split, orderedIds, savePart, ensureMember };

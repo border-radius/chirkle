@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -48,6 +49,16 @@ type stubPB struct {
 func newStubPB(t *testing.T) *stubPB {
 	s := &stubPB{}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/files/") {
+			// A message's file, as PocketBase serves it: no secret, the URL is one.
+			if strings.HasSuffix(r.URL.Path, "/big.bin") {
+				w.Write(make([]byte, 2000))
+				return
+			}
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte("PNGDATA"))
+			return
+		}
 		if r.Header.Get(secretHeader) != "s3cret" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -107,6 +118,10 @@ type stubXMPP struct {
 	joins    []string    // presences to the conference, as "to|since"
 	received []inMessage // what the bot sent
 	sessions int
+
+	upload    string // the upload service's HTTP base ("": the server has none)
+	uploadMax int
+	slots     []string // the requests, as "filename|size|content-type"
 }
 
 func newStubXMPP(t *testing.T) *stubXMPP {
@@ -157,13 +172,50 @@ func (s *stubXMPP) session(conn net.Conn) {
 		case "iq":
 			// The conference's name, for disco#info.
 			var iq struct {
-				ID    string     `xml:"id,attr"`
-				From  string     `xml:"from,attr"`
-				To    string     `xml:"to,attr"`
-				Type  string     `xml:"type,attr"`
-				Disco *discoInfo `xml:"http://jabber.org/protocol/disco#info query"`
+				ID      string      `xml:"id,attr"`
+				From    string      `xml:"from,attr"`
+				To      string      `xml:"to,attr"`
+				Type    string      `xml:"type,attr"`
+				Disco   *discoInfo  `xml:"http://jabber.org/protocol/disco#info query"`
+				Items   *discoItems `xml:"http://jabber.org/protocol/disco#items query"`
+				Request *struct {
+					Filename string `xml:"filename,attr"`
+					Size     string `xml:"size,attr"`
+					Type     string `xml:"content-type,attr"`
+				} `xml:"urn:xmpp:http:upload:0 request"`
 			}
 			d.Decode(&iq)
+			s.mu.Lock()
+			upload, max := s.upload, s.uploadMax
+			s.mu.Unlock()
+			answer := func(from, inner string) error {
+				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+from+`' to='`+s.client+`'>`+inner+`</iq>`)))
+				return err
+			}
+			const svc = "upload." + domain
+			switch {
+			case iq.Type == "get" && iq.To == domain && iq.Items != nil:
+				items := "<item jid='conf." + domain + "'/>"
+				if upload != "" {
+					items += "<item jid='" + svc + "'/>"
+				}
+				return answer(domain, `<query xmlns='http://jabber.org/protocol/disco#items'>`+items+`</query>`)
+			case iq.Type == "get" && iq.To == svc && iq.Disco != nil:
+				return answer(svc, `<query xmlns='http://jabber.org/protocol/disco#info'><identity category='store' type='file'/>`+
+					`<feature var='urn:xmpp:http:upload:0'/><x xmlns='jabber:x:data' type='result'>`+
+					`<field var='FORM_TYPE' type='hidden'><value>urn:xmpp:http:upload:0</value></field>`+
+					`<field var='max-file-size'><value>`+strconv.Itoa(max)+`</value></field></x></query>`)
+			case iq.Type == "get" && iq.To == svc && iq.Request != nil:
+				s.mu.Lock()
+				s.slots = append(s.slots, iq.Request.Filename+"|"+iq.Request.Size+"|"+iq.Request.Type)
+				s.mu.Unlock()
+				return answer(svc, `<slot xmlns='urn:xmpp:http:upload:0'><put url='`+upload+`/put/`+iq.Request.Filename+`'>`+
+					`<header name='Authorization'>Bearer t0k</header><header name='X-Evil'>no</header></put>`+
+					`<get url='`+upload+`/get/`+iq.Request.Filename+`'/></slot>`)
+			case iq.Type == "get" && iq.Disco != nil && iq.To != muc:
+				// The server itself, the conference service: no uploads.
+				return answer(iq.To, `<query xmlns='http://jabber.org/protocol/disco#info'><identity category='server' type='im'/></query>`)
+			}
 			if iq.Type == "get" && iq.To == muc && iq.Disco != nil {
 				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+muc+`' to='`+s.client+`'>`+
 					`<query xmlns='http://jabber.org/protocol/disco#info'><identity category='conference' type='text' name='Friends'/></query></iq>`)))
@@ -591,4 +643,84 @@ yes!</body><reply xmlns='urn:xmpp:reply:0' to='` + muc + `/Chirkle' id='sid-9'/>
 	if m := srv.waitReceived(t, 3); m.Retract == nil || m.Retract.ID != "sid-7" || m.ApplyTo == nil || m.ApplyTo.ID != "o1" || len(m.Fallbacks) != 1 {
 		t.Fatalf("retraction out: %+v", m)
 	}
+}
+
+func TestFiles(t *testing.T) {
+	allowPlainUploads = true
+	b, pb, srv := start(t)
+	b.setRooms([]wantedRoom{{MUC: muc, Key: "k1"}})
+	join(t, b, pb, srv, 1, "Chirkle")
+
+	// In: a file's link, in the body and in OOB; an encrypted message.
+	from := `from='` + muc + `/Ann' to='` + srv.to() + `'`
+	srv.raw(`<message type='groupchat' ` + from + ` id='f1'><body>https://up.example.org/a/cat.jpg</body>` +
+		`<x xmlns='jabber:x:oob'><url>https://up.example.org/a/cat.jpg</url></x></message>`)
+	srv.raw(`<message type='groupchat' ` + from + ` id='e1'><body>I sent you an OMEMO encrypted message</body>` +
+		`<encrypted xmlns='eu.siacs.conversations.axolotl'><payload>x</payload></encrypted></message>`)
+	f := pb.waitFor(t, "file", func(ev event) bool { return ev.ID == "f1" })
+	if len(f.OOB) != 1 || f.OOB[0] != "https://up.example.org/a/cat.jpg" || f.Encrypted {
+		t.Fatalf("file: %+v", f)
+	}
+	if e := pb.waitFor(t, "encrypted", func(ev event) bool { return ev.ID == "e1" }); !e.Encrypted {
+		t.Fatalf("encrypted: %+v", e)
+	}
+
+	// Out, with no upload service: refused for good, saying so.
+	if _, err := b.upload(context.Background(), "/api/files/messages/m1/cat.png", "cat.png", ""); !isCode(err, codeUnsupported) {
+		t.Fatalf("no service: %v", err)
+	}
+
+	// With one: the slot asked for with the file's size and type, the PUT with only the allowed headers.
+	var mu sync.Mutex
+	var puts []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		puts = append(puts, r.Method+" "+r.URL.Path+" "+string(data)+" "+r.Header.Get("Authorization")+" "+r.Header.Get("X-Evil")+" "+r.Header.Get("Content-Type"))
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(up.Close)
+	srv.mu.Lock()
+	srv.upload, srv.uploadMax = up.URL, 1000
+	srv.mu.Unlock()
+	// The service was looked up for this session already: a new session looks again.
+	b.mu.Lock()
+	b.uploads = uploadService{}
+	b.mu.Unlock()
+	got, err := b.upload(context.Background(), "/api/files/messages/m1/cat.png", "cat.png", "")
+	if err != nil || got != up.URL+"/get/cat.png" {
+		t.Fatalf("upload: %q %v", got, err)
+	}
+	mu.Lock()
+	if len(puts) != 1 || puts[0] != "PUT /put/cat.png PNGDATA Bearer t0k  image/png" {
+		t.Fatalf("puts: %q", puts)
+	}
+	mu.Unlock()
+	srv.mu.Lock()
+	if len(srv.slots) != 1 || srv.slots[0] != "cat.png|7|image/png" {
+		t.Fatalf("slots: %q", srv.slots)
+	}
+	srv.mu.Unlock()
+	// Over the service's limit: refused for good, without asking for a slot.
+	if _, err := b.upload(context.Background(), "/api/files/messages/m1/big.bin", "big.bin", ""); !isCode(err, codeTooLarge) {
+		t.Fatalf("too large: %v", err)
+	}
+	// Only PocketBase's files.
+	if _, err := b.upload(context.Background(), "http://elsewhere/x", "x", ""); err == nil {
+		t.Fatal("read a file not PocketBase's")
+	}
+
+	// The link goes with OOB.
+	if err := b.sendGroup(context.Background(), muc, "m1-f1", got, sendOptions{OOB: got}); err != nil {
+		t.Fatal(err)
+	}
+	if m := srv.waitReceived(t, 1); len(m.OOB) != 1 || m.OOB[0].URL != got || *m.Body != got {
+		t.Fatalf("sent: %+v", m)
+	}
+}
+
+func isCode(err error, code string) bool {
+	ue, ok := err.(*uploadError)
+	return ok && ue.code == code && !ue.transient
 }

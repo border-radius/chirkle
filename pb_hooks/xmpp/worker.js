@@ -85,7 +85,7 @@ function drain(app, renew) {
     const message = row.getString("message");
     try {
       const op = row.getString("op");
-      if (op === "send") send(app, message, muc);
+      if (op === "send") send(app, message, muc, renew);
       else if (op === "edit") edit(app, message, muc);
       else if (op === "delete") remove(app, message, muc);
       app.delete(row);

@@ -6,6 +6,8 @@
 // - TELEGRAM_WEBHOOK_SECRET: what Telegram sends with each webhook call; derived from the token when unset.
 // - TELEGRAM_API_BASE: the Bot API server (tests point it at a stub).
 
+const { storedName } = require(`${__hooks}/lib/bridges.js`);
+
 const env = (/** @type {string} */ name) => $os.getenv(name).trim();
 
 function config() {
@@ -84,26 +86,6 @@ function call(method, params = {}, files, timeout = 30) {
     throw new TelegramError(res.statusCode || 500, `${method}: ${description}`, json?.parameters?.retry_after || 0);
   }
   return json.result;
-}
-
-/**
- * A stored name as PocketBase makes them ("report_k3j2h1g0f9.pdf"): the client tells images and videos by its
- * extension, so it is the original's, or else that of the path Telegram serves the file at.
- * @param {string} name
- * @param {string} path
- */
-function storedName(name, path) {
-  const ext = (/** @type {string} */ s) => (/\.([a-z0-9]{1,8})$/i.exec(s) || ["", ""])[1].toLowerCase();
-  const base =
-    name
-      .replace(/\.[^.]*$/, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 60) || "file";
-  const suffix = $security.randomStringWithAlphabet(10, "abcdefghijklmnopqrstuvwxyz0123456789");
-  const e = ext(name) || ext(path);
-  return `${base}_${suffix}${e ? `.${e}` : ""}`;
 }
 
 /**

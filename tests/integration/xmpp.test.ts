@@ -2,9 +2,10 @@
 // child's part, posting its events with its secret, and answers what PocketBase asks of it. The bridge's worker runs
 // on a cron job and also on POST /api/xmpp/tick; checks wait for its work with `eventually`, since either may do it.
 
+import { createServer, type Server } from "node:http";
 import PocketBase, { type RecordModel } from "pocketbase";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { pngFile } from "../support/files.ts";
+import { PNG, pngFile } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
 import { withName } from "../support/names.ts";
 import { disableRateLimits, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
@@ -14,9 +15,31 @@ import { status } from "./helpers.ts";
 let stub: XmppStub;
 let server: PocketBaseServer;
 let admin: PocketBase;
+/** Files people in conferences link to: an upload service's, at an address allowed for the tests. */
+let files: Server;
+let filesBase = "";
 
 beforeAll(async () => {
   stub = await startXmppStub();
+  files = createServer((req, res) => {
+    if (req.url === "/up/k1/cat%20pic.png") {
+      res.writeHead(200, { "content-type": "image/png" });
+      return res.end(PNG);
+    }
+    if (req.url === "/moved") {
+      res.writeHead(302, { location: "/up/k1/cat%20pic.png" });
+      return res.end();
+    }
+    if (req.url === "/big.bin") {
+      res.writeHead(200, { "content-type": "application/octet-stream" });
+      return res.end(Buffer.alloc(21 * 1024 * 1024));
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise<void>((r) => files.listen(0, "127.0.0.1", r));
+  const host = `127.0.0.1:${(files.address() as { port: number }).port}`;
+  filesBase = `http://${host}`;
   server = await startPocketBase({
     fixtureRoute: true,
     env: {
@@ -24,6 +47,7 @@ beforeAll(async () => {
       XMPP_PASSWORD: "pw",
       CHIRKLE_XMPP_BIN: stub.bin,
       CHIRKLE_XMPP_STALE_MS: "3000",
+      LINK_PREVIEWS_ALLOW_HOSTS: host,
     },
   });
   await disableRateLimits(server.url);
@@ -36,6 +60,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await server?.stop();
   await stub?.close();
+  await new Promise((r) => files?.close(r));
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -231,26 +256,93 @@ describe("XMPP bridge (§38)", () => {
     expect(await messagesOf(room.id)).toHaveLength(1);
   });
 
-  it("an anonymous link sends the text alone; files go as links at the App URL", async () => {
+  it("an anonymous link sends the text alone; files go as uploads, else as links at the App URL", async () => {
     const owner = await signUp();
     const { room, muc, link } = await linkedRoom(owner);
     await admin.collection("xmpp_links").update(link.id, { anonymous: true });
     await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "no name" });
     await eventually(() => expect(sentTo(muc).map((r) => r.body.body)).toEqual(["no name"]));
-
     await admin.collection("xmpp_links").update(link.id, { anonymous: false });
+
+    // Uploaded: the text, then each file as its own message, its link in OOB. The child read it from PocketBase.
+    stub.uploads = "ok";
+    try {
+      const m = await owner.pb.collection("messages").create({
+        room: room.id,
+        author: owner.user.id,
+        text: "look",
+        files: [pngFile("cat.png"), pngFile("dog.png")],
+      });
+      await eventually(() => expect(sentTo(muc)).toHaveLength(4));
+      const sent = sentTo(muc)
+        .slice(1)
+        .map((r) => r.body);
+      expect(sent).toEqual([
+        { muc, id: m.id, body: `${owner.user.name}: look` },
+        { muc, id: `${m.id}-f1`, body: "https://upload.xmpp.example/cat.png", oob: "https://upload.xmpp.example/cat.png" },
+        { muc, id: `${m.id}-f2`, body: "https://upload.xmpp.example/dog.png", oob: "https://upload.xmpp.example/dog.png" },
+      ]);
+      expect(stub.uploaded.get("https://upload.xmpp.example/cat.png")).toEqual(Buffer.from(PNG));
+      // Deleted: each stanza retracted.
+      await owner.pb.collection("messages").update(m.id, { deleted: true });
+      await eventually(() =>
+        expect(
+          sentTo(muc)
+            .filter((r) => r.body.retract)
+            .map((r) => r.body.retract.origin_id)
+            .sort(),
+        ).toEqual([m.id, `${m.id}-f1`, `${m.id}-f2`].sort()),
+      );
+    } finally {
+      stub.uploads = "unsupported";
+    }
+
+    // No uploads: the App URL's link. A file alone says whose it is.
     await admin.settings.update({ meta: { appURL: "https://chat.example/" } });
     try {
-      const m = await owner.pb
-        .collection("messages")
-        .create({ room: room.id, author: owner.user.id, text: "look", files: [pngFile("cat.png")] });
+      const before = sentTo(muc).length;
+      const m = await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, files: [pngFile("cat.png")] });
       const [stored] = m.files as string[];
-      await eventually(() =>
-        expect(sentTo(muc).at(-1)!.body.body).toBe(`${owner.user.name}: look\nhttps://chat.example/api/files/messages/${m.id}/${stored}`),
-      );
+      const url = `https://chat.example/api/files/messages/${m.id}/${stored}`;
+      await eventually(() => expect(sentTo(muc).length).toBe(before + 2));
+      expect(
+        sentTo(muc)
+          .slice(before)
+          .map((r) => r.body),
+      ).toEqual([
+        { muc, id: m.id, body: `${owner.user.name}: [cat.png]` },
+        { muc, id: `${m.id}-f1`, body: url, oob: url },
+      ]);
     } finally {
       await admin.settings.update({ meta: { appURL: "http://localhost:8090" } });
     }
+  });
+
+  it("a file's link from a conference brings the file; one that can't be fetched stays a link; encrypted ones say so", async () => {
+    const owner = await signUp();
+    const { room, muc } = await linkedRoom(owner);
+    const link = (url: string) => xmppMessage(muc, { body: url, oob: [url] });
+    await link(`${filesBase}/up/k1/cat%20pic.png`);
+    await link(`${filesBase}/moved`); // a redirect, followed
+    await link(`${filesBase}/big.bin`); // over 20 MB
+    await link(`${filesBase}/missing`);
+    await link("http://127.0.0.1:1/x.png"); // not a public address
+    await xmppMessage(muc, { body: `see ${filesBase}/up/k1/cat%20pic.png`, oob: [`${filesBase}/up/k1/cat%20pic.png`] }); // text, not just the link
+    await xmppMessage(muc, { body: "I sent you an OMEMO encrypted message", encrypted: true });
+    const list = await messagesOf(room.id);
+    expect(list.map((m) => [m.text, (m.files as string[]).length])).toEqual([
+      ["", 1],
+      ["", 1],
+      [`${filesBase}/big.bin`, 0],
+      [`${filesBase}/missing`, 0],
+      ["http://127.0.0.1:1/x.png", 0],
+      [`see ${filesBase}/up/k1/cat%20pic.png`, 0],
+      ["🔒 An encrypted message", 0],
+    ]);
+    expect(JSON.parse(JSON.stringify(list[0]!.file_names))).toEqual({ [(list[0]!.files as string[])[0]!]: "cat pic.png" });
+    expect((list[0]!.files as string[])[0]).toMatch(/^cat_pic_[a-z0-9]{10}\.png$/);
+    const res = await fetch(`${server.url}/api/files/messages/${list[0]!.id}/${(list[0]!.files as string[])[0]}`);
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(Buffer.from(PNG));
   });
 
   it("a room's two conferences each get what came from the other, never their own", async () => {
@@ -429,7 +521,11 @@ describe("XMPP bridge (§38)", () => {
     const old = stub.children.at(-1)!;
     stub.quiet = true;
     try {
-      const fresh = await stub.waitForChild(before + 1, 30_000);
+      // The worker restarts it: on its cron job, or here, ticked meanwhile.
+      const fresh = await eventually(() => {
+        expect(stub.children.length).toBeGreaterThan(before);
+        return stub.waitForChild(before + 1, 5_000);
+      }, 30_000);
       expect(fresh.secret).not.toBe(old.secret);
     } finally {
       stub.quiet = false;

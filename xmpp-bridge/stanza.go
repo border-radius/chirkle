@@ -147,6 +147,22 @@ type inMessage struct {
 	Retract   *retract   `xml:"urn:xmpp:message-retract:1 retract"`
 	Retracted *struct{}  `xml:"urn:xmpp:message-retract:1 retracted"`
 	ApplyTo   *applyTo   `xml:"urn:xmpp:fasten:0 apply-to"`
+
+	// Files: a link to one (XEP-0066), which is how XEP-0363 uploads are sent.
+	OOB []struct {
+		URL string `xml:"url"`
+	} `xml:"jabber:x:oob x"`
+	// Encrypted: OMEMO (the old namespace and the new), OpenPGP (XEP-0373, XEP-0027). The body is only a notice.
+	OMEMO   *struct{} `xml:"eu.siacs.conversations.axolotl encrypted"`
+	OMEMO2  *struct{} `xml:"urn:xmpp:omemo:2 encrypted"`
+	OpenPGP *struct{} `xml:"urn:xmpp:openpgp:0 openpgp"`
+	PGP     *struct{} `xml:"jabber:x:encrypted x"`
+}
+
+// encrypted: a message the bot can't read. An aesgcm:// link is an OMEMO-encrypted file.
+func (m *inMessage) encrypted() bool {
+	return m.OMEMO != nil || m.OMEMO2 != nil || m.OpenPGP != nil || m.PGP != nil ||
+		m.Body != nil && strings.HasPrefix(strings.TrimSpace(*m.Body), "aesgcm://")
 }
 
 // A reply (XEP-0461): to the message the conference knows by id (its stanza id), written by to (an occupant).
@@ -279,6 +295,12 @@ type outMessage struct {
 	ApplyTo   *outApplyTo   `xml:",omitempty"`
 	Fallbacks []outFallback `xml:",omitempty"`
 	Store     *outStore     `xml:",omitempty"`
+	OOB       *outOOB       `xml:",omitempty"`
+}
+
+type outOOB struct {
+	XMLName xml.Name `xml:"jabber:x:oob x"`
+	URL     string   `xml:"url"`
 }
 
 type outReply struct {
@@ -360,6 +382,7 @@ type discoInfo struct {
 	Node       string          `xml:"node,attr,omitempty"`
 	Identities []discoIdentity `xml:"identity"`
 	Features   []discoFeature  `xml:"feature"`
+	Forms      []dataForm      `xml:"jabber:x:data x"`
 }
 
 // The reply to an IQ: its type and, for an error, its condition.
@@ -368,4 +391,6 @@ type iqReply struct {
 	Type    string       `xml:"type,attr"`
 	Error   *stanzaError `xml:"error"`
 	Disco   *discoInfo   `xml:"http://jabber.org/protocol/disco#info query"`
+	Items   *discoItems  `xml:"http://jabber.org/protocol/disco#items query"`
+	Slot    *slot        `xml:"urn:xmpp:http:upload:0 slot"`
 }

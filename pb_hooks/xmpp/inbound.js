@@ -6,8 +6,12 @@
 const child = require(`${__hooks}/xmpp/child.js`);
 const links = require(`${__hooks}/xmpp/links.js`);
 const { personOf, renamed, standInOf } = require(`${__hooks}/xmpp/people.js`);
+const { download, fileLink } = require(`${__hooks}/xmpp/files.js`);
 const { ensureMember, orderedIds, savePart, split } = require(`${__hooks}/lib/bridges.js`);
 const { isBlank } = require(`${__hooks}/lib/text.js`);
+
+/** What an encrypted message (OMEMO, OpenPGP) shows: the bot can't read it (§38.6). */
+const ENCRYPTED = "🔒 An encrypted message";
 
 /** What it said in the room when the bot was taken out of a conference. */
 const REASONS = /** @type {Record<string, string>} */ ({
@@ -127,11 +131,16 @@ function message(app, ev) {
   const reply = ev.reply_id ? findByXmppId(app, muc, String(ev.reply_id)) : null;
   const known = !!reply && reply.getString("room") === room.id && !reply.getBool("deleted");
   // Without the message it answers here, the quote over it stays: it says what it answers.
-  const body = String((known && ev.reply_body) || ev.body || "");
+  let body = String((known && ev.reply_body) || ev.body || "");
+  if (ev.encrypted) body = ENCRYPTED;
   if (isBlank(body)) return;
 
   const author = personOf(app, { muc, nick: String(ev.nick || ""), occupant_id: ev.occupant_id, jid: ev.jid });
   ensureMember(app, room, author.id);
+  // Just a file's link: the file, attached. One that can't be fetched stays a link.
+  const url = ev.encrypted ? "" : fileLink(ev);
+  const got = url ? download(app, url) : null;
+  if (got) body = "";
   const pieces = split(body);
   const ids = orderedIds(pieces.length);
   const sender = { msgId: String(ev.origin_id || ev.id || ""), nick: String(ev.nick || "") };
@@ -146,6 +155,7 @@ function message(app, ev) {
         rec.set("author", author.id);
         rec.set("text", text);
         if (i === 0 && withReply && reply) rec.set("reply_to", reply.id);
+        if (i === 0 && got) require(`${__hooks}/lib/files.js`).attachUploads(tx, rec, [got.file]);
         tx.save(rec);
         remember(tx, rec.id, muc, id, ev.stanza_id || "", i, sender);
       });
@@ -160,6 +170,8 @@ function message(app, ev) {
   } catch (err) {
     if (mapped(app, muc, id)) return; // the same message, brought over meanwhile (the unique index)
     throw err;
+  } finally {
+    got?.done();
   }
 }
 

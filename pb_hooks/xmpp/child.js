@@ -167,10 +167,11 @@ function update(app, fn) {
 
 /** A request to the child that failed; transient when it may work later. */
 class ChildError extends Error {
-  /** @param {string} message @param {boolean} transient */
-  constructor(message, transient) {
+  /** @param {string} message @param {boolean} transient @param {string} [code] why an upload can't be ("unsupported", "too_large") */
+  constructor(message, transient, code = "") {
     super(message);
     this.transient = transient;
+    this.code = code;
   }
 }
 
@@ -179,8 +180,9 @@ class ChildError extends Error {
  * @param {core.App} app
  * @param {string} path
  * @param {any} body
+ * @param {number} [timeout] seconds
  */
-function call(app, path, body) {
+function call(app, path, body, timeout = 30) {
   const child = current(app);
   if (!child?.port) throw new ChildError("the child isn't running", true);
   let res;
@@ -190,14 +192,14 @@ function call(app, path, body) {
       method: "POST",
       body: JSON.stringify(body),
       headers: { "content-type": "application/json", "x-chirkle-bridge": child.secret },
-      timeout: 30,
+      timeout,
     });
   } catch (err) {
     throw new ChildError(String(err), true);
   }
   if (res.statusCode === 200) return res.json;
   const error = res.json?.error || `HTTP ${res.statusCode}`;
-  throw new ChildError(error, res.statusCode >= 500 || !!res.json?.transient);
+  throw new ChildError(error, res.statusCode >= 500 || !!res.json?.transient, String(res.json?.code || ""));
 }
 
 module.exports = { start, stop, supervise, isOurs, hello, beat, call, current, ChildError };

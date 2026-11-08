@@ -15,7 +15,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -62,6 +64,10 @@ type event struct {
 	Replace   string `json:"replace,omitempty"`
 	Target    string `json:"target,omitempty"`
 	Moderated bool   `json:"moderated,omitempty"`
+
+	// message: the links to files in it (XEP-0066); encrypted, when the bot can't read it.
+	OOB       []string `json:"oob,omitempty"`
+	Encrypted bool     `json:"encrypted,omitempty"`
 }
 
 type roomStatus struct {
@@ -77,6 +83,7 @@ type pocketbase struct {
 	url    string
 	secret string
 	client *http.Client
+	files  *http.Client // no timeout of its own: the caller's context has one
 
 	mu     sync.Mutex
 	queue  []event
@@ -98,7 +105,9 @@ func newPocketBase(url, addr, secret string) *pocketbase {
 	return &pocketbase{
 		url:    url,
 		secret: secret,
-		client: &http.Client{Transport: tr, Timeout: 30 * time.Second},
+		// An event with a file waits for PocketBase to download it (up to a minute).
+		client: &http.Client{Transport: tr, Timeout: 2 * time.Minute},
+		files:  &http.Client{Transport: tr},
 		signal: make(chan struct{}, 1),
 	}
 }
@@ -183,6 +192,23 @@ func (p *pocketbase) post(ctx context.Context, ev event) error {
 		log.Printf("pocketbase: %s event refused: %s", ev.Type, res.Status)
 	}
 	return nil
+}
+
+// file GETs what PocketBase serves at path (a message's file), on the host and port it is posted to.
+func (p *pocketbase) file(ctx context.Context, path string) (*http.Response, error) {
+	base, err := url.Parse(p.url)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := url.Parse(path)
+	if err != nil || ref.IsAbs() || !strings.HasPrefix(ref.Path, "/api/files/") {
+		return nil, fmt.Errorf("not a file of PocketBase's: %q", path)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.ResolveReference(ref).String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return p.files.Do(req)
 }
 
 // postNow sends ev outside the queue, once (statuses).

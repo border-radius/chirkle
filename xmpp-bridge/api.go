@@ -3,9 +3,11 @@ package main
 // What PocketBase asks of the child (DESIGN.md §38.3): HTTP on 127.0.0.1, each request with the secret.
 //
 //	POST /rooms {"rooms": [{"muc", "key", "password", "since"}]}  the conferences to be in, all of them
-//	POST /send  {"muc", "id", "body", "reply", "replace", "retract"}  a message to a conference (sendOptions)
+//	POST /send  {"muc", "id", "body", "reply", "replace", "retract", "oob"}  a message to a conference (sendOptions)
+//	POST /upload {"path", "name", "type"}  → {"url"}  a file PocketBase serves at path, put on the bot's server
 //
 // A refusal is {"error", "transient"}: transient when it may work later (not connected, not in the conference yet).
+// An upload refused for good may say why in "code": "unsupported" (no upload service) or "too_large".
 
 import (
 	"context"
@@ -54,6 +56,31 @@ func (b *bridge) api(secret string) http.Handler {
 		}
 		reply(w, http.StatusOK, map[string]any{"id": body.ID})
 	})
+	mux.HandleFunc("POST /upload", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Path string `json:"path"`
+			Name string `json:"name"`
+			Type string `json:"type"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		if body.Path == "" || body.Name == "" {
+			refuse(w, "path and name are required", false)
+			return
+		}
+		u, err := b.upload(context.WithoutCancel(r.Context()), body.Path, body.Name, body.Type)
+		if err != nil {
+			var ue *uploadError
+			if errors.As(err, &ue) {
+				refuseWith(w, ue.msg, ue.transient, ue.code)
+			} else {
+				refuse(w, err.Error(), true)
+			}
+			return
+		}
+		reply(w, http.StatusOK, map[string]any{"url": u})
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get(secretHeader)), []byte(secret)) != 1 {
 			reply(w, http.StatusUnauthorized, map[string]any{"error": "wrong secret"})
@@ -71,12 +98,18 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-func refuse(w http.ResponseWriter, msg string, transient bool) {
+func refuse(w http.ResponseWriter, msg string, transient bool) { refuseWith(w, msg, transient, "") }
+
+func refuseWith(w http.ResponseWriter, msg string, transient bool, code string) {
 	status := http.StatusBadRequest
 	if transient {
 		status = http.StatusServiceUnavailable
 	}
-	reply(w, status, map[string]any{"error": msg, "transient": transient})
+	body := map[string]any{"error": msg, "transient": transient}
+	if code != "" {
+		body["code"] = code
+	}
+	reply(w, status, body)
 }
 
 func reply(w http.ResponseWriter, status int, v any) {

@@ -3917,8 +3917,8 @@ differs from the plan above:
   stand-ins ("Ann (XMPP)", "Ann 2 (XMPP)").
   - The stand-in name rule, `split`, `orderedIds`, `savePart` and `ensureMember` moved from `telegram/` to
     `lib/bridges.js`, which both bridges use.
-- **Files out:** for now, files go as links at the App URL (`meta.appURL`), one per line after the text, or as
-  `[name]` without an App URL. HTTP upload comes with milestone 3.
+- **Files out:** in milestone 1, files went as links at the App URL after the text. Milestone 3 sends them as
+  messages of their own (§38.17).
 - **`XMPP_SERVER`** is `host[:port]` (5222 by default), dialed as given with no SRV lookup, then STARTTLS.
 - **Tests** (§38.12): the child's Go tests against an in-process server (`xmpp-bridge/bridge_test.go`).
   `tests/integration/xmpp.test.ts` runs PocketBase with a Node stand-in for the child, `tests/support/xmpp-child.mjs`,
@@ -3953,3 +3953,36 @@ Milestone 2 adds replies, corrections and retractions, both ways. Repeats, echoe
   person's message deleted in the room (by a room moderator, §36) is not retracted on their behalf.
 - **Queue:** `xmpp_queue` has `edit` and `delete` ops, queued by the messages update hook and kept in order per
   conference with sends. The migration was extended in place (`1760000044`), since it hasn't shipped.
+
+### 38.17 As built: milestone 3 (2026-11-08)
+
+Milestone 3 adds files both ways.
+
+- **Files in:** a message whose body is just a link that is also in its OOB element (XEP-0066) has the file
+  downloaded and attached, with no text. The link's last path segment, decoded, is its name.
+  - The download (`xmpp/files.js`) checks addresses as link previews do (`lib/outbound.js`): public addresses
+    only, curl connecting to the address checked, up to 3 redirects, each checked. Unlike previews, any port is
+    allowed, since upload services often have their own (Prosody's 5281). Up to 60 s and the attachment limit
+    (`files.file` maxSize, 20 MB).
+  - A file that can't be fetched (too large, not there, not a public address) stays a link in the text. So does a
+    link with other text around it.
+  - The child's posts to PocketBase may now take 2 minutes, since a message event waits for its download.
+- **Encrypted messages** (OMEMO, either namespace; OpenPGP, XEP-0373 and XEP-0027; an `aesgcm://` link) show as
+  "🔒 An encrypted message".
+- **Files out:** the text goes first, "Ann: look"; with no text, it names the files, "Ann: [cat.png]", so it is
+  known whose they are (on an anonymous link, files alone have no text). Then each file goes as a message of its
+  own, with the id `<message id>-f<n>`, its link as the body and in OOB.
+  - The link comes from the child's `POST /upload {path, name}`. The child finds the server's upload service
+    (disco#items, then disco#info for `urn:xmpp:http:upload:0` and its `max-file-size`), once per connection. It
+    GETs the file from PocketBase at `path` on the address it posts to, asks for a slot and PUTs the file there.
+    Only the slot's `Authorization`, `Cookie` and `Expires` headers are sent, and only HTTPS slots are taken.
+  - A refusal for good with `code` `unsupported` (no upload service) or `too_large` falls back to the file's
+    address at the App URL. A failure for now retries the whole send, which skips stanzas already sent: each one
+    gets its `xmpp_messages` row once sent.
+  - The worker's lock is renewed after each file. An upload may take 150 s on PocketBase's side.
+- **Edits** correct the text stanza. **Deletes** retract every stanza sent for the message. A reply goes with the
+  first stanza.
+- **Telegram's `storedName`** moved to `lib/bridges.js`, which both bridges use.
+- **Tests:** the Go tests run a stub upload service (disco, slots, a PUT server). The integration tests have the
+  stub child read the file from PocketBase as the real one does, and serve files to bring in from an address allowed
+  by `LINK_PREVIEWS_ALLOW_HOSTS`.

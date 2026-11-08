@@ -1,6 +1,6 @@
 // The XMPP bridge's tests (DESIGN.md §38.12) run PocketBase with a stub child (xmpp-child.mjs) instead of the Go one:
-// this hub hears from it when PocketBase starts it, answers what PocketBase asks it (/rooms, /send: recorded, and
-// failed on demand), and posts what a child would post (hello, statuses every second, events) with its secret.
+// this hub hears from it when PocketBase starts it, answers what PocketBase asks it (/rooms, /send, /upload: recorded,
+// and failed on demand), and posts what a child would post (hello, statuses every second, events) with its secret.
 
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
@@ -41,6 +41,13 @@ export interface XmppStub {
   readonly titles: Map<string, string>;
   /** While true, the current child posts no statuses: it looks stuck. */
   quiet: boolean;
+  /**
+   * How /upload answers: "ok" reads the file from PocketBase (as the child does) and gives
+   * https://upload.xmpp.example/<name>; otherwise a refusal for good with that code. "unsupported" at first.
+   */
+  uploads: "ok" | "unsupported" | "too_large";
+  /** The files /upload read from PocketBase, by the URL it gave. */
+  readonly uploaded: Map<string, Buffer>;
   /** Post an event to PocketBase as the current child would. Returns the HTTP status. */
   event(ev: Json, secret?: string): Promise<number>;
   /** Wait until PocketBase has started `n` children and the last has said hello. */
@@ -64,6 +71,7 @@ export async function startXmppStub(): Promise<XmppStub> {
   const failures = new Map<string, { status: number; body: Json; times: number }>();
   const titles = new Map<string, string>();
   const helloed = new Set<number>();
+  const uploaded = new Map<string, Buffer>();
   /** The conferences the current child was last told to be in. */
   let rooms: Json[] = [];
 
@@ -107,6 +115,15 @@ export async function startXmppStub(): Promise<XmppStub> {
       return reply({ status: f.status, json: f.body });
     }
     if (body.path === "/rooms") rooms = body.body.rooms;
+    if (body.path === "/upload") {
+      if (stub.uploads !== "ok") return reply({ status: 400, json: { error: "no", transient: false, code: stub.uploads } });
+      const child = children[children.length - 1]!;
+      const file = await fetch(new URL(body.body.path, child.in));
+      if (file.status !== 200) return reply({ status: 400, json: { error: `reading the file: ${file.status}`, transient: false } });
+      const url = `https://upload.xmpp.example/${encodeURIComponent(body.body.name)}`;
+      uploaded.set(url, Buffer.from(await file.arrayBuffer()));
+      return reply({ status: 200, json: { url } });
+    }
     reply({ status: 200, json: body.path === "/send" ? { id: body.body.id } : {} });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -120,6 +137,8 @@ export async function startXmppStub(): Promise<XmppStub> {
     requests,
     titles,
     quiet: false,
+    uploads: "unsupported",
+    uploaded,
     requestsTo: (path) => requests.filter((r) => r.path === path),
     fail: (path, status, body, times = 1) => failures.set(path, { status, body, times }),
     event: (ev, secret) => {
