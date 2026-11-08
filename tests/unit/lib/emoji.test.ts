@@ -20,6 +20,23 @@ describe("emoji (§20.1, §20.4)", () => {
     expect(serverEmoji()).toEqual(CATEGORIES.flatMap((c) => c.emoji));
   });
 
+  it("each of Telegram's reaction emoji is one of the picker's or has the nearest of them (pb_hooks/telegram/reactions.js)", () => {
+    const src = readFileSync("pb_hooks/telegram/reactions.js", "utf8");
+    const telegram = [.../const TELEGRAM = new Set\(([\s\S]*?)\.split/.exec(src)![1]!.matchAll(/"([^"]*)"/g)].flatMap((m) =>
+      m[1]!.split(" ").filter(Boolean),
+    );
+    const similar = new Map(
+      [.../const SIMILAR = new Map\(\[([\s\S]*?)\]\);/.exec(src)![1]!.matchAll(/\["([^"]+)", "([^"]+)"\]/g)].map((m) => [m[1]!, m[2]!]),
+    );
+    const picker = new Set(serverEmoji());
+    expect(telegram.length).toBeGreaterThan(70);
+    for (const to of similar.values()) expect(picker.has(to), to).toBe(true);
+    for (const e of telegram) {
+      const bare = e.replace(/\u200D[♂♀]$/, "");
+      expect([e, bare, `${bare}\uFE0F`].some((x) => picker.has(x)) || similar.has(e), e).toBe(true);
+    }
+  });
+
   it("every emoji is offered once, as a single character on screen", () => {
     const all = CATEGORIES.flatMap((c) => c.emoji);
     expect(all.length).toBe(EMOJI.size);

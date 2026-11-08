@@ -1,8 +1,9 @@
 /// <reference path="../../types/pocketbase.d.ts" />
 // Reactions across the bridge (DESIGN.md §26.9). Telegram tells a bot about reactions only where it is an admin
-// (`message_reaction`): each person's change comes over as their stand-in's reaction on the message. The other way, a
-// bot may set one reaction of its own on a message: it shows the one most of the room's own people (not Telegram's
-// stand-ins, whose reactions are in the group already) reacted with, among those Telegram offers.
+// (`message_reaction`): each person's change comes over as their stand-in's reaction on the message, as the nearest
+// emoji the picker has. The other way, a bot may set one reaction of its own on a message: it shows the one most of
+// the room's own people (not Telegram's stand-ins, whose reactions are in the group already) reacted with, among those
+// Telegram offers.
 
 const { call } = require(`${__hooks}/telegram/api.js`);
 const { isReactionEmoji } = require(`${__hooks}/lib/emoji.js`);
@@ -18,15 +19,67 @@ const TELEGRAM = new Set(
   ).split(" "),
 );
 
+/** Telegram's reaction emoji the picker hasn't got (bare, as in TELEGRAM), and the picker's nearest to each. */
+const SIMILAR = new Map([
+  ["🕊", "🐦"],
+  ["❤‍🔥", "❤️"],
+  ["💋", "😘"],
+  ["🖕", "👎"],
+  ["👨‍💻", "💻"],
+  ["🫡", "🙇"],
+  ["🎅", "🎄"],
+  ["🗿", "😐"],
+  ["👾", "👽"],
+]);
+
+/** What a reaction is when nothing nearer is found: Telegram's own default (a double tap). */
+const FALLBACK = "❤️";
+
 /**
- * The picker's emoji (§20.1) for a Telegram reaction, or "" when it has none: "❤" is "❤️", a shrug of either gender is
- * "🤷". Custom and paid reactions have no emoji.
- * @param {any} r ReactionType
+ * The picker's emoji for `emoji`, or "" when neither it nor a near one is there.
+ * @param {string} emoji
  */
-function fromTelegram(r) {
-  if (r?.type !== "emoji" || typeof r.emoji !== "string") return "";
-  const bare = r.emoji.replace(/\uFE0F/g, "").replace(/\u200D[♂♀]$/, "");
-  return [r.emoji, bare, `${bare}${VS16}`].find((e) => isReactionEmoji(e)) || "";
+function pickerEmoji(emoji) {
+  const bare = emoji.replace(/\uFE0F/g, "").replace(/\u200D[♂♀]$/, "");
+  const found = [emoji, bare, `${bare}${VS16}`].find((e) => isReactionEmoji(e)) || SIMILAR.get(bare) || "";
+  if (found) return found;
+  // Skin tones aside; a sequence (👩‍🚀) as the first of its parts the picker has.
+  const plain = bare.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "");
+  if (plain !== bare) return pickerEmoji(plain);
+  const parts = plain.split("\u200D");
+  return parts.length > 1 ? parts.map(pickerEmoji).find(Boolean) || "" : "";
+}
+
+/**
+ * The picker's emoji (§20.1) for a Telegram reaction, never none: "❤" is "❤️", a shrug of either gender is "🤷",
+ * one the picker hasn't got is the nearest it has ("🕊" is "🐦"), a custom emoji is the emoji it stands for (from
+ * `customs`), a paid reaction is "⭐", and anything else is "❤️".
+ * @param {any} r ReactionType
+ * @param {Map<string, string>} [customs] custom emoji ids to the emoji they stand for
+ */
+function fromTelegram(r, customs) {
+  const emoji =
+    r?.type === "emoji" ? r.emoji : r?.type === "custom_emoji" ? customs?.get(String(r.custom_emoji_id)) : r?.type === "paid" ? "⭐" : "";
+  return (typeof emoji === "string" && emoji && pickerEmoji(emoji)) || FALLBACK;
+}
+
+/**
+ * The emoji custom emoji stand for (getCustomEmojiStickers), by id; those Telegram doesn't say are left out.
+ * @param {any[]} reactions ReactionType
+ */
+function customEmoji(reactions) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  const ids = [...new Set(reactions.filter((r) => r?.type === "custom_emoji" && r.custom_emoji_id).map((r) => String(r.custom_emoji_id)))];
+  if (!ids.length) return out;
+  try {
+    for (const s of call("getCustomEmojiStickers", { custom_emoji_ids: ids.slice(0, 200) }) || []) {
+      if (s?.custom_emoji_id && typeof s.emoji === "string") out.set(String(s.custom_emoji_id), s.emoji);
+    }
+  } catch (err) {
+    console.warn(`telegram: custom emoji: ${err}`);
+  }
+  return out;
 }
 
 /**
@@ -66,7 +119,7 @@ function botReaction(app, rec) {
 
 /**
  * A `message_reaction` update: someone's reactions on a message changed. Their stand-in's reactions on the chat message
- * change the same way (those the picker has; the rest are left out).
+ * change the same way, each as the picker's emoji or the nearest it has (none is left out).
  * @param {core.App} app
  * @param {any} update MessageReactionUpdated
  */
@@ -80,7 +133,9 @@ function reactionOver(app, update) {
   if (!room) return;
   const found = mapped(app, chatId, update.message_id);
   if (!found || found.getString("room") !== room.id || !found.getString("author")) return;
-  const emojiOf = (/** @type {any} */ list) => new Set((Array.isArray(list) ? list : []).map(fromTelegram).filter(Boolean));
+  const listOf = (/** @type {any} */ list) => (Array.isArray(list) ? list : []);
+  const customs = customEmoji([...listOf(update.old_reaction), ...listOf(update.new_reaction)]);
+  const emojiOf = (/** @type {any} */ list) => new Set(listOf(list).map((r) => fromTelegram(r, customs)));
   const was = emojiOf(update.old_reaction);
   const now = emojiOf(update.new_reaction);
   const changes = [

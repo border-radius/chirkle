@@ -31,6 +31,8 @@ export interface TelegramStub {
   addFile(id: string, bytes: Uint8Array, path?: string): void;
   /** Profile pictures of a Telegram user, by file id (getUserProfilePhotos). */
   setPhoto(userId: number, fileId: string): void;
+  /** The emoji a custom emoji stands for (getCustomEmojiStickers). */
+  setCustomEmoji(id: string, emoji: string): void;
   /** Updates for getUpdates. */
   readonly updates: unknown[];
   /** Fail the next `times` calls of `method` with this status and body. */
@@ -66,6 +68,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
   const updates: unknown[] = [];
   const files = new Map<string, { path: string; bytes: Uint8Array }>();
   const photos = new Map<number, string>();
+  const customEmoji = new Map<string, string>();
   const failures = new Map<string, { status: number; body: Record<string, unknown> }[]>();
   let nextId = 1000;
 
@@ -102,6 +105,10 @@ export async function startTelegramStub(): Promise<TelegramStub> {
         const sizes = id ? [{ file_id: id, file_unique_id: `u-${id}`, width: 160, height: 160 }] : [];
         return { total_count: sizes.length ? 1 : 0, photos: sizes.length ? [sizes] : [] };
       }
+      case "getCustomEmojiStickers":
+        return (params.custom_emoji_ids as string[])
+          .filter((id) => customEmoji.has(id))
+          .map((id) => ({ type: "custom_emoji", custom_emoji_id: id, emoji: customEmoji.get(id) }));
       case "getUpdates":
         return updates.splice(0);
       default:
@@ -145,6 +152,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
     callsOf: (method) => calls.filter((c) => c.method === method),
     addFile: (id, bytes, path = `files/${id}.bin`) => void files.set(id, { path, bytes }),
     setPhoto: (userId, fileId) => void photos.set(userId, fileId),
+    setCustomEmoji: (id, emoji) => void customEmoji.set(id, emoji),
     fail: (method, status, body, times = 1) => {
       const list = failures.get(method) ?? [];
       for (let i = 0; i < times; i++) list.push({ status, body });

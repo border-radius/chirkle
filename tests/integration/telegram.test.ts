@@ -761,18 +761,33 @@ describe("Telegram bridge (§26)", () => {
     const reactionsOf = async (id: string) => (await admin.collection("messages").getOne(id)).reactions;
     const standIn = async (name: string) => (await admin.collection("users").getFirstListItem(admin.filter("name = {:n}", { n: name }))).id;
 
-    await reaction(from.message_id, bob, [], [emoji("👍"), { type: "custom_emoji", custom_emoji_id: "1" }]);
+    await reaction(from.message_id, bob, [], [emoji("👍")]);
     const bobId = await eventually(() => standIn("Bob Tg (TG)"));
     expect(await reactionsOf(m!.id)).toEqual([{ emoji: "👍", users: [bobId] }]);
-    // Telegram's "❤" is the picker's "❤️"; a shrug of either gender is "🤷"; what the picker hasn't got is left out.
+    // Telegram's "❤" is the picker's "❤️"; a shrug of either gender is "🤷"; what the picker hasn't got is the nearest
+    // it has ("🕊" is "🐦").
     await reaction(from.message_id, bob, [emoji("👍")], [emoji("❤"), emoji("🤷‍♂"), emoji("🕊")]);
     await reaction(from.message_id, ann, [], [emoji("❤")]);
     const annId = await standIn("Ann Lee (TG)");
     expect(await reactionsOf(m!.id)).toEqual([
       { emoji: "❤️", users: [bobId, annId] },
       { emoji: "🤷", users: [bobId] },
+      { emoji: "🐦", users: [bobId] },
     ]);
-    await reaction(from.message_id, bob, [emoji("❤"), emoji("🤷‍♂")], []);
+    await reaction(from.message_id, bob, [emoji("❤"), emoji("🤷‍♂"), emoji("🕊")], []);
+    expect(await reactionsOf(m!.id)).toEqual([{ emoji: "❤️", users: [annId] }]);
+    // A custom emoji is the emoji it stands for, one Telegram doesn't say is "❤️", a paid reaction is "⭐".
+    stub.setCustomEmoji("77", "🫡");
+    const custom = (id: string) => ({ type: "custom_emoji", custom_emoji_id: id });
+    await reaction(from.message_id, bob, [], [custom("77"), { type: "paid" }]);
+    expect(await reactionsOf(m!.id)).toEqual([
+      { emoji: "❤️", users: [annId] },
+      { emoji: "🙇", users: [bobId] },
+      { emoji: "⭐", users: [bobId] },
+    ]);
+    await reaction(from.message_id, bob, [custom("77"), { type: "paid" }], [custom("78")]);
+    expect(await reactionsOf(m!.id)).toEqual([{ emoji: "❤️", users: [annId, bobId] }]);
+    await reaction(from.message_id, bob, [custom("78")], []);
     expect(await reactionsOf(m!.id)).toEqual([{ emoji: "❤️", users: [annId] }]);
 
     // A chat message sent to the group takes them too, on any of its Telegram messages.

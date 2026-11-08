@@ -2481,9 +2481,13 @@ own on a message.
 
 - **Telegram → chat:** each update says what one person's reactions on a message were and are now. The ones added
   are added to the message under their stand-in (§26.3; made on their first reaction if they never wrote), the ones
-  taken back are taken back, read and saved in one transaction like the reactions route (§20.2). Only the picker's
-  emoji (§20.1) come over: Telegram's "❤" is "❤️" (no variation selectors there), a shrug of either gender is "🤷";
-  others ("🕊", "🫡"), custom emoji and paid stars are left out. A reaction on any of a message's Telegram messages
+  taken back are taken back, read and saved in one transaction like the reactions route (§20.2). Each comes over as
+  one of the picker's emoji (§20.1), none left out: Telegram's "❤" is "❤️" (no variation selectors there), a shrug of
+  either gender is "🤷"; those the picker hasn't got are the nearest it has (`SIMILAR`: "🕊" is "🐦", "🫡" is "🙇",
+  "❤‍🔥" is "❤️"…); an emoji Telegram may add later is itself without its skin tone, or the first part of a sequence
+  the picker has ("👩‍🚀" is "👩"); a custom emoji is the emoji it stands for (`getCustomEmojiStickers`), a paid star
+  is "⭐", and whatever still has no match is "❤️", Telegram's default reaction. Two that come out the same are one
+  reaction. A reaction on any of a message's Telegram messages
   (an album's items, a sent text and its files) is on that message; on a long message that came as several (§26.4), on
   its first part. A reaction by an anonymous admin or a channel is the chat's stand-in's. A channel's reactions are
   anonymous counts (`message_reaction_count`), which name nobody: they are not asked for.
