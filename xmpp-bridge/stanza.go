@@ -11,6 +11,8 @@ import (
 const (
 	nsMUC      = "http://jabber.org/protocol/muc"
 	nsMUCUser  = "http://jabber.org/protocol/muc#user"
+	nsMUCOwner = "http://jabber.org/protocol/muc#owner"
+	nsData     = "jabber:x:data"
 	nsDiscoInf = "http://jabber.org/protocol/disco#info"
 	nsSID      = "urn:xmpp:sid:0"
 	nsOccupant = "urn:xmpp:occupant-id:0"
@@ -35,6 +37,7 @@ const (
 // MUC status codes (XEP-0045 §15.6).
 const (
 	statusSelf       = 110
+	statusCreated    = 201
 	statusNickChange = 303
 	statusBanned     = 301
 	statusKicked     = 307

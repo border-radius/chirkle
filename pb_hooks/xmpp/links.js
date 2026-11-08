@@ -73,9 +73,12 @@ function wanted(app) {
   return rooms;
 }
 
+/** Invitations waiting for a superuser at most: anyone on the XMPP network can invite the bot. */
+const MAX_INVITED = 20;
+
 /**
  * An invitation to the bot: the conference gets a link, disabled and with no room, for a superuser to link. Its
- * password, if the invitation gave one, kept.
+ * password, if the invitation gave one, kept. Not while MAX_INVITED are waiting already: those first.
  * @param {core.App} app
  * @param {string} muc
  * @param {string} password
@@ -83,6 +86,24 @@ function wanted(app) {
 function ensureLink(app, muc, password) {
   const addr = cleanMuc(muc);
   if (!addr || linkOfMuc(app, addr)) return;
+  const waiting = app.countRecords("xmpp_links", $dbx.exp("room = '' AND enabled = FALSE"));
+  if (waiting >= MAX_INVITED) {
+    // Said at most hourly: a flood of them is one line.
+    const said = Number(app.store().get("xmpp.invitesFull") || 0);
+    if (Date.now() - said > 3600_000) {
+      app.store().set("xmpp.invitesFull", Date.now());
+      app
+        .logger()
+        .warn(
+          "xmpp: invitations waiting in xmpp_links: more are ignored until they are linked or deleted",
+          "max",
+          MAX_INVITED,
+          "muc",
+          addr,
+        );
+    }
+    return;
+  }
   const link = new Record(app.findCollectionByNameOrId("xmpp_links"));
   link.set("muc", addr);
   link.set("enabled", false);

@@ -11,7 +11,11 @@ if (require(`${__hooks}/xmpp/config.js`).configured()) {
       e.next();
       e.app
         .logger()
-        .warn("xmpp: the child's binary isn't there: the XMPP bridge is off", "CHIRKLE_XMPP_BIN", $os.getenv("CHIRKLE_XMPP_BIN"));
+        .warn(
+          "xmpp: the child's binary isn't there (build it: npm run build:xmpp, or the Docker image with --build-arg XMPP=on): the XMPP bridge is off",
+          "CHIRKLE_XMPP_BIN",
+          $os.getenv("CHIRKLE_XMPP_BIN"),
+        );
     });
   } else {
     // Only when serving: other commands (migrate, superuser…) bootstrap too.

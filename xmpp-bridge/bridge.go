@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -66,7 +67,23 @@ type room struct {
 	feats map[string]bool // the conference's features (disco#info)
 
 	occupants map[string]occupant
+
+	// What the bot sent lately, for a refusal to find: the conference had forgotten the bot (its service restarted),
+	// and these wait in resend, in order, until it is in again (sent: newest last, sentKeep at most).
+	sent   []sentStanza
+	resend []outMessage
 }
+
+// A stanza the bot sent to a conference, as it was.
+type sentStanza struct {
+	msg outMessage
+	at  time.Time
+}
+
+const (
+	sentKeep = 200
+	sentFor  = 2 * time.Minute
+)
 
 type settings struct {
 	jid      jid.JID
@@ -217,7 +234,7 @@ func (b *bridge) connect(ctx context.Context) (*xmpp.Session, error) {
 	}
 	sess, err := xmpp.NewClientSession(ctx, b.cfg.jid, conn,
 		xmpp.StartTLS(tlsCfg),
-		xmpp.SASL("", b.cfg.password, mechs...),
+		loginRefusedSays(xmpp.SASL("", b.cfg.password, mechs...)),
 		xmpp.BindResource(),
 	)
 	if err != nil {
@@ -225,6 +242,21 @@ func (b *bridge) connect(ctx context.Context) (*xmpp.Session, error) {
 		return nil, err
 	}
 	return sess, nil
+}
+
+// loginRefusedSays has a failed login say what it is: the server's own words alone ("The response provided by the
+// client doesn't match…") don't tell an admin to look at XMPP_JID and XMPP_PASSWORD. Not a connection that broke.
+func loginRefusedSays(f xmpp.StreamFeature) xmpp.StreamFeature {
+	negotiate := f.Negotiate
+	f.Negotiate = func(ctx context.Context, s *xmpp.Session, data interface{}) (xmpp.SessionState, io.ReadWriter, error) {
+		mask, rw, err := negotiate(ctx, s, data)
+		var netErr net.Error
+		if err != nil && ctx.Err() == nil && !errors.As(err, &netErr) && !errors.Is(err, io.EOF) {
+			err = fmt.Errorf("the server refused the bot's login (XMPP_JID, XMPP_PASSWORD): %w", err)
+		}
+		return mask, rw, err
+	}
+	return f
 }
 
 // run holds the connection until ctx is done: connect, join, serve; after a drop, again, after a backoff.
@@ -522,7 +554,7 @@ func (b *bridge) onPresence(ctx context.Context, p *inPresence) {
 			r.state = ""
 			poke(b.sync)
 		} else {
-			r.state, r.err = stateError, p.Error.Error()
+			r.state, r.err = stateError, joinError(p.Error)
 		}
 		poke(b.changed)
 	case self && p.Type == "unavailable":
@@ -556,6 +588,13 @@ func (b *bridge) onPresence(ctx context.Context, p *inPresence) {
 		r.role = u.item().Role
 		if first {
 			poke(b.changed)
+			if len(r.resend) > 0 {
+				go b.resendRefused(ctx, r.muc)
+			}
+			if u.has(statusCreated) {
+				// Nobody was in it: the bot made it, and it stays locked to everyone else until configured.
+				go b.unlock(ctx, r.muc)
+			}
 			go b.fetchTitle(ctx, r.muc)
 		}
 	case p.Type == "unavailable":
@@ -588,6 +627,41 @@ func (b *bridge) onPresence(ctx context.Context, p *inPresence) {
 	b.mu.Unlock()
 	if ev != nil {
 		b.pb.send(*ev)
+	}
+}
+
+// joinError says why the conference didn't let the bot in, for the link's status.
+func joinError(e *stanzaError) string {
+	switch e.condition() {
+	case "not-authorized":
+		return "the conference has a password, and the link's isn't it"
+	case "forbidden":
+		return "the bot is banned from the conference"
+	case "registration-required":
+		return "the conference is members-only, and the bot isn't a member"
+	case "service-unavailable":
+		return "the conference is full"
+	case "item-not-found":
+		return "no such conference (or it is locked, and only its owner may come in)"
+	case "not-allowed":
+		return "no such conference, and the bot may not make it"
+	case "conflict":
+		return "every nickname the bot tried is taken"
+	}
+	return e.Error()
+}
+
+// unlock opens a conference the bot made: the server's default configuration, as an instant room (XEP-0045 §10.1.2).
+func (b *bridge) unlock(ctx context.Context, muc jid.JID) {
+	b.mu.Lock()
+	sess := b.sess
+	b.mu.Unlock()
+	if sess == nil {
+		return
+	}
+	form := xmlstream.Wrap(nil, xml.StartElement{Name: xml.Name{Space: nsData, Local: "x"}, Attr: []xml.Attr{{Name: xml.Name{Local: "type"}, Value: "submit"}}})
+	if _, err := b.iq(ctx, sess, muc, "set", xmlstream.Wrap(form, xml.StartElement{Name: xml.Name{Space: nsMUCOwner, Local: "query"}})); err != nil {
+		log.Printf("xmpp: %s: couldn't open the conference the bot made: %v", muc, err)
 	}
 }
 
@@ -670,9 +744,13 @@ func (b *bridge) onMessage(ctx context.Context, m *inMessage) {
 		if r != nil {
 			log.Printf("xmpp: %s refused a message: %v", bare, m.Error)
 			b.mu.Lock()
-			if r.state == stateJoined && m.Error.condition() == "not-acceptable" {
-				r.state = ""
-				poke(b.sync)
+			if m.Error.condition() == "not-acceptable" {
+				// Sent again once in: the join below, or one going already.
+				r.refused(m.ID)
+				if r.state == stateJoined {
+					r.state = ""
+					poke(b.sync)
+				}
 			}
 			b.mu.Unlock()
 		}
@@ -905,7 +983,55 @@ func (b *bridge) sendGroup(ctx context.Context, muc, id, body string, opt sendOp
 	if err := sess.Encode(ctx, msg); err != nil {
 		return &sendError{msg: err.Error(), transient: true}
 	}
+	b.mu.Lock()
+	r.sent = append(r.sent, sentStanza{msg: msg, at: time.Now()})
+	if len(r.sent) > sentKeep {
+		r.sent = r.sent[len(r.sent)-sentKeep:]
+	}
+	b.mu.Unlock()
 	return nil
+}
+
+// refused takes a stanza the conference refused off the sent list, to send again once the bot is back in. Under b.mu.
+func (r *room) refused(id string) {
+	for i, s := range r.sent {
+		if s.msg.ID == id {
+			if time.Since(s.at) <= sentFor {
+				r.resend = append(r.resend, s.msg)
+			}
+			r.sent = append(r.sent[:i:i], r.sent[i+1:]...)
+			return
+		}
+	}
+}
+
+// resendRefused sends again what the conference refused while it had forgotten the bot, now that it is back in.
+func (b *bridge) resendRefused(ctx context.Context, muc jid.JID) {
+	b.mu.Lock()
+	sess := b.sess
+	r := b.rooms[muc.String()]
+	if r == nil || sess == nil || r.state != stateJoined {
+		b.mu.Unlock()
+		return
+	}
+	pending := r.resend
+	r.resend = nil
+	b.mu.Unlock()
+	for i, msg := range pending {
+		sctx, cancel := context.WithTimeout(ctx, sendTimeout)
+		err := sess.Encode(sctx, msg)
+		cancel()
+		if err != nil {
+			log.Printf("xmpp: %s: sending again: %v", muc, err)
+			b.mu.Lock()
+			r.resend = append(pending[i:], r.resend...)
+			b.mu.Unlock()
+			return
+		}
+		b.mu.Lock()
+		r.sent = append(r.sent, sentStanza{msg: msg, at: time.Now()})
+		b.mu.Unlock()
+	}
 }
 
 // status is everything a status event says.

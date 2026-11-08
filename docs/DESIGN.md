@@ -4031,13 +4031,19 @@ Milestone 5 packages the child; the bridge is complete.
   build. Packing now needs Go and fails without it. The four binaries are 8–8.7 MB each, 3.2–3.6 MB gzipped. The
   0.2.0 tarball went from about 0.9 MB to 14.8 MB (35.8 MB unpacked), a little over the 10–12 MB estimated. The
   per-platform optional packages of §38.9 remain the way out if that matters.
+- **No overhead when unused:** without `XMPP_JID`, `xmpp.pb.js` registers nothing (no child, cron, routes or
+  hooks), `features.xmpp()` is one `getenv`, and neither script looks for Go. The npm tarball still carries the four
+  binaries (14 MB of download). Per-platform optional packages would remove that.
 - **`start.mjs`** builds the child for this machine only in a checkout (`xmpp-bridge/go.mod` is there), with
   `XMPP_JID` set and `go` on the PATH. A server that doesn't use the bridge never waits for Go. `dev.mjs` does the
   same, and warns when `XMPP_JID` is set with neither Go nor a binary built before.
-- **Docker:** an `xmpp` stage on `golang:1.27.3-alpine` (the version in `go.mod`) downloads the modules first, for
+- **Docker:** an `xmpp-on` stage on `golang:1.27.3-alpine` (the version in `go.mod`) downloads the modules first, for
   the layer cache, then builds with the version from `package.json` and runs `--version` as a check. The runtime
-  image gets `/app/xmpp-bridge` and `ENV CHIRKLE_XMPP_BIN=/app/xmpp-bridge`: the bridge stays off until `XMPP_JID`
-  and `XMPP_PASSWORD` are set. Docker isn't available here, so the image itself wasn't built. The stage's commands
+  image gets `/app/xmpp/xmpp-bridge` and `ENV CHIRKLE_XMPP_BIN=/app/xmpp/xmpp-bridge`: the bridge stays off until `XMPP_JID`
+  and `XMPP_PASSWORD` are set. It is opt-in: `ARG XMPP=off` picks `FROM xmpp-${XMPP}`, and `xmpp-off` is an
+  empty `/out` on the runtime's alpine, so a default build never pulls Go or compiles the child under BuildKit (the
+  default builder since Docker 23; the legacy one builds every stage). Without it `CHIRKLE_XMPP_BIN` names a missing
+  file, and the hooks warn only when `XMPP_JID` is set. Docker isn't available here, so the image itself wasn't built. The stage's commands
   (the version `sed`, the build, `--version`) were run as they are.
 - **CI:** the setup action takes `go: "true"` to add `actions/setup-go` (`go-version-file: xmpp-bridge/go.mod`,
   cached by `go.sum`), so the jobs that don't need Go skip it. A new `xmpp` job runs gofmt, `go vet`,
@@ -4047,3 +4053,71 @@ Milestone 5 packages the child; the bridge is complete.
 - **Checked:** the packed tarball, unpacked and started as `npx chirkle` would, runs its own
   `bin/xmpp-bridge/linux-amd64`, which posts to PocketBase and exits with it. A checkout with no binary built builds
   one on `npm start` and runs it.
+
+### 38.20 Against a real XMPP server (2026-11-08)
+
+`tests/integration/xmpp.prosody.test.ts` runs PocketBase with the real child against Prosody 13. People in the
+conference are `xmpp-person` processes (`xmpp-bridge/cmd/xmpp-person`, a test tool that isn't shipped): each logs in as
+its own account, sends each line of its stdin as a stanza, and prints each stanza it gets on a line of its own. The
+suite is skipped unless `XMPP_PROSODY` is set.
+
+**The server it expects**
+- Domain `localhost`, on a certificate from a CA in `XMPP_PROSODY_CA`. The child and curl both read it as
+  `SSL_CERT_FILE`.
+- `conference.localhost` with `muc_mam` and `muc_moderation` (the latter from prosody-modules).
+- `http_file_share` on `upload.localhost:5281`.
+- Accounts `bot`, `ann` and `bob`, each with the password `pw`.
+- Optional: `XMPP_PROSODY_RESTART`, a command that restarts the server, and `XMPP_PROSODY_SHELL`, which runs Prosody
+  shell commands read from stdin. These turn on the restart test and the two tests where the conference forgets the
+  bot; one of those takes up to the 5-minute self-ping interval.
+
+Local setup:
+- Prosody and its Lua modules were extracted from Arch packages into `~/.local/prosody`; config, certificates and
+  scripts are in `~/.cache/xmpp-test`.
+- The `*.localhost` names resolve to `::1`, so Prosody also listens on IPv6 loopback.
+- Run with `NOTIFY_SOCKET` unset inside a systemd container.
+
+**What it covers (35 tests)**
+- Messages both ways, once each, with markup kept as text.
+- Replies (XEP-0461 with fallbacks; emoji counted in code points), corrections, and retractions in both XEP-0424
+  forms.
+- Reactions; files both ways (HTTP upload, then an upload link coming back in as a file); moderation (XEP-0425) as
+  an admin, and by the conference's owner.
+- vCard avatars, OMEMO messages shown as encrypted, anonymous links and anonymous rooms, password-protected
+  conferences.
+- Conference history after the bot was away, a taken nickname, mediated and direct invitations, kicks, bans and a
+  destroyed conference, unlinking.
+- Spoofed corrections, retractions and reactions (by someone else), nickname changes and rejoining, odd nicknames.
+- Long messages (split into parts), chat states, subjects and blank messages (none brought in), private messages.
+- Several files in one message, a file over the server's upload limit (sent as a link), links that aren't files.
+- Two conferences linked to one room; bursts keeping their order both ways.
+- PocketBase restarted, Prosody restarted, the conference forgetting the bot, a wrong bot password.
+
+**Bugs it found, fixed**
+1. **A conference the bot made stayed locked.** When the bot is the first one in, Prosody (as XEP-0045 says) keeps the
+   new room locked until it is configured. The link said "joined as Chirkle", and everyone else was refused. The bot
+   now submits the default configuration (an instant room) when its self-presence has status 201.
+2. **Join failures showed raw conditions** ("error: not-authorized"). They now say what's wrong: "the conference has a
+   password, and the link's isn't it", banned, members-only, full, no such conference, the bot may not create it,
+   every nickname taken.
+3. **Invitations had no limit.** Any account on the XMPP network could fill `xmpp_links` with rows, one per invitation:
+   64 from one account in 8 seconds. At most 20 now wait for a superuser (no room, not enabled), and more are
+   ignored, logged at most hourly.
+4. **A refused login showed only the server's words** ("not connected: The response provided by the client doesn't
+   match the one we calculated."). The child now puts "the server refused the bot's login (XMPP_JID, XMPP_PASSWORD)"
+   in front.
+5. **Messages to a conference that had forgotten the bot were lost.** Prosody refuses them as `not-acceptable`, and the
+   child rejoined, but the message had already counted as sent. The child now keeps what it sent to each conference
+   for 2 minutes (at most 200 stanzas). A refused one is sent again, as it was (same id, so its echo is still known),
+   once the bot is back in.
+
+**Not bugs: these were the tests' own mistakes**
+- Stand-ins are per conference with unique names, so "Ann 5 (XMPP)" is right.
+- A v1 retraction names the stanza-id.
+- Moderators are site-wide (§36), not room owners.
+- A server started without the tests' tick waits for its first cron run.
+- Prosody refuses emoji nicknames.
+- The fixture SQL route's token changes after a restart. `runSql` now logs in again once on a 401.
+
+**Left open:** one run of a 100-message burst stalled at 59. The person tool's write timed out and Prosody received
+no more. The bot had received everything Prosody had. It didn't happen again in 7 runs.

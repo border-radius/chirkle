@@ -114,7 +114,7 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 
 Every test run starts its own PocketBase on a free port with a temp data dir — nothing to clean up, and no fakes
 except a stub Telegram Bot API and a stub XMPP child for the bridges' tests (the child itself has Go tests against an
-in-process XMPP server: `cd xmpp-bridge && go test ./...`). CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
+in-process XMPP server: `cd xmpp-bridge && go test ./...`; with `XMPP_PROSODY` set, the bridge is also tested against a real Prosody, as `docs/DESIGN.md` §38.20 says). CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
 per browser (Chromium, Firefox, WebKit).
 
 ## Project layout
@@ -309,9 +309,10 @@ both ways. People in the conference show in the room under stand-in users ("Ann 
 vCard avatars; the bot posts Chirkle messages as "Name: text". Files go up to the bot's server by HTTP upload
 (XEP-0363), or as links to this site when it has none. Encrypted messages (OMEMO) can't be read: they show as such.
 
-The XMPP connection is a small Go program (`xmpp-bridge/`) that PocketBase starts and stops with itself. The npm
-package and the Docker image ship it built; in a clone, `npm start` and `npm run dev` build it when Go is installed
-(or `npm run build:xmpp`).
+The XMPP connection is a small Go program (`xmpp-bridge/`) that PocketBase starts and stops with itself. An instance
+without `XMPP_JID` neither builds nor runs it. The npm package ships it built; in a clone, `npm start` and
+`npm run dev` build it when `XMPP_JID` is set and Go is installed (or `npm run build:xmpp`). The Docker image has it
+only when built with `--build-arg XMPP=on`.
 
 **Setup**
 
@@ -322,7 +323,9 @@ package and the Docker image ship it built; in a clone, `npm start` and `npm run
    - `XMPP_NICK` — its nickname in conferences (default `Chirkle`)
    - `XMPP_SERVER` — `host[:port]` to connect to, when DNS (SRV records) doesn't say
 
-   With Dokku: `dokku config:set chirkle XMPP_JID='bot@example.org' XMPP_PASSWORD='…'`.
+   With Docker, build the image with `--build-arg XMPP=on`. With Dokku:
+   `dokku docker-options:add chirkle build '--build-arg XMPP=on'`, then
+   `dokku config:set chirkle XMPP_JID='bot@example.org' XMPP_PASSWORD='…'` and deploy again.
 3. Add a row under *Collections → xmpp_links* in the admin UI: the conference's address
    (`room@conference.example.org`), its `password` if it has one, the room, and tick `enabled`. Its `status` then says
    whether the bot is in ("joined as Chirkle") or why not. Inviting the bot to a conference makes a row to fill in.

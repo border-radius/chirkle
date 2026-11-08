@@ -124,6 +124,7 @@ type stubXMPP struct {
 	slots     []string // the requests, as "filename|size|content-type"
 
 	moderations []string // the moderate IQs, as "version|id|reason"
+	configured  int      // the conference configured (muc#owner sets)
 }
 
 func newStubXMPP(t *testing.T) *stubXMPP {
@@ -196,6 +197,7 @@ func (s *stubXMPP) session(conn net.Conn) {
 					} `xml:"urn:xmpp:message-moderate:0 moderate"`
 				} `xml:"urn:xmpp:fasten:0 apply-to"`
 				VCard *struct{} `xml:"vcard-temp vCard"`
+				Owner *struct{} `xml:"http://jabber.org/protocol/muc#owner query"`
 			}
 			d.Decode(&iq)
 			s.mu.Lock()
@@ -245,6 +247,12 @@ func (s *stubXMPP) session(conn net.Conn) {
 				s.mu.Unlock()
 				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+muc+`' to='`+s.client+`'/>`)))
 				return err
+			}
+			if iq.Type == "set" && iq.To == muc && iq.Owner != nil {
+				s.mu.Lock()
+				s.configured++
+				s.mu.Unlock()
+				return answer(muc, "")
 			}
 			if iq.Type == "get" && iq.VCard != nil {
 				photo := ""
@@ -860,5 +868,87 @@ func TestReactionsModerationAvatars(t *testing.T) {
 	}
 	if token, _, err := b.avatar(context.Background(), muc, "Bob"); err != nil || token != "" {
 		t.Fatalf("no photo: %q %v", token, err)
+	}
+}
+
+func TestMadeRefusedAndRefusals(t *testing.T) {
+	b, pb, srv := start(t)
+	b.setRooms([]wantedRoom{{MUC: muc, Key: "k1"}})
+
+	// Refused for a password: the status says so.
+	srv.waitJoin(t, 1)
+	srv.raw(`<presence type='error' from='` + muc + `/Chirkle' to='` + srv.to() + `'><error type='auth'>` +
+		`<not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></presence>`)
+	pb.waitFor(t, "password status", func(ev event) bool {
+		return len(ev.Rooms) == 1 && ev.Rooms[0].State == stateError && strings.Contains(ev.Rooms[0].Error, "has a password")
+	})
+
+	// Asked again: in, as the one who made it (201), so the bot opens it for everyone else.
+	b.setRooms([]wantedRoom{{MUC: muc, Key: "k1"}})
+	srv.waitJoin(t, 2)
+	srv.raw(`<presence from='` + muc + `/Chirkle' to='` + srv.to() + `'><x xmlns='http://jabber.org/protocol/muc#user'>` +
+		`<item affiliation='owner' role='moderator'/><status code='110'/><status code='201'/></x></presence>`)
+	pb.waitFor(t, "joined", func(ev event) bool { return roomState(ev, stateJoined) })
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		srv.mu.Lock()
+		n := srv.configured
+		srv.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("configured %d times", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// A message the conference refuses (it forgot the bot): joined again, then sent again, as it was.
+	if err := b.sendGroup(context.Background(), muc, "m1", "Ann: hi", sendOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	srv.waitReceived(t, 1)
+	srv.raw(`<message type='error' id='m1' from='` + muc + `' to='` + srv.to() + `'><error type='modify'>` +
+		`<not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></message>`)
+	srv.waitJoin(t, 3)
+	srv.raw(`<presence from='` + muc + `/Chirkle' to='` + srv.to() + `'><x xmlns='http://jabber.org/protocol/muc#user'>` +
+		`<item affiliation='owner' role='moderator'/><status code='110'/></x></presence>`)
+	again := srv.waitReceived(t, 2)
+	if again.ID != "m1" || again.Body == nil || *again.Body != "Ann: hi" {
+		t.Fatalf("sent again: %+v", again)
+	}
+}
+
+func TestLoginRefused(t *testing.T) {
+	pb := newStubPB(t)
+	srv := newStubXMPP(t)
+	cfg := settings{
+		jid:        jid.MustParse("bot@" + domain),
+		password:   "wrong",
+		nick:       "Chirkle",
+		tls:        &tls.Config{InsecureSkipVerify: true, ServerName: domain},
+		mechanisms: []sasl.Mechanism{sasl.Plain},
+		dial: func(ctx context.Context) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "tcp", srv.ln.Addr().String())
+		},
+	}
+	p := newPocketBase(pb.URL, "", "s3cret")
+	b := newBridge(cfg, p)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go p.run(ctx)
+	go b.run(ctx)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		b.mu.Lock()
+		why := b.connErr
+		b.mu.Unlock()
+		if strings.Contains(why, "refused the bot's login (XMPP_JID, XMPP_PASSWORD)") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("connection error: %q", why)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
