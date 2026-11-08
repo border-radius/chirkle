@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import PocketBase, { type RecordModel } from "pocketbase";
 import { beforeAll, describe, expect, inject, it } from "vitest";
 import { pngOf } from "../support/images.ts";
-import { migrate, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
+import { migrate, migrateDownPast, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 import { makeMp4 } from "../support/video.ts";
 import { adminClient, client, newRoom, newUser, rawDb, type TestUser } from "./helpers.ts";
 
@@ -344,7 +344,7 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
       await server.stop();
 
       // Down past the media index, and up again: it is filled from the messages.
-      migrate(dataDir, "down", "2");
+      migrateDownPast(dataDir, "1760000041_shared_files.js");
       migrate(dataDir, "up");
       const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
       try {
@@ -402,7 +402,7 @@ describe("migrations 1760000029_media.js and 1760000041_shared_files.js", () => 
       await server.stop();
 
       // Down: each message and item has its own copy in its own folder again, as before shared files.
-      migrate(dataDir, "down", "2");
+      migrateDownPast(dataDir, "1760000041_shared_files.js");
       const storage = join(dataDir, "storage");
       const ids = (() => {
         const db = new DatabaseSync(join(dataDir, "data.db"));

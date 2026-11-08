@@ -1,6 +1,7 @@
 // Spawns a throwaway PocketBase process on a free port with its own temp data dir.
 // Shared by the Vitest integration globalSetup and the Playwright webServer.
 import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -221,4 +222,11 @@ export function migrate(dataDir: string, ...args: string[]): void {
     ],
     { input: "y\n", stdio: "pipe" },
   );
+}
+
+/** Revert `file` (e.g. "1760000041_shared_files.js") and every migration after it, however many have been added since. */
+export function migrateDownPast(dataDir: string, file: string): void {
+  const count = readdirSync(join(root, "pb_migrations")).filter((f) => f.endsWith(".js") && f >= file).length;
+  if (!count) throw new Error(`no migration ${file}`);
+  migrate(dataDir, "down", String(count));
 }

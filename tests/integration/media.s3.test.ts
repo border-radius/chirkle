@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import PocketBase, { type RecordModel } from "pocketbase";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pngOf } from "../support/images.ts";
-import { disableRateLimits, migrate, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
+import { disableRateLimits, migrate, migrateDownPast, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 import { hasS3Server, type S3Server, startS3 } from "../support/s3.ts";
 import { makeMp4 } from "../support/video.ts";
 
@@ -171,7 +171,7 @@ describe.skipIf(!run)("media worker, files in S3 (§30.1)", () => {
       await admin.send("/api/media/tick", { method: "POST" });
       await own.stop();
 
-      migrate(dataDir, "down", "2");
+      migrateDownPast(dataDir, "1760000041_shared_files.js");
       const ids = (() => {
         const db = new DatabaseSync(join(dataDir, "data.db"));
         try {

@@ -2598,7 +2598,8 @@
             "send",
             "edit",
             "delete",
-            "album"
+            "album",
+            "react"
           ]
         },
         {
