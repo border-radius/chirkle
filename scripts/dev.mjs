@@ -1,9 +1,10 @@
 // Dev loop: esbuild watch (unminified, unhashed) → pb_public/, plus `pocketbase serve --dev`.
 // Ctrl-C stops both. Reload the browser manually after changes.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import * as esbuild from "esbuild";
+import { binary as xmppBinary } from "./build-xmpp.mjs";
 import {
   ACCESS,
   BASE_OPTIONS,
@@ -19,6 +20,17 @@ import {
 } from "./lib/build-utils.mjs";
 
 const PORT = process.env.PORT ?? "8090";
+
+// The XMPP bridge's child (DESIGN.md §38.9): built for this machine first when the bridge is set up and Go is there.
+if (process.env.XMPP_JID && !process.env.CHIRKLE_XMPP_BIN) {
+  const go = spawnSync("go", ["version"], { stdio: "ignore" });
+  if (!go.error && go.status === 0) {
+    const r = spawnSync(process.execPath, ["scripts/build-xmpp.mjs"], { stdio: "inherit" });
+    if (r.status !== 0) process.exit(r.status ?? 1);
+  } else if (!xmppBinary()) {
+    console.warn("XMPP_JID is set, but there is no Go to build the bridge's child with: the bridge stays off");
+  }
+}
 
 await mkdir(OUTDIR, { recursive: true });
 
@@ -73,7 +85,8 @@ const pb = spawn(
     "--hooksDir=pb_hooks",
     "--hooksPool=100", // as in the Dockerfile: room pages enrich messages in parallel
   ],
-  { stdio: "inherit" },
+  // The XMPP bridge's child, once built (npm run build:xmpp, DESIGN.md §38.9): the bridge is on with XMPP_JID set.
+  { stdio: "inherit", env: { CHIRKLE_XMPP_BIN: xmppBinary(), ...process.env } },
 );
 
 let stopping = false;

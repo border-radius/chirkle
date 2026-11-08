@@ -69,8 +69,8 @@ routerAdd("GET", "/api/chat/users", (e) => require(`${__hooks}/lib/users.js`).se
 routerAdd("POST", "/api/chat/password", (e) => require(`${__hooks}/lib/account.js`).changePassword(e), $apis.requireAuth("users"));
 
 // The core collections' hooks (messages, rooms, users) are all here, with the optional features' parts (lib/features.js)
-// called in order: the federation's first, then the core's, then the Telegram bridge's; after the save, the other way
-// round.
+// called in order: the federation's first, then the core's, then the Telegram bridge's and the XMPP bridge's; after the
+// save, the other way round.
 
 onRecordCreate((e) => {
   require(`${__hooks}/lib/users.js`).beforeUserSave(e);
@@ -90,11 +90,12 @@ onRecordUpdate((e) => {
   if (fed && e.record) fed.people.userChanged(e.app, e.record, profile);
 }, "users");
 
-// Names ending in a peer's label are its people's (§33), and a Telegram stand-in's are the bridge's (§26).
+// Names ending in a peer's label are its people's (§33), and a stand-in's are its bridge's (§26, §38).
 onRecordUpdateRequest((e) => {
   const features = require(`${__hooks}/lib/features.js`);
   features.federation(e.app)?.people.refuseLabelName(e);
   features.telegram()?.people.refuseStandInName(e);
+  features.xmpp()?.people.refuseStandInName(e);
   e.next();
 }, "users");
 
@@ -108,6 +109,7 @@ onRecordCreateRequest((e) => {
   features.federation(e.app)?.people.refuseLabelName(e);
   require(`${__hooks}/lib/site.js`).checkInvite(e);
   features.telegram()?.people.refuseStandInName(e);
+  features.xmpp()?.people.refuseStandInName(e);
   e.next();
 }, "users");
 
@@ -234,6 +236,7 @@ onRecordCreate((e) => {
   // Saved: what each feature does with a new message is queued, in the save's transaction.
   const features = require(`${__hooks}/lib/features.js`);
   features.telegram()?.outbound.queueCreate(e.app, rec);
+  features.xmpp()?.outbound.queueCreate(e.app, rec);
   require(`${__hooks}/lib/previews.js`).queue(e.app, rec);
   require(`${__hooks}/lib/media.js`).add(e.app, rec);
   features.federation(e.app)?.messages.messageCreated(e.app, rec);
@@ -275,8 +278,11 @@ onRecordUpdate((e) => {
   const files = deleted ? require(`${__hooks}/lib/files.js`).namedBy(e.app, "messages", rec.id) : [];
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
+  const xmpp = features.xmpp();
+  const xmppChange = xmpp ? xmpp.outbound.changeOf(e.app, rec) : null;
   e.next();
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
+  if (xmpp && xmppChange) xmpp.outbound.queueUpdate(e.app, rec, xmppChange);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);
   if (deleted) require(`${__hooks}/lib/files.js`).unlink(e.app, files);

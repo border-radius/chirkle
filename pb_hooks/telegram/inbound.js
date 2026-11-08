@@ -7,13 +7,12 @@ const { call, config, download } = require(`${__hooks}/telegram/api.js`);
 const { personOf } = require(`${__hooks}/telegram/people.js`);
 const { activeLink, ensureLink, linkedRoom, linkOfChat, moveLink, tellLinkChange } = require(`${__hooks}/telegram/links.js`);
 const { richText } = require(`${__hooks}/telegram/rich.js`);
-const { isBlank } = require(`${__hooks}/lib/text.js`);
+const { ensureMember, orderedIds, savePart, split } = require(`${__hooks}/lib/bridges.js`);
 
 /** The largest file the Bot API lets a bot download, and the largest attachment (§17.1). */
 const MAX_FILE = 20 * 1024 * 1024;
-/** messages.files maxSelect and messages.text max. */
+/** messages.files maxSelect. */
 const MAX_FILES = 10;
-const MAX_TEXT = 2000;
 /** An album is complete when nothing more of it came for this long. */
 const ALBUM_QUIET_MS = 1500;
 
@@ -122,46 +121,6 @@ function partsOf(msg) {
 }
 
 /**
- * Text in pieces that each fit messages.text (in code points, as PocketBase counts): a Telegram message holds twice as
- * much as a chat message, and comes over as several rather than cut. Each piece ends at a line break, else a space, in
- * its second half; a text with neither there is cut at the limit. Always one piece at least, blank for no text.
- * @param {string} text
- * @returns {string[]}
- */
-function split(text) {
-  /** @type {string[]} */
-  const pieces = [];
-  let chars = [...text];
-  while (chars.length > MAX_TEXT) {
-    // The character just past the limit may be where it breaks: the break itself is left out.
-    const room = chars.slice(0, MAX_TEXT + 1);
-    let at = room.lastIndexOf("\n");
-    if (at < MAX_TEXT / 2) for (at = MAX_TEXT; at >= MAX_TEXT / 2 && !/\s/.test(room[at]); at--);
-    const cut = at >= MAX_TEXT / 2;
-    pieces.push(
-      chars
-        .slice(0, cut ? at : MAX_TEXT)
-        .join("")
-        .trim(),
-    );
-    chars = chars.slice(cut ? at + 1 : MAX_TEXT);
-  }
-  pieces.push(chars.join("").trim());
-  const kept = pieces.filter((p) => !isBlank(p));
-  return kept.length ? kept : [""];
-}
-
-/**
- * Ids for messages saved at once, in the order they were written: the room shows messages by created, then id, and
- * those saved within the same millisecond would otherwise show in any order.
- * @param {number} n
- */
-function orderedIds(n) {
-  const ids = Array.from({ length: n }, () => $security.randomStringWithAlphabet(15, "abcdefghijklmnopqrstuvwxyz0123456789"));
-  return ids.sort();
-}
-
-/**
  * What a Telegram message came over as: its tg_messages rows (either way), first part first.
  * @param {core.App} app
  * @param {string} chatId
@@ -209,43 +168,6 @@ function rememberIn(tx, messageId, chatId, tgId, kind, part) {
   row.set("kind", kind);
   row.set("part", part);
   tx.save(row);
-}
-
-/**
- * A further part of a long Telegram message: its text, under the same stand-in, after the first.
- * @param {core.App} tx
- * @param {string} roomId
- * @param {string} authorId
- * @param {string} text
- * @param {string} [id]
- */
-function savePart(tx, roomId, authorId, text, id) {
-  const rec = new Record(tx.findCollectionByNameOrId("messages"));
-  if (id) rec.id = id;
-  rec.set("room", roomId);
-  rec.set("author", authorId);
-  rec.set("text", text);
-  tx.save(rec);
-  return rec;
-}
-
-/**
- * Stand-ins write in a private room as members, and in a room where only some people post as writers (the messages
- * hook checks both, §23, §23.6): the Telegram group decides who speaks.
- * @param {core.App} app
- * @param {core.Record} room
- * @param {string} userId
- */
-function ensureMember(app, room, userId) {
-  if (room.getString("created_by") === userId) return;
-  const members = room.getStringSlice("members");
-  const writers = room.getStringSlice("writers");
-  const member = room.getString("visibility") !== "private" || members.includes(userId);
-  const writer = room.getString("posting") !== "selected" || writers.includes(userId);
-  if (member && writer) return;
-  if (!member) room.set("members", [...members, userId]);
-  if (!writer) room.set("writers", [...writers, userId]);
-  app.save(room);
 }
 
 /**

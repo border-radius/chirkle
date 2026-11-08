@@ -1,8 +1,18 @@
 name: Setup
-description: Node 22 with npm 11, the locked dependencies, and the pinned PocketBase binary (cached).
+description: Node 22 with npm 11, the locked dependencies, the pinned PocketBase binary (cached), and Go when asked.
+inputs:
+  go:
+    description: Also install Go, the version xmpp-bridge/go.mod names (the XMPP bridge's child, DESIGN.md §38.9)
+    default: "false"
 runs:
   using: composite
   steps:
+    - if: inputs.go == 'true'
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: xmpp-bridge/go.mod
+        cache-dependency-path: xmpp-bridge/go.sum
+
     - uses: actions/setup-node@v4
       with:
         node-version: 22

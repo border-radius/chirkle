@@ -12,7 +12,7 @@ export interface SqlStatement {
 const superuserTokens = new Map<string, Promise<string>>();
 
 /** Run fixture SQL on the test server at `url` (started with `fixtureRoute`), all statements in one transaction. */
-export async function runSql(url: string, statements: SqlStatement[]): Promise<void> {
+export async function runSql(url: string, statements: SqlStatement[], retried = false): Promise<void> {
   let token = superuserTokens.get(url);
   if (!token) {
     token = fetch(`${url}/api/collections/_superusers/auth-with-password`, {
@@ -31,5 +31,10 @@ export async function runSql(url: string, statements: SqlStatement[]): Promise<v
     headers: { "content-type": "application/json", authorization: await token },
     body: JSON.stringify({ statements }),
   });
+  // A server started again on the same address (and data) has a new superuser token: logged in again.
+  if (res.status === 401 && !retried) {
+    superuserTokens.delete(url);
+    return runSql(url, statements, true);
+  }
   if (!res.ok) throw new Error(`POST /api/test/sql → ${res.status} ${await res.text()}`);
 }
