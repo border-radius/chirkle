@@ -306,7 +306,7 @@ a.button.primary,
 .guest-link.primary {
   border-color: transparent;
   background: var(--fill);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 /* The pane next to the sidebar. A page taller than it (the profile, a collection) scrolls in it, not with the sidebar

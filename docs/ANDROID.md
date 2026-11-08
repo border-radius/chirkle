@@ -1013,7 +1013,8 @@ changelog named after its `versionCode`.
 ### 28.4 Releasing
 
 Bump `versionCode` and `versionName` in `app/build.gradle.kts` (F-Droid reads them there), add the changelog, and tag
-the commit `android-v<versionName>`. F-Droid's update checker finds new tags (`UpdateCheckMode: Tags ^android-v`)
+the commit `android-v<versionName>`. Since 2026-11-08 a release of both the app and the npm package does this for
+you (§28.7). F-Droid's update checker finds new tags (`UpdateCheckMode: Tags ^android-v`)
 and builds them on its own; the push also puts the signed APK on a GitHub Release (§28.6).
 
 ### 28.5 Submitting
@@ -1021,7 +1022,8 @@ and builds them on its own; the push also puts the signed APK on a GitHub Releas
 `android/fdroid/com.chirkle.android.yml` is the recipe. To submit: fork
 gitlab.com/fdroid/fdroiddata, copy the recipe to `metadata/` (the repository is github.com/border-radius/chirkle),
 check it with `fdroid lint` and `fdroid build -v -l com.chirkle.android` (or the merge request's CI), and open the merge
-request. The first tag must exist before that. Risk: AGP 9.4, Gradle 9.8 and compileSdk 37 are recent; if F-Droid's
+request. The first tag must exist before that. The recipe lists only the latest build (fdroiddata asks new apps for
+one); after that, the update checker adds one build per new tag. Risk: AGP 9.4, Gradle 9.8 and compileSdk 37 are recent; if F-Droid's
 build server lacks them, the recipe needs extra steps.
 
 Verified: the unsigned and the debug-signed release APKs build; the signed one's signing block holds only the v2
@@ -1043,6 +1045,36 @@ It needs the secrets of the GitHub environment `release` (the job names it): `CH
 `CHIRKLE_KEY_ALIAS` and, if it differs from the store's, `CHIRKLE_KEY_PASSWORD`. Without the keystore it fails
 rather than sign with the debug key, and it checks the APK's certificate isn't the debug one. Losing the key means
 the next APK can't update installed ones: keep a backup outside GitHub. Tests aren't repeated: CI runs on tag pushes.
+
+### 28.7 One release for the app and the npm package (2026-11-08)
+
+The app and the npm package `chirkle` share one version from 0.2.0 on (before, the app was at 0.1.6 and the package
+at 0.1.0), released together:
+
+1. `npm run release -- <version>` (`scripts/release.mjs`) sets `package.json`'s version and `versionName`, adds one
+   to `versionCode`, updates the draft recipe (§28.5) and creates `changelogs/<versionCode>.txt` with "Fixes." to
+   rewrite. It refuses a version not newer than either.
+2. Commit and push; CI runs on the push.
+3. On GitHub, Releases → Draft a new release, a new tag `v<version>` on master, the notes, Publish.
+
+`.github/workflows/release.yml` then:
+
+- **checks** that the tag, `package.json` and `versionName` agree and the changelog exists, and stops otherwise;
+- **attaches the APK** by calling `android-release.yml` with the tag (§28.6; that workflow skips `v` Releases on its
+  own);
+- **tags `android-v<version>`** on the same commit, for F-Droid's update checker. A tag made with the workflow's token
+  starts no workflow, so the APK isn't built twice;
+- **stages the npm package** with `npm stage publish` through npm's trusted publishing (OIDC, no token stored). It
+  isn't installable until a maintainer approves it with 2FA, on npmjs.com or with `npm stage approve <id>`
+  (`npm stage list chirkle` shows the id). A version already on npm is skipped, so the workflow can run again.
+
+Actions → Release → Run workflow with an existing `v` tag runs it again (say the APK failed).
+
+Setup, once: on npmjs.com, the package's Settings → Trusted publishing → GitHub Actions, with owner `border-radius`,
+repository `chirkle`, workflow `release.yml`, environment `release`, and the stage-publish action allowed (npm
+requires choosing the allowed actions for configurations made after 2026-05-20). The npm job runs in the
+`release` environment like the APK job; if that environment has protection rules (reviewers, branches), they apply
+to both.
 
 ## 29. Attachment shapes before they load (2026-10-28)
 
@@ -1192,7 +1224,7 @@ Tests: `UiFeaturesTest` (quotes and the reply bar follow an edit and a delete), 
 
 The "Chirkle Sidebar Redesign" design (DESIGN.md §7.1, §7.8; boards in `docs/design-frames/`) restyled the web and the app together. In the app:
 
-- **Theme** (`core/ui/Theme.kt`): the web's new tokens. Dark: background `#1a1724`, the room list on `#15121e`
+- **Theme** (`core/ui/Theme.kt`): the web's new tokens (dark replaced on 2026-11-07, §55). Dark: background `#1a1724`, the room list on `#15121e`
   (`surfaceVariant`), raised `#221e2f` (`surfaceContainer`), accent text `#b9a6ff` (`primary`), the violet fill
   `#6d4aff` (`primaryContainer`, `ChirkleColors.fill`: unread badges, the send button), pink `#f9a8d4` for the NEW line
   (`ChirkleColors.new`), and a quieter `ChirkleColors.dim` for times, "#" and section headings. Light keeps its palette.
@@ -1502,3 +1534,12 @@ From docs/QA.md "QA pass 33":
 
 Tests: `UiPortsTest` "the media grid drops a message deleted while it is open", `JumpTest` "collections are found
 too".
+
+## 55. Dark theme from chirkle.com (2026-11-07)
+
+The dark theme took the colours of chirkle.com's dark hero demo, on the web (DESIGN.md §7.8) and here
+(`core/ui/Theme.kt`): graphite in place of grape. Background `#1a1b1e`, the room list on `#111214` (`surfaceVariant`),
+raised `#232428` (`surfaceContainer`), text `#ecece8`, `muted` `#b0b4ba`, `dim` `#9ea2a9`, outlines `#3a3d42` /
+`#2a2c30`, and one lavender `#a58bff` for both the accent text (`primary`) and the fill (`primaryContainer`,
+`ChirkleColors.fill`). The fill is light now, so what is on it is ink `#16181a`: the new `ChirkleColors.onFill`
+(white in light) for unread badges, a collection's new count and the send icon. Light is unchanged.

@@ -1,6 +1,7 @@
 // Light and dark themes in the web app's colours (DESIGN.md §7.8: web/styles/app/tokens.css), following the system.
 // Dynamic colour is off: the app looks the same on every phone, and like the web app. Since the 2026-10-31 redesign: the
-// dark grape surfaces, accent text on a violet fill (primaryContainer and [ChirkleColors.fill]), Inter.
+// accent on a fill (primaryContainer and [ChirkleColors.fill]), Inter. Since 2026-11-07 dark is chirkle.com's: graphite
+// surfaces and a lavender fill with ink on it.
 package chirkle.android.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -35,15 +36,17 @@ data class ChirkleColors(
     val highlight: Color,
     val tint: Color,
     val own: Color,
-    /** The solid accent: unread badges, the send button, a picked tile (white on it). */
+    /** The solid accent: unread badges, the send button, a picked tile ([onFill] on it). */
     val fill: Color,
+    /** Text and icons on [fill]: white in light, ink in dark (the lavender fill is light). */
+    val onFill: Color,
     /** The NEW line above the first unread message. */
     val new: Color,
 )
 
 val LocalChirkleColors = staticCompositionLocalOf {
     ChirkleColors(
-        Color.Gray, Color.Gray, Color.LightGray, Color.LightGray, Color.Yellow, Color.Transparent, Color.LightGray, Color.Blue, Color.Magenta,
+        Color.Gray, Color.Gray, Color.LightGray, Color.LightGray, Color.Yellow, Color.Transparent, Color.LightGray, Color.Blue, Color.White, Color.Magenta,
     )
 }
 
@@ -76,32 +79,33 @@ private val Light: ColorScheme = lightColorScheme(
     onSecondaryContainer = Color(0xFF1D1530),
 )
 
-private val DarkFill = Color(0xFF6D4AFF)
+private val DarkFill = Color(0xFFA58BFF)
+private val DarkInk = Color(0xFF16181A)
 
 private val Dark: ColorScheme = darkColorScheme(
-    primary = Color(0xFFB9A6FF),
-    onPrimary = Color(0xFF1A1724),
+    primary = DarkFill,
+    onPrimary = DarkInk,
     secondary = Color(0xFFF9A8D4),
-    onSecondary = Color(0xFF1A1724),
-    background = Color(0xFF1A1724),
-    onBackground = Color(0xFFECEAF4),
-    surface = Color(0xFF1A1724),
-    onSurface = Color(0xFFECEAF4),
-    surfaceVariant = Color(0xFF15121E),
-    onSurfaceVariant = Color(0xFFA6A1B8),
-    surfaceContainerLowest = Color(0xFF15121E),
-    surfaceContainerLow = Color(0xFF1D1929),
-    surfaceContainer = Color(0xFF221E2F),
-    surfaceContainerHigh = Color(0xFF2A2540),
-    surfaceContainerHighest = Color(0xFF2F2A45),
-    outline = Color(0xFF3F3956),
-    outlineVariant = Color(0xFF2A2638),
+    onSecondary = DarkInk,
+    background = Color(0xFF1A1B1E),
+    onBackground = Color(0xFFECECE8),
+    surface = Color(0xFF1A1B1E),
+    onSurface = Color(0xFFECECE8),
+    surfaceVariant = Color(0xFF111214),
+    onSurfaceVariant = Color(0xFFB0B4BA),
+    surfaceContainerLowest = Color(0xFF111214),
+    surfaceContainerLow = Color(0xFF1E1F22),
+    surfaceContainer = Color(0xFF232428),
+    surfaceContainerHigh = Color(0xFF2A2C30),
+    surfaceContainerHighest = Color(0xFF303236),
+    outline = Color(0xFF3A3D42),
+    outlineVariant = Color(0xFF2A2C30),
     error = Color(0xFFFCA5A5),
-    onError = Color(0xFF1A1724),
+    onError = DarkInk,
     primaryContainer = DarkFill,
-    onPrimaryContainer = Color.White,
-    secondaryContainer = Color(0xFF2E2848),
-    onSecondaryContainer = Color(0xFFECEAF4),
+    onPrimaryContainer = DarkInk,
+    secondaryContainer = Color(0xFF2A2442),
+    onSecondaryContainer = Color(0xFFECECE8),
 )
 
 private val LightChirkle = ChirkleColors(
@@ -113,18 +117,20 @@ private val LightChirkle = ChirkleColors(
     tint = Accent.copy(alpha = 0.12f),
     own = Color(0xFFEDE8FF),
     fill = Accent,
+    onFill = Color.White,
     new = Color(0xFFC0267A),
 )
 
 private val DarkChirkle = ChirkleColors(
-    muted = Color(0xFFA6A1B8),
-    dim = Color(0xFF9C97B2),
+    muted = Color(0xFFB0B4BA),
+    dim = Color(0xFF9EA2A9),
     border = Color(0x14FFFFFF),
     hover = Color(0x0FFFFFFF),
     highlight = Color(0xFF3D3314),
-    tint = Color(0xFF8B6CFF).copy(alpha = 0.16f),
-    own = Color(0xFF8B6CFF).copy(alpha = 0.10f),
+    tint = DarkFill.copy(alpha = 0.16f),
+    own = DarkFill.copy(alpha = 0.10f),
     fill = DarkFill,
+    onFill = DarkInk,
     new = Color(0xFFF9A8D4),
 )
 

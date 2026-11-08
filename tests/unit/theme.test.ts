@@ -49,7 +49,7 @@ describe("theme (§7.8)", () => {
   it("sets <html data-theme> and gives both theme-color metas the chosen theme's color; auto puts them back", () => {
     for (const [scheme, color] of [
       ["light", "#f1eefc"],
-      ["dark", "#13111d"],
+      ["dark", "#111214"],
     ]) {
       document.head.append(
         Object.assign(document.createElement("meta"), { name: "theme-color", content: color, media: `(prefers-color-scheme: ${scheme})` }),
@@ -57,12 +57,12 @@ describe("theme (§7.8)", () => {
     }
     applyTheme("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(metas().map((m) => m.content)).toEqual(["#13111d", "#13111d"]);
+    expect(metas().map((m) => m.content)).toEqual(["#111214", "#111214"]);
     applyTheme("light");
     expect(metas().map((m) => m.content)).toEqual(["#f1eefc", "#f1eefc"]);
     applyTheme("auto");
     expect(document.documentElement.dataset.theme).toBeUndefined();
-    expect(metas().map((m) => m.content)).toEqual(["#f1eefc", "#13111d"]);
+    expect(metas().map((m) => m.content)).toEqual(["#f1eefc", "#111214"]);
   });
 
   it("saves the choice (auto removes it), and still applies it when storage throws", () => {

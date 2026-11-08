@@ -1,0 +1,104 @@
+name: Release
+
+# One release for the app and the npm package (docs/ANDROID.md §28.7): publish a GitHub Release with a new tag
+# `v<version>`, after `npm run release -- <version>` set that version in package.json and the app. This checks both
+# say it, attaches the signed APK (android-release.yml), tags the commit `android-v<version>` for F-Droid's update
+# checker, and stages the npm package. A maintainer then approves it on npmjs.com (2FA), which publishes it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (v<version>) to build again; its Release must exist
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  versions:
+    name: Check the versions
+    if: startsWith(github.event.release.tag_name || inputs.tag, 'v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    outputs:
+      tag: ${{ steps.read.outputs.tag }}
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+      - id: read
+        run: |
+          v=${TAG#v}
+          pkg=$(node -p 'require("./package.json").version')
+          name=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' android/app/build.gradle.kts)
+          code=$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' android/app/build.gradle.kts)
+          bad=0
+          [ "$pkg" = "$v" ] || { echo "::error::Tag $TAG but package.json is $pkg"; bad=1; }
+          [ "$name" = "$v" ] || { echo "::error::Tag $TAG but the app's versionName is $name"; bad=1; }
+          [ -f "fastlane/metadata/android/en-US/changelogs/$code.txt" ] || { echo "::error::No changelogs/$code.txt for versionCode $code"; bad=1; }
+          [ $bad = 0 ] || { echo "::error::Run npm run release -- $v, commit, then tag again (ANDROID.md §28.7)"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  apk:
+    name: Android APK
+    needs: versions
+    uses: ./.github/workflows/android-release.yml
+    with:
+      tag: ${{ needs.versions.outputs.tag }}
+
+  # F-Droid's update checker looks for android-v tags (UpdateCheckMode: Tags ^android-v). A tag pushed with the job's
+  # token starts no workflow, so android-release.yml doesn't build it a second time.
+  fdroid-tag:
+    name: Tag android-v for F-Droid
+    needs: [versions, apk]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.versions.outputs.tag }}
+      ANDROID_TAG: android-v${{ needs.versions.outputs.version }}
+    steps:
+      - run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)
+          if old=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ANDROID_TAG" --jq .sha 2>/dev/null); then
+            [ "$old" = "$sha" ] || { echo "::error::$ANDROID_TAG already exists, on $old instead of $sha"; exit 1; }
+            echo "$ANDROID_TAG is already there."
+          else
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$ANDROID_TAG" -f "sha=$sha" > /dev/null
+            echo "Tagged $sha as $ANDROID_TAG."
+          fi
+
+  npm:
+    name: Stage the npm package
+    needs: versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # npm's trusted publisher for this package names this workflow and this environment: no token is stored anywhere.
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.versions.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.versions.outputs.tag }}
+      - uses: ./.github/actions/setup
+      - name: Stage it
+        run: |
+          if [ "$(npm view "chirkle@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "chirkle@$VERSION is on npm already."; exit 0
+          fi
+          # prepack builds the web app (and fails over its size budget) before the tarball is made.
+          npm stage publish
+          echo "::notice::chirkle@$VERSION is staged: approve it on npmjs.com (or npm stage approve <id>) to publish it."

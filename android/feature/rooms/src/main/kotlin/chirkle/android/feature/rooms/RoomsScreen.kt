@@ -366,7 +366,7 @@ private fun UnreadBadge(badge: Int) {
     ) {
         Text(
             if (badge > 99) "99+" else badge.toString(),
-            color = androidx.compose.ui.graphics.Color.White,
+            color = Chirkle.colors.onFill,
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.semantics { contentDescription = "$badge unread" },
         )
@@ -474,7 +474,7 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
                 ) {
                     Text(
                         if (c.new > 99) "99+" else c.new.toString(),
-                        color = Color.White,
+                        color = Chirkle.colors.onFill,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.semantics { contentDescription = "${c.new} new" },
                     )

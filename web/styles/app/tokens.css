@@ -13,8 +13,9 @@
   --line: #e3ddf5;
   --hover: #e9e4fb;
   --accent: #5b3df5;
-  /* Solid fills: Send, badges, primary buttons (white text on them). */
+  /* Solid fills: Send, badges, primary buttons, with --on-fill text on them. */
   --fill: #5b3df5;
+  --on-fill: #fff;
   --accent-2: #c42a7c;
   --grad: linear-gradient(135deg, #6a4bff, #c42a7c);
   --tint: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -43,18 +44,19 @@
    blocks must stay the same (contrast.test.ts checks). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1a1724;
-    --surface: #15121e;
-    --raised: #221e2f;
-    --fg: #eceaf4;
-    --text: #dcd8e8;
-    --muted: #a6a1b8;
-    --dim: #9c97b2;
-    --border: #2c2839;
-    --line: #24202f;
-    --hover: #24202f;
-    --accent: #b9a6ff;
-    --fill: #6d4aff;
+    --bg: #1a1b1e;
+    --surface: #111214;
+    --raised: #232428;
+    --fg: #ecece8;
+    --text: #e0e0db;
+    --muted: #b0b4ba;
+    --dim: #9ea2a9;
+    --border: #3a3d42;
+    --line: #2a2c30;
+    --hover: #2a2c30;
+    --accent: #a58bff;
+    --fill: #a58bff;
+    --on-fill: #16181a;
     --danger: #ff7a8f;
     --new: #f9a8d4;
     --highlight: #3d3314;
@@ -68,18 +70,19 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1a1724;
-  --surface: #15121e;
-  --raised: #221e2f;
-  --fg: #eceaf4;
-  --text: #dcd8e8;
-  --muted: #a6a1b8;
-  --dim: #9c97b2;
-  --border: #2c2839;
-  --line: #24202f;
-  --hover: #24202f;
-  --accent: #b9a6ff;
-  --fill: #6d4aff;
+  --bg: #1a1b1e;
+  --surface: #111214;
+  --raised: #232428;
+  --fg: #ecece8;
+  --text: #e0e0db;
+  --muted: #b0b4ba;
+  --dim: #9ea2a9;
+  --border: #3a3d42;
+  --line: #2a2c30;
+  --hover: #2a2c30;
+  --accent: #a58bff;
+  --fill: #a58bff;
+  --on-fill: #16181a;
   --danger: #ff7a8f;
   --new: #f9a8d4;
   --highlight: #3d3314;

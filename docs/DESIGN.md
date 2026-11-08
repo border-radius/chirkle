@@ -618,8 +618,9 @@ Other rules:
 ### 7.8 Styling
 
 - One plain CSS file with custom properties for theming (`web/styles/app/tokens.css`). The look (2026-10-31, from
-  the "Chirkle Sidebar Redesign" design, its boards in `docs/design-frames/`): a dark grape surface by default (pane `#1a1724`, sidebar `#15121e`, raised
-  `#221e2f`), accent text `#b9a6ff` on a `#6d4aff` fill, pink `#f9a8d4` for the NEW line; 10 px radius for controls,
+  the "Chirkle Sidebar Redesign" design, its boards in `docs/design-frames/`): a dark graphite surface by default, from chirkle.com's dark hero demo (2026-11-07: pane `#1a1b1e`,
+  sidebar `#111214`, raised `#232428`), lavender `#a58bff` as accent and fill with ink `#16181a` on the fill (`--on-fill`, white
+  in light), pink `#f9a8d4` for the NEW line; 10 px radius for controls,
   16 px for dialogs over a dimmed page; Inter, self-hosted (§7.7), with the system font stack behind it.
 - Icons are one-color SVGs used as CSS masks (`web/styles/app/icons.css`): an element with `ic i-<name>` draws the
   icon as its `::before` in `currentColor`. Icon-only buttons carry an `aria-label`. No emoji in the chrome.

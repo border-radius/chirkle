@@ -1,6 +1,6 @@
 {
   "name": "chirkle",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A small, fast, real-time group chat: one PocketBase server, a vanilla TypeScript web app",
   "license": "GPL-3.0-or-later",
   "repository": {
@@ -41,6 +41,7 @@
     "start": "node scripts/start.mjs",
     "prepack": "npm run build",
     "setup": "sh scripts/fetch-pocketbase.sh",
+    "release": "node scripts/release.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "sh scripts/pb-types.sh && tsc --noEmit && tsc --noEmit -p tsconfig.server.json",

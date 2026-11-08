@@ -97,7 +97,7 @@ button.primary,
 .new-room button[type="submit"] {
   border-color: transparent;
   background: var(--fill);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 @media (hover: hover) {

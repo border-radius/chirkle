@@ -186,7 +186,7 @@
   padding: 0 6px;
   border-radius: 10px;
   background: var(--fill);
-  color: #fff;
+  color: var(--on-fill);
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 20px;

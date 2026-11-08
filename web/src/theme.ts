@@ -8,7 +8,7 @@ export type Theme = (typeof THEMES)[number];
 export const THEME_KEY = "chat.theme";
 
 /** --surface of each theme (tokens.css), for <meta name="theme-color">. */
-const BAR = { light: "#f1eefc", dark: "#13111d" } as const;
+const BAR = { light: "#f1eefc", dark: "#111214" } as const;
 
 function safeLocalStorage(): Storage | null {
   try {

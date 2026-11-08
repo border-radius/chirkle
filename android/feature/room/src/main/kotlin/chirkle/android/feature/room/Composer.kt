@@ -240,7 +240,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                 Spacer(Modifier.width(8.dp))
                 // A rounded square in the accent fill; dimmed while there is nothing to send.
                 val bg by androidx.compose.animation.animateColorAsState(if (canSend) Chirkle.colors.fill else Chirkle.colors.fill.copy(alpha = 0.25f), label = "send")
-                val fg by androidx.compose.animation.animateColorAsState(if (canSend) Color.White else Color.White.copy(alpha = 0.55f), label = "sendIcon")
+                val fg by androidx.compose.animation.animateColorAsState(if (canSend) Chirkle.colors.onFill else Color.White.copy(alpha = 0.55f), label = "sendIcon")
                 androidx.compose.material3.FilledIconButton(
                     onClick = vm::submit,
                     enabled = canSend,

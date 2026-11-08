@@ -2,7 +2,8 @@ name: Android release
 
 # Builds the app's release APK, signed with the release key (docs/ANDROID.md §28.2), and attaches it to the GitHub
 # Release (§28.6). Pushing a tag `android-v<versionName>` makes the Release if there is none; a Release published from
-# the web with any other tag gets the APK too. The tests ran already: CI runs on every push, tags included.
+# the web with any other tag but `v…` gets the APK too. A `v<version>` Release is release.yml's (§28.7): it calls this
+# with the tag. The tests ran already: CI runs on every push, tags included.
 on:
   push:
     tags: ["android-v*"]
@@ -13,24 +14,31 @@ on:
       tag:
         description: Release tag to build and attach the APK to (it must exist)
         required: true
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and attach the APK to (its Release must exist)
+        type: string
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: android-release-${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+  group: android-release-${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
 
 jobs:
   apk:
     name: Build and attach the APK
-    # A Release published from the web for a new android-v tag also pushes that tag: the push builds it, not this.
-    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'android-v')
+    # A Release published from the web for a new android-v tag also pushes that tag: the push builds it, not this. A
+    # v tag's Release is built by release.yml, which passes the tag.
+    if: inputs.tag || github.event_name != 'release' || !(startsWith(github.event.release.tag_name, 'android-v') || startsWith(github.event.release.tag_name, 'v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # The signing secrets are the "release" environment's, not the repository's: only jobs that name it see them.
     environment: release
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     defaults:
       run:
@@ -53,6 +61,9 @@ jobs:
           # An android-v tag names the version it releases: a forgotten bump would ship the old version under a new tag.
           if [[ "$TAG" == android-v* && "$TAG" != "android-v$name" ]]; then
             echo "::error::Tag $TAG but versionName is $name: bump app/build.gradle.kts (ANDROID.md §28.4)"; exit 1
+          fi
+          if [[ "$TAG" == v* && "$TAG" != "v$name" ]]; then
+            echo "::error::Tag $TAG but versionName is $name: run npm run release -- ${TAG#v} (ANDROID.md §28.7)"; exit 1
           fi
           echo "CODE=$code" >> "$GITHUB_ENV"
           echo "NAME=$name" >> "$GITHUB_ENV"

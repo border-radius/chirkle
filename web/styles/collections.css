@@ -150,7 +150,7 @@
   gap: 8px;
   padding: 0 16px;
   background: var(--fill);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .coll-actions [aria-pressed="true"] {
@@ -421,7 +421,7 @@ dialog.coll-dialog::backdrop {
   height: 1.5rem;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
   font-weight: 800;
 }
 

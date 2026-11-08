@@ -1,0 +1,1 @@
+A new dark theme in graphite and lavender. Find emoji by name: search in the emoji sheet, or type ":name" in a message for suggestions. Jump to finds your collections too. Albums wrap instead of being cut off, and the media grid drops messages deleted while it is open.
