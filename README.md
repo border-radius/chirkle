@@ -246,7 +246,7 @@ set (`/.well-known/assetlinks.json`; `ANDROID_APP_ID` only for a build with anot
 One version for the npm package and the Android app. `npm run release -- 0.2.0` sets it in `package.json` and
 `android/app/build.gradle.kts` (versionCode + 1) and creates `fastlane/…/changelogs/<versionCode>.txt` to fill in.
 Commit, push, then publish a GitHub Release with the new tag `v0.2.0`. The Release workflow
-(`.github/workflows/release.yml`) checks the versions, attaches the signed APK, tags `android-v0.2.0` for F-Droid and
+(`.github/workflows/release.yml`) checks the versions, attaches the signed APK and
 stages `chirkle@0.2.0` on npm; approve it on npmjs.com (2FA) to publish it. Setup and details:
 [`docs/ANDROID.md` §28.7](docs/ANDROID.md#287-one-release-for-the-app-and-the-npm-package-2026-11-08).
 

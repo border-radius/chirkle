@@ -13,7 +13,7 @@ Repo: https://github.com/border-radius/chirkle.git
 Builds:
   - versionName: 0.2.0
     versionCode: 8
-    commit: android-v0.2.0
+    commit: v0.2.0
     subdir: android/app
     gradle:
       - yes
@@ -21,6 +21,6 @@ Builds:
       - chirkle.unsigned=true
 
 AutoUpdateMode: Version
-UpdateCheckMode: Tags ^android-v
+UpdateCheckMode: Tags ^v
 CurrentVersion: 0.2.0
 CurrentVersionCode: 8

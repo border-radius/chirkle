@@ -2,8 +2,7 @@ name: Release
 
 # One release for the app and the npm package (docs/ANDROID.md §28.7): publish a GitHub Release with a new tag
 # `v<version>`, after `npm run release -- <version>` set that version in package.json and the app. This checks both
-# say it, attaches the signed APK (android-release.yml), tags the commit `android-v<version>` for F-Droid's update
-# checker, and stages the npm package. A maintainer then approves it on npmjs.com (2FA), which publishes it.
+# say it, attaches the signed APK (android-release.yml) and stages the npm package; F-Droid finds the v tag itself. A maintainer then approves it on npmjs.com (2FA), which publishes it.
 on:
   release:
     types: [published]
@@ -56,28 +55,6 @@ jobs:
       tag: ${{ needs.versions.outputs.tag }}
     # The called job names the "release" environment, but its secrets reach a called workflow only with these.
     secrets: inherit
-
-  # F-Droid's update checker looks for android-v tags (UpdateCheckMode: Tags ^android-v). A tag pushed with the job's
-  # token starts no workflow, so android-release.yml doesn't build it a second time.
-  fdroid-tag:
-    name: Tag android-v for F-Droid
-    needs: [versions, apk]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ needs.versions.outputs.tag }}
-      ANDROID_TAG: android-v${{ needs.versions.outputs.version }}
-    steps:
-      - run: |
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)
-          if old=$(gh api "repos/$GITHUB_REPOSITORY/commits/$ANDROID_TAG" --jq .sha 2>/dev/null); then
-            [ "$old" = "$sha" ] || { echo "::error::$ANDROID_TAG already exists, on $old instead of $sha"; exit 1; }
-            echo "$ANDROID_TAG is already there."
-          else
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$ANDROID_TAG" -f "sha=$sha" > /dev/null
-            echo "Tagged $sha as $ANDROID_TAG."
-          fi
 
   npm:
     name: Stage the npm package

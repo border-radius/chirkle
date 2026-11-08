@@ -1013,9 +1013,8 @@ changelog named after its `versionCode`.
 ### 28.4 Releasing
 
 Bump `versionCode` and `versionName` in `app/build.gradle.kts` (F-Droid reads them there), add the changelog, and tag
-the commit `android-v<versionName>`. Since 2026-11-08 a release of both the app and the npm package does this for
-you (§28.7). F-Droid's update checker finds new tags (`UpdateCheckMode: Tags ^android-v`)
-and builds them on its own; the push also puts the signed APK on a GitHub Release (§28.6).
+the commit `android-v<versionName>` (up to 0.1.6). From 0.2.0 on, `npm run release` and a `v<version>` Release do it
+(§28.7), and F-Droid's update checker follows those tags (`UpdateCheckMode: Tags ^v`), building them on its own.
 
 ### 28.5 Submitting
 
@@ -1062,13 +1061,15 @@ at 0.1.0), released together:
 - **checks** that the tag, `package.json` and `versionName` agree and the changelog exists, and stops otherwise;
 - **attaches the APK** by calling `android-release.yml` with the tag (§28.6; that workflow skips `v` Releases on its
   own);
-- **tags `android-v<version>`** on the same commit, for F-Droid's update checker. A tag made with the workflow's token
-  starts no workflow, so the APK isn't built twice;
 - **stages the npm package** with `npm stage publish` through npm's trusted publishing (OIDC, no token stored). It
   isn't installable until a maintainer approves it with 2FA, on npmjs.com or with `npm stage approve <id>`
   (`npm stage list chirkle` shows the id). A version already on npm is skipped, so the workflow can run again.
 
 Actions → Release → Run workflow with an existing `v` tag runs it again (say the APK failed).
+
+F-Droid follows the `v` tags (`UpdateCheckMode: Tags ^v`, `commit: v<version>` in the recipe). At first the workflow
+also tagged `android-v<version>` for it, but the workflow's token may not create a tag on a commit that changes
+`.github/workflows/` (it lacks the `workflows` permission), so that job failed on 0.2.0 and was dropped.
 
 Setup, once: on npmjs.com, the package's Settings → Trusted publishing → GitHub Actions, with owner `border-radius`,
 repository `chirkle`, workflow `release.yml`, environment `release`, and the stage-publish action allowed (npm

@@ -57,7 +57,7 @@ let recipe = readFileSync(RECIPE, "utf8");
 recipe = recipe
   .replace(/^( *- versionName: ).*$/m, (_, p) => `${p}${version}`)
   .replace(/^( *versionCode: ).*$/m, (_, p) => `${p}${code}`)
-  .replace(/^( *commit: ).*$/m, (_, p) => `${p}android-v${version}`)
+  .replace(/^( *commit: ).*$/m, (_, p) => `${p}v${version}`)
   .replace(/^CurrentVersion: .*$/m, () => `CurrentVersion: ${version}`)
   .replace(/^CurrentVersionCode: .*$/m, () => `CurrentVersionCode: ${code}`);
 writeFileSync(RECIPE, recipe);
@@ -70,5 +70,5 @@ Next:
   1. Write the app's release notes in fastlane/metadata/android/en-US/changelogs/${code}.txt (500 characters at most).
   2. Commit and push.
   3. On GitHub: Releases → Draft a new release → tag v${version} (create it on publish) → Publish.
-     The Release workflow attaches the APK, tags android-v${version} and stages chirkle@${version} on npm.
+     The Release workflow attaches the APK and stages chirkle@${version} on npm.
   4. Approve the staged package on npmjs.com (or: npm stage approve <id>).`);
