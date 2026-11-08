@@ -54,6 +54,8 @@ jobs:
     uses: ./.github/workflows/android-release.yml
     with:
       tag: ${{ needs.versions.outputs.tag }}
+    # The called job names the "release" environment, but its secrets reach a called workflow only with these.
+    secrets: inherit
 
   # F-Droid's update checker looks for android-v tags (UpdateCheckMode: Tags ^android-v). A tag pushed with the job's
   # token starts no workflow, so android-release.yml doesn't build it a second time.

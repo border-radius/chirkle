@@ -3,7 +3,7 @@ import { apiUser, login, test } from "./fixtures.ts";
 
 const bg = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const LIGHT = "rgb(251, 250, 255)"; // --bg, tokens.css
-const DARK = "rgb(26, 23, 36)";
+const DARK = "rgb(26, 27, 30)"; // --bg dark, #1a1b1e
 
 test.use({ colorScheme: "light" });
 
