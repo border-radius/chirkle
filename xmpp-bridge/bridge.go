@@ -46,8 +46,9 @@ const (
 )
 
 type occupant struct {
-	jid string // bare, when the conference shows it
-	id  string // occupant-id
+	jid   string // bare, when the conference shows it
+	id    string // occupant-id
+	photo string // their vCard photo's hash, as last told
 }
 
 type room struct {
@@ -61,6 +62,8 @@ type room struct {
 	nick  string
 	tries int
 	title string
+	role  string          // the bot's: "moderator" may moderate (XEP-0425)
+	feats map[string]bool // the conference's features (disco#info)
 
 	occupants map[string]occupant
 }
@@ -88,6 +91,7 @@ type bridge struct {
 	answered  map[string]time.Time
 	uploads   uploadService // the server's, for sess
 	http      *http.Client  // to upload services
+	photos    photos        // vCard photos fetched, for PocketBase to take
 
 	sync    chan struct{} // joins and leaves to do
 	changed chan struct{} // a status to send
@@ -549,6 +553,7 @@ func (b *bridge) onPresence(ctx context.Context, p *inPresence) {
 	case self:
 		first := r.state != stateJoined
 		r.state, r.err, r.nick = stateJoined, "", nick
+		r.role = u.item().Role
 		if first {
 			poke(b.changed)
 			go b.fetchTitle(ctx, r.muc)
@@ -562,12 +567,21 @@ func (b *bridge) onPresence(ctx context.Context, p *inPresence) {
 			ev = &event{Type: "occupant", MUC: r.muc.String(), Nick: nick, NewNick: newNick, OccupantID: o.id, JID: o.jid}
 		}
 	case p.Type == "":
-		o := occupant{}
+		known := r.occupants[nick]
+		o := occupant{photo: known.photo}
 		if j, err := jid.Parse(u.item().JID); err == nil && u.item().JID != "" {
 			o.jid = j.Bare().String()
 		}
 		if p.OccupantID != nil {
 			o.id = p.OccupantID.ID
+		}
+		// A new photo, or the first told this run: PocketBase fetches it if it hasn't got that one (at most daily).
+		if p.Photo != nil && p.Photo.Hash != nil {
+			hash := strings.ToLower(strings.TrimSpace(*p.Photo.Hash))
+			if _, seen := r.occupants[nick]; hash != o.photo || !seen && hash != "" {
+				ev = &event{Type: "photo", MUC: r.muc.String(), Nick: nick, OccupantID: o.id, JID: o.jid, Hash: hash}
+			}
+			o.photo = hash
 		}
 		r.occupants[nick] = o
 	}
@@ -590,6 +604,15 @@ func (b *bridge) fetchTitle(ctx context.Context, muc jid.JID) {
 	if err != nil || reply.Disco == nil {
 		return
 	}
+	feats := map[string]bool{}
+	for _, f := range reply.Disco.Features {
+		feats[f.Var] = true
+	}
+	b.mu.Lock()
+	if r := b.rooms[muc.String()]; r != nil {
+		r.feats = feats
+	}
+	b.mu.Unlock()
 	for _, id := range reply.Disco.Identities {
 		if id.Category == "conference" && strings.TrimSpace(id.Name) != "" {
 			b.mu.Lock()
@@ -632,6 +655,10 @@ func (b *bridge) onMessage(ctx context.Context, m *inMessage) {
 			return // not ours; what's left of a retracted message in history
 		}
 		if b.retraction(r, from.Resourcepart(), m) {
+			return
+		}
+		if m.Reactions != nil {
+			b.reactions(r, from.Resourcepart(), m)
 			return
 		}
 		if from.Resourcepart() == "" || m.Body == nil || strings.TrimSpace(*m.Body) == "" {
@@ -748,6 +775,28 @@ func (b *bridge) retraction(r *room, nick string, m *inMessage) bool {
 	return true
 }
 
+// reactions passes on someone's set of reactions on a message (XEP-0444): all of them, so none is the same as
+// taking them all back.
+func (b *bridge) reactions(r *room, nick string, m *inMessage) {
+	if nick == "" || m.Reactions.ID == "" {
+		return
+	}
+	b.mu.Lock()
+	o := r.occupants[nick]
+	ev := event{Type: "reactions", MUC: r.muc.String(), Nick: nick, JID: o.jid, OccupantID: o.id, Target: m.Reactions.ID, Self: nick == r.nick}
+	b.mu.Unlock()
+	if m.OccupantID != nil {
+		ev.OccupantID = m.OccupantID.ID
+	}
+	ev.Emoji = []string{}
+	for _, e := range m.Reactions.Reactions {
+		if e = strings.TrimSpace(e); e != "" && len(ev.Emoji) < 50 {
+			ev.Emoji = append(ev.Emoji, e)
+		}
+	}
+	b.pb.send(ev)
+}
+
 // answerPrivate tells someone writing to the bot directly that it works in conferences: once an hour at most.
 func (b *bridge) answerPrivate(ctx context.Context, from jid.JID) {
 	key := from.String()
@@ -790,6 +839,11 @@ type sendOptions struct {
 	} `json:"retract"`
 	// A file's link, which is also the body: clients show it inline (XEP-0066).
 	OOB string `json:"oob"`
+	// The bot's whole set of reactions on the message the conference knows by id (XEP-0444); the body is ignored.
+	React *struct {
+		ID    string   `json:"id"`
+		Emoji []string `json:"emoji"`
+	} `json:"react"`
 }
 
 // sendGroup sends body to a joined conference, with id as both its id and its origin-id (XEP-0359): the conference's
@@ -841,6 +895,12 @@ func (b *bridge) sendGroup(ctx context.Context, muc, id, body string, opt sendOp
 	}
 	if opt.OOB != "" {
 		msg.OOB = &outOOB{URL: opt.OOB}
+	}
+	if opt.React != nil {
+		// No body: a reaction is only the element (XEP-0444 §3). Kept in the archives, as a retraction is.
+		msg.Body = ""
+		msg.Reactions = &outReactions{ID: opt.React.ID, Reactions: opt.React.Emoji}
+		msg.Store = &outStore{}
 	}
 	if err := sess.Encode(ctx, msg); err != nil {
 		return &sendError{msg: err.Error(), transient: true}

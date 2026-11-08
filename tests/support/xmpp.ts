@@ -48,6 +48,8 @@ export interface XmppStub {
   uploads: "ok" | "unsupported" | "too_large";
   /** The files /upload read from PocketBase, by the URL it gave. */
   readonly uploaded: Map<string, Buffer>;
+  /** vCard photos /avatar gives, by nickname (anyone else has none). */
+  readonly photos: Map<string, { type: string; data: Uint8Array }>;
   /** Post an event to PocketBase as the current child would. Returns the HTTP status. */
   event(ev: Json, secret?: string): Promise<number>;
   /** Wait until PocketBase has started `n` children and the last has said hello. */
@@ -72,6 +74,8 @@ export async function startXmppStub(): Promise<XmppStub> {
   const titles = new Map<string, string>();
   const helloed = new Set<number>();
   const uploaded = new Map<string, Buffer>();
+  const photos = new Map<string, { type: string; data: Uint8Array }>();
+  const tokens = new Map<string, { type: string; data: Uint8Array }>();
   /** The conferences the current child was last told to be in. */
   let rooms: Json[] = [];
 
@@ -86,6 +90,13 @@ export async function startXmppStub(): Promise<XmppStub> {
   };
 
   const server = createServer(async (req, res) => {
+    if (req.method === "GET" && req.url?.startsWith("/photo/")) {
+      const token = req.url.slice("/photo/".length);
+      const p = tokens.get(token);
+      tokens.delete(token);
+      res.writeHead(p ? 200 : 404, { "content-type": p?.type || "text/plain" });
+      return res.end(p ? Buffer.from(p.data) : "");
+    }
     const body = await readJson(req);
     const reply = (json: Json) => {
       res.writeHead(200, { "content-type": "application/json" });
@@ -115,6 +126,13 @@ export async function startXmppStub(): Promise<XmppStub> {
       return reply({ status: f.status, json: f.body });
     }
     if (body.path === "/rooms") rooms = body.body.rooms;
+    if (body.path === "/avatar") {
+      const p = photos.get(body.body.nick);
+      if (!p) return reply({ status: 200, json: {} });
+      const token = `t${Math.random().toString(36).slice(2)}`;
+      tokens.set(token, p);
+      return reply({ status: 200, json: { token, type: p.type } });
+    }
     if (body.path === "/upload") {
       if (stub.uploads !== "ok") return reply({ status: 400, json: { error: "no", transient: false, code: stub.uploads } });
       const child = children[children.length - 1]!;
@@ -139,6 +157,7 @@ export async function startXmppStub(): Promise<XmppStub> {
     quiet: false,
     uploads: "unsupported",
     uploaded,
+    photos,
     requestsTo: (path) => requests.filter((r) => r.path === path),
     fail: (path, status, body, times = 1) => failures.set(path, { status, body, times }),
     event: (ev, secret) => {

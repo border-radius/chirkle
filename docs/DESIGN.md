@@ -3986,3 +3986,39 @@ Milestone 3 adds files both ways.
 - **Tests:** the Go tests run a stub upload service (disco, slots, a PUT server). The integration tests have the
   stub child read the file from PocketBase as the real one does, and serve files to bring in from an address allowed
   by `LINK_PREVIEWS_ALLOW_HOSTS`.
+
+### 38.18 As built: milestone 4 (2026-11-08)
+
+Milestone 4 adds reactions, moderation and avatars.
+
+- **Reactions in** (`xmpp/reactions.js`): a `reactions` event carries one person's whole set on a message (by its
+  stanza id, else its sender's id). Their stand-in's reactions become that set, in one transaction. Each emoji is
+  mapped by `pickerEmoji`, moved from `telegram/reactions.js` to `lib/emoji.js` with its near-emoji map. Unlike
+  Telegram, an emoji with no near one is left out rather than becoming ❤️. An empty set from someone with no stand-in
+  makes none. The bot's own reactions, as the conference sends them back, are skipped.
+- **Reactions out:** the bot's set on a message, for each conference, is every emoji someone reacted with who isn't
+  a stand-in of that conference (`xmpp_people.muc`). Stand-ins from another conference of the room count, as do
+  Telegram's. The messages update hook queues a `react` op only for conferences whose set changed, and not twice
+  while one waits. The worker sends the set as it is then, as a bodiless message with `<reactions>` and a `store`
+  hint, on the first stanza the conference knows the message by.
+- **Moderation:** the child tracks the bot's role from its own presence, and the conference's features from the
+  disco#info it already fetches for the title. `POST /moderate {muc, id, reason}` sends XEP-0425 version 1, or 0.2
+  (`apply-to`) when the conference has only that, and refuses for good when the bot isn't a moderator. Deleting an
+  XMPP person's message in the room moderates it in the conference it came from. A refusal for good just leaves it
+  deleted in the room. A message the conference took out itself (a retraction, a moderator's, or the parts a shorter
+  correction leaves over) has its queued delete for that conference dropped in the same transaction, so it isn't
+  moderated back.
+- **Avatars** (`xmpp/avatars.js`): the child sends a `photo` event when an occupant's XEP-0153 hash is new, or
+  the first one it hears this run. PocketBase queues an `avatar` op (`xmpp_queue.person`, `nick`, `hash`) unless the
+  hash is the stand-in's already or theirs was fetched within a day (`xmpp_people.avatar_hash`, `avatar_at`). A new
+  stand-in queues one too, with no hash.
+  - The worker calls `POST /avatar {muc, nick}`. The child asks for the vCard through the conference (up to 2 MB)
+    and answers with a one-time token. PocketBase reads the photo from `GET /photo/<token>` on the child's port: no
+    secret header, since `$filesystem.fileFromURL` can't send one, so the token is the secret, valid for 2 minutes.
+    It is saved as the stand-in's avatar if it is a JPEG, PNG, WebP or GIF.
+  - An empty hash, or no photo in the vCard, takes the avatar away. Avatar ops run in a queue lane of their own, so
+    they never hold up a conference's messages.
+- **The migration** `1760000044` was extended in place again (still unshipped).
+- **Tests:** the Go test covers reactions both ways, moderation in both versions, photo hashes and the one-time
+  photo. The integration tests cover reaction sets, the bot's set, moderation and its suppression, and avatars with
+  the daily limit.

@@ -56,6 +56,10 @@ function handle(app, ev) {
       return links.ensureLink(app, String(ev.muc || ""), String(ev.password || ""));
     case "retraction":
       return retraction(app, ev);
+    case "reactions":
+      return require(`${__hooks}/xmpp/reactions.js`).reactionsIn(app, ev);
+    case "photo":
+      return require(`${__hooks}/xmpp/avatars.js`).photo(app, ev);
     case "kicked":
       return kicked(app, ev);
   }
@@ -273,12 +277,17 @@ function correction(app, muc, ev) {
   );
   const next = rows.length ? rows[rows.length - 1].getInt("part") + 1 : 1;
   app.runInTransaction((tx) => {
+    /** @type {string[]} */
+    const gone = [];
     [rec, ...parts].forEach((part, i) => {
-      if (i >= pieces.length) part.set("deleted", true);
-      else if (pieces[i] === part.getString("text")) return;
+      if (i >= pieces.length) {
+        part.set("deleted", true);
+        gone.push(part.id);
+      } else if (pieces[i] === part.getString("text")) return;
       else part.set("text", pieces[i]);
       tx.save(part);
     });
+    unqueueDeletes(tx, gone, muc);
     const ids = orderedIds(pieces.length);
     for (let i = parts.length + 1; i < pieces.length; i++) {
       const part = savePart(tx, rec.getString("room"), rec.getString("author"), pieces[i], ids[i]);
@@ -307,13 +316,33 @@ function retraction(app, ev) {
   const rec = findMessage(app, row.getString("message"));
   if (!rec || (!ev.moderated && !byAuthor(app, muc, ev, rec))) return;
   app.runInTransaction((tx) => {
+    /** @type {string[]} */
+    const gone = [];
     for (const r of partsOf(tx, row)) {
       const part = findMessage(tx, r.getString("message"));
       if (!part || part.getBool("deleted")) continue;
       part.set("deleted", true);
       tx.save(part);
+      gone.push(part.id);
     }
+    unqueueDeletes(tx, gone, muc);
   });
+}
+
+/**
+ * Messages deleted because their conference took them out (a retraction, a shorter correction): the deletes the
+ * messages hook queued for that conference are dropped, in the same transaction, so the bot doesn't moderate them
+ * there in turn (outbound.js). Other conferences of the room still get theirs.
+ * @param {core.App} tx
+ * @param {string[]} ids
+ * @param {string} muc
+ */
+function unqueueDeletes(tx, ids, muc) {
+  for (const id of ids) {
+    for (const q of tx.findRecordsByFilter("xmpp_queue", "op = 'delete' && message = {:m} && muc = {:muc}", "", 0, 0, { m: id, muc })) {
+      if (q) tx.delete(q);
+    }
+  }
 }
 
 /**
@@ -374,4 +403,4 @@ function kicked(app, ev) {
   });
 }
 
-module.exports = { route, handle };
+module.exports = { route, handle, rowByXmppId };

@@ -15,6 +15,12 @@ const server = createServer((req, res) => {
   let body = "";
   req.on("data", (d) => (body += d));
   req.on("end", async () => {
+    // A vCard photo by its one-time token: no secret, as the child serves it.
+    if (req.method === "GET" && req.url?.startsWith("/photo/")) {
+      const r = await fetch(`${hub}${req.url}`).catch(() => null);
+      res.writeHead(r?.status ?? 500, { "content-type": r?.headers.get("content-type") || "application/octet-stream" });
+      return res.end(r ? Buffer.from(await r.arrayBuffer()) : undefined);
+    }
     if (req.headers["x-chirkle-bridge"] !== secret) {
       res.writeHead(401, { "content-type": "application/json" });
       return res.end('{"error":"wrong secret"}');

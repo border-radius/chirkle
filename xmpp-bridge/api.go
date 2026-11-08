@@ -5,6 +5,10 @@ package main
 //	POST /rooms {"rooms": [{"muc", "key", "password", "since"}]}  the conferences to be in, all of them
 //	POST /send  {"muc", "id", "body", "reply", "replace", "retract", "oob"}  a message to a conference (sendOptions)
 //	POST /upload {"path", "name", "type"}  → {"url"}  a file PocketBase serves at path, put on the bot's server
+//	POST /moderate {"muc", "id", "reason"}  a message (its stanza id) retracted by the bot as a moderator (XEP-0425)
+//	POST /avatar {"muc", "nick"}  → {"token", "type"} (or {} for none)  an occupant's vCard photo, fetched
+//	GET  /photo/{token}  that photo, once, within 2 minutes: the token is its secret (no header: PocketBase reads it
+//	                     as a file from a URL)
 //
 // A refusal is {"error", "transient"}: transient when it may work later (not connected, not in the conference yet).
 // An upload refused for good may say why in "code": "unsupported" (no upload service) or "too_large".
@@ -16,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 )
 
 const secretHeader = "X-Chirkle-Bridge"
@@ -45,7 +50,7 @@ func (b *bridge) api(secret string) http.Handler {
 		if !decode(w, r, &body) {
 			return
 		}
-		if body.ID == "" || body.Body == "" {
+		if body.ID == "" || body.Body == "" && body.React == nil {
 			refuse(w, "id and body are required", false)
 			return
 		}
@@ -81,7 +86,59 @@ func (b *bridge) api(secret string) http.Handler {
 		}
 		reply(w, http.StatusOK, map[string]any{"url": u})
 	})
+	mux.HandleFunc("POST /moderate", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			MUC    string `json:"muc"`
+			ID     string `json:"id"`
+			Reason string `json:"reason"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		if body.ID == "" {
+			refuse(w, "id is required", false)
+			return
+		}
+		if err := b.moderate(context.WithoutCancel(r.Context()), body.MUC, body.ID, body.Reason); err != nil {
+			var se *sendError
+			refuse(w, err.Error(), errors.As(err, &se) && se.transient)
+			return
+		}
+		reply(w, http.StatusOK, map[string]any{})
+	})
+	mux.HandleFunc("POST /avatar", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			MUC  string `json:"muc"`
+			Nick string `json:"nick"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		token, typ, err := b.avatar(context.WithoutCancel(r.Context()), body.MUC, body.Nick)
+		if err != nil {
+			var se *sendError
+			refuse(w, err.Error(), errors.As(err, &se) && se.transient)
+			return
+		}
+		if token == "" {
+			reply(w, http.StatusOK, map[string]any{})
+			return
+		}
+		reply(w, http.StatusOK, map[string]any{"token": token, "type": typ})
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token, ok := strings.CutPrefix(r.URL.Path, "/photo/"); ok && r.Method == http.MethodGet {
+			ph, found := b.photos.take(token)
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			if ph.typ != "" {
+				w.Header().Set("Content-Type", ph.typ)
+			}
+			w.Write(ph.data)
+			return
+		}
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get(secretHeader)), []byte(secret)) != 1 {
 			reply(w, http.StatusUnauthorized, map[string]any{"error": "wrong secret"})
 			return

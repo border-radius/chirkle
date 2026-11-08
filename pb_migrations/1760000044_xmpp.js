@@ -6,7 +6,8 @@
 //   bridge does (no room, disabled) when the bot is invited somewhere.
 // - xmpp_people: someone in a conference and the stand-in user ("Ann (XMPP)") whose name their messages show under.
 // - xmpp_messages: which XMPP messages a chat message is, both ways.
-// - xmpp_queue: work for the bridge's worker: messages, edits and deletes to pass on to the conferences.
+// - xmpp_queue: work for the bridge's worker: messages, edits, deletes and the bot's reactions to pass on to the
+//   conferences, and stand-ins' avatars to fetch.
 // And a rate limit for the child's posts (/api/xmpp/), above PocketBase's "/api/" one that would otherwise count them.
 
 /** @param {Record<string, unknown>} data */
@@ -62,6 +63,9 @@ migrate(
           { type: "text", name: "muc", max: 255 },
           { type: "text", name: "nick", max: 255 },
           { type: "text", name: "jid", max: 255 },
+          // Their avatar (XEP-0153): the photo hash last fetched, and when (fetched once a day at most).
+          { type: "text", name: "avatar_hash", max: 255 },
+          { type: "date", name: "avatar_at" },
           ...stamps,
         ],
         indexes: [
@@ -103,9 +107,14 @@ migrate(
       xmppCollection({
         name: "xmpp_queue",
         fields: [
-          { type: "select", name: "op", required: true, maxSelect: 1, values: ["send", "edit", "delete"] },
-          { type: "text", name: "message", required: true, max: 15 },
+          { type: "select", name: "op", required: true, maxSelect: 1, values: ["send", "edit", "delete", "react", "avatar"] },
+          // The chat message; for "avatar", none: the xmpp_people row (person), as the nickname to ask in muc, and
+          // the photo hash the child told ("" when not told: a new stand-in).
+          { type: "text", name: "message", max: 15 },
           { type: "text", name: "muc", required: true, max: 255 },
+          { type: "text", name: "person", max: 15 },
+          { type: "text", name: "nick", max: 255 },
+          { type: "text", name: "hash", max: 255 },
           { type: "number", name: "tries", onlyInt: true },
           { type: "date", name: "next_at" },
           { type: "date", name: "locked_until" },

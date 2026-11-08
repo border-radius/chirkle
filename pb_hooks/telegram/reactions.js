@@ -6,10 +6,8 @@
 // Telegram offers.
 
 const { call } = require(`${__hooks}/telegram/api.js`);
-const { isReactionEmoji } = require(`${__hooks}/lib/emoji.js`);
+const { pickerEmoji } = require(`${__hooks}/lib/emoji.js`);
 const { reactionsOf, setReaction } = require(`${__hooks}/lib/reactions.js`);
-
-const VS16 = "️";
 
 /** The emoji Telegram takes as a reaction (Bot API ReactionTypeEmoji), written without variation selectors. */
 const TELEGRAM = new Set(
@@ -19,36 +17,8 @@ const TELEGRAM = new Set(
   ).split(" "),
 );
 
-/** Telegram's reaction emoji the picker hasn't got (bare, as in TELEGRAM), and the picker's nearest to each. */
-const SIMILAR = new Map([
-  ["🕊", "🐦"],
-  ["❤‍🔥", "❤️"],
-  ["💋", "😘"],
-  ["🖕", "👎"],
-  ["👨‍💻", "💻"],
-  ["🫡", "🙇"],
-  ["🎅", "🎄"],
-  ["🗿", "😐"],
-  ["👾", "👽"],
-]);
-
 /** What a reaction is when nothing nearer is found: Telegram's own default (a double tap). */
 const FALLBACK = "❤️";
-
-/**
- * The picker's emoji for `emoji`, or "" when neither it nor a near one is there.
- * @param {string} emoji
- */
-function pickerEmoji(emoji) {
-  const bare = emoji.replace(/\uFE0F/g, "").replace(/\u200D[♂♀]$/, "");
-  const found = [emoji, bare, `${bare}${VS16}`].find((e) => isReactionEmoji(e)) || SIMILAR.get(bare) || "";
-  if (found) return found;
-  // Skin tones aside; a sequence (👩‍🚀) as the first of its parts the picker has.
-  const plain = bare.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, "");
-  if (plain !== bare) return pickerEmoji(plain);
-  const parts = plain.split("\u200D");
-  return parts.length > 1 ? parts.map(pickerEmoji).find(Boolean) || "" : "";
-}
 
 /**
  * The picker's emoji (§20.1) for a Telegram reaction, never none: "❤" is "❤️", a shrug of either gender is "🤷",
@@ -77,7 +47,7 @@ function customEmoji(reactions) {
       if (s?.custom_emoji_id && typeof s.emoji === "string") out.set(String(s.custom_emoji_id), s.emoji);
     }
   } catch (err) {
-    console.warn(`telegram: custom emoji: ${err}`);
+    $app.logger().warn("telegram: custom emoji", "error", String(err));
   }
   return out;
 }

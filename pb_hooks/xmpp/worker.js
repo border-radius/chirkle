@@ -7,6 +7,8 @@
 const child = require(`${__hooks}/xmpp/child.js`);
 const { wanted } = require(`${__hooks}/xmpp/links.js`);
 const { edit, remove, send } = require(`${__hooks}/xmpp/outbound.js`);
+const { react } = require(`${__hooks}/xmpp/reactions.js`);
+const avatars = require(`${__hooks}/xmpp/avatars.js`);
 
 const LOCK = "xmpp.worker";
 /** What the child was last told to be in, with its boot: told again when either changes. */
@@ -76,10 +78,12 @@ function drain(app, renew) {
   for (const row of rows) {
     if (!row) continue;
     const muc = row.getString("muc");
-    if (blocked.has(muc)) continue;
+    // A conference's messages go in order; avatars go on their own, never holding them up.
+    const lane = row.getString("op") === "avatar" ? `${muc}\navatar` : muc;
+    if (blocked.has(lane)) continue;
     const due = row.getDateTime("next_at");
     if ((!due.isZero() && due.time().unixMilli() > now) || !claim(app, row.id)) {
-      blocked.add(muc);
+      blocked.add(lane);
       continue;
     }
     const message = row.getString("message");
@@ -88,6 +92,8 @@ function drain(app, renew) {
       if (op === "send") send(app, message, muc, renew);
       else if (op === "edit") edit(app, message, muc);
       else if (op === "delete") remove(app, message, muc);
+      else if (op === "react") react(app, message, muc);
+      else if (op === "avatar") avatars.fetch(app, row);
       app.delete(row);
     } catch (err) {
       const tries = row.getInt("tries") + 1;
@@ -102,7 +108,7 @@ function drain(app, renew) {
       row.set("locked_until", "");
       row.set("error", String(err).slice(0, 1000));
       app.save(row);
-      blocked.add(muc);
+      blocked.add(lane);
     } finally {
       renew();
     }

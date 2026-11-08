@@ -279,10 +279,10 @@ onRecordUpdate((e) => {
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
   const xmpp = features.xmpp();
-  const xmppChange = xmpp ? xmpp.outbound.changeOf(rec) : "";
+  const xmppChange = xmpp ? xmpp.outbound.changeOf(e.app, rec) : null;
   e.next();
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
-  if (xmpp) xmpp.outbound.queueUpdate(e.app, rec, xmppChange);
+  if (xmpp && xmppChange) xmpp.outbound.queueUpdate(e.app, rec, xmppChange);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);
   if (deleted) require(`${__hooks}/lib/files.js`).unlink(e.app, files);

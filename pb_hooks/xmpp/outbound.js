@@ -35,27 +35,58 @@ function queueCreate(app, rec) {
 }
 
 /**
- * What a messages update changes for the conferences, read before it is saved.
- * @param {core.Record} rec
- * @returns {"" | "edit" | "delete"}
+ * @typedef {{ op: "" | "edit" | "delete", react: string[] }} Change
  */
-function changeOf(rec) {
+
+/**
+ * What a messages update changes for the conferences, read before it is saved: an edit or a delete, and the
+ * conferences whose bot reactions on it change (reactions.js).
+ * @param {core.App} app
+ * @param {core.Record} rec
+ * @returns {Change}
+ */
+function changeOf(app, rec) {
   const orig = rec.original();
-  if (rec.getBool("deleted") && !orig.getBool("deleted")) return "delete";
-  if (!rec.getBool("deleted") && rec.getString("text") !== orig.getString("text")) return "edit";
-  return "";
+  /** @type {Change["op"]} */
+  let op = "";
+  if (rec.getBool("deleted") && !orig.getBool("deleted")) op = "delete";
+  else if (!rec.getBool("deleted") && rec.getString("text") !== orig.getString("text")) op = "edit";
+  if (!rec.getString("author")) return { op, react: [] };
+  const mucs = linksOfRoom(app, rec.getString("room")).map((/** @type {core.Record} */ l) => l.getString("muc"));
+  const react = op === "delete" ? [] : require(`${__hooks}/xmpp/reactions.js`).changedFor(app, rec, mucs);
+  return { op, react };
 }
 
 /**
- * messages update (saved): queue an edit or delete for the conferences of its room. The worker passes it on only
- * where the message went (outbound rows): not back to the conference it came from.
+ * messages update (saved): queue an edit, delete or the bot's reactions for the conferences of its room. The worker
+ * passes an edit on only where the message went (outbound rows); a delete, where it came from too, as a moderator
+ * (§38.7). Reactions already waiting for a conference aren't queued again: they go as they are when they go.
  * @param {core.App} app
  * @param {core.Record} rec
- * @param {"" | "edit" | "delete"} change
+ * @param {Change} change
  */
 function queueUpdate(app, rec, change) {
-  if (!change || !rec.getString("author")) return; // a service message never went to XMPP
-  for (const link of linksOfRoom(app, rec.getString("room"))) enqueue(app, change, rec.id, link.getString("muc"));
+  if (!rec.getString("author")) return; // a service message never went to XMPP
+  for (const link of linksOfRoom(app, rec.getString("room"))) {
+    const muc = link.getString("muc");
+    if (change.op) enqueue(app, change.op, rec.id, muc);
+    if (change.react.includes(muc) && !reactWaiting(app, rec.id, muc)) enqueue(app, "react", rec.id, muc);
+  }
+}
+
+/**
+ * Are the bot's reactions on this message queued for this conference and not yet taken by the worker?
+ * @param {core.App} app
+ * @param {string} messageId
+ * @param {string} muc
+ */
+function reactWaiting(app, messageId, muc) {
+  try {
+    app.findFirstRecordByFilter("xmpp_queue", "op = 'react' && message = {:m} && muc = {:muc} && locked_until = ''", { m: messageId, muc });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------- the worker's side
@@ -329,8 +360,10 @@ function edit(app, messageId, muc) {
 
 /**
  * A delete: a retraction (XEP-0424) of each stanza the bot sent for the message (its text, its files), by the
- * conference's stanza id and its origin id (versions 1 and before). Only where the bot sent it: a message that came
- * from a conference was deleted there already, or is one only a moderator could take out (§38.7).
+ * conference's stanza id and its origin id (versions 1 and before). A message that came from the conference (an XMPP
+ * person's, deleted by one of the room's moderators, §36) is moderated there (XEP-0425) when the bot is one of its
+ * moderators; otherwise it is deleted only in the room. One the conference took out itself never gets here
+ * (inbound.js unqueues it).
  * @param {core.App} app
  * @param {string} messageId
  * @param {string} muc
@@ -338,7 +371,17 @@ function edit(app, messageId, muc) {
 function remove(app, messageId, muc) {
   const msg = find(app, "messages", messageId);
   if (!msg || !linkFor(app, msg, muc)) return;
-  for (const row of rowsOf(app, messageId, muc)) {
+  const rows = rowsOf(app, messageId, muc);
+  const theirs = rows.find((r) => r.getString("direction") === "in" && r.getString("stanza_id"));
+  if (theirs) {
+    try {
+      call(app, "/moderate", { muc, id: theirs.getString("stanza_id") });
+    } catch (err) {
+      if (/** @type {any} */ (err).transient !== false) throw err;
+      app.logger().info("xmpp: not moderated", "message", messageId, "muc", muc, "why", String(err));
+    }
+  }
+  for (const row of rows) {
     if (row.getString("direction") !== "out") continue;
     const id = `${messageId}-${$security.randomStringWithAlphabet(8, "abcdefghijklmnopqrstuvwxyz0123456789")}`;
     call(app, "/send", {

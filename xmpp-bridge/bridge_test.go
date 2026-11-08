@@ -122,6 +122,8 @@ type stubXMPP struct {
 	upload    string // the upload service's HTTP base ("": the server has none)
 	uploadMax int
 	slots     []string // the requests, as "filename|size|content-type"
+
+	moderations []string // the moderate IQs, as "version|id|reason"
 }
 
 func newStubXMPP(t *testing.T) *stubXMPP {
@@ -183,6 +185,17 @@ func (s *stubXMPP) session(conn net.Conn) {
 					Size     string `xml:"size,attr"`
 					Type     string `xml:"content-type,attr"`
 				} `xml:"urn:xmpp:http:upload:0 request"`
+				Moderate *struct {
+					ID     string `xml:"id,attr"`
+					Reason string `xml:"reason"`
+				} `xml:"urn:xmpp:message-moderate:1 moderate"`
+				ApplyTo *struct {
+					ID       string `xml:"id,attr"`
+					Moderate *struct {
+						Reason string `xml:"reason"`
+					} `xml:"urn:xmpp:message-moderate:0 moderate"`
+				} `xml:"urn:xmpp:fasten:0 apply-to"`
+				VCard *struct{} `xml:"vcard-temp vCard"`
 			}
 			d.Decode(&iq)
 			s.mu.Lock()
@@ -218,7 +231,28 @@ func (s *stubXMPP) session(conn net.Conn) {
 			}
 			if iq.Type == "get" && iq.To == muc && iq.Disco != nil {
 				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+muc+`' to='`+s.client+`'>`+
-					`<query xmlns='http://jabber.org/protocol/disco#info'><identity category='conference' type='text' name='Friends'/></query></iq>`)))
+					`<query xmlns='http://jabber.org/protocol/disco#info'><identity category='conference' type='text' name='Friends'/>`+
+					`<feature var='urn:xmpp:message-moderate:1'/></query></iq>`)))
+				return err
+			}
+			if iq.Type == "set" && iq.To == muc && (iq.Moderate != nil || iq.ApplyTo != nil) {
+				s.mu.Lock()
+				if iq.Moderate != nil {
+					s.moderations = append(s.moderations, "1|"+iq.Moderate.ID+"|"+iq.Moderate.Reason)
+				} else if iq.ApplyTo.Moderate != nil {
+					s.moderations = append(s.moderations, "0|"+iq.ApplyTo.ID+"|"+iq.ApplyTo.Moderate.Reason)
+				}
+				s.mu.Unlock()
+				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+muc+`' to='`+s.client+`'/>`)))
+				return err
+			}
+			if iq.Type == "get" && iq.VCard != nil {
+				photo := ""
+				if iq.To == muc+"/Ann" {
+					photo = "<PHOTO><TYPE>image/png</TYPE><BINVAL>UE5H\n REFUQQ==</BINVAL></PHOTO>" // "PNGDATA", wrapped
+				}
+				_, err := xmlstream.Copy(tr, xml.NewDecoder(strings.NewReader(`<iq type='result' id='`+iq.ID+`' from='`+iq.To+`' to='`+s.client+`'>`+
+					`<vCard xmlns='vcard-temp'>`+photo+`</vCard></iq>`)))
 				return err
 			}
 		case "presence":
@@ -723,4 +757,108 @@ func TestFiles(t *testing.T) {
 func isCode(err error, code string) bool {
 	ue, ok := err.(*uploadError)
 	return ok && ue.code == code && !ue.transient
+}
+
+func TestReactionsModerationAvatars(t *testing.T) {
+	b, pb, srv := start(t)
+	b.setRooms([]wantedRoom{{MUC: muc, Key: "k1"}})
+	join(t, b, pb, srv, 1, "Chirkle")
+	from := `from='` + muc + `/Ann' to='` + srv.to() + `'`
+
+	// In: someone's set of reactions, and none (all taken back).
+	srv.raw(`<message type='groupchat' ` + from + `><reactions xmlns='urn:xmpp:reactions:0' id='sid-1'><reaction>👍</reaction>` +
+		`<reaction>🎉</reaction></reactions><store xmlns='urn:xmpp:hints'/></message>`)
+	srv.raw(`<message type='groupchat' ` + from + `><reactions xmlns='urn:xmpp:reactions:0' id='sid-2'/></message>`)
+	r := pb.waitFor(t, "reactions", func(ev event) bool { return ev.Type == "reactions" && ev.Target == "sid-1" })
+	if strings.Join(r.Emoji, " ") != "👍 🎉" || r.Nick != "Ann" || r.OccupantID != "oid-ann" {
+		t.Fatalf("reactions: %+v", r)
+	}
+	if r := pb.waitFor(t, "none", func(ev event) bool { return ev.Type == "reactions" && ev.Target == "sid-2" }); len(r.Emoji) != 0 {
+		t.Fatalf("none: %+v", r)
+	}
+
+	// Out: the bot's set, with no body.
+	var opt sendOptions
+	json.Unmarshal([]byte(`{"react":{"id":"sid-1","emoji":["❤️","👍"]}}`), &opt)
+	if err := b.sendGroup(context.Background(), muc, "x1", "", opt); err != nil {
+		t.Fatal(err)
+	}
+	m := srv.waitReceived(t, 1)
+	if m.Body != nil || m.Reactions == nil || m.Reactions.ID != "sid-1" || strings.Join(m.Reactions.Reactions, " ") != "❤️ 👍" {
+		t.Fatalf("reactions out: %+v", m)
+	}
+
+	// Moderation: not as a participant; as a moderator, in the version the conference has.
+	if err := b.moderate(context.Background(), muc, "sid-5", ""); err == nil || err.(*sendError).transient {
+		t.Fatalf("moderated as a participant: %v", err)
+	}
+	srv.raw(`<presence from='` + muc + `/Chirkle' to='` + srv.to() + `'><x xmlns='http://jabber.org/protocol/muc#user'>` +
+		`<item affiliation='admin' role='moderator'/><status code='110'/></x></presence>`)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		b.mu.Lock()
+		ready := b.rooms[muc].role == "moderator" && b.rooms[muc].feats[nsModerate]
+		b.mu.Unlock()
+		if ready {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no role or features")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := b.moderate(context.Background(), muc, "sid-5", "spam"); err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Lock()
+	b.rooms[muc].feats = map[string]bool{nsModerat0: true}
+	b.mu.Unlock()
+	if err := b.moderate(context.Background(), muc, "sid-6", ""); err != nil {
+		t.Fatal(err)
+	}
+	srv.mu.Lock()
+	if strings.Join(srv.moderations, ",") != "1|sid-5|spam,0|sid-6|" {
+		t.Fatalf("moderations: %q", srv.moderations)
+	}
+	srv.mu.Unlock()
+
+	// Avatars: a photo hash told once (again when it changes), the vCard's photo held for one fetch.
+	photoPresence := func(hash string) {
+		srv.raw(`<presence ` + from + `><occupant-id xmlns='urn:xmpp:occupant-id:0' id='oid-ann'/>` +
+			`<x xmlns='http://jabber.org/protocol/muc#user'><item affiliation='member' role='participant'/></x>` +
+			`<x xmlns='vcard-temp:x:update'><photo>` + hash + `</photo></x></presence>`)
+	}
+	photoPresence("AB12")
+	photoPresence("ab12")
+	photoPresence("cd34")
+	pb.waitFor(t, "second photo", func(ev event) bool { return ev.Type == "photo" && ev.Hash == "cd34" })
+	pb.mu.Lock()
+	n := 0
+	for _, ev := range pb.events {
+		if ev.Type == "photo" {
+			n++
+		}
+	}
+	pb.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("%d photo events, not 2", n)
+	}
+	token, typ, err := b.avatar(context.Background(), muc, "Ann")
+	if err != nil || token == "" || typ != "image/png" {
+		t.Fatalf("avatar: %q %q %v", token, typ, err)
+	}
+	api := httptest.NewServer(b.api("s3cret"))
+	defer api.Close()
+	res, _ := http.Get(api.URL + "/photo/" + token)
+	data, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if string(data) != "PNGDATA" || res.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("photo: %q %q", data, res.Header.Get("Content-Type"))
+	}
+	if res, _ := http.Get(api.URL + "/photo/" + token); res.StatusCode != http.StatusNotFound {
+		t.Fatal("the photo was given twice")
+	}
+	if token, _, err := b.avatar(context.Background(), muc, "Bob"); err != nil || token != "" {
+		t.Fatalf("no photo: %q %v", token, err)
+	}
 }

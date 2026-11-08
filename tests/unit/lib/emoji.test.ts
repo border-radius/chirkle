@@ -20,13 +20,14 @@ describe("emoji (§20.1, §20.4)", () => {
     expect(serverEmoji()).toEqual(CATEGORIES.flatMap((c) => c.emoji));
   });
 
-  it("each of Telegram's reaction emoji is one of the picker's or has the nearest of them (pb_hooks/telegram/reactions.js)", () => {
+  it("each of Telegram's reaction emoji is one of the picker's or has the nearest of them (pb_hooks/telegram/reactions.js, lib/emoji.js)", () => {
     const src = readFileSync("pb_hooks/telegram/reactions.js", "utf8");
+    const lib = readFileSync("pb_hooks/lib/emoji.js", "utf8");
     const telegram = [.../const TELEGRAM = new Set\(([\s\S]*?)\.split/.exec(src)![1]!.matchAll(/"([^"]*)"/g)].flatMap((m) =>
       m[1]!.split(" ").filter(Boolean),
     );
     const similar = new Map(
-      [.../const SIMILAR = new Map\(\[([\s\S]*?)\]\);/.exec(src)![1]!.matchAll(/\["([^"]+)", "([^"]+)"\]/g)].map((m) => [m[1]!, m[2]!]),
+      [.../const SIMILAR = new Map\(\[([\s\S]*?)\]\);/.exec(lib)![1]!.matchAll(/\["([^"]+)", "([^"]+)"\]/g)].map((m) => [m[1]!, m[2]!]),
     );
     const picker = new Set(serverEmoji());
     expect(telegram.length).toBeGreaterThan(70);

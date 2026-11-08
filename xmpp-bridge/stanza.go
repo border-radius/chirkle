@@ -27,6 +27,9 @@ const (
 	nsModerat0 = "urn:xmpp:message-moderate:0"
 	nsFasten   = "urn:xmpp:fasten:0"
 	nsHints    = "urn:xmpp:hints"
+	nsReact    = "urn:xmpp:reactions:0"
+	nsVCard    = "vcard-temp"
+	nsVUpdate  = "vcard-temp:x:update"
 )
 
 // MUC status codes (XEP-0045 §15.6).
@@ -157,6 +160,12 @@ type inMessage struct {
 	OMEMO2  *struct{} `xml:"urn:xmpp:omemo:2 encrypted"`
 	OpenPGP *struct{} `xml:"urn:xmpp:openpgp:0 openpgp"`
 	PGP     *struct{} `xml:"jabber:x:encrypted x"`
+
+	// Someone's whole set of reactions on a message (XEP-0444): in a conference, by its stanza id.
+	Reactions *struct {
+		ID        string   `xml:"id,attr"`
+		Reactions []string `xml:"reaction"`
+	} `xml:"urn:xmpp:reactions:0 reactions"`
 }
 
 // encrypted: a message the bot can't read. An aesgcm:// link is an OMEMO-encrypted file.
@@ -267,6 +276,10 @@ type inPresence struct {
 	OccupantID *idAttr      `xml:"urn:xmpp:occupant-id:0 occupant-id"`
 	MUCUser    *mucUser     `xml:"http://jabber.org/protocol/muc#user x"`
 	Error      *stanzaError `xml:"error"`
+	// The hash of their vCard's photo (XEP-0153): empty for none. No element: the client doesn't say.
+	Photo *struct {
+		Hash *string `xml:"photo"`
+	} `xml:"vcard-temp:x:update x"`
 }
 
 type inIQ struct {
@@ -287,7 +300,7 @@ type outMessage struct {
 	To        string        `xml:"to,attr"`
 	ID        string        `xml:"id,attr,omitempty"`
 	Type      string        `xml:"type,attr"`
-	Body      string        `xml:"body"`
+	Body      string        `xml:"body,omitempty"`
 	OriginID  *outID        `xml:"origin-id,omitempty"`
 	Reply     *outReply     `xml:",omitempty"`
 	Replace   *outReplace   `xml:",omitempty"`
@@ -296,6 +309,13 @@ type outMessage struct {
 	Fallbacks []outFallback `xml:",omitempty"`
 	Store     *outStore     `xml:",omitempty"`
 	OOB       *outOOB       `xml:",omitempty"`
+	Reactions *outReactions `xml:",omitempty"`
+}
+
+type outReactions struct {
+	XMLName   xml.Name `xml:"urn:xmpp:reactions:0 reactions"`
+	ID        string   `xml:"id,attr"`
+	Reactions []string `xml:"reaction"`
 }
 
 type outOOB struct {
@@ -393,4 +413,10 @@ type iqReply struct {
 	Disco   *discoInfo   `xml:"http://jabber.org/protocol/disco#info query"`
 	Items   *discoItems  `xml:"http://jabber.org/protocol/disco#items query"`
 	Slot    *slot        `xml:"urn:xmpp:http:upload:0 slot"`
+	VCard   *struct {
+		Photo struct {
+			Type   string `xml:"TYPE"`
+			BinVal string `xml:"BINVAL"`
+		} `xml:"PHOTO"`
+	} `xml:"vcard-temp vCard"`
 }

@@ -511,6 +511,117 @@ describe("XMPP bridge (§38)", () => {
     expect((await messagesOf(room.id)).filter((m) => !m.deleted).map((m) => m.text)).toEqual(["or 1pm"]);
   });
 
+  it("reactions come over as each person's whole set; the bot's set goes out, without the conference's own people's", async () => {
+    const owner = await signUp();
+    const { room, muc } = await linkedRoom(owner);
+    await xmppMessage(muc, { id: "p1", stanza_id: "sp1", body: "party?" });
+    const [party] = await messagesOf(room.id);
+    const reactions = async () =>
+      ((await admin.collection("messages").getOne(party!.id)).reactions as { emoji: string; users: string[] }[]).map((r) => [
+        r.emoji,
+        r.users.length,
+      ]);
+
+    // Ann's set; Bob's, with one the picker hasn't got ("❤" is "❤️"; "🫠" has no near one).
+    await stub.event({ type: "reactions", muc, nick: "Ann", occupant_id: "oid-ann", target: "sp1", emoji: ["👍", "🎉"] });
+    await stub.event({ type: "reactions", muc, nick: "Bob", occupant_id: "oid-bob", target: "sp1", emoji: ["❤", "👍", "🫠"] });
+    expect(await reactions()).toEqual([
+      ["👍", 2],
+      ["🎉", 1],
+      ["❤️", 1],
+    ]);
+    // Ann's new set takes 🎉 back; none takes all of Bob's back. Eve's none makes no stand-in.
+    await stub.event({ type: "reactions", muc, nick: "Ann", occupant_id: "oid-ann", target: "sp1", emoji: ["👍"] });
+    await stub.event({ type: "reactions", muc, nick: "Bob", occupant_id: "oid-bob", target: "sp1" });
+    await stub.event({ type: "reactions", muc, nick: "Eve", occupant_id: "oid-eve", target: "sp1" });
+    expect(await reactions()).toEqual([["👍", 1]]);
+    expect((await admin.collection("users").getFullList({ filter: 'name ~ "Eve"' })).length).toBe(0);
+    // The conference's people's reactions are theirs already: the bot sends none for them.
+    await tick();
+    await tick();
+    expect(sentTo(muc).filter((r) => r.body.react)).toEqual([]);
+
+    // The owner reacts: the bot's set is theirs; taken back, none.
+    await owner.pb.send("/api/chat/reactions", { method: "POST", body: { message: party!.id, emoji: "🔥", on: true } });
+    await eventually(() =>
+      expect(
+        sentTo(muc)
+          .filter((r) => r.body.react)
+          .at(-1)?.body.react,
+      ).toEqual({ id: "sp1", emoji: ["🔥"] }),
+    );
+    await owner.pb.send("/api/chat/reactions", { method: "POST", body: { message: party!.id, emoji: "🔥", on: false } });
+    await eventually(() =>
+      expect(
+        sentTo(muc)
+          .filter((r) => r.body.react)
+          .at(-1)?.body.react,
+      ).toEqual({ id: "sp1", emoji: [] }),
+    );
+    // The bot's own, as the conference sends them back, change nothing.
+    await stub.event({ type: "reactions", muc, nick: "Chirkle", self: true, target: "sp1", emoji: ["🔥"] });
+    expect(await reactions()).toEqual([["👍", 1]]);
+  });
+
+  it("a room moderator's delete of an XMPP person's message is moderated there; their own retraction isn't sent back", async () => {
+    const owner = await signUp();
+    const { room, muc } = await linkedRoom(owner);
+    await xmppMessage(muc, { id: "s1", stanza_id: "ss1", body: "spam" });
+    await xmppMessage(muc, { id: "s2", stanza_id: "ss2", body: "oops" });
+    await xmppMessage(muc, { id: "s3", stanza_id: "ss3", body: "more spam" });
+    const [spam, oops, more] = await messagesOf(room.id);
+    const moderated = () => stub.requestsTo("/moderate").filter((r) => r.body.muc === muc);
+
+    await admin.collection("messages").update(spam!.id, { deleted: true });
+    await eventually(() => expect(moderated().map((r) => r.body.id)).toEqual(["ss1"]));
+
+    // Retracted by its author: deleted in the room, and not moderated in turn.
+    await stub.event({ type: "retraction", muc, nick: "Ann", occupant_id: "oid-ann", target: "ss2" });
+    expect((await admin.collection("messages").getOne(oops!.id)).deleted).toBe(true);
+    // Not a moderator there: deleted in the room only, and not tried again.
+    stub.fail("/moderate", 400, { error: "the bot isn't a moderator there", transient: false });
+    await admin.collection("messages").update(more!.id, { deleted: true });
+    await eventually(() => expect(moderated().map((r) => r.body.id)).toEqual(["ss1", "ss3"]));
+    await tick();
+    await tick();
+    expect(moderated().map((r) => r.body.id)).toEqual(["ss1", "ss3"]);
+    expect((await admin.collection("xmpp_queue").getFullList({ filter: admin.filter("muc = {:muc}", { muc }) })).length).toBe(0);
+  });
+
+  it("a stand-in gets its vCard photo as its avatar: when made, and when the hash changes, at most once a day", async () => {
+    const owner = await signUp();
+    const { room, muc } = await linkedRoom(owner);
+    stub.photos.set("Pat", { type: "image/png", data: PNG });
+    try {
+      await xmppMessage(muc, { nick: "Pat", occupant_id: "oid-pat", body: "hello" });
+      const [hello] = await messagesOf(room.id);
+      const user = () => admin.collection("users").getOne(hello!.author);
+      await eventually(async () => expect((await user()).avatar).toMatch(/^avatar_\w+\.png$/));
+      const avatarRequests = () => stub.requestsTo("/avatar").filter((r) => r.body.nick === "Pat");
+      expect(avatarRequests()).toHaveLength(1);
+
+      // A new hash within the day: not fetched again.
+      await stub.event({ type: "photo", muc, nick: "Pat", occupant_id: "oid-pat", hash: "abc" });
+      await tick();
+      expect(avatarRequests()).toHaveLength(1);
+      // A day later, it is; none takes the avatar away.
+      const person = await admin.collection("xmpp_people").getFirstListItem(admin.filter("user = {:u}", { u: hello!.author }));
+      await admin.collection("xmpp_people").update(person.id, { avatar_at: "2020-01-01 00:00:00.000Z" });
+      await stub.event({ type: "photo", muc, nick: "Pat", occupant_id: "oid-pat", hash: "abc" });
+      await eventually(() => expect(avatarRequests()).toHaveLength(2));
+      expect((await admin.collection("xmpp_people").getOne(person.id)).avatar_hash).toBe("abc");
+      // The same hash again: nothing to fetch, whatever the day.
+      await admin.collection("xmpp_people").update(person.id, { avatar_at: "2020-01-01 00:00:00.000Z" });
+      await stub.event({ type: "photo", muc, nick: "Pat", occupant_id: "oid-pat", hash: "abc" });
+      await tick();
+      expect(avatarRequests()).toHaveLength(2);
+      await stub.event({ type: "photo", muc, nick: "Pat", occupant_id: "oid-pat", hash: "" });
+      expect((await user()).avatar).toBe("");
+    } finally {
+      stub.photos.delete("Pat");
+    }
+  });
+
   it("names ending in (XMPP) are the stand-ins'", async () => {
     const u = await signUp();
     expect(await status(u.pb.collection("users").update(u.user.id, { name: "Mallory (xmpp)" }))).toBe(400);

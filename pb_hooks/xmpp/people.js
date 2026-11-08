@@ -57,6 +57,8 @@ function personOf(app, who) {
   row.set("nick", who.nick);
   row.set("jid", who.jid || "");
   app.save(row);
+  // Their avatar, if they have one: the child may have told its hash before there was a stand-in to give it to.
+  require(`${__hooks}/xmpp/avatars.js`).queueFetch(app, row, who.muc, who.nick, "");
   return user;
 }
 

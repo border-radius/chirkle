@@ -68,6 +68,10 @@ type event struct {
 	// message: the links to files in it (XEP-0066); encrypted, when the bot can't read it.
 	OOB       []string `json:"oob,omitempty"`
 	Encrypted bool     `json:"encrypted,omitempty"`
+
+	// reactions: the emoji (all of them; none takes them back), on Target. photo: the vCard photo's hash ("": none).
+	Emoji []string `json:"emoji,omitempty"`
+	Hash  string   `json:"hash,omitempty"`
 }
 
 type roomStatus struct {
