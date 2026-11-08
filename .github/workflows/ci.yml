@@ -29,6 +29,25 @@ jobs:
       - uses: ./.github/actions/setup
       - run: npm test
 
+  xmpp:
+    name: XMPP bridge child (vet, test, build)
+    needs: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: xmpp-bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::gofmt these"; exit 1; }
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      # Every platform the npm package ships (prepack builds the same).
+      - run: node ../scripts/build-xmpp.mjs --all
+
   integration:
     name: Integration tests
     needs: static

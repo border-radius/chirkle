@@ -1,4 +1,5 @@
-# Production image: the built frontend + the pinned PocketBase, and ffmpeg. Used by Dokku (README "Deploying").
+# Production image: the built frontend + the pinned PocketBase, the XMPP bridge's child, and ffmpeg. Used by Dokku
+# (README "Deploying").
 
 # ---- frontend: web/ → pb_public/ ----
 FROM node:22-alpine AS web
@@ -18,6 +19,17 @@ WORKDIR /src
 COPY scripts/fetch-pocketbase.sh scripts/
 RUN sh scripts/fetch-pocketbase.sh
 
+# ---- the XMPP bridge's child (DESIGN.md §38.9): one static binary, built from xmpp-bridge/ at this commit ----
+FROM golang:1.27.3-alpine AS xmpp
+WORKDIR /src/xmpp-bridge
+COPY xmpp-bridge/go.mod xmpp-bridge/go.sum ./
+RUN go mod download
+COPY xmpp-bridge ./
+COPY package.json /src/
+RUN v=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' /src/package.json) \
+  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=$v" -o /out/xmpp-bridge . \
+  && /out/xmpp-bridge --version
+
 # ---- runtime ----
 FROM alpine:3.22
 # ffmpeg: the media worker makes each video's poster frame for the room and the media grid (DESIGN.md §30.1). Without it (or with
@@ -31,7 +43,10 @@ COPY --from=pocketbase /src/bin/pocketbase ./pocketbase
 COPY --from=web /src/pb_public ./pb_public
 COPY pb_migrations ./pb_migrations
 COPY pb_hooks ./pb_hooks
+COPY --from=xmpp /out/xmpp-bridge ./xmpp-bridge
 USER chirkle
+# The XMPP bridge is on once XMPP_JID and XMPP_PASSWORD are set (README "XMPP integration").
+ENV CHIRKLE_XMPP_BIN=/app/xmpp-bridge
 # Rate limits are per client IP, and Dokku's proxy is always in front: trust the address it adds to X-Forwarded-For.
 # Use -e TRUSTED_PROXY=off when clients reach the container directly (README "Deploying").
 ENV TRUSTED_PROXY=X-Forwarded-For

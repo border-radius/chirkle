@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// `npm start` / `npx chirkle`: run the production server. In a source checkout it builds web/ → pb_public/ first;
-// the npm package ships pb_public/ built. PocketBase (pinned, checksum-verified) is downloaded on the first run.
+// `npm start` / `npx chirkle`: run the production server. In a source checkout it builds web/ → pb_public/ first,
+// and the XMPP bridge's child when the bridge is set up and Go is installed; the npm package ships both built.
+// PocketBase (pinned, checksum-verified) is downloaded on the first run.
 //
 //   chirkle                          serve on http://127.0.0.1:8090 (HOST, PORT), data in ./pb_data (CHIRKLE_DATA)
 //   chirkle chat.example.com         serve with HTTPS (Let's Encrypt) on :80/:443; any other `pocketbase serve` flags
@@ -56,7 +57,18 @@ run("sh", [join(ROOT, "scripts/fetch-pocketbase.sh")], {
   const os = /** @type {Record<string, string>} */ ({ linux: "linux", darwin: "darwin" })[process.platform];
   const cpu = /** @type {Record<string, string>} */ ({ x64: "amd64", arm64: "arm64" })[process.arch];
   const child = join(ROOT, "bin", "xmpp-bridge", `${os}-${cpu}`);
+  // A checkout builds it as it builds the web app, when the bridge is set up (XMPP_JID) and Go is there; without Go,
+  // one built before is used, or the bridge stays off.
+  const checkout = existsSync(join(ROOT, "xmpp-bridge", "go.mod"));
+  if (checkout && os && cpu && process.env.XMPP_JID && !process.env.CHIRKLE_XMPP_BIN && hasGo()) {
+    run(process.execPath, ["scripts/build-xmpp.mjs"], { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] });
+  }
   if (!process.env.CHIRKLE_XMPP_BIN && os && cpu && existsSync(child)) process.env.CHIRKLE_XMPP_BIN = child;
+}
+
+function hasGo() {
+  const r = spawnSync("go", ["version"], { stdio: "ignore" });
+  return !r.error && r.status === 0;
 }
 
 // ---- run it ----

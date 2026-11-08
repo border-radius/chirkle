@@ -73,11 +73,14 @@ jobs:
         with:
           ref: refs/tags/${{ needs.versions.outputs.tag }}
       - uses: ./.github/actions/setup
+        with:
+          go: "true" # prepack builds the XMPP bridge's child for each platform
       - name: Stage it
         run: |
           if [ "$(npm view "chirkle@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
             echo "chirkle@$VERSION is on npm already."; exit 0
           fi
-          # prepack builds the web app (and fails over its size budget) before the tarball is made.
+          # prepack builds the web app (and fails over its size budget) and the XMPP bridge's child (four platforms)
+          # before the tarball is made.
           npm stage publish
           echo "::notice::chirkle@$VERSION is staged: approve it on npmjs.com (or npm stage approve <id>) to publish it."

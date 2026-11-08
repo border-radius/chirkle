@@ -30,6 +30,9 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
 - What you were typing is kept per room, even across a reload; "Jump to latest" whenever you are scrolled up
 - Your own branding (title and logo) and, if you like, invite-only signups: set by the admin in PocketBase
 - Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits, files and (with the bot an admin) reactions go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [Telegram integration](#telegram-integration)
+- XMPP bridge (optional): link rooms to XMPP conferences (MUCs) through a bot account; messages, replies,
+  corrections, deletes, files and reactions go both ways, and conference people show under stand-in accounts with
+  their nicknames and avatars — see [XMPP integration](#xmpp-integration)
 - Fast room switching: each room's latest messages are kept in the browser (IndexedDB) and shown at once while the
   server answers; unread rooms are fetched ahead. Attachment thumbnails are kept by the service worker, so going back
   to a room (or reloading) doesn't download them again. All of it is cleared on logout
@@ -52,7 +55,9 @@ Design: [`docs/DESIGN.md`](docs/DESIGN.md) · Android app: [`docs/ANDROID.md`](d
 
 - Node.js ≥ 22 and npm ≥ 11
 - Linux or macOS (x64/arm64) — `npm start` and `npm run setup` download the matching PocketBase binary (Windows: WSL or Docker)
-- Optional, for the server's workers: `ffmpeg` (video posters) and `curl` (link previews) on the `PATH`
+- Optional, for the server's workers: `ffmpeg` (video posters) and `curl` (link previews, files from XMPP) on the `PATH`
+- Optional, for the XMPP bridge in a clone: Go (the version `xmpp-bridge/go.mod` names). The npm package and the
+  Docker image ship its binary built; packing the npm package (`npm pack`) needs Go
 - For e2e tests: Playwright's Chromium (`npx playwright install chromium`)
 
 ## Quick start
@@ -108,7 +113,8 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 | `npm run check` | typecheck + lint + lint:sinks + test + test:int + build (what CI runs before e2e) |
 
 Every test run starts its own PocketBase on a free port with a temp data dir — nothing to clean up, and no fakes
-except a stub Telegram Bot API for the bridge's tests. CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
+except a stub Telegram Bot API and a stub XMPP child for the bridges' tests (the child itself has Go tests against an
+in-process XMPP server: `cd xmpp-bridge && go test ./...`). CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
 per browser (Chromium, Firefox, WebKit).
 
 ## Project layout
@@ -116,13 +122,16 @@ per browser (Chromium, Firefox, WebKit).
 ```
 pb_migrations/   schema + API rules (the source of truth for access control)
 pb_hooks/        server-side hooks: trimming, soft delete, edit/archive stamps, DM + unread routes, guards, security headers;
-                 telegram.pb.js + telegram/: the optional Telegram bridge
+                 telegram.pb.js + telegram/: the optional Telegram bridge; xmpp.pb.js + xmpp/: the optional XMPP
+                 bridge; lib/bridges.js: what the two share
 web/src/         frontend: api.ts (the only module that talks to PocketBase, through pb.ts, a minimal client), router,
                  store, cache.ts (the room cache), sw.ts (the service worker), views/, lib/ (pure logic)
 web/styles/      app.css (bundles app/*.css, one file per part) and viewer.css
 web/public/      icons/: the logo (logo.svg) as icon.svg and the PNG app icons, served as they are
 scripts/         build, dev, fetch-pocketbase, pb-types (PocketBase's types for the hooks), html-sink check
 tests/           unit/, integration/, e2e/, perf/ (scale measurements), support/ (PocketBase harness, Telegram stub, helpers)
+xmpp-bridge/     the XMPP bridge's child process (Go): the XMPP connection, which PocketBase starts and talks to over
+                 localhost HTTP (DESIGN.md §38)
 android/         the Android app (docs/ANDROID.md): core/data (API, realtime, database, sync), core/ui, feature/*, app
 ```
 
@@ -291,6 +300,38 @@ superusers); see DESIGN.md §35. Telegram groups linked to it get the room's nam
 
 The bridge is self-contained: `pb_hooks/telegram.pb.js`, `pb_hooks/telegram/` and its own `tg_*` collections. Delete
 the first two to remove it.
+
+## XMPP integration
+
+An optional bridge between rooms and XMPP conferences (MUCs) ([`docs/DESIGN.md` §38](docs/DESIGN.md)). A bot account
+joins your conferences; once one is linked to a room, messages, replies, corrections, deletes, files and reactions go
+both ways. People in the conference show in the room under stand-in users ("Ann (XMPP)") with their nicknames and
+vCard avatars; the bot posts Chirkle messages as "Name: text". Files go up to the bot's server by HTTP upload
+(XEP-0363), or as links to this site when it has none. Encrypted messages (OMEMO) can't be read: they show as such.
+
+The XMPP connection is a small Go program (`xmpp-bridge/`) that PocketBase starts and stops with itself. The npm
+package and the Docker image ship it built; in a clone, `npm start` and `npm run dev` build it when Go is installed
+(or `npm run build:xmpp`).
+
+**Setup**
+
+1. Make an account for the bot on any XMPP server (one with HTTP upload, for files to go as files).
+2. Set the environment and restart:
+   - `XMPP_JID` — the bot's address, `bot@example.org` (without it the bridge is off)
+   - `XMPP_PASSWORD` — its password
+   - `XMPP_NICK` — its nickname in conferences (default `Chirkle`)
+   - `XMPP_SERVER` — `host[:port]` to connect to, when DNS (SRV records) doesn't say
+
+   With Dokku: `dokku config:set chirkle XMPP_JID='bot@example.org' XMPP_PASSWORD='…'`.
+3. Add a row under *Collections → xmpp_links* in the admin UI: the conference's address
+   (`room@conference.example.org`), its `password` if it has one, the room, and tick `enabled`. Its `status` then says
+   whether the bot is in ("joined as Chirkle") or why not. Inviting the bot to a conference makes a row to fill in.
+   Tick `anonymous` to send the room's messages without their authors' names. Make the bot a moderator of the
+   conference for deletes by the room's moderators to take XMPP people's messages out there too.
+
+A room can be linked to Telegram groups and XMPP conferences at once: each gets what came from the others.
+
+The bridge is self-contained: `pb_hooks/xmpp.pb.js`, `pb_hooks/xmpp/`, the child and its own `xmpp_*` collections.
 
 ## Linked instances
 

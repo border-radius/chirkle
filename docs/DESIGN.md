@@ -4022,3 +4022,28 @@ Milestone 4 adds reactions, moderation and avatars.
 - **Tests:** the Go test covers reactions both ways, moderation in both versions, photo hashes and the one-time
   photo. The integration tests cover reaction sets, the bot's set, moderation and its suppression, and avatars with
   the daily limit.
+
+### 38.19 As built: milestone 5 (2026-11-08)
+
+Milestone 5 packages the child; the bridge is complete.
+
+- **npm package:** `"files"` adds `bin/xmpp-bridge/`, and `prepack` runs `build-xmpp.mjs --all` after the web
+  build. Packing now needs Go and fails without it. The four binaries are 8–8.7 MB each, 3.2–3.6 MB gzipped. The
+  0.2.0 tarball went from about 0.9 MB to 14.8 MB (35.8 MB unpacked), a little over the 10–12 MB estimated. The
+  per-platform optional packages of §38.9 remain the way out if that matters.
+- **`start.mjs`** builds the child for this machine only in a checkout (`xmpp-bridge/go.mod` is there), with
+  `XMPP_JID` set and `go` on the PATH. A server that doesn't use the bridge never waits for Go. `dev.mjs` does the
+  same, and warns when `XMPP_JID` is set with neither Go nor a binary built before.
+- **Docker:** an `xmpp` stage on `golang:1.27.3-alpine` (the version in `go.mod`) downloads the modules first, for
+  the layer cache, then builds with the version from `package.json` and runs `--version` as a check. The runtime
+  image gets `/app/xmpp-bridge` and `ENV CHIRKLE_XMPP_BIN=/app/xmpp-bridge`: the bridge stays off until `XMPP_JID`
+  and `XMPP_PASSWORD` are set. Docker isn't available here, so the image itself wasn't built. The stage's commands
+  (the version `sed`, the build, `--version`) were run as they are.
+- **CI:** the setup action takes `go: "true"` to add `actions/setup-go` (`go-version-file: xmpp-bridge/go.mod`,
+  cached by `go.sum`), so the jobs that don't need Go skip it. A new `xmpp` job runs gofmt, `go vet`,
+  `go test -race` and the four-platform build. `release.yml`'s npm job asks for Go, since its `prepack` builds them.
+- **README:** an "XMPP integration" section (setup, settings, linking), plus the feature list, requirements, layout
+  and tests.
+- **Checked:** the packed tarball, unpacked and started as `npx chirkle` would, runs its own
+  `bin/xmpp-bridge/linux-amd64`, which posts to PocketBase and exits with it. A checkout with no binary built builds
+  one on `npm start` and runs it.
