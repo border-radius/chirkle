@@ -359,4 +359,26 @@ class UiFeaturesTest {
         ui.waitFor("Message forwarded.")
         ui.until { a.api.page(Pages.latest(to.id)).singleOrNull()?.forwardedFrom == b.user.id }
     }
+
+    @Test fun `the forward picker searches rooms and finds people with no DM yet (forward spec)`() {
+        val a = newUser()
+        val b = newUser()
+        val from = runBlocking { a.api.createRoom("fs-${uniq()}") }
+        val other = runBlocking { a.api.createRoom("fsother-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), from.id, "find them")) }
+        ui.signedIn(a)
+        openRoom(from.name)
+        longPress("find them")
+        compose.onNodeWithText("Forward").performClick()
+        ui.waitFor("Forward message")
+        ui.waitFor("#${other.name}")
+        // Rooms narrow as you type; the person comes from the server.
+        compose.onNodeWithContentDescription("Search rooms and people").performTextInput(b.user.name.uppercase())
+        ui.waitGone("#${other.name}")
+        ui.waitFor(b.user.name)
+        compose.onNodeWithText(b.user.name).performClick()
+        ui.waitFor("Message forwarded.")
+        val dm = runBlocking { a.api.listRooms() }.single { it.isDm && b.user.id in it.members }
+        ui.until { a.api.page(Pages.latest(dm.id)).singleOrNull()?.forwardedFrom == a.user.id }
+    }
 }

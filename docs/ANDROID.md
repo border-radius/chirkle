@@ -1585,3 +1585,15 @@ nothing, and goes as soon as nothing is out. Not over a first load's spinner (no
 
 Tests: `ServicesTest` "the room list and a room say while they are being fetched" (the list's count goes up and back
 to 0; a room is no longer busy once ready). Web: `tests/e2e/loadbar.spec.ts`, `tests/unit/loadbar.test.ts`.
+
+## 59. Searching the forward picker (2026-11-09)
+
+The forward sheet (§21.3) had only a list to scroll. It now has the web's search field (`web/src/views/room/forward.ts`,
+"Search rooms and people") over the list. Typing narrows the rooms and DMs to those whose title holds the text, with
+case and accents folded as in Jump to (`jumpFold`) and a leading "#" or "@" ignored. After a 200 ms pause (the web's
+`SEARCH_DEBOUNCE_MS`) the people search runs too: the people it finds come after the rooms, except those you already
+have a DM with (they show as that DM) and those who take no DMs (§16.7). Picking one of them opens the DM
+(`RoomActions.openDm`) and forwards there (`ForwardTo.ToUser`). The keyboard's Done forwards to the first match.
+The field isn't focused when the sheet opens, so the keyboard doesn't cover the list, the same as the emoji sheet.
+The list keeps the height of the full list while you type, so the sheet doesn't shrink under your finger. Test:
+`UiFeaturesTest` "the forward picker searches rooms and finds people with no DM yet".

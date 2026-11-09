@@ -470,7 +470,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     saving?.let { from -> chirkle.android.ui.SaveToCollectionSheet(from) { saving = null } }
     if (pickingItems) CollectionPickerSheet(vm.filesLeft, onPick = { pickingItems = false; vm.attachItems(it) }) { pickingItems = false }
     forwarding?.let { ids ->
-        ForwardSheet(ids.size, forwardTargets(app_), me?.id, onPick = { r -> forwarding = null; vm.forward(ids, r.id) {} }, onDismiss = { forwarding = null })
+        ForwardSheet(ids.size, forwardTargets(app_), me?.id, onPick = { to -> forwarding = null; vm.forward(ids, to) }, onDismiss = { forwarding = null })
     }
 }
 

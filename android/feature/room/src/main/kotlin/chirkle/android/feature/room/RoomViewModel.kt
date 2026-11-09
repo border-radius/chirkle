@@ -441,10 +441,15 @@ class RoomViewModel(
     }
 
     /** Forward [ids] into [room] (§21.3); the copies are mine and say who first wrote them. */
-    fun forward(ids: List<String>, room: String, then: (String) -> Unit) {
+    fun forward(ids: List<String>, to: ForwardTo, then: (String) -> Unit = {}) {
         val ordered = ids.mapNotNull { controller.find(it) }.sortedWith(MessageOrder).map { it.id }
         viewModelScope.launch {
-            runCatching { services.api.forward(ordered, room) }
+            // Someone you had no DM with: open it first, as the web does (§16.2).
+            var room = ""
+            runCatching {
+                room = when (to) { is ForwardTo.ToRoom -> to.room.id; is ForwardTo.ToUser -> services.actions.openDm(to.user.id).id }
+                services.api.forward(ordered, room)
+            }
                 .onSuccess {
                     selected = emptySet()
                     toast = if (ordered.size == 1) "Message forwarded." else "${ordered.size} messages forwarded."

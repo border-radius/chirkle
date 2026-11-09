@@ -24,7 +24,7 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | `edit` | `UiFeaturesTest`: edit, delete, a message's menu closing when it is deleted meanwhile (QA BUG-156); `ServicesTest`: edit, delete | Covered |
 | `reactions` | `UiFeaturesTest`: quick reactions; `ServicesTest`; `HelpersTest`: the web's reaction cases; `UiPortsTest`: emoji by name, ":ta" offering 🎉 over the composer, a tap and a whole ":fire:" putting them in, the emoji sheet's search field (DESIGN.md §20.6, ANDROID.md §53); `EmojiTest`: the web's names, line by line, and its finding cases | Covered (what the sheet's search finds: on `EmojiTest` only, as Robolectric draws no emoji) |
 | `replies` | `UiFeaturesTest`: reply and its quote; `ServicesTest`: a live reply's quote from the window, kept through an edit, or fetched (ANDROID.md §34); `UiFeaturesTest`: quotes and the reply bar follow the original's edit and delete (QA BUG-181, BUG-182); `ChirkleApiTest` | Partial: going to the original |
-| `forward` | `UiFeaturesTest`: forwarding one message; `ChirkleApiTest` | Partial: several at once, delete together |
+| `forward` | `UiFeaturesTest`: forwarding one message; the picker's search narrowing rooms and finding someone with no DM yet (ANDROID.md §59); `ChirkleApiTest` | Partial: several at once, delete together |
 | `dm` | `UiFeaturesTest`: a new DM from the people search; `ChirkleApiTest` | Partial: close and reopen |
 | `hide` | `UiFeaturesTest`: hiding a room (listed under the one Hidden & archived heading, ANDROID.md §36) | Partial: unhide |
 | `archive` | `UiFeaturesTest`: an archived room is read-only; `ServicesTest` | Covered |
