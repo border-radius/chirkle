@@ -349,3 +349,37 @@ all 100 users. What is left:
 - **A room page's p95** comes from the first seconds, with 100 users arriving at once.
 - **Thumbnails' p95** (about 1.2–2.2 s) is S3: a file served holds one JS runtime while it streams (§6).
 - **The server's peak memory** stays at about 1.5–1.7 GB.
+
+## 8. 2026-11-09: a $5 VPS (one CPU)
+
+What one small VPS (1 vCPU, 1 GB) carries, with `scripts/stress.ts` against §7's server. The server and what it spawns
+are pinned to one CPU with `GOMAXPROCS=1` and `GOMEMLIMIT=700MiB` (`--cpu=7 --memlimit=700MiB`), and the clients run on
+other CPUs (not the pinned CPU's SMT sibling). The container has no cgroups, so 1 GB isn't enforced: the memory column is the peak
+of the server and its children together, which a 1 GB box would have to hold. `--warm` makes the history's thumbnails
+first, as a live instance has them; `--files=off` fetches no files, as when Cloudflare or the browser's cache serves
+them; `--arrive` is the number of seconds over which the users arrive. Steady state means after the first 30 s.
+
+| Users, think, arrive | Files | Steady p50 / p95, ms: page · send · live | Peak memory | Verdict |
+|---|---|---|---|---|
+| 100, 5 s, 5 s (cold thumbnails) | on | page 28,000 · open room 53,000 | 1.1 GB | 800 thumbnails made at once |
+| 100, 5 s, 5 s | on | 88 / 486 · 37 / 299 · 47 / 381 | 0.78 GB | fine (≈45 actions/s, 3 msgs/s) |
+| 200, 5 s, 5 s | on | 4,314 / 16,509 · 6,234 / 33,772 · 6,337 / 33,553 | 2.2 GB | overloaded |
+| 500, 30 s, 5 s | on | ~90,000 | 6.5 GB | collapsed (arrival storm) |
+| 500, 30 s, 5 s | off | ~75,000 | 6.0 GB | collapsed: not files |
+| 500, 30 s, 5 s, `--live=off` | off | ~75,000 | 5.8 GB | collapsed: not realtime |
+| 500, 30 s, 60 s | off | 123 / 1,742 · 84 / 1,742 · 99 / 1,274 | 0.67 GB | fine (≈22 actions/s, 2.4 msgs/s) |
+| 1000, 60 s, 120 s | off | 2,233 / 164,115 · 136,458 / 221,236 · 69,713 / 212,680 | 6.4 GB | collapsed |
+
+Two limits show up, and both end in the same way. Once more than `--hooksPool` (100) JS calls are in flight, each further
+call builds a fresh goja runtime, about 11 MB with the libs loaded again. Memory then climbs to several GB, and the box
+falls further behind, never catching up:
+
+- **Many requests at once.** About 500 room opens within 5 s (a restart or a network blip: every client reconnects
+  and loads its room) send a single CPU into this spiral. Spread over 60 s, the same 500 users are fine.
+- **Fan-out to many listeners.** At 1000 listeners, about 1.3 messages a second is too many. `lib/live.js` (likewise
+  keepalive.js, collections.js, access.js) calls `client.send()` inside the saving request, once per listener.
+  PocketBase's client channel is unbuffered (`tools/subscriptions/client.go`), so a save waits for every listener's
+  SSE writer, and holds its JS runtime the whole time. PocketBase's own broadcasts send from goroutines
+  (`routine.FireAndForget`). This is inferred from the code and the numbers; a goroutine dump wasn't taken.
+
+Not changed yet.

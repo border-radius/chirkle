@@ -4,6 +4,14 @@
 //
 //   node --no-warnings scripts/stress.ts [--users=100] [--seconds=90] [--think=1000] [--s3-delay=150]
 //        [--photos=0.1] [--live=on|off] [--hooks=pb_hooks] [--images=dir] [--out=result.json]
+//        [--cpu=7] [--memlimit=700MiB] [--warm] [--files=on|off] [--arrive=5]
+//
+// A small VPS (PERF.md §8): --cpu pins the server (and what it spawns: ffmpeg) to that one CPU with GOMAXPROCS=1, and
+// --memlimit sets GOMEMLIMIT. Run the script itself on the other CPUs (taskset -c 0-5 node …), not the pinned one's
+// SMT sibling. The memory reported is then the server's and its children's together, as a VPS's RAM would hold.
+// --warm makes the history's thumbnails before the crowd comes, as a live instance has them (made once, on the first
+// view), so the run measures the steady state rather than 100 users making 800 thumbnails at once. --files=off: no
+// thumbnail or photo is fetched, as when a CDN (Cloudflare) or the browser's cache has them.
 //
 // Every user signs up, keeps a realtime connection (all messages' activity, plus the open room's messages, as the web
 // subscribes) and then, after a think time (exponential, mean --think ms), does one of: open a room (its latest page,
@@ -11,6 +19,7 @@
 // and count unread, list rooms, open a photo. Reported: each action's latency (p50/p95/p99/max) and errors, how long a
 // sent message took to reach every user live, and the server's CPU and memory. Needs versitygw (tests/support/s3.ts).
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { connect, createServer } from "node:net";
@@ -35,6 +44,12 @@ const LIVE = arg("live", "on") !== "off";
 const S3_DELAY_MS = Number(arg("s3-delay", "150"));
 const HOOKS = arg("hooks", "");
 const OUT = arg("out", "");
+const CPU = arg("cpu", "");
+const MEMLIMIT = arg("memlimit", "");
+const WARM = process.argv.includes("--warm");
+const FILES = arg("files", "on") !== "off";
+/** Over how many seconds the users arrive (5: a reconnect storm, as after a restart). */
+const ARRIVE_MS = Number(arg("arrive", "5")) * 1000;
 const ROOMS = 10;
 const HISTORY = 150; // messages a room starts with
 const THUMB = "800x480f"; // what the web asks for in a room
@@ -95,16 +110,39 @@ const cpuMs = (pid: number) => {
   const f = readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]!.split(" ");
   return (Number(f[11]) + Number(f[12])) * 10;
 };
-const rssMb = (pid: number) => Math.round(Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, "utf8"))?.[1]) / 1024);
+const rssKb = (pid: number) => {
+  try {
+    return Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, "utf8"))?.[1] ?? 0);
+  } catch {
+    return 0; // gone
+  }
+};
+/** The server's memory, with its children's (ffmpeg making posters and thumbnails) when --cpu or --memlimit is given. */
+const rssMb = (pid: number) => {
+  let kb = rssKb(pid);
+  if (CPU || MEMLIMIT)
+    for (const d of readdirSync("/proc")) {
+      if (!/^\d+$/.test(d)) continue;
+      try {
+        if (readFileSync(`/proc/${d}/stat`, "utf8").split(") ")[1]!.split(" ")[1] === String(pid)) kb += rssKb(Number(d));
+      } catch {}
+    }
+  return Math.round(kb / 1024);
+};
 
 // ---- timings
 const times = new Map<string, number[]>();
+/** After the first 30 s of the crowd (everyone has arrived and opened a room): the steady state, reported apart. */
+const steadyTimes = new Map<string, number[]>();
+const STEADY_AFTER_MS = 30_000;
+let loadStart = Infinity;
 const errors = new Map<string, { n: number; first: string }>();
 async function timed<T>(name: string, fn: () => Promise<T>): Promise<T | undefined> {
   const t = performance.now();
   try {
     const out = await fn();
     (times.get(name) ?? times.set(name, []).get(name)!).push(performance.now() - t);
+    if (t - loadStart > STEADY_AFTER_MS) (steadyTimes.get(name) ?? steadyTimes.set(name, []).get(name)!).push(performance.now() - t);
     return out;
   } catch (err) {
     const e = errors.get(name) ?? errors.set(name, { n: 0, first: String((err as Error)?.message ?? err).slice(0, 400) }).get(name)!;
@@ -128,10 +166,12 @@ const proxy = await slowProxy(Number(new URL(s3.endpoint).port), S3_DELAY_MS);
 const pb = await startPocketBase({
   ...(HOOKS ? { hooksDir: HOOKS } : {}),
   // The workers on, as in production; no page has a link, so previews fetch nothing.
-  env: { MEDIA_CRON: "on", LINK_PREVIEWS: "off" },
+  verbose: process.argv.includes("--server-log"),
+  env: { MEDIA_CRON: "on", LINK_PREVIEWS: "off", ...(CPU ? { GOMAXPROCS: "1" } : {}), ...(MEMLIMIT ? { GOMEMLIMIT: MEMLIMIT } : {}) },
 });
 try {
   const pid = serverPid(new URL(pb.url).port);
+  if (CPU) execFileSync("taskset", ["-a", "-p", "-c", CPU, String(pid)], { stdio: "ignore" });
   await disableRateLimits(pb.url);
   const su = new PocketBase(pb.url);
   su.autoCancellation(false);
@@ -179,6 +219,20 @@ try {
   );
   const seedS = (performance.now() - t0) / 1000;
   console.log(`seeded ${USERS} users, ${ROOMS} rooms × ${HISTORY} messages in ${seedS.toFixed(0)} s; connecting`);
+  if (WARM) {
+    const all = await su.collection("messages").getFullList<{ id: string; files?: string[] }>({ batch: 500 });
+    const withFiles = all.filter((m) => m.files?.length) as { id: string; files: string[] }[];
+    await limited(
+      4,
+      withFiles.flatMap((m) =>
+        m.files.map((f) => async () => {
+          const res = await fetch(`${pb.url}/api/files/messages/${m.id}/${f}?thumb=${THUMB}`);
+          await res.arrayBuffer();
+        }),
+      ),
+    );
+    console.log(`warmed ${withFiles.length} thumbnails; server memory ${rssMb(pid)} MB`);
+  }
 
   // ---- realtime: each user hears every message's activity; delivery timed from the send's start
   const sentAt = new Map<string, number>();
@@ -199,10 +253,14 @@ try {
   // ---- the crowd
   let sent = 0;
   let stop = false;
+  // Timed at the stop, not when the last user has finished: a user then ends its think time before it sees the stop.
+  let stopAt = 0;
+  let cpuAtStop = 0;
   const cpu0 = cpuMs(pid);
   let rssMax = rssMb(pid);
-  const rssTimer = setInterval(() => (rssMax = Math.max(rssMax, rssMb(pid))), 1000);
+  const rssTimer = setInterval(() => (rssMax = Math.max(rssMax, rssMb(pid))), 250);
   t0 = performance.now();
+  loadStart = t0;
   const file = (m: Message, f: string, thumb?: string) =>
     fetch(`${pb.url}/api/files/messages/${m.forward_of || m.id}/${f}${thumb ? `?thumb=${thumb}` : ""}`).then(async (res) => {
       const body = await res.arrayBuffer();
@@ -213,7 +271,7 @@ try {
   await Promise.all(
     apis
       .map(async (api, u) => {
-        await sleep(Math.random() * 5000); // arrive over 5 s
+        await sleep(Math.random() * ARRIVE_MS); // arrive over --arrive seconds
         let room = pick(rooms);
         let page: Message[] = [];
         let roomSub: (() => Promise<void>) | undefined;
@@ -223,7 +281,7 @@ try {
           if (LIVE) roomSub = await api.subscribeMessages(room, () => {});
           page = (await timed("page (latest)", () => api.page(latest(room)))) ?? [];
           const thumbs = page.flatMap((m) => (m.files ?? []).map((f) => () => timed("thumbnail", () => file(m, f, THUMB)))).slice(-8);
-          await limited(6, thumbs);
+          if (FILES) await limited(6, thumbs);
         };
         await timed("open room (page + thumbnails)", open);
         while (!stop) {
@@ -254,7 +312,7 @@ try {
             await timed("room list", () => api.listRooms());
           } else {
             const withFile = page.filter((m) => m.files?.length);
-            if (withFile.length) {
+            if (withFile.length && FILES) {
               const m = pick(withFile);
               await timed("photo (original)", () => file(m, m.files![0]!));
             }
@@ -265,12 +323,14 @@ try {
       .concat([
         sleep(SECONDS * 1000).then(() => {
           stop = true;
+          stopAt = performance.now();
+          cpuAtStop = cpuMs(pid);
         }),
       ]),
   );
-  const loadS = (performance.now() - t0) / 1000;
+  const loadS = (stopAt - t0) / 1000;
   clearInterval(rssTimer);
-  const cpu = cpuMs(pid) - cpu0;
+  const cpu = cpuAtStop - cpu0;
   await sleep(3000); // the last messages' deliveries
   for (const un of unsubs) await un().catch(() => {});
 
@@ -292,6 +352,9 @@ try {
   }
   for (const [name, e] of errors) if (!times.has(name)) rows.push({ action: name, n: 0, errors: e.n });
   console.table(rows);
+  console.log(`steady state (after the first ${STEADY_AFTER_MS / 1000} s):`);
+  const steady = [...steadyTimes.entries()].sort().map(([action, xs]) => ({ action, n: xs.length, p50: round(pct(xs, 50)), p95: round(pct(xs, 95)), p99: round(pct(xs, 99)), max: round(pct(xs, 100)) }));
+  console.table(steady);
   for (const [name, e] of errors) console.log(`errors in ${name}: ${e.n}, first: ${e.first}`);
   const expected = sent * USERS;
   const summary = {
@@ -308,7 +371,7 @@ try {
     serverRssMaxMb: rssMax,
   };
   console.log(summary);
-  if (OUT) await writeFile(OUT, `${JSON.stringify({ summary, rows, errors: Object.fromEntries(errors) }, null, 2)}\n`);
+  if (OUT) await writeFile(OUT, `${JSON.stringify({ summary, rows, steady, errors: Object.fromEntries(errors) }, null, 2)}\n`);
 } finally {
   await pb.stop();
   proxy.close();
