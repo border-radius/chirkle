@@ -8,6 +8,7 @@ import { ApiError, errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, reconcile, uniqueId } from "../dom.ts";
 import { brand, jumpButton } from "../header.ts";
+import { SEARCH_KIT } from "../lazy.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
 import { canManage, isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
 import type { Collection, Room, User, Visibility } from "../lib/types.ts";
@@ -19,7 +20,7 @@ import { avatar } from "../ui/avatar.ts";
 import { collectionIcon } from "../ui/icon.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
 import type { MenuItem } from "../ui/menu.ts";
-import { createUserSearch, SearchError, type UserSearch } from "../ui/user-search.ts";
+import type { UserSearch } from "../ui/user-search.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
 
 type Section = "rooms" | "dms" | "hidden" | "archived";
@@ -142,30 +143,58 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     if (scope.active) renderAlert();
   }
 
+  /** The people search's chunk, once asked for; and a search is on its way (New message pressed while it loads). */
+  let searchChunk: Promise<typeof import("../ui/user-search.ts")> | null = null;
+  let opening = false;
+
   function toggleSearch(open: boolean) {
-    if (open === !!search) return;
-    search = open
-      ? createUserSearch({
-          // Not those who take no direct messages (§16.7). "ann@b.example" is someone on a linked instance (§33.5).
-          search: async (q, signal) => {
-            if (!isAddress(q)) return (await api.searchUsers(q, signal)).filter((u) => !u.no_dms);
-            try {
-              return [await api.remoteUser(q)];
-            } catch (e) {
-              throw new SearchError(reasonOf(e));
-            }
-          },
-          avatarUrl: api.avatarUrl,
-          onPick: (u) => void message(u),
-          onClose: () => {
-            toggleSearch(false);
-            nav.querySelector<HTMLElement>("button.new-dm")?.focus();
-          },
-          signal: scope.signal,
-        })
-      : null;
+    if (open === (!!search || opening)) return;
+    if (!open) {
+      opening = false;
+      search = null;
+      render();
+      return;
+    }
+    opening = true;
+    searchChunk ??= import("../ui/user-search.ts");
+    searchChunk.then(
+      (m) => {
+        if (!opening || !scope.active) return;
+        opening = false;
+        showSearch(m);
+      },
+      () => {
+        searchChunk = null;
+        if (!opening) return;
+        opening = false;
+        actionError = "Couldn't open the people search. Check your connection.";
+        if (scope.active) renderAlert();
+      },
+    );
+  }
+
+  function showSearch({ createUserSearch, SearchError }: typeof import("../ui/user-search.ts")) {
+    search = createUserSearch({
+      kit: SEARCH_KIT,
+      // Not those who take no direct messages (§16.7). "ann@b.example" is someone on a linked instance (§33.5).
+      search: async (q, signal) => {
+        if (!isAddress(q)) return (await api.searchUsers(q, signal)).filter((u) => !u.no_dms);
+        try {
+          return [await api.remoteUser(q)];
+        } catch (e) {
+          throw new SearchError(reasonOf(e));
+        }
+      },
+      avatarUrl: api.avatarUrl,
+      onPick: (u) => void message(u),
+      onClose: () => {
+        toggleSearch(false);
+        nav.querySelector<HTMLElement>("button.new-dm")?.focus();
+      },
+      signal: scope.signal,
+    });
     render();
-    search?.focus();
+    search.focus();
   }
 
   function toggleNewRoom(open: boolean) {
@@ -332,7 +361,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       class: "icon-button ic i-plus new-dm",
       "aria-label": "New message",
       title: "New message",
-      on: { click: () => toggleSearch(!search) },
+      on: { click: () => toggleSearch(!(search || opening)) },
       signal: scope.signal,
     });
     const newColl = h("button", {
@@ -632,6 +661,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       scope = createScope();
       rows.clear();
       search = null;
+      opening = false;
       creating = false;
       collRows.clear();
       newRoom = newRoomForm();

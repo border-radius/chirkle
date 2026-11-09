@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../web/src/api.ts";
+import { PROFILE_KIT } from "../../../web/src/lazy.ts";
+import { LIMITS } from "../../../web/src/lib/limits.ts";
 import type { View } from "../../../web/src/router.ts";
 import { type AppState, createStore, initialState, type Store } from "../../../web/src/store.ts";
 import { avatarProblem, createProfileView, passwordProblem } from "../../../web/src/views/profile.ts";
@@ -8,19 +10,19 @@ import { pngFile } from "../../support/files.ts";
 
 describe("avatarProblem (§15.5)", () => {
   it("accepts the server's raster types up to 2 MB", () => {
-    expect(avatarProblem(pngFile())).toBe("");
-    expect(avatarProblem(new File(["x"], "a.svg", { type: "image/svg+xml" }))).toMatch(/JPEG, PNG/);
-    expect(avatarProblem(new File([new Uint8Array(2 * 1024 * 1024 + 1)], "a.png", { type: "image/png" }))).toMatch(/too large/);
+    expect(avatarProblem(pngFile(), LIMITS)).toBe("");
+    expect(avatarProblem(new File(["x"], "a.svg", { type: "image/svg+xml" }), LIMITS)).toMatch(/JPEG, PNG/);
+    expect(avatarProblem(new File([new Uint8Array(2 * 1024 * 1024 + 1)], "a.png", { type: "image/png" }), LIMITS)).toMatch(/too large/);
   });
 });
 
 describe("passwordProblem (§22.2)", () => {
   it("needs the current password, 8+ characters, a change, and the same text twice", () => {
-    expect(passwordProblem("", "new-password", "new-password")).toEqual({ current: "Enter your current password." });
-    expect(passwordProblem("old-password", "short", "short")).toEqual({ next: "Must be at least 8 characters." });
-    expect(passwordProblem("same-password", "same-password", "same-password").next).toMatch(/current password/);
-    expect(passwordProblem("old-password", "new-password", "new-passw0rd")).toEqual({ confirm: "The passwords don't match." });
-    expect(passwordProblem("old-password", "new-password", "new-password")).toEqual({});
+    expect(passwordProblem("", "new-password", "new-password", LIMITS)).toEqual({ current: "Enter your current password." });
+    expect(passwordProblem("old-password", "short", "short", LIMITS)).toEqual({ next: "Must be at least 8 characters." });
+    expect(passwordProblem("same-password", "same-password", "same-password", LIMITS).next).toMatch(/current password/);
+    expect(passwordProblem("old-password", "new-password", "new-passw0rd", LIMITS)).toEqual({ confirm: "The passwords don't match." });
+    expect(passwordProblem("old-password", "new-password", "new-password", LIMITS)).toEqual({});
   });
 });
 
@@ -48,7 +50,7 @@ describe("profile view (§15.5)", () => {
   function mount() {
     const ctx = viewContext(me.api, store, vi.fn());
     logOut = vi.fn<() => void>();
-    view = createProfileView({ ...ctx, logOut });
+    view = createProfileView({ ...ctx, logOut, kit: PROFILE_KIT });
     view.mount(root, {});
   }
 

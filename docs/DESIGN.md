@@ -608,6 +608,10 @@ while its first page loads.
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
 | "Mentions & replies" page (§41.4), loaded when it is opened | ≤ 2 KB script (`views/inbox.ts`), ≤ 1 KB stylesheet (`web/styles/inbox.css`) |
 | The composer's "@" suggestions (§41.3), loaded when an "@" is typed | ≤ 2 KB script (`ui/mention-suggest.ts`; styled by `emoji.css`) |
+| Settings (`/me`, `views/profile.ts`), loaded when it is opened (since 2026-11-10) | ≤ 3.5 KB script |
+| Log in and sign up (`views/login.ts`), loaded for those pages, at once for someone not signed in (since 2026-11-10) | ≤ 2 KB script |
+| The forward dialog (§21.3, `views/room/forward.ts`), loaded when Forward is first chosen (since 2026-11-10) | ≤ 1.5 KB script |
+| The people search (§16.5, `ui/user-search.ts`): New message, and loaded with the room access dialog (since 2026-11-10) | ≤ 1.5 KB script |
 | Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
@@ -621,7 +625,10 @@ Other rules:
 - A feature most visits never use can be a lazy chunk (`import()`, esbuild code splitting) with its own budget, like
   the image viewer (§17.7). A lazy module must not import a module `app.js` uses: esbuild would move it into a shared
   chunk that `app.js` loads on every visit (a fourth request). The build fails if `app.js` imports any chunk; such a
-  module gets what it needs from `app.js` as arguments.
+  module imports types only and gets what it needs from `app.js` as arguments: its "kit" (`web/src/lazy.ts`, which
+  also has `lazyView`, a page made once its chunk is in). Two lazy chunks importing the same module would share a
+  third chunk too, so one that another needs is loaded beside it and handed over (the room access dialog and the
+  people search).
 
 ### 7.8 Styling
 
@@ -1109,6 +1116,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (WebKit taps) | `app.js` raised from 49.60 KB to 49.75 KB (§7.7), the user's call (2026-11-02): two phone tap fixes found by the WebKit e2e run took it from 49.59 KB to 49.69 KB. A tap on a message's text counts for the message even when the browser's touch adjustment moves the click onto a link near it (WebKit; Chrome on Android does it too): it went to the time's permalink. And a touch ending outside the messages hides the tapped message's buttons, since WebKit (iOS Safari too) sends no click for a tap on something that takes none, such as the room's name. |
 | Bundle budget (emoji by name) | The emoji chunk raised from 4.25 KB to 13 KB (§7.7), 2026-11-06: the user asked for emoji search and ":name" in the composer on the grounds that the picker is a lazy chunk now. The names (`lib/emoji-names.ts`, one line per emoji with the emoji itself, so it can be read and kept) are about 7.4 KB of the 12.83 KB; lines without the emoji would save about 2 KB. The picker's styles moved out of `app.css` (11.19 → 11.00 KB) into `web/styles/emoji.css` (new `emojiCss` budget, 1 KB) rather than raise `app.css` for the search box and the suggestions. `app.js` grew by about 0.13 KB (the composer spotting ":na"). |
 | Bundle budget (collection chips) | The collections chunk raised from 6.70 KB to 6.75 KB script and 1.95 KB to 2 KB stylesheet (§7.7), the user's call (2026-11-02): the picker's collections as a row of chips, as the app's, instead of a select (§31.3) took them from 6.65 KB and 1.94 KB to 6.75 KB and 1.98 KB. |
+| Bundle size (pages out of app.js) | 2026-11-10, the user's call ("move profile/settings, login/sign-up, forward picker, dm people search to separate bundles"): mentions (§41) had taken `app.js` to 50.54 KB, over its 49.75 KB. Settings, log in and sign up, the forward dialog and the people search became lazy chunks with budgets of their own (§7.7): `app.js` 46.36 KB, its budget unchanged. Each opens after its chunk loads the first time (log in's is started at once for someone not signed in). Measured but not done: re-minifying with terser, −2.8 KB (2026-11-02). |
 | Bundle budget (QA pass 33) | The collections stylesheet raised from 2 KB to 2.05 KB (§7.7), 2026-11-07, the user's call ("raise budget if needed"): on a phone the collection page's Delete went up by the back arrow, as it wrapped to a line of its own, and its buttons got narrower (QA BUG-246), which took it from 1.97 KB to 2.00 KB. |
 
 ### Decided (2026-10-24, linked instances)

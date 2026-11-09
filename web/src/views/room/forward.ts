@@ -1,11 +1,23 @@
 // Forward dialog (§21.3): choose where messages go — a room, a DM, or someone you have no DM with yet (found by name).
 // A modal <dialog>: it keeps focus inside, Escape closes it, and focus goes back to where it was.
+//
+// A lazy chunk: the room view loads it when Forward is first chosen. It imports types only, and gets what it uses of
+// app.js in `kit` (lazy.ts FORWARD_KIT).
 
-import { h, uniqueId } from "../../dom.ts";
-import { otherMember, roomTitle } from "../../lib/rooms.ts";
+import type { h, uniqueId } from "../../dom.ts";
+import type { otherMember, roomTitle } from "../../lib/rooms.ts";
 import type { Room, User } from "../../lib/types.ts";
-import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
-import { SEARCH_DEBOUNCE_MS } from "../../ui/user-search.ts";
+import type { AvatarUrl, avatar } from "../../ui/avatar.ts";
+
+export interface ForwardKit {
+  h: typeof h;
+  uniqueId: typeof uniqueId;
+  avatar: typeof avatar;
+  otherMember: typeof otherMember;
+  roomTitle: typeof roomTitle;
+  /** How long typing pauses before people are searched (the people search's). */
+  SEARCH_DEBOUNCE_MS: number;
+}
 
 export type ForwardTo = { room: Room } | { user: User };
 
@@ -17,6 +29,7 @@ export interface ForwardDialog {
 }
 
 export function createForwardDialog(opts: {
+  kit: ForwardKit;
   /** Where messages can go, in the order to offer them. */
   rooms: () => Room[];
   me: () => User | null;
@@ -27,6 +40,7 @@ export function createForwardDialog(opts: {
   signal: AbortSignal;
 }): ForwardDialog {
   const { signal } = opts;
+  const { h, uniqueId, avatar, otherMember, roomTitle, SEARCH_DEBOUNCE_MS } = opts.kit;
   const id = uniqueId("forward");
   const title = h("h2", { id: `${id}-title` });
   const input = h("input", {
