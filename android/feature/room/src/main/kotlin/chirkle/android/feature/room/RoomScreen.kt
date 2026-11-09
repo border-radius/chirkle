@@ -59,6 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -261,7 +268,12 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
 
     Scaffold(
         // Swiping the room to the right goes back to the rooms, unless a mode (selection, search) is open.
-        modifier = Modifier.swipeBack(enabled = !vm.selecting && !vm.searching, onBack = nav.back),
+        modifier = Modifier.swipeBack(enabled = !vm.selecting && !vm.searching, onBack = nav.back)
+            // Ctrl+/ from a hardware keyboard: to the composer, as on the web (§7.6). Nothing while there is none (a banner).
+            .onPreviewKeyEvent { e ->
+                e.type == KeyEventType.KeyDown && e.isCtrlPressed && !e.isAltPressed && e.key == Key.Slash &&
+                    runCatching { focus.requestFocus() }.isSuccess
+            },
         topBar = {
             when {
                 vm.selecting -> TopAppBar(

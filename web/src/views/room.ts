@@ -1004,6 +1004,19 @@ export function createRoomView({
           composer.focus(),
         { signal },
       );
+      // Ctrl+/ (⌘/ on a Mac) anywhere: to the composer, as its key badge says (§7.6). By the key's place too, for layouts
+      // where it types something else (Cyrillic: "."). Not for a room kept in the background, nor while there is no
+      // composer (a banner instead); behind a modal dialog the composer is inert, so focus stays there.
+      document.addEventListener(
+        "keydown",
+        (e) => {
+          if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "/" && e.code !== "Slash")) return;
+          if (parked || !footer.contains(composer.el)) return;
+          e.preventDefault();
+          composer.focus();
+        },
+        { signal },
+      );
       // When the list gets shorter (the attachment tray opens, the textarea grows, the keyboard opens) while it is
       // at the live bottom, keep it there instead of letting the newest messages slide under the composer (BUG-31).
       list.addEventListener("scroll", () => (pinned = isNearBottom(list)), { signal });

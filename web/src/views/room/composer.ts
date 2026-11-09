@@ -1,7 +1,8 @@
 // Message composer (§7.6, §17.4): auto-growing textarea, character counter, Enter to send, Shift+Enter for a
 // newline, Up arrow in an empty composer to edit your last message, Ctrl+Up/Down to pick the message replied to, attachments (picker, paste, drop) shown
 // in a tray above the textarea, the message being replied to (§19) above that, and an emoji button (§20.4). Typing
-// ":name" asks for emoji suggestions (§20.6).
+// ":name" asks for emoji suggestions (§20.6). Ctrl+/ (⌘/) anywhere in the room focuses it, which a key badge says while
+// it isn't focused (§7.6).
 
 import { h } from "../../dom.ts";
 import { checkFiles, formatBytes, isVideo } from "../../lib/files.ts";
@@ -111,7 +112,14 @@ export function createComposer(opts: {
   signal: AbortSignal;
 }): Composer {
   const { signal } = opts;
-  const textarea = h("textarea", { name: "text", rows: 1, id: opts.id, autocomplete: "off" });
+  const mac = /Mac|iP/.test(navigator.platform);
+  const textarea = h("textarea", {
+    name: "text",
+    rows: 1,
+    id: opts.id,
+    autocomplete: "off",
+    "aria-keyshortcuts": mac ? "Meta+/" : "Control+/",
+  });
   // The placeholder as given, and cut to the box with "…": browsers ignore text-overflow on a textarea's placeholder,
   // so a long room or person name was cut off mid-word.
   let placeholder = "";
@@ -369,6 +377,7 @@ export function createComposer(opts: {
         attach,
         h("label", { for: opts.id, class: "visually-hidden" }, "Message"),
         textarea,
+        h("kbd", { class: "focus-key", "aria-hidden": "true", title: "Focus the message box" }, mac ? "⌘/" : "Ctrl /"),
         counter,
         emojiBtn,
         sendBtn,

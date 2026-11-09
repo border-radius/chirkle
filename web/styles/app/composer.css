@@ -163,3 +163,20 @@
 .composer .counter {
   align-self: center;
 }
+
+/* Ctrl+/ focuses the textarea (§7.6): said while it isn't focused, and only where there is a keyboard. */
+.focus-key {
+  align-self: center;
+  margin-inline: 4px;
+  white-space: nowrap;
+}
+
+.composer textarea:focus ~ .focus-key {
+  display: none;
+}
+
+@media (hover: none) {
+  .focus-key {
+    display: none;
+  }
+}

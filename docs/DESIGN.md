@@ -552,6 +552,12 @@ while its first page loads.
 - Input is kept on failure, so nothing the user typed is lost.
 - Message text is rendered with `white-space: pre-wrap`. No markdown in the MVP.
 - **Up arrow** in an empty composer starts editing the user's most recent message in the current window. Deleted messages are skipped.
+- **Ctrl+/** (⌘/ on a Mac) anywhere in the room puts the caret in the composer; by the key's place too (`Slash`), for
+  layouts where it types something else. While the textarea isn't focused, a key badge in the composer row ("Ctrl /",
+  "⌘/", the Jump to button's style) says so; it hides while the textarea is focused, and on touch screens
+  (`hover: none`). The textarea carries `aria-keyshortcuts`. A room kept in the background, a banner instead of the
+  composer, or a modal dialog over it (the composer inert) leaves focus where it is. Test: `keyboard.test.ts`.
+  Android: Ctrl+/ from a hardware keyboard (ANDROID.md §7.2), no badge.
 
 ### 7.6.1 Editing messages
 

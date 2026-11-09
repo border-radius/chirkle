@@ -150,5 +150,27 @@ describe("room view", () => {
         expect(focus).not.toHaveBeenCalled();
       });
     });
+    it("Ctrl+/ (or ⌘/, or the key's place on another layout) focuses the composer, which shows the keys", async () => {
+      const room = await newRoom();
+      await mount(room);
+      const hint = root.querySelector(".composer kbd.focus-key")!;
+      expect(hint.textContent).toBe("Ctrl /");
+      expect(composer()!.getAttribute("aria-keyshortcuts")).toBe("Control+/");
+      for (const opts of [{ ctrlKey: true }, { metaKey: true }, { ctrlKey: true, code: "Slash", k: "." }]) {
+        const b = button(headerMenu(), "Jump to beginning")!;
+        b.focus();
+        const { k = "/", ...init } = opts;
+        const e = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
+        b.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(true);
+        expect(active()).toBe(composer());
+      }
+      // Plain "/" and Ctrl+Alt+/ are typing, not the shortcut.
+      document.body.focus();
+      for (const opts of [{}, { ctrlKey: true, altKey: true }]) {
+        key(document.body, "/", opts);
+        expect(active()).not.toBe(composer());
+      }
+    });
   });
 });

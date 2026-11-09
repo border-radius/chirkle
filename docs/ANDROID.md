@@ -242,7 +242,8 @@ is a route.
 Multi-line field with the 2,000-character limit counted in code points (`textLength`); emoji, attach, send. One rounded
 field holds emoji at its start and attach at its end, both kept at the bottom as the text grows to six lines, then the
 send circle: the text gets the width. Enter makes
-a new line; a hardware keyboard sends with Enter and Ctrl+Up/Down pick the reply as on the web. Replying and editing
+a new line; a hardware keyboard sends with Enter and Ctrl+Up/Down pick the reply as on the web, and Ctrl+/ anywhere in
+the room focuses the field (web §7.6; no key badge, as the app is for touch screens; `UiPortsTest`). Replying and editing
 show a bar above the field. A room you may only read shows why instead of the composer (archived, Open Air guest, not a
 writer: §23.6).
 
