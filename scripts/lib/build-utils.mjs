@@ -1,6 +1,6 @@
 // Pure helpers for scripts/build.mjs. Kept side-effect free so they can be unit-tested.
 
-/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number, emojiJs: number, emojiCss: number, statsJs: number, statsCss: number }} Sizes gzipped byte sizes */
+/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number, emojiJs: number, emojiCss: number, inboxJs: number, inboxCss: number, mentionJs: number, statsJs: number, statsCss: number }} Sizes gzipped byte sizes */
 
 /** Where builds go: PocketBase serves this directory. */
 export const OUTDIR = "pb_public";
@@ -34,6 +34,12 @@ export const NOTIFY = Object.freeze({ js: "web/src/notify.ts" });
  * chunk and a stylesheet it links (`EMOJI_CSS`).
  */
 export const EMOJI = Object.freeze({ js: "web/src/ui/emoji-picker.ts", css: "web/styles/emoji.css" });
+
+/** "Mentions & replies" (§41): the page, a lazy chunk with a stylesheet it links (`INBOX_CSS`). */
+export const INBOX = Object.freeze({ js: "web/src/views/inbox.ts", css: "web/styles/inbox.css" });
+
+/** The composer's "@" suggestions (§41): a lazy chunk; its list is styled by the emoji picker's stylesheet, which it links. */
+export const MENTION = Object.freeze({ js: "web/src/ui/mention-suggest.ts" });
 
 /**
  * The usage statistics page (§40): a page of its own, stats.html from this template, with its own script and
@@ -81,13 +87,15 @@ export const STATIC_DIR = "web/public";
  * @param {string} collCssPath the collections' (§31)
  * @param {string} accessCssPath the room access dialog's (§23.2)
  * @param {string} emojiCssPath the emoji picker's (§20.4)
+ * @param {string} inboxCssPath the inbox's (§41)
  */
-export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath) => ({
+export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath) => ({
   VIEWER_CSS: JSON.stringify(`/${cssPath}`),
   MEDIA_CSS: JSON.stringify(`/${mediaCssPath}`),
   COLLECTIONS_CSS: JSON.stringify(`/${collCssPath}`),
   ACCESS_CSS: JSON.stringify(`/${accessCssPath}`),
   EMOJI_CSS: JSON.stringify(`/${emojiCssPath}`),
+  INBOX_CSS: JSON.stringify(`/${inboxCssPath}`),
 });
 
 /**
@@ -141,6 +149,9 @@ export const BUDGET = Object.freeze({
   notifyJs: 3 * 1024,
   emojiJs: 13 * 1024,
   emojiCss: 1024,
+  inboxJs: 2 * 1024,
+  inboxCss: 1024,
+  mentionJs: 2 * 1024,
   statsJs: 5.5 * 1024,
   statsCss: 3.5 * 1024,
 });

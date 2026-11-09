@@ -16,6 +16,8 @@ data class User(
     val instance: String = "",
     /** You are a moderator (DESIGN.md §36): only said of the signed-in user. */
     val moderator: Boolean = false,
+    /** What "@handle" names (DESIGN.md §41), without the "@"; "" where the server doesn't say. */
+    val handle: String = "",
 )
 
 /**
@@ -123,6 +125,8 @@ data class Message(
     /** The message a forward shows (§21.3); its files are that message's. */
     @SerialName("forward_of") val forwardOf: String = "",
     val previews: List<LinkPreview> = emptyList(),
+    /** Who its "@handle"s name (DESIGN.md §41): user ids, set by the server. */
+    val mentions: List<String> = emptyList(),
     /** Stored name → the collection the file was attached from (§31); a forward's are its original's. */
     @SerialName("file_sources") val fileSources: Map<String, String> = emptyMap(),
     /** Stored image or video name → [width, height] as shown (§17.5), set by the server; absent until it knows. */
@@ -164,7 +168,45 @@ data class Cursor(val created: String, val id: String)
 
 /** Unread messages per room id, as of `at` (server time, §18.2), and the recent messages they account for. */
 @Serializable
-data class UnreadCounts(val at: String = "", val rooms: Map<String, Int> = emptyMap(), val ids: List<String> = emptyList())
+data class UnreadCounts(
+    val at: String = "",
+    val rooms: Map<String, Int> = emptyMap(),
+    val ids: List<String> = emptyList(),
+    /** Inbox rows not seen yet (at most 100), and each room's unread mentions and replies (DESIGN.md §41); none from older servers. */
+    val inbox: Int = 0,
+    val mentions: Map<String, Int> = emptyMap(),
+)
+
+/** A row of the "Mentions & replies" inbox (DESIGN.md §41, GET /api/chat/inbox). */
+@Serializable
+data class InboxItem(
+    val id: String,
+    /** Where the next page starts (`before`). */
+    val cursor: String = "",
+    /** "mention", "reply" or "reaction". */
+    val kind: String = "",
+    /** A reaction's emoji, "" otherwise. */
+    val emoji: String = "",
+    val created: String = "",
+    val room: String = "",
+    /** The mention, the reply, or your message reacted to. */
+    val message: InboxMessage = InboxMessage(""),
+    /** A reply's: your message it answers. */
+    val quote: InboxMessage? = null,
+    /** Who did it; in an anonymous room (§35), the room for a mention or reply. */
+    val actor: User = User(""),
+)
+
+/** A message as an inbox row shows it: its text cut short, how many files it has. */
+@Serializable
+data class InboxMessage(val id: String, val text: String = "", val files: Int = 0, val created: String = "")
+
+@Serializable
+data class InboxPage(val items: List<InboxItem> = emptyList(), val more: Boolean = false, @SerialName("seen_at") val seenAt: String = "")
+
+/** Someone the composer offers as "@" is typed (GET /api/chat/mentionable). */
+@Serializable
+data class Mentionable(val id: String, val name: String = "", val handle: String = "", val avatar: String = "", val instance: String = "")
 
 /** A room_reads row: how far you have read a room. */
 @Serializable

@@ -6,6 +6,7 @@ import {
   type CollectionItem,
   type Collections,
   DEFAULT_SITE,
+  type InboxEvent,
   type MediaPage,
   type Message,
   type Posting,
@@ -35,10 +36,13 @@ export interface UnreadCounts {
   rooms: Record<string, number>;
   /** The recent messages these counts account for (QA BUG-106); missing from servers before it. */
   ids?: string[];
+  /** Inbox rows not seen yet, at most 100, and each room's unread mentions and replies (§41); missing from servers before. */
+  inbox?: number;
+  mentions?: Record<string, number>;
 }
 
 /** What the unread counter needs to know about a message event in any room (§18.3). */
-export type MessageActivity = Pick<Message, "id" | "room" | "author" | "deleted" | "reply_to">;
+export type MessageActivity = Pick<Message, "id" | "room" | "author" | "deleted" | "reply_to" | "mentions">;
 
 export interface NewMessage {
   /** Client-generated (lib/id.ts) so retries can't duplicate (§7.5). */
@@ -104,6 +108,8 @@ export interface Api {
   setAvatar(file: File): Promise<User>;
   removeAvatar(): Promise<User>;
   rename(name: string): Promise<User>;
+  /** Change your handle (§41); refused with the reason on `handle` (taken, not allowed). */
+  setHandle(handle: string): Promise<User>;
   /**
    * Change your password (§22.2). The server checks the current one and signs out every other session; this one gets
    * a fresh token. Rejects with field errors on `oldPassword` or `password`.
@@ -207,6 +213,8 @@ export interface Api {
   subscribeHidden(fn: RealtimeHandler<HiddenRow>): Promise<Unsubscribe>;
   /** Every message event in every room you can see, without text or files (§18.3, §34). */
   subscribeAllMessages(fn: RealtimeHandler<MessageActivity>): Promise<Unsubscribe>;
+  /** Your inbox's rows as they are added and taken away (§41). */
+  subscribeInbox(fn: (e: InboxEvent) => void): Promise<Unsubscribe>;
   /** Your own room_reads rows, e.g. written by another tab or device. */
   subscribeReads(fn: RealtimeHandler<ReadRow>): Promise<Unsubscribe>;
   /** Called on every realtime (re)connect; `reconnect` is false for the first one. */
@@ -256,7 +264,7 @@ export const MSG_FIELDS =
   "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance," +
   "reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files," +
   "expand.reply_to.expand.author.id,expand.reply_to.expand.author.name," +
-  "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name";
+  "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions";
 const MSG_OPTS = { expand: "author,reply_to.author,forwarded_from", fields: MSG_FIELDS } as const;
 /**
  * Live messages (pb_hooks/lib/live.js, docs/PERF.md §7): the server sends each message once on this topic to everyone who
@@ -280,7 +288,7 @@ interface SiteRow {
   invite_only?: boolean;
 }
 /** reply_to: notifications (§34) look closer at replies only. */
-export const ACTIVITY_FIELDS = "id,room,author,deleted,reply_to";
+export const ACTIVITY_FIELDS = "id,room,author,deleted,reply_to,mentions";
 
 function toApiError(e: unknown): ApiError {
   if (e instanceof ApiError) return e;
@@ -312,9 +320,10 @@ const toUser = (r: AuthRecord): User => ({
   ...(r.no_dms ? { no_dms: true } : {}),
   ...(r.instance ? { instance: r.instance as string } : {}),
   ...(r.moderator ? { moderator: true } : {}),
+  ...(r.handle ? { handle: r.handle as string } : {}),
 });
 /** What the profile calls return: never the email, even for yourself. */
-export const USER_FIELDS = "id,name,avatar,instance";
+export const USER_FIELDS = "id,name,avatar,instance,handle";
 
 /** The query for GET /api/chat/rooms/{room}/messages (pb_hooks/lib/lists.js). */
 export function pageOptions(q: PageQuery, limit = PAGE_SIZE, page = 1) {
@@ -494,6 +503,7 @@ export function createApi(client: PbClient): Api {
     setAvatar: async (file) => toUser(await wrap(users.update(me(), { avatar: file }, { fields: USER_FIELDS }))),
     removeAvatar: async () => toUser(await wrap(users.update(me(), { avatar: null }, { fields: USER_FIELDS }))),
     rename: async (name) => toUser(await wrap(users.update(me(), { name }, { fields: USER_FIELDS }))),
+    setHandle: async (handle) => toUser(await wrap(users.update(me(), { handle }, { fields: USER_FIELDS }))),
     async changePassword(oldPassword, password) {
       me();
       return toUser(await wrap(users.authAt("/api/chat/password", { oldPassword, password })));
@@ -622,7 +632,17 @@ export function createApi(client: PbClient): Api {
     subscribeRooms: (fn) => subscribe("rooms", fn, ROOM_OPTS),
     subscribeHidden: (fn) => subscribe("hidden_rooms", fn, { fields: HIDDEN_FIELDS }),
     subscribeAllMessages: (fn) =>
-      live((action, m) => fn(action, { id: m.id, room: m.room, author: m.author, deleted: m.deleted, reply_to: m.reply_to ?? "" })),
+      live((action, m) =>
+        fn(action, {
+          id: m.id,
+          room: m.room,
+          author: m.author,
+          deleted: m.deleted,
+          reply_to: m.reply_to ?? "",
+          mentions: m.mentions ?? [],
+        }),
+      ),
+    subscribeInbox: (fn) => wrap(pb.realtime.subscribe("chat/inbox", (d) => fn(d as InboxEvent))),
     subscribeReads: (fn) => subscribe("room_reads", fn, { fields: HIDDEN_FIELDS }),
 
     onConnect(fn) {

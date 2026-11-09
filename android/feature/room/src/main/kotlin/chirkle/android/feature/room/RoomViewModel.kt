@@ -49,6 +49,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
+/** How long typing pauses before the server is asked who an "@" may name (DESIGN.md §41; the web waits as long). */
+private const val MENTION_WAIT_MS = 120L
+
 /** A row of the message list, newest first (the list is laid out from the bottom). */
 sealed interface ListRow {
     val key: String
@@ -162,7 +165,40 @@ class RoomViewModel(
     /** Where the ":name" closed with Escape starts: not offered again until another one is typed. */
     private var dismissedAt = -1
 
+    /**
+     * People offered for the "@an" before the caret (DESIGN.md §41, GET /api/chat/mentionable; just "@": who wrote here
+     * lately), asked once typing pauses. Shown instead of emoji: the two never start at once.
+     */
+    var people by mutableStateOf<List<chirkle.android.data.model.Mentionable>>(emptyList())
+        private set
+    private var peopleAt = -1
+    private var peopleDismissed = -1
+    private var peopleJob: Job? = null
+
+    private fun suggestPeople() {
+        val t = if (text.selection.collapsed) chirkle.android.data.lib.mentionToken(text.text, text.selection.end) else null
+        if (t == null) peopleDismissed = -1
+        peopleJob?.cancel()
+        if (t == null || t.start == peopleDismissed) {
+            peopleAt = -1
+            people = emptyList()
+            return
+        }
+        peopleJob = viewModelScope.launch {
+            delay(MENTION_WAIT_MS)
+            val found = runCatching { services.api.mentionable(roomId, t.query) }.getOrNull() ?: return@launch
+            // The text may have moved on meanwhile.
+            val now = if (text.selection.collapsed) chirkle.android.data.lib.mentionToken(text.text, text.selection.end) else null
+            if (now != t) return@launch
+            if (t.start != peopleAt) suggestion = 0
+            peopleAt = if (found.isEmpty()) -1 else t.start
+            people = found
+            if (found.isNotEmpty()) suggestion = suggestion.coerceAtMost(found.lastIndex)
+        }
+    }
+
     private fun suggest() {
+        suggestPeople()
         val t = if (text.selection.collapsed) chirkle.android.data.lib.emojiToken(text.text, text.selection.end) else null
         if (t == null) dismissedAt = -1
         val found = if (t == null || t.start == dismissedAt) emptyList() else chirkle.android.data.lib.findEmoji(t.query, chirkle.android.data.lib.SUGGEST_MAX)
@@ -179,16 +215,34 @@ class RoomViewModel(
 
     /** ↑/↓ with a hardware keyboard: round the list. */
     fun stepSuggestion(by: Int) {
-        if (suggestions.isNotEmpty()) suggestion = (suggestion + by).mod(suggestions.size)
+        if (people.isNotEmpty()) suggestion = (suggestion + by).mod(people.size)
+        else if (suggestions.isNotEmpty()) suggestion = (suggestion + by).mod(suggestions.size)
     }
 
     fun dismissSuggestions() {
-        dismissedAt = suggestAt
+        if (people.isNotEmpty()) peopleDismissed = peopleAt else dismissedAt = suggestAt
         suggest()
+    }
+
+    /** Emoji or people are offered over the composer. */
+    val suggesting: Boolean get() = people.isNotEmpty() || suggestions.isNotEmpty()
+
+    /** Put the person's "@handle " in place of "@an" (and the rest of a handle typed after the caret). */
+    fun pickPerson(i: Int = suggestion) {
+        val u = people.getOrNull(i) ?: return
+        val t = text
+        val caret = t.selection.end
+        val tail = Regex("^\\w*").find(t.text.substring(caret))?.value?.length ?: 0
+        val put = "@${u.handle} "
+        val at = peopleAt
+        people = emptyList()
+        peopleAt = -1
+        onText(TextFieldValue(t.text.substring(0, at) + put + t.text.substring(caret + tail), TextRange(at + put.length)))
     }
 
     /** Put the emoji in place of ":name", with a space after when it ends the text. */
     fun pickSuggestion(i: Int = suggestion) {
+        if (people.isNotEmpty()) return pickPerson(i)
         val e = suggestions.getOrNull(i)?.emoji ?: return
         val t = text
         val caret = t.selection.end

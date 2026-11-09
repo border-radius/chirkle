@@ -111,3 +111,22 @@
   width: 28px;
   height: 28px;
 }
+
+/* "@handle" in a message (§41); yours stands out. The sidebar's "Mentions & replies" row has "@" for its "#". */
+.mention {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mention.me {
+  border-radius: 4px;
+  background: var(--tint);
+}
+
+.room-section[data-section="inbox"] a::before {
+  content: "@";
+}
+
+.badge + .badge {
+  margin-left: 0;
+}

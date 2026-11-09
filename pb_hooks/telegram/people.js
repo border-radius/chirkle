@@ -93,6 +93,10 @@ function personOf(app, msg) {
   user.set("email", `tg${s.id.replace(/\D/g, "")}.${$security.randomStringWithAlphabet(6, "abcdefghijklmnopqrstuvwxyz")}@telegram.invalid`);
   user.setPassword($security.randomString(40));
   user.set("no_dms", true);
+  // Their Telegram username as their handle when it is one and free (§41), so "@username" means them on both sides.
+  const { HANDLE, freeHandle, normalHandle } = require(`${__hooks}/lib/handles.js`);
+  const wanted = normalHandle(s.username);
+  if (HANDLE.test(wanted)) user.set("handle", freeHandle(app, wanted, user.id));
   saveWithName(app, user, s.name);
   row = new Record(app.findCollectionByNameOrId("tg_people"));
   row.set("tg_user_id", s.id);

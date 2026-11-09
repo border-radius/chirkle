@@ -4,7 +4,7 @@ import { describe, expect, inject, it } from "vitest";
 import { type Action, type Api, ApiError, createApi } from "../../web/src/api.ts";
 import { latest, older, PAGE_SIZE } from "../../web/src/lib/cursor.ts";
 import { newId } from "../../web/src/lib/id.ts";
-import type { Message } from "../../web/src/lib/types.ts";
+import type { Message, User } from "../../web/src/lib/types.ts";
 import { createClient } from "../../web/src/pb.ts";
 import { pngFile } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
@@ -48,13 +48,19 @@ async function setup(): Promise<{ a: Api; b: Api; anon: Api }> {
   return { a, b, anon: realClient() };
 }
 
+/** A user as a message's author shows them: without the handle (§41). */
+const pub = (u: User | null) => {
+  const { handle: _, ...rest } = u ?? ({} as User);
+  return rest;
+};
+
 describe("createApi", () => {
   describe("auth", () => {
     it("signUp logs the user in; logOut clears; logIn restores", async () => {
       const { anon } = await setup();
       const email = `c-${uniq()}@test.local`;
       const user = await signUpAs(anon, { email, password: "password-123", name: "  Ada  " });
-      expect(user).toEqual({ id: expect.any(String), name: "Ada", avatar: "" });
+      expect(user).toEqual({ id: expect.any(String), name: "Ada", avatar: "", handle: expect.stringMatching(/^ada\d*$/) });
       expect(anon.currentUser()).toEqual(user);
       expect(await anon.refreshAuth()).toEqual(user);
 
@@ -102,7 +108,7 @@ describe("createApi", () => {
       expect(a.avatarUrl(me, 48)).toBe("");
 
       const set = await a.setAvatar(pngFile());
-      expect(set).toEqual({ id: me.id, name: me.name, avatar: expect.stringMatching(/\.png$/) });
+      expect(set).toEqual({ id: me.id, name: me.name, handle: me.handle, avatar: expect.stringMatching(/\.png$/) });
       expect(a.currentUser()).toEqual(set);
       const url = a.avatarUrl(set, 96);
       expect(url).toContain("thumb=96x96");
@@ -319,7 +325,7 @@ describe("createApi", () => {
       const id = newId();
       const m = await a.send({ id, room: room.id, text: "  hello  " });
       expect(m).toMatchObject({ id, room: room.id, text: "hello", author: a.currentUser()!.id, edited_at: "", deleted: false });
-      expect(m.expand?.author).toEqual({ ...a.currentUser(), no_dms: false, instance: "" });
+      expect(m.expand?.author).toEqual({ ...pub(a.currentUser()), no_dms: false, instance: "" });
       expect(m.created).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}Z$/);
     });
 
@@ -367,7 +373,7 @@ describe("createApi", () => {
       const e = await a.edit(m.id, " v2 ");
       expect(e).toMatchObject({ id: m.id, text: "v2" });
       expect(e.edited_at).not.toBe("");
-      expect(e.expand?.author).toEqual({ ...a.currentUser(), no_dms: false, instance: "" });
+      expect(e.expand?.author).toEqual({ ...pub(a.currentUser()), no_dms: false, instance: "" });
     });
 
     it("softDelete wipes text and freezes the message", async () => {
@@ -441,7 +447,7 @@ describe("createApi", () => {
           ["update", "edited", false],
           ["update", "", true],
         ]);
-        expect(events[0]![1].expand?.author).toEqual({ ...a.currentUser(), no_dms: false, instance: "" });
+        expect(events[0]![1].expand?.author).toEqual({ ...pub(a.currentUser()), no_dms: false, instance: "" });
       } finally {
         await off();
       }

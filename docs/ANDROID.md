@@ -1597,3 +1597,26 @@ have a DM with (they show as that DM) and those who take no DMs (§16.7). Pickin
 The field isn't focused when the sheet opens, so the keyboard doesn't cover the list, the same as the emoji sheet.
 The list keeps the height of the full list while you type, so the sheet doesn't shrink under your finger. Test:
 `UiFeaturesTest` "the forward picker searches rooms and finds people with no DM yet".
+
+## 60. Handles, mentions and Mentions & replies (2026-11-10)
+
+The web's DESIGN.md §41, ported. `User.handle` and `Message.mentions` are read (`fields.user`, `fields.message`).
+
+- **Messages**: `linked()` (core/ui) marks each "@handle" (`splitMentions`, `lib/Mentions.kt`, on the web's vectors) in
+  the accent and bold, yours on the tint; a message mentioning you gets the reply-to-you card.
+- **Composer**: "@" before the caret (`mentionToken`) asks `GET /api/chat/mentionable` after 120 ms; the people show
+  in a column over the field (`People`, content description "Name @handle"); a tap, or Enter/Tab with a keyboard,
+  puts "@handle " in. Emoji suggestions and people never show at once.
+- **Room list**: a "Mentions & replies" row first (an "@" tile, "N new"), opening `InboxScreen` (route `Inbox`); a room
+  with unread mentions or replies shows an "@" (`MentionBadge`, "Mentions you") before its count. `UnreadSync` keeps
+  `AppState.mentions` and `inbox` from `GET /api/chat/unread` and refetches on `chat/inbox` (a server from before
+  sends none and its counts lack both: no "@", no count).
+- **InboxScreen** (feature/rooms): the web's page; opening it sees all (`POST /api/chat/inbox/seen`); a tap opens the
+  message (`Room(id, msgId)`).
+- **Profile**: a Handle field with its own Save.
+- **Notifications**: the check's `notifiable` includes mentions on the server; they go on the "Mentions and replies"
+  channel (was "Replies"; same id).
+
+Tests: `VectorsTest` (mentions, `mentionToken`), `ContractTest`, `UiMentionsTest` (suggest and send, the "@" and count
+live, the inbox opening the message and reading clears the "@", the handle saved and a taken one refused). Looked at
+in Robolectric screenshots (room list, inbox, room with the suggestions).

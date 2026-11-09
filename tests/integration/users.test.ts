@@ -99,6 +99,6 @@ describe("user search ignores case beyond ASCII (BUG-55)", () => {
     await me.signUp({ email: `${uniq()}@test.local`, password: "password-123", name: `viewer ${tag}` });
     await realClient().signUp({ email: `${uniq()}@test.local`, password: "password-123", name: `shown ${tag}` });
     const [found] = await me.searchUsers(`shown ${tag}`);
-    expect(Object.keys(found!).sort()).toEqual(["avatar", "id", "name"]);
+    expect(Object.keys(found!).sort()).toEqual(["avatar", "handle", "id", "name"]);
   });
 });

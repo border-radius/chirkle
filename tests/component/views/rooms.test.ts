@@ -310,6 +310,35 @@ describe("rooms view (§7.1)", () => {
     });
   });
 
+  describe("mentions and replies (§41)", () => {
+    it("lists Mentions & replies first, with how many are new; a room that mentions you has an @", async () => {
+      const a = await room();
+      const b = await room();
+      await mount();
+      const inbox = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
+      expect(section("inbox" as Section)).toBe(root.querySelector("nav")!.firstElementChild);
+      expect(inbox.getAttribute("href")).toBe("/inbox");
+      expect(inbox.textContent).toBe("Mentions & replies");
+      store.set({
+        inbox: 3,
+        unread: new Map([
+          [a.id, 2],
+          [b.id, 1],
+        ]),
+        mentions: new Map([[a.id, 1]]),
+      });
+      const now = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
+      expect(now.textContent).toBe("Mentions & replies3 new");
+      expect(now.classList.contains("unread")).toBe(true);
+      const badges = (r: Room) => [...row(r)!.querySelectorAll(".badge")].map((x) => x.textContent);
+      expect(badges(a)).toEqual(["@ mentions you,", "2 unread"]);
+      expect(badges(b)).toEqual(["1 unread"]);
+      // Read: no count, no @.
+      store.set({ unread: new Map([[b.id, 1]]) });
+      expect(badges(a)).toEqual([]);
+    });
+  });
+
   describe("unread badges (§18.4)", () => {
     const badge = (r: Room) => row(r)?.querySelector(".badge") ?? null;
 

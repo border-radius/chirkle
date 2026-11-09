@@ -1,0 +1,23 @@
+{
+  "$comment": "\"@handle\" in message text and handles made from names (DESIGN.md §41). Run by tests/unit/vectors.test.ts (web/src/lib/mentions.ts and pb_hooks/lib/handles.js) and android/core/data/src/test/kotlin/chirkle/android/data/lib/VectorsTest.kt. `mentions`: the handles found, in lower case, each once, in order; `parts`: the text split into plain strings and mentions ({ handle, text }).",
+  "mentions": [
+    { "input": "hi @ann!", "handles": ["ann"], "parts": ["hi ", { "handle": "ann", "text": "@ann" }, "!"] },
+    { "input": "@Bob_2 and @bob_2, @ann.", "handles": ["bob_2", "ann"], "parts": [{ "handle": "bob_2", "text": "@Bob_2" }, " and ", { "handle": "bob_2", "text": "@bob_2" }, ", ", { "handle": "ann", "text": "@ann" }, "."] },
+    { "input": "mail ann@example.com or @ann@b.example", "handles": [], "parts": ["mail ann@example.com or @ann@b.example"] },
+    { "input": "@ab is short, @abc isn't", "handles": ["abc"], "parts": ["@ab is short, ", { "handle": "abc", "text": "@abc" }, " isn't"] },
+    { "input": "(@ann) «@bob» привет@ann", "handles": ["ann", "bob"], "parts": ["(", { "handle": "ann", "text": "@ann" }, ") «", { "handle": "bob", "text": "@bob" }, "» привет", { "handle": "ann", "text": "@ann" }] },
+    { "input": "path/@ann x.@ann @@ann", "handles": [], "parts": ["path/@ann x.@ann @@ann"] },
+    { "input": "@aaaaaaaaaaaaaaaaaaaaaaaaa", "handles": [], "parts": ["@aaaaaaaaaaaaaaaaaaaaaaaaa"] },
+    { "input": "line\n@ann", "handles": ["ann"], "parts": ["line\n", { "handle": "ann", "text": "@ann" }] }
+  ],
+  "handleFrom": [
+    { "input": "Ann", "output": "ann" },
+    { "input": "Zoë Ünal-Smith", "output": "zoe_unal_smith" },
+    { "input": "Иван Пётр", "output": "ivan_petr" },
+    { "input": "Straße", "output": "strasse" },
+    { "input": "李", "output": "user" },
+    { "input": "Al", "output": "al_user" },
+    { "input": "  __Ann  (B)__ ", "output": "ann_b" },
+    { "input": "A very long display name indeed", "output": "a_very_long_display" }
+  ]
+}

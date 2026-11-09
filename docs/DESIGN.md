@@ -606,6 +606,8 @@ while its first page loads.
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
 | Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2.05 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
+| "Mentions & replies" page (§41.4), loaded when it is opened | ≤ 2 KB script (`views/inbox.ts`), ≤ 1 KB stylesheet (`web/styles/inbox.css`) |
+| The composer's "@" suggestions (§41.3), loaded when an "@" is typed | ≤ 2 KB script (`ui/mention-suggest.ts`; styled by `emoji.css`) |
 | Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
@@ -3692,3 +3694,69 @@ in the 5-minute run (one transaction). Nothing per message.
 guests, superusers left out, gone on disconnect; recording, `no_stats`, the prune and a deleted account; messages,
 DMs, files, reactions, accounts; the viewer's days), `tests/unit/stats.test.ts` (person-hours, peaks, runs, the 30 days,
 axis tops). Looked at in Chromium (light, dark, 390 px; as a moderator, another account, and a superuser through `/_/`).
+
+## 41. Handles, mentions and "Mentions & replies" (2026-11-10)
+
+The user: "user should have nicknames/handles. and there should be a way to mention them like @nickname (with
+auto-complete). mentions should act like replies (notifications and highlight in room). also room in roomlist should
+show if room have any mentions/replies. in sidebar right after jump to should be a new section "mentions & replies"
+where user can see all mentions and replies for them and jump to chat where they are. info about reactions should also
+be there (somebody set reaction to your message)". Web, server and the Android app (ANDROID.md §60).
+
+### 41.1 Handles (`users.handle`, `pb_hooks/lib/handles.js`)
+
+3 to 24 of `a–z`, `0–9`, `_`, unique, stored in lower case; "all", "everyone", "here", "room" and "channel" are
+reserved. Every account has one: a new account's is made from its name (Latin and Cyrillic letters transliterated,
+accents dropped, anything else "_", at most 20, a number added when taken), and migration `1760000045_mentions.js`
+gave existing accounts theirs the same way (it repeats the code: migrations can't require hooks). A Telegram stand-in
+takes its Telegram username when it is free. You change yours on Settings (web) or Your profile (app); an "@" typed
+first is dropped. Refused with the reason on `handle`: "Use 3 to 24 letters a–z, digits or underscores.", "This handle
+is taken. Choose another one.". A rename keeps the handle. People search (`/api/chat/users`) finds by handle too.
+
+### 41.2 Mentions (`messages.mentions`)
+
+"@handle" after the start or anything but a letter, digit, "_", "@", "." or "/", and not followed by one of those
+(so not an email, `@ann@b.example` or a path), case ignored: `MENTION` in `handles.js`, `web/src/lib/mentions.ts`,
+the app's `lib/Mentions.kt`, all run on `shared/vectors/mentions.json`. The server resolves them on create and on an
+edit of the text into `mentions` (users, at most 20): people who can see the room, not the author; none for a forward,
+a deleted or a service message. Clients can't set it (400). A linked server's events carry them by global id (§33).
+
+In a room each "@handle" is marked (`.mention`, accent and bold); yours more (`.mention.me`), and a message that
+mentions you is highlighted as a reply to you is (`.to-me`).
+
+### 41.3 Suggestions as "@" is typed
+
+`GET /api/chat/mentionable?room=&q=` (signed in; 404 for a room you can't see): up to 8 people who can see the room,
+whose handle starts with `q` or whose name holds it, those who wrote there lately first (not in an anonymous room,
+§35); never you or a banned account. The web's composer spots "@" and loads `ui/mention-suggest.ts`, which asks
+after a 120 ms pause and shows a list over the composer like the ":name" emoji (§20.6): ↑/↓, Enter or Tab put
+"@handle ", Escape closes it. The app shows a column of people over its field; a tap puts the handle in.
+
+### 41.4 The inbox (`inbox`, `inbox_reads`, `pb_hooks/lib/inbox.js`)
+
+A row per thing told to you: `mention`, `reply` (to your message) or `reaction` (to your message, with its emoji);
+`actor`, `message`, `room`. Written in the messages hooks: a mention added or removed by an edit, a reaction taken
+back and a deleted message take theirs away; your own doings, stand-ins and the reply's author mentioned too get none.
+No API rules: `GET /api/chat/inbox?before=<cursor>&limit=` lists yours, newest first, leaving out rooms you can't see
+now; in an anonymous room the room is the actor of a mention or reply. `POST /api/chat/inbox/seen { at }` moves
+`inbox_reads.seen_at`. Each row added or taken away is sent to its user's clients on `chat/inbox`
+(`{ action, id, kind, room, message, created }`).
+
+`GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100) and `mentions` (per room, the unread
+messages that mention or reply to you). The sidebar's first row, right under Jump to, is **Mentions & replies**
+(`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
+`chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
+in #room", "replied to you" (with your message quoted) or "reacted 👍 to your message", newest first, "Show older",
+what is new tinted; each opens its message in its room. Opening it sees everything listed.
+
+### 41.5 Notifications
+
+A mention of you notifies as a reply does (§34, the "Mentions and replies" choice; "Ada mentioned you in #room"). The
+app's check (`GET /api/chat/notifiable`) now includes mentions (`mentions.id ?= {:me}`: PocketBase's `mentions ?=`
+on a multi-relation matched nothing), on the channel renamed "Mentions and replies".
+
+### 41.6 Tests
+
+Server `tests/integration/mentions.test.ts`, `lists.test.ts` (notifiable); web `tests/unit/vectors.test.ts`,
+`tests/component/views/room/mentions.test.ts`, `views/inbox.test.ts`, `views/rooms.test.ts`, `unread.test.ts`,
+`notify.test.ts`, `tests/e2e/mentions.spec.ts`; app `VectorsTest`, `ContractTest`, `UiMentionsTest`.

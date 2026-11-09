@@ -3,10 +3,14 @@ package chirkle.android.data.lib
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** A piece of message text: plain, or a link with where it goes. */
+/**
+ * A piece of message text: plain, a link with where it goes, or a mention (DESIGN.md §41: [Mention.handle] in lower case
+ * without the "@", [Mention.text] as written; lib/Mentions.kt).
+ */
 sealed interface TextPart {
     data class Plain(val text: String) : TextPart
     data class Link(val text: String, val href: String) : TextPart
+    data class Mention(val handle: String, val text: String) : TextPart
 }
 
 /**

@@ -55,6 +55,25 @@ describe("unread counts (§18.3)", () => {
     return { other, r };
   }
 
+  describe("mentions and the inbox (§41)", () => {
+    it("loads each room's unread mentions and replies and the inbox's unseen count, and follows them live", async () => {
+      const { other, r } = await unreadRoom(1);
+      await say(other, r.id, `@${me.user.handle} look`);
+      start();
+      await vi.waitFor(() => expect(store.get().mentions.get(r.id)).toBe(1));
+      expect(store.get().inbox).toBe(1);
+      await subscribed(me.api);
+      const mine = await say(me, r.id, "mine");
+      await other.api.send({ id: newId(), room: r.id, text: "re", replyTo: mine.id });
+      await vi.waitFor(() => expect(store.get().mentions.get(r.id)).toBe(2));
+      expect(store.get().inbox).toBe(2);
+      // Read: the room's mentions go with its count.
+      unread!.open(r.id).seen(new Date(Date.now() + 1000).toISOString().replace("T", " "), true);
+      expect(store.get().mentions.has(r.id)).toBe(false);
+      expect(count(r.id)).toBeUndefined();
+    });
+  });
+
   describe("counts", () => {
     it("loads the counts", async () => {
       const { r } = await unreadRoom(2);

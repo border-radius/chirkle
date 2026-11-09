@@ -11,6 +11,8 @@ export interface User {
   instance?: string;
   /** You are a moderator (§36): only said of the signed-in user. */
   moderator?: boolean;
+  /** What "@handle" names (§41), without the "@"; absent where the server doesn't say. */
+  handle?: string;
 }
 
 /**
@@ -91,6 +93,8 @@ export interface Message {
    * it is deleted. "" or absent otherwise, and for forwards made before forwards pointed at their original.
    */
   forward_of?: string;
+  /** Who its "@handle"s name (§41): user ids, set by the server; empty or absent when none. */
+  mentions?: string[];
   /** What its links show (§28), set by the server once it has fetched them; empty or absent until then. */
   previews?: LinkPreview[];
   expand?: { author?: User; reply_to?: Quoted; forwarded_from?: User };
@@ -198,6 +202,34 @@ export interface Site {
   logo: string;
   /** Signing up needs an invite code. */
   inviteOnly: boolean;
+}
+
+/** A row of the "Mentions & replies" inbox (§41, GET /api/chat/inbox). */
+export interface InboxItem {
+  id: string;
+  /** Where the next page starts (`before`). */
+  cursor: string;
+  kind: "mention" | "reply" | "reaction";
+  /** A reaction's emoji, "" otherwise. */
+  emoji: string;
+  created: string;
+  room: string;
+  /** The message: the mention, the reply, or your message reacted to. Its text cut short, how many files it has. */
+  message: { id: string; text: string; files: number; created: string };
+  /** A reply's: your message it answers ("" text and no files once deleted). */
+  quote: { id: string; text: string; files: number } | null;
+  /** Who did it; in an anonymous room (§35), the room for a mention or reply. */
+  actor: User;
+}
+
+/** A row of the inbox added or taken away, told live on `chat/inbox` (§41). */
+export interface InboxEvent {
+  action: "create" | "delete";
+  id: string;
+  kind: InboxItem["kind"];
+  room: string;
+  message: string;
+  created: string;
 }
 
 /** What the app shows before (or without) the site record. */

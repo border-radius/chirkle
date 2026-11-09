@@ -7,6 +7,7 @@
 
 import { h, reconcile } from "../../dom.ts";
 import { linkify } from "../../lib/links.ts";
+import { splitMentions } from "../../lib/mentions.ts";
 import { emptyForward, type MessageWindow, quoteText, startsGroup } from "../../lib/messages.ts";
 import { reactors } from "../../lib/reactions.ts";
 import { captureAnchor, restoreAnchor } from "../../lib/scroll.ts";
@@ -483,8 +484,8 @@ export function createMessageList(opts: {
       ? []
       : opts.reactions(m).map((r) => ({ ...r, who: reactors(r.users, me?.id ?? "", (id) => names.get(id) ?? opts.nameOf(id)) }));
     const { ms, time } = timeOf(m.created);
-    /** Someone else's reply to one of my messages: highlighted, so that I notice it (§19.3). */
-    const toMe = !!me && quoted?.author === me.id && m.author !== me.id;
+    /** Someone else's reply to one of my messages, or a mention of me (§41): highlighted, so that I notice it (§19.3). */
+    const toMe = !!me && m.author !== me.id && (quoted?.author === me.id || !!m.mentions?.includes(me.id));
     const sig = JSON.stringify([
       m.text,
       m.deleted,
@@ -614,10 +615,18 @@ export function createMessageList(opts: {
     return li;
   }
 
-  /** Message text with its links clickable (§7.6.3). They open in a new tab, which the router leaves alone. */
-  function bodyText(text: string): (string | HTMLAnchorElement)[] {
-    return linkify(text).map((part) =>
-      typeof part === "string" ? part : h("a", { href: part.href, target: "_blank", rel: "noopener noreferrer nofollow" }, part.text),
+  /**
+   * Message text with its links clickable (§7.6.3), which open in a new tab (the router leaves them alone), and its
+   * "@handle"s marked (§41), yours more.
+   */
+  function bodyText(text: string): (string | HTMLElement)[] {
+    const mine = opts.me()?.handle;
+    return linkify(text).flatMap((part) =>
+      typeof part === "string"
+        ? splitMentions(part).map((t) =>
+            typeof t === "string" ? t : h("span", { class: t.handle === mine ? "mention me" : "mention" }, t.text),
+          )
+        : h("a", { href: part.href, target: "_blank", rel: "noopener noreferrer nofollow" }, part.text),
     );
   }
 

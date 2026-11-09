@@ -122,7 +122,7 @@ function searchWhere(text, params) {
 
 /**
  * GET /api/chat/notifiable?rooms=a,b&since=…[&every=a] → other people's messages in `rooms` since `since` that are
- * DMs or replies to you, or any message in an `every` room (ANDROID.md §21.2, §24): newest first, `limit` of them. The
+ * DMs, replies to you or mentions of you (DESIGN.md §41), or any message in an `every` room (ANDROID.md §21.2, §24): newest first, `limit` of them. The
  * rooms you can't see are left out.
  * @param {core.RequestEvent} e
  */
@@ -150,7 +150,7 @@ function notifiable(e) {
     "created > {:since}",
     "author != {:me}",
     "deleted = false",
-    `(room.kind = "dm" || reply_to.author = {:me}${all})`,
+    `(room.kind = "dm" || reply_to.author = {:me} || mentions.id ?= {:me}${all})`,
   ];
   return e.json(200, list(e, where, "-created,-id", q, params, rooms));
 }

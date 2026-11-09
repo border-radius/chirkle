@@ -105,6 +105,8 @@ export function createComposer(opts: {
   onEmoji: (opener: HTMLElement, insert: (emoji: string) => void) => void;
   /** ":" and two letters typed before the caret: offer emoji by name (§20.6). Those follow the textarea from then on. */
   onEmojiName?: (textarea: HTMLTextAreaElement) => void;
+  /** An "@" typed (§41): offer people by handle. Those follow the textarea from then on. */
+  onMention?: (textarea: HTMLTextAreaElement) => void;
   /** The text changed (typed, inserted, sent or replaced): e.g. to keep it as a draft. */
   onChange?: (text: string) => void;
   /** Attach from collections (§31): offer at most `room` items next to `opener` (they come back through addItems). */
@@ -330,7 +332,11 @@ export function createComposer(opts: {
   textarea.addEventListener("input", onInput, { signal });
   textarea.addEventListener(
     "input",
-    () => /(?<=^|[\s(]):[\w+-]{2,}$/.test(textarea.value.slice(0, textarea.selectionStart)) && opts.onEmojiName?.(textarea),
+    () => {
+      const before = textarea.value.slice(0, textarea.selectionStart);
+      if (/(?<=^|[\s(]):[\w+-]{2,}$/.test(before)) opts.onEmojiName?.(textarea);
+      if (/(^|[^\w@./])@\w*$/.test(before)) opts.onMention?.(textarea);
+    },
     { signal },
   );
   textarea.addEventListener(

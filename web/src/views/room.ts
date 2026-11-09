@@ -333,6 +333,7 @@ export function createRoomView({
       void openPicker(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
     },
     onEmojiName: (textarea) => void suggestEmoji(textarea),
+    onMention: (textarea) => void suggestPeople(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).
     onChange: (text) => {
       if (roomId) drafts.set(roomId, text);
@@ -935,6 +936,21 @@ export function createRoomView({
       },
       () => {
         suggest = null;
+      },
+    );
+  }
+
+  /** People by handle in the composer (§41), a lazy chunk: once loaded it follows the textarea. Quietly not, offline. */
+  let people = false;
+  function suggestPeople(textarea: HTMLTextAreaElement) {
+    if (people) return;
+    people = true;
+    void import("../ui/mention-suggest.ts").then(
+      ({ createMentionSuggest }) =>
+        scope.active &&
+        createMentionSuggest({ h, api, textarea, room: () => roomId, avatar: (u) => avatar(u, 24, api.avatarUrl), signal }).update(),
+      () => {
+        people = false;
       },
     );
   }

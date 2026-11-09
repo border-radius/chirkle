@@ -159,7 +159,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
             if (error.isNotEmpty()) {
                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
-            if (vm.suggestions.isNotEmpty()) Suggestions(vm)
+            if (vm.people.isNotEmpty()) People(vm) else if (vm.suggestions.isNotEmpty()) Suggestions(vm)
             // One rounded field with emoji at its start and attach at its end, both kept at the bottom as the text
             // grows, then Send: the text gets the width, as in the messengers people know.
             Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
@@ -189,7 +189,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             .onPreviewKeyEvent { e ->
                                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
-                                if (vm.suggestions.isNotEmpty()) when {
+                                if (vm.suggesting) when {
                                     (e.key == Key.Enter || e.key == Key.Tab) && plain -> return@onPreviewKeyEvent true.also { vm.pickSuggestion() }
                                     e.key == Key.DirectionDown && plain -> return@onPreviewKeyEvent true.also { vm.stepSuggestion(1) }
                                     e.key == Key.DirectionUp && plain -> return@onPreviewKeyEvent true.also { vm.stepSuggestion(-1) }
@@ -278,6 +278,38 @@ private fun Suggestions(vm: RoomViewModel) {
                 Text(n.emoji, fontSize = 20.sp)
                 Spacer(Modifier.width(6.dp))
                 Text(":${n.name}:", style = MaterialTheme.typography.bodyMedium, color = Chirkle.colors.muted)
+            }
+        }
+    }
+}
+
+/** The people an "@" finds (DESIGN.md §41), in a column over the field: a tap puts their handle in; the chosen one is tinted. */
+@Composable
+private fun People(vm: RoomViewModel) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .semantics { contentDescription = "People" },
+    ) {
+        vm.people.forEachIndexed { i, u ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(if (i == vm.suggestion) Chirkle.colors.tint else Color.Transparent)
+                    .clickable(onClickLabel = "Mention") { vm.pickPerson(i) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .semantics(mergeDescendants = true) { contentDescription = "${u.name} @${u.handle}" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                chirkle.android.ui.Avatar(chirkle.android.data.model.User(u.id, u.name, u.avatar, instance = u.instance, handle = u.handle), 28.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(u.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(8.dp))
+                Text("@${u.handle}", style = MaterialTheme.typography.bodyMedium, color = Chirkle.colors.muted, maxLines = 1)
             }
         }
     }

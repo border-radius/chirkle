@@ -90,7 +90,7 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
             if (stack.firstOrNull() !is Rooms) stack.reset(Rooms)
             onSignedIn()
         } else if (!guest && stack.firstOrNull() !is Login) stack.reset(Login)
-        else if (guest && stack.any { it is Profile }) stack.reset(Rooms)
+        else if (guest && stack.any { it is Profile || it is Inbox }) stack.reset(Rooms)
     }
     LaunchedEffect(linked, signedIn) {
         val r = linked ?: return@LaunchedEffect
@@ -125,6 +125,7 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
                     onLogIn = { guest = false; stack.reset(Login) },
                     onOpenCollection = { stack += CollectionPage(it) },
                     onAccounts = { stack += AccountList },
+                    onInbox = { stack += Inbox },
                 )
             }
             entry<Room> { key ->
@@ -157,6 +158,7 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
             entry<RoomAccess> { key -> RoomAccessScreen(key.id) { stack.removeAt(stack.lastIndex) } }
             entry<Viewer> { key -> ViewerScreen(key.roomId, key.msgId, key.file) { stack.removeAt(stack.lastIndex) } }
             entry<Profile> { ProfileScreen { stack.removeAt(stack.lastIndex) } }
+            entry<Inbox> { chirkle.android.feature.rooms.InboxScreen(onOpen = { r, m -> stack += Room(r, m) }) { stack.removeAt(stack.lastIndex) } }
             entry<AccountList>(metadata = mapOf(FROM_START to true)) { AccountsScreen(onAddAccount = { stack += ChooseServer }) { stack.removeAt(stack.lastIndex) } }
             entry<SharePicker> {
                 SharePickerScreen(forwardTargets(s), s.user?.id, onPick = { room ->

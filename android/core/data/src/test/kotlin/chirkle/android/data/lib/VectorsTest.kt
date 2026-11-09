@@ -2,6 +2,8 @@ package chirkle.android.data.lib
 
 import chirkle.android.data.model.Cursor
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -13,6 +15,25 @@ import org.junit.Test
 class VectorsTest {
     private val text = shared("vectors/text.json")
     private val jump = shared("vectors/jump.json")
+    private val mentions = shared("vectors/mentions.json")
+
+    @Test fun splitMentions() {
+        for (c in mentions.cases("mentions")) {
+            val input = c.str("input")
+            assertEquals(input, c.strings("handles"), mentionedHandles(input))
+            val parts = c.getValue("parts").jsonArray.map {
+                if (it is JsonPrimitive) TextPart.Plain(it.content) else TextPart.Mention(it.jsonObject.str("handle"), it.jsonObject.str("text"))
+            }
+            assertEquals(input, parts, splitMentions(input))
+        }
+    }
+
+    @Test fun mentionToken() {
+        assertEquals(MentionToken(3, "an"), mentionToken("hi @An", 6))
+        assertEquals(MentionToken(0, ""), mentionToken("@", 1))
+        assertEquals(null, mentionToken("ann@ex", 6))
+        assertEquals(null, mentionToken("hi @ann ", 8))
+    }
 
     @Test fun foldKey() {
         for (c in text.cases("foldKey")) assertEquals(c.str("input"), c.str("output"), foldKey(c.str("input")))

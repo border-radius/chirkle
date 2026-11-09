@@ -20,6 +20,10 @@ data class AppState(
     /** roomId → unread messages (§18); rooms without any are absent. [counted] is false until the counts are first in. */
     val unread: Map<String, Int> = emptyMap(),
     val counted: Boolean = false,
+    /** roomId → unread messages there that mention or reply to you (DESIGN.md §41): an "@" on its row. */
+    val mentions: Map<String, Int> = emptyMap(),
+    /** "Mentions & replies" rows not seen yet (at most 100). */
+    val inbox: Int = 0,
     val roomsStatus: LoadStatus = LoadStatus.Idle,
     /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§58). */
     val listLoads: Int = 0,
@@ -77,4 +81,8 @@ fun AppState.unmarkHidden(row: String) = copy(hidden = hidden.filterValues { it 
 
 fun AppState.bumpUnread(room: String) = copy(unread = unread + (room to (unread[room] ?: 0) + 1))
 
-fun AppState.clearUnread(room: String) = if (room in unread) copy(unread = unread - room) else this
+fun AppState.clearUnread(room: String) =
+    if (room in unread || room in mentions) copy(unread = unread - room, mentions = mentions - room) else this
+
+/** Unread messages in [room] that mention or reply to you (§41). */
+fun AppState.mentioned(room: String): Boolean = (mentions[room] ?: 0) > 0

@@ -26,8 +26,8 @@ describe("shared contract", () => {
     expect(USER_FIELDS).toBe(contract.fields.user);
     expect(HIDDEN_FIELDS).toBe(contract.fields.roomRow);
     expect(ITEM_FIELDS).toBe(contract.fields.collectionItem);
-    // The web's notifications (§34) also look at replies; the app's come from its periodic check instead.
-    expect(ACTIVITY_FIELDS).toBe(`${contract.fields.activity},reply_to`);
+    // The web's notifications (§34) also look at replies and mentions (§41); the app's come from its periodic check instead.
+    expect(ACTIVITY_FIELDS).toBe(`${contract.fields.activity},reply_to,mentions`);
   });
 
   it("the web's limits are the contract's", () => {

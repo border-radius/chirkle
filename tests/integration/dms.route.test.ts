@@ -63,7 +63,7 @@ describe("POST /api/chat/dms (§16.2)", () => {
     expect((await a.pb.collection("messages").getFullList({ filter: `room = "${dm.id}"` })).map((m) => m.text)).toEqual(["before"]);
     // The search says so; a public room still takes their messages.
     const found = await a.pb.send("/api/chat/users", { query: { q: b.user.name } });
-    expect(found).toEqual([{ id: b.user.id, name: b.user.name, avatar: "", no_dms: true, instance: "" }]);
+    expect(found).toEqual([{ id: b.user.id, name: b.user.name, handle: b.user.handle, avatar: "", no_dms: true, instance: "" }]);
     await post(b, (await newRoom(a)).id, "in a room");
   });
 

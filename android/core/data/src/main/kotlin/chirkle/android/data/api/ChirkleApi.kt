@@ -10,8 +10,10 @@ import chirkle.android.data.model.CollectionItem
 import chirkle.android.data.model.CollectionMeta
 import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
+import chirkle.android.data.model.InboxPage
 import chirkle.android.data.model.MediaItem
 import chirkle.android.data.model.MediaPage
+import chirkle.android.data.model.Mentionable
 import chirkle.android.data.model.Message
 import chirkle.android.data.model.Posting
 import chirkle.android.data.model.ReadPosition
@@ -51,7 +53,7 @@ const val MSG_FIELDS =
     "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance," +
         "reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files," +
         "expand.reply_to.expand.author.id,expand.reply_to.expand.author.name," +
-        "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name"
+        "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions"
 private val MSG_OPTS = mapOf("expand" to "author,reply_to.author,forwarded_from", "fields" to MSG_FIELDS)
 
 /**
@@ -72,7 +74,7 @@ internal const val ROW_FIELDS = "id,room"
 private const val SITE_FIELDS = "id,title,logo,invite_only,min_android_version"
 internal const val ACTIVITY_FIELDS = "id,room,author,deleted"
 /** What the profile calls return: never the email, even your own. */
-internal const val USER_FIELDS = "id,name,avatar,instance"
+internal const val USER_FIELDS = "id,name,avatar,instance,handle"
 internal const val ITEM_FIELDS = "id,collection,file,name,video,poster,created"
 /** A collection's page of items, as the media grid's (DESIGN.md §30.2). */
 const val COLLECTION_PAGE = 60
@@ -290,6 +292,9 @@ class ChirkleApi(val pb: PbClient) {
 
     suspend fun rename(name: String): User = updateMe(Body.Json(buildJsonObject { put("name", name) }))
 
+    /** Change your handle (DESIGN.md §41); refused with the reason on `handle` (taken, not allowed). */
+    suspend fun setHandle(handle: String): User = updateMe(Body.Json(buildJsonObject { put("handle", handle) }))
+
     /** Change your password (§22.2): every other session is signed out, this one gets a fresh token. */
     suspend fun changePassword(oldPassword: String, password: String): User {
         me()
@@ -366,6 +371,19 @@ class ChirkleApi(val pb: PbClient) {
         if (some.isEmpty()) return emptyList()
         val filter = pb.filter(some.indices.joinToString(" || ") { "id = {:u$it}" }, some.withIndex().associate { "u${it.index}" to it.value })
         return items(call(records("users"), query = mapOf("page" to 1, "perPage" to some.size, "filter" to filter, "fields" to USER_FIELDS, "skipTotal" to true)), User.serializer())
+    }
+
+    /** Up to 8 people of [room] for the composer's "@" (DESIGN.md §41): handle or name starting with [query], recent writers first. */
+    suspend fun mentionable(room: String, query: String): List<Mentionable> = get("/api/chat/mentionable", mapOf("room" to room, "q" to query))
+
+    // ---- the "Mentions & replies" inbox (DESIGN.md §41)
+
+    /** A page of your inbox, newest first; [before]: the last item's cursor. */
+    suspend fun inbox(before: String = ""): InboxPage = get("/api/chat/inbox", if (before.isEmpty()) emptyMap() else mapOf("before" to before))
+
+    /** You have seen your inbox up to [at] (an item's `created`). */
+    suspend fun inboxSeen(at: String) {
+        call("/api/chat/inbox/seen", "POST", body = Body.Json(buildJsonObject { put("at", at) }))
     }
 
     // ---- hidden rooms (§13)
@@ -763,6 +781,14 @@ class ChirkleApi(val pb: PbClient) {
     suspend fun subscribeAllMessages(fn: (Change<Activity>) -> Unit) =
         if (hasLiveTopic()) live(Activity.serializer(), { true }, fn)
         else subscribe("messages", mapOf("fields" to ACTIVITY_FIELDS), Activity.serializer(), fn)
+
+    /** Your inbox's rows as they are added and taken away (DESIGN.md §41): their room. A server from before sends none. */
+    suspend fun subscribeInbox(fn: (String) -> Unit): Unsubscribe =
+        try {
+            pb.realtime.subscribe("chat/inbox") { d -> fn((d["room"] as? JsonPrimitive)?.content ?: "") }
+        } catch (e: Exception) {
+            throw e.toApiError()
+        }
 
     /** Your own room_reads rows, e.g. written on another device. */
     suspend fun subscribeReads(fn: (Change<RoomRow>) -> Unit) = subscribe("room_reads", mapOf("fields" to ROW_FIELDS), RoomRow.serializer(), fn)

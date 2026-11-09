@@ -57,20 +57,21 @@ export function savePrefs(p: NotifyPrefs, s: Storage | null = storage()): void {
 }
 
 /**
- * Could this message be one to alert about? "dm", "all" (a room chosen) or "reply" (its quoted message still to be
- * checked: is it yours?), "room" when its room isn't loaded yet (a DM just started), null when not.
+ * Could this message be one to alert about? "dm", "all" (a room chosen) or "reply" (it mentions you, §41, or its quoted
+ * message is still to be checked: is it yours?), "room" when its room isn't loaded yet (a DM just started), null when not.
  */
 export function candidate(p: NotifyPrefs, m: MessageActivity, s: AppState): Kind | "room" | null {
   const me = s.user;
   if (!me || !m.author || m.author === me.id || m.deleted || !(p.popup || p.sound)) return null;
   const room = s.rooms.get(m.room);
-  if (!room) return p.dms || (p.replies && m.reply_to) || p.rooms.includes(m.room) ? "room" : null;
-  return alertKind(p, room, s, !!m.reply_to);
+  const toMe = !!m.reply_to || !!m.mentions?.includes(me.id);
+  if (!room) return p.dms || (p.replies && toMe) || p.rooms.includes(m.room) ? "room" : null;
+  return alertKind(p, room, s, toMe);
 }
 
 type Kind = "dm" | "reply" | "all";
 
-/** The kind of alert for a message in `room`; `reply`: it replies to one of yours. Hidden and archived rooms are silent (§13). */
+/** The kind of alert for a message in `room`; `reply`: it replies to one of yours or mentions you. Hidden and archived rooms are silent (§13). */
 function alertKind(p: NotifyPrefs, room: Room, s: AppState, reply: boolean): Kind | null {
   if (room.archived) return null;
   // A closed DM opens again with a message (§16.4): its hidden row goes, maybe after this event.
@@ -211,7 +212,8 @@ export function startNotify({ api, store, title, navigate }: NotifyOptions): () 
       icon: "/icons/icon-192.png",
       data: { url: `/r/${room.id}/m/${m.id}` },
     } as NotificationOptions;
-    const head = kind === "dm" ? author : `${author} ${kind === "reply" ? "replied in" : "in"} ${title(room, s.user)}`;
+    const did = kind !== "reply" ? "in" : m.expand?.reply_to?.author === s.user?.id ? "replied in" : "mentioned you in";
+    const head = kind === "dm" ? author : `${author} ${did} ${title(room, s.user)}`;
     const reg = await navigator.serviceWorker?.getRegistration().catch(() => undefined);
     if (reg?.active) return reg.showNotification(head, opts);
     const n = new Notification(head, opts);
@@ -238,7 +240,7 @@ export function startNotify({ api, store, title, navigate }: NotifyOptions): () 
     const m = await api.getMessage(a.id).catch(() => null);
     const room = m && (await roomOf(m.room));
     if (!m || !room || !live() || m.deleted) return;
-    const kind = alertKind(p, room, store.get(), m.expand?.reply_to?.author === me);
+    const kind = alertKind(p, room, store.get(), m.expand?.reply_to?.author === me || !!m.mentions?.includes(me));
     if (!kind) return;
     const there = await whereInFront(m.id);
     if (!live() || there === room.id) return; // being read
@@ -312,7 +314,7 @@ export function notifySettings({ h, id, onChange, signal }: SettingsOptions): HT
   };
   const boxes = {
     dms: box("dms", "Direct messages"),
-    replies: box("replies", "Replies to you"),
+    replies: box("replies", "Mentions and replies"),
     popup: box("popup", "Show a pop-up"),
     sound: box("sound", "Play a sound"),
   };

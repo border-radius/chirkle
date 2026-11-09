@@ -13,6 +13,7 @@ import { startFavicon } from "./favicon.ts";
 import { createHeader } from "./header.ts";
 import { startJumpTo } from "./jump.ts";
 import { roomTitle } from "./lib/rooms.ts";
+import { formatTime, parsePb } from "./lib/time.ts";
 import type { User } from "./lib/types.ts";
 import { createPrefetch } from "./prefetch.ts";
 import { createRenewal } from "./renewal.ts";
@@ -20,6 +21,7 @@ import { createRouter, here, type Router, type View } from "./router.ts";
 import { startSite } from "./site.ts";
 import { type AppState, createStore, initialState, type Store } from "./store.ts";
 import { createSync } from "./sync.ts";
+import { avatar } from "./ui/avatar.ts";
 import { createUnread } from "./unread.ts";
 import { startUpdates } from "./update.ts";
 import { createCollectionView } from "./views/collection.ts";
@@ -297,6 +299,41 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     early: prefetch,
   };
   const rooms = () => createRoomsView(ctx);
+  /** "Mentions & replies" (§41): a lazy chunk, given what it needs of app.js. */
+  const inboxPage = (): View => {
+    let stop = new AbortController();
+    return {
+      mount(el) {
+        stop = new AbortController();
+        const { signal } = stop;
+        el.replaceChildren(h("p", { class: "empty", role: "status" }, "Loading…"));
+        import("./views/inbox.ts").then(
+          (m) =>
+            void (
+              !signal.aborted &&
+              m.mountInbox(el, {
+                api,
+                h,
+                store,
+                signal,
+                avatar: (u) => avatar(u, 32, api.avatarUrl),
+                roomName: (id) => {
+                  const r = store.get().rooms.get(id);
+                  return r ? roomTitle(r, store.get().user) : "";
+                },
+                when: (c) => formatTime(parsePb(c)),
+              })
+            ),
+          () => {
+            if (!signal.aborted) el.textContent = "Couldn't open your mentions and replies. Check your connection.";
+          },
+        );
+      },
+      unmount() {
+        stop.abort();
+      },
+    };
+  };
   const roomPage = withSidebar(panes, rooms, () => createRoomView(ctx), "", true);
 
   const authPage = (mode: "login" | "signup") => () =>
@@ -323,6 +360,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       { pattern: "/r/:id/m/:msgId", public: true, view: roomPage },
       { pattern: "/c/:id", public: true, view: withSidebar(panes, rooms, () => createCollectionView(ctx)) },
       { pattern: "/me", view: withSidebar(panes, rooms, () => createProfileView(ctx)) },
+      { pattern: "/inbox", view: withSidebar(panes, rooms, inboxPage) },
     ],
   });
 

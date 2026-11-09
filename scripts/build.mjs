@@ -12,9 +12,11 @@ import {
   ENTRIES,
   entryOutputs,
   formatSizes,
+  INBOX,
   injectAssets,
   latinFont,
   MEDIA,
+  MENTION,
   NOTIFY,
   OUTDIR,
   outputOf,
@@ -50,6 +52,7 @@ const viewerCss = await esbuild.build({
     { in: COLLECTIONS.css, out: "collections" },
     { in: ACCESS.css, out: "access" },
     { in: EMOJI.css, out: "emoji" },
+    { in: INBOX.css, out: "inbox" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -59,11 +62,12 @@ const mediaCssPath = outputOf(viewerCss.metafile, OUTDIR, MEDIA.css);
 const collCssPath = outputOf(viewerCss.metafile, OUTDIR, COLLECTIONS.css);
 const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
 const emojiCssPath = outputOf(viewerCss.metafile, OUTDIR, EMOJI.css);
+const inboxCssPath = outputOf(viewerCss.metafile, OUTDIR, INBOX.css);
 
 const result = await esbuild.build({
   ...BASE_OPTIONS,
   ...shared,
-  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath),
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath),
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
@@ -103,6 +107,9 @@ const sizes = {
   notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
   emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
   emojiCss: await gz(`${OUTDIR}/${emojiCssPath}`),
+  inboxJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, INBOX.js)}`),
+  inboxCss: await gz(`${OUTDIR}/${inboxCssPath}`),
+  mentionJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, MENTION.js)}`),
   statsJs: await gz(`${OUTDIR}/${statsAssets.js}`),
   statsCss: await gz(`${OUTDIR}/${statsAssets.css}`),
 };

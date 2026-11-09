@@ -56,6 +56,7 @@ describe("MSG_FIELDS", () => {
       "forward_of",
       "expand.forwarded_from.id",
       "expand.forwarded_from.name",
+      "mentions",
     ]);
     expect(MSG_FIELDS).not.toContain("email");
   });

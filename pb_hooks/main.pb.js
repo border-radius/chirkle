@@ -97,6 +97,9 @@ routerAdd("GET", "/api/chat/stats", (e) => require(`${__hooks}/lib/stats.js`).ge
 routerAdd("POST", "/api/stats/tick", (e) => require(`${__hooks}/lib/stats.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/media/tick", (e) => require(`${__hooks}/lib/media.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("GET", "/api/chat/users", (e) => require(`${__hooks}/lib/users.js`).searchUsers(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/mentionable", (e) => require(`${__hooks}/lib/handles.js`).mentionable(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/inbox", (e) => require(`${__hooks}/lib/inbox.js`).list(e), $apis.requireAuth("users"));
+routerAdd("POST", "/api/chat/inbox/seen", (e) => require(`${__hooks}/lib/inbox.js`).markSeen(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/password", (e) => require(`${__hooks}/lib/account.js`).changePassword(e), $apis.requireAuth("users"));
 
 // The core collections' hooks (messages, rooms, users) are all here, with the optional features' parts (lib/features.js)
@@ -258,12 +261,18 @@ onRecordDelete((e) => {
 onRecordCreate((e) => {
   const messages = require(`${__hooks}/lib/messages.js`);
   messages.beforeMessageCreate(e);
-  if (e.record) messages.setTextKey(e.record);
+  const features = require(`${__hooks}/lib/features.js`);
+  if (e.record) {
+    messages.setTextKey(e.record);
+    // Who it mentions (§41): from its text, or as the linked instance it comes from says.
+    const fed = features.federation(e.app);
+    require(`${__hooks}/lib/handles.js`).setMentions(e.app, e.record, !!fed && fed.messages.isFromPeer(e.app, e.record));
+  }
   e.next();
   const rec = e.record;
   if (!rec) return;
-  // Saved: what each feature does with a new message is queued, in the save's transaction.
-  const features = require(`${__hooks}/lib/features.js`);
+  // Saved: whom it tells (§41), and what each feature does with a new message is queued, in the save's transaction.
+  require(`${__hooks}/lib/inbox.js`).messageCreated(e.app, rec);
   features.telegram()?.outbound.queueCreate(e.app, rec);
   require(`${__hooks}/lib/previews.js`).queue(e.app, rec);
   require(`${__hooks}/lib/media.js`).add(e.app, rec);
@@ -290,6 +299,16 @@ onRecordAfterDeleteSuccess((e) => {
   require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "delete");
 }, "messages");
 
+// The inbox (§41): each row added or removed, once committed, to its person's apps.
+onRecordAfterCreateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/inbox.js`).tell(e.app, e.record, "create");
+}, "inbox");
+onRecordAfterDeleteSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/inbox.js`).tell(e.app, e.record, "delete");
+}, "inbox");
+
 // Committed (with the message that queued it): the workers look at it now, not on their next look round.
 onRecordAfterCreateSuccess((e) => {
   e.next();
@@ -312,8 +331,11 @@ onRecordUpdate((e) => {
   const was = fed ? fed.messages.before(rec) : null;
   if (fed) fed.messages.checkMirrorChange(e.app, rec);
   const messages = require(`${__hooks}/lib/messages.js`);
+  const inbox = require(`${__hooks}/lib/inbox.js`);
+  const told = inbox.before(rec);
   messages.beforeMessageUpdate(e);
   messages.setTextKey(rec);
+  require(`${__hooks}/lib/handles.js`).setMentions(e.app, rec, !!fed && fed.messages.isFromPeer(e.app, rec));
   const touch = messages.changesForwards(rec);
   const edited = rec.getString("text") !== rec.original().getString("text");
   const deleted = rec.getBool("deleted") && !rec.original().getBool("deleted");
@@ -322,6 +344,8 @@ onRecordUpdate((e) => {
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
   e.next();
+  // Saved: mentions, replies and reactions told or taken back (§41).
+  inbox.messageChanged(e.app, rec, told);
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);

@@ -1,0 +1,86 @@
+/* "Mentions & replies" (DESIGN.md §41). Not part of app.css: the chunk links this file when the page first shows. Uses
+   app.css's custom properties and its .room-header. */
+
+.inbox-list {
+  max-width: calc(720px + 2 * 20px);
+  margin: 0;
+  padding: 12px 20px 8px;
+  list-style: none;
+}
+
+.inbox-list a {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .inbox-list a:hover {
+    background: var(--hover);
+  }
+}
+
+/* Not seen before this visit. */
+.inbox-list .new a {
+  background: var(--tint);
+}
+
+.inbox-list .avatar {
+  flex: none;
+  margin-top: 2px;
+}
+
+.inbox-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.inbox-body p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-what {
+  color: var(--muted);
+}
+
+.inbox-what strong {
+  color: var(--fg);
+}
+
+.inbox-what time {
+  margin-left: 8px;
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+.inbox-quote {
+  color: var(--dim);
+  font-size: 0.8125rem;
+}
+
+.inbox-quote::before {
+  content: "↳ ";
+}
+
+.inbox-text {
+  margin-top: 2px;
+}
+
+.inbox-status {
+  padding: 24px 32px;
+  color: var(--dim);
+}
+
+.inbox-status:empty {
+  display: none;
+}
+
+.inbox-more {
+  margin: 4px 32px 32px;
+}

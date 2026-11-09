@@ -265,6 +265,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         onSave = if (me == null) null else ({ m, f -> saving = chirkle.android.data.model.SaveFrom.File(m.forwardOf.ifEmpty { m.id }, f) }),
         badge = { badges[it] },
         onCollection = nav.collection,
+        myHandle = me?.handle.orEmpty(),
     )
 
     Scaffold(

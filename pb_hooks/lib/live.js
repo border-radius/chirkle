@@ -20,7 +20,7 @@ const TOPIC = "chat/messages";
 const EXPAND = ["author", "forwarded_from"];
 /** What an event carries: the fields the apps ask the records API for (shared/contract.json, tests/unit/contract.test.ts). */
 const FIELDS =
-  "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance,reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files,expand.reply_to.expand.author.id,expand.reply_to.expand.author.name,forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name";
+  "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance,reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files,expand.reply_to.expand.author.id,expand.reply_to.expand.author.name,forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions";
 
 /**
  * `value` (a record as JSON) with only `fields` (PocketBase's `fields` syntax, dotted paths), as the API's `fields` gives it.

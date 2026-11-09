@@ -14,7 +14,7 @@ import type { Collection, Room, User, Visibility } from "../lib/types.ts";
 import { HOVER_MS } from "../prefetch.ts";
 import type { View } from "../router.ts";
 import { createScope, type Scope } from "../scope.ts";
-import { roomSections, unreadCount } from "../store.ts";
+import { mentioned, roomSections, unreadCount } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import { collectionIcon } from "../ui/icon.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
@@ -258,8 +258,9 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const s = store.get();
     const current = s.activeRoomId === r.id;
     const n = unreadCount(s, r);
+    const at = mentioned(s, r);
     // What the row and its button depend on (rowAction reads the user and, when archived, hidden).
-    const sig = [r, section, n, current, s.user, section === "archived" && s.hidden.has(r.id)];
+    const sig = [r, section, n, current, s.user, section === "archived" && s.hidden.has(r.id), at];
     const hit = rows.get(r.id);
     if (hit?.sig.every((v, i) => v === sig[i])) return hit.el;
     const other = r.kind === "dm" ? otherMember(r, s.user) : undefined;
@@ -268,6 +269,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       other ? avatar(other, 24, api.avatarUrl) : null,
       h("span", {}, other ? other.name : r.kind === "dm" ? title(r) : r.name),
       r.kind === "dm" ? null : visibilityMark(visibilityOf(r)),
+      // Unread mentions of you or replies to you (§41).
+      at ? h("span", { class: "badge", title: "Mentions you" }, ["@", h("span", { class: "visually-hidden" }, " mentions you,")]) : null,
       n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " unread")]) : null,
     ];
     const el = h("li", { class: r.kind === "dm" ? "dm" : "", dataset: { roomId: r.id } }, [
@@ -384,7 +387,24 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       colls: h("div", { class: "room-section", dataset: { section: "collections" } }),
       collList: h("ul"),
       more: collapsible(),
+      inbox: h("div", { class: "room-section", dataset: { section: "inbox" } }),
     };
+  }
+
+  /** "Mentions & replies" (§41), right after Jump to, with how many you haven't seen. */
+  function inboxRow(n: number) {
+    return h(
+      "ul",
+      {},
+      h(
+        "li",
+        {},
+        h("a", { href: "/inbox", class: n ? "unread" : "", "aria-current": location.pathname === "/inbox" ? "page" : null }, [
+          h("span", {}, "Mentions & replies"),
+          n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")]) : null,
+        ]),
+      ),
+    );
   }
 
   function render() {
@@ -449,7 +469,12 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
         hidden.length || archived.length ? null : m.empty,
       ].filter((n) => n !== null),
     );
-    reconcile(nav, [p.main, p.direct, p.colls, m.el]);
+    const key = `${s.inbox} ${location.pathname}`;
+    if (p.inbox.dataset.k !== key) {
+      p.inbox.dataset.k = key;
+      p.inbox.replaceChildren(inboxRow(s.inbox));
+    }
+    reconcile(nav, [p.inbox, p.main, p.direct, p.colls, m.el]);
     for (const b of nav.querySelectorAll<HTMLElement>("[data-fold]"))
       b.setAttribute("aria-expanded", String(!folded.has(b.dataset.fold as string)));
     if (focused?.isConnected && document.activeElement !== focused) focused.focus();
@@ -627,6 +652,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             s.rooms !== prev.rooms ||
             s.hidden !== prev.hidden ||
             s.unread !== prev.unread ||
+            s.inbox !== prev.inbox ||
+            s.mentions !== prev.mentions ||
             s.activeRoomId !== prev.activeRoomId ||
             s.collections !== prev.collections ||
             s.activeCollectionId !== prev.activeCollectionId ||

@@ -62,6 +62,17 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   const nameInput = h("input", { id: `${vid}-name`, name: "name", autocomplete: "nickname", "aria-describedby": `${vid}-name-status` });
   const saveBtn = h("button", { type: "submit", class: "primary" }, "Save");
   const nameStatus = h("p", { id: `${vid}-name-status`, class: "field-status", role: "status" });
+  // The handle (§41): what "@handle" names in messages.
+  const handleInput = h("input", {
+    id: `${vid}-handle`,
+    name: "handle",
+    autocomplete: "username",
+    autocapitalize: "none",
+    spellcheck: false,
+    "aria-describedby": `${vid}-handle-status`,
+  });
+  const handleBtn = h("button", { type: "submit", class: "primary" }, "Save");
+  const handleStatus = h("p", { id: `${vid}-handle-status`, class: "field-status", role: "status" }, "People mention you by it: @handle.");
 
   // Password (§22.2): each field with its own error under it.
   const pwField = (key: "current" | "next" | "confirm", label: string, autocomplete: string) => {
@@ -167,39 +178,46 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     }
   }
 
-  async function rename(e: Event) {
+  /** Save the display name (§22.1) or the handle (§41), with what is wrong with it said under it. */
+  async function saveField(e: Event, key: "name" | "handle") {
     e.preventDefault();
-    const name = nameInput.value.trim();
-    nameStatus.classList.remove("error");
-    const problem = !name
-      ? "A display name can't be empty."
-      : textLength(name) > LIMITS.userName
-        ? `Must be no more than ${LIMITS.userName} characters.`
-        : "";
+    const [input, status, btn] = key === "name" ? [nameInput, nameStatus, saveBtn] : [handleInput, handleStatus, handleBtn];
+    const value = key === "name" ? input.value.trim() : input.value.trim().replace(/^@/, "").toLowerCase();
+    status.classList.remove("error");
+    const problem =
+      key === "handle"
+        ? /^[a-z0-9_]{3,24}$/.test(value)
+          ? ""
+          : "Use 3 to 24 letters a–z, digits or underscores."
+        : !value
+          ? "A display name can't be empty."
+          : textLength(value) > LIMITS.userName
+            ? `Must be no more than ${LIMITS.userName} characters.`
+            : "";
     if (problem) {
-      nameStatus.textContent = problem;
-      nameStatus.classList.add("error");
-      nameInput.setAttribute("aria-invalid", "true");
+      status.textContent = problem;
+      status.classList.add("error");
+      input.setAttribute("aria-invalid", "true");
       return;
     }
-    // Your own name back (after "taken", say): nothing to save, and nothing wrong any more (QA BUG-56).
-    nameStatus.textContent = "";
-    nameInput.removeAttribute("aria-invalid");
-    if (name === me()?.name) return;
-    saveBtn.disabled = true;
+    // Your own one back (after "taken", say): nothing to save, and nothing wrong any more (QA BUG-56).
+    status.textContent = "";
+    input.removeAttribute("aria-invalid");
+    if (value === me()?.[key]) return;
+    btn.disabled = true;
     try {
-      const user = await api.rename(name);
+      const user = await (key === "name" ? api.rename(value) : api.setHandle(value));
       if (!scope.active) return;
       store.set({ user });
-      nameInput.value = user.name;
-      nameStatus.textContent = "Saved.";
+      input.value = user[key] ?? "";
+      status.textContent = "Saved.";
     } catch (err) {
       if (!scope.active) return;
-      nameStatus.textContent = fieldMessage(err, "name");
-      nameStatus.classList.add("error");
-      nameInput.setAttribute("aria-invalid", "true");
+      status.textContent = fieldMessage(err, key);
+      status.classList.add("error");
+      input.setAttribute("aria-invalid", "true");
     } finally {
-      saveBtn.disabled = false;
+      btn.disabled = false;
     }
   }
 
@@ -251,6 +269,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     mount(el) {
       root = el;
       nameInput.value = me()?.name ?? "";
+      handleInput.value = me()?.handle ?? "";
       fileInput.addEventListener(
         "change",
         () => {
@@ -288,10 +307,15 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
               ]),
             ]),
             avatarError,
-            h("form", { class: "profile-name", on: { submit: (e) => void rename(e) }, signal }, [
+            h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "name") }, signal }, [
               h("label", { for: `${vid}-name` }, "Display name"),
               h("div", { class: "row" }, [nameInput, saveBtn]),
               nameStatus,
+            ]),
+            h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "handle") }, signal }, [
+              h("label", { for: `${vid}-handle` }, "Handle"),
+              h("div", { class: "row" }, [handleInput, handleBtn]),
+              handleStatus,
             ]),
           ]),
           h("fieldset", { class: "card profile-theme", "aria-describedby": `${vid}-theme-hint` }, [
@@ -353,6 +377,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
           // Renamed in another tab: show the new name, unless a change is being typed here. Saving the old one
           // would quietly undo the rename.
           if (s.user && nameInput.value.trim() === prev.user?.name) nameInput.value = s.user.name;
+          if (s.user && handleInput.value.trim() === (prev.user?.handle ?? "")) handleInput.value = s.user.handle ?? "";
         }),
       );
       scope.defer(dropPreview);

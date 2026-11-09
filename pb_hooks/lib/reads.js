@@ -92,7 +92,9 @@ function unread(e) {
     if (row.id) ids.push(row.id);
     else out[row.room] = row.n;
   }
-  return e.json(200, { at, rooms: out, ids });
+  // The inbox's unseen rows and each room's unread mentions and replies (§41).
+  const { inbox, mentions } = require(`${__hooks}/lib/inbox.js`).counts(e.app, user);
+  return e.json(200, { at, rooms: out, ids, inbox, mentions });
 }
 
 /**
