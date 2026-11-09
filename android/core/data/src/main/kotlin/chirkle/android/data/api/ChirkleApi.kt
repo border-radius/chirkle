@@ -8,6 +8,7 @@ import chirkle.android.data.lib.PageQuery
 import chirkle.android.data.model.Badge
 import chirkle.android.data.model.CollectionItem
 import chirkle.android.data.model.CollectionMeta
+import chirkle.android.data.model.InboxEvent
 import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
 import chirkle.android.data.model.InboxPage
@@ -782,10 +783,13 @@ class ChirkleApi(val pb: PbClient) {
         if (hasLiveTopic()) live(Activity.serializer(), { true }, fn)
         else subscribe("messages", mapOf("fields" to ACTIVITY_FIELDS), Activity.serializer(), fn)
 
-    /** Your inbox's rows as they are added and taken away (DESIGN.md §41): their room. A server from before sends none. */
-    suspend fun subscribeInbox(fn: (String) -> Unit): Unsubscribe =
+    /** Your inbox's rows as they are added and taken away (DESIGN.md §41). A server from before sends none. */
+    suspend fun subscribeInbox(fn: (InboxEvent) -> Unit): Unsubscribe =
         try {
-            pb.realtime.subscribe("chat/inbox") { d -> fn((d["room"] as? JsonPrimitive)?.content ?: "") }
+            pb.realtime.subscribe("chat/inbox") { d ->
+                fun s(k: String) = (d[k] as? JsonPrimitive)?.content ?: ""
+                fn(InboxEvent(s("action"), s("id"), s("room")))
+            }
         } catch (e: Exception) {
             throw e.toApiError()
         }

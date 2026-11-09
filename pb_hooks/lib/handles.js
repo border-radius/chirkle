@@ -67,6 +67,49 @@ const CYRILLIC = {
 };
 
 /**
+ * Letters NFKD leaves whole (Ł, Ø, Æ, Þ…) and Greek, spelled in Latin: "Łukasz" was "ukasz", "Ørjan" "rjan" (QA BUG-255).
+ * @type {Record<string, string>}
+ */
+const LATIN = {
+  ł: "l",
+  ø: "o",
+  æ: "ae",
+  œ: "oe",
+  đ: "d",
+  ð: "d",
+  þ: "th",
+  ı: "i",
+  ħ: "h",
+  ŧ: "t",
+  ŋ: "ng",
+  α: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  ζ: "z",
+  η: "i",
+  θ: "th",
+  ι: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+};
+
+/**
  * A handle made from a display name: Latin letters without their accents, Cyrillic spelled in Latin, anything else
  * an "_" (at most 20, so a number fits after it). Keep in sync with pb_migrations/1760000045_mentions.js.
  * @param {string} name
@@ -76,6 +119,7 @@ function handleFrom(name) {
   if (typeof s.normalize === "function") s = s.normalize("NFKD").replace(/[̀-ͯ]/g, "");
   s = s
     .replace(/ß/g, "ss")
+    .replace(/[\u0080-\uffff]/g, (c) => LATIN[c] ?? c)
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 20)

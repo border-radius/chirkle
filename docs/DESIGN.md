@@ -3727,7 +3727,7 @@ is taken. Choose another one.". A rename keeps the handle. People search (`/api/
 (so not an email, `@ann@b.example` or a path), case ignored: `MENTION` in `handles.js`, `web/src/lib/mentions.ts`,
 the app's `lib/Mentions.kt`, all run on `shared/vectors/mentions.json`. The server resolves them on create and on an
 edit of the text into `mentions` (users, at most 20): people who can see the room, not the author; none for a forward,
-a deleted or a service message. Clients can't set it (400). A linked server's events carry them by global id (§33).
+a deleted or a service message. Clients can't set it: a create's is replaced, an update changing it is a 400. A linked server's events carry them by global id (§33).
 
 In a room each "@handle" is marked (`.mention`, accent and bold); yours more (`.mention.me`), and a message that
 mentions you is highlighted as a reply to you is (`.to-me`).

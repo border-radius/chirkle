@@ -21,7 +21,16 @@ test("search (§29): finds a room's messages in any case and goes to the one pic
   expect(violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
 
   // The people search (forward dialog, new DM) shares its class names, not its 45vh scroll box (QA BUG-115).
-  expect(await page.locator(".forward-list").evaluate((el) => getComputedStyle(el).maxHeight)).toBe("none");
+  // The forward dialog is a lazy chunk since 2026-11-10 (not in the page until Forward): a list of its classes stands in.
+  const maxHeight = await page.evaluate(() => {
+    const ul = document.createElement("ul");
+    ul.className = "search-results forward-list";
+    document.body.append(ul);
+    const v = getComputedStyle(ul).maxHeight;
+    ul.remove();
+    return v;
+  });
+  expect(maxHeight).toBe("none");
 
   await results.first().click();
   await expect(message(page, "Встреча в ПЯТНИЦУ")).toHaveClass(/target/);

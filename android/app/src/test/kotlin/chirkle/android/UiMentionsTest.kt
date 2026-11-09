@@ -78,6 +78,23 @@ class UiMentionsTest {
         ui.until { a.api.unreadCounts().mentions[room.id] == null }
     }
 
+    @Test fun `a row taken away while Mentions and replies is open goes (QA BUG-254)`() {
+        val a = newUser()
+        val b = newUser("ada-${uniq()}")
+        val room = runBlocking { b.api.createRoom("gone-${uniq()}") }
+        val gone = runBlocking {
+            b.api.send(NewMessage(newId(), room.id, "stays @${a.user.handle}"))
+            b.api.send(NewMessage(newId(), room.id, "goes @${a.user.handle}"))
+        }
+        ui.signedIn(a)
+        ui.waitFor("Mentions & replies")
+        compose.onNodeWithText("Mentions & replies").performClick()
+        ui.waitFor("goes @${a.user.handle}")
+        runBlocking { b.api.edit(gone.id, "goes nowhere") }
+        ui.until { compose.onAllNodes(hasText("goes @${a.user.handle}", substring = true)).fetchSemanticsNodes().isEmpty() }
+        ui.waitFor("stays @${a.user.handle}")
+    }
+
     @Test fun `your handle can be changed on the profile, a taken one says so`() {
         val a = newUser()
         val b = newUser()

@@ -46,7 +46,7 @@ through `POST /api/chat/delete` (the records API still allows only the author) a
 access and `archived` through the records API, as its creator does. `POST /api/chat/ban { user, banned }` is theirs
 only.
 
-Since 2026-11-10 (mentions, DESIGN.md §41) `users` has `handle` (in `fields.user`; set by its owner, refused with the reason when taken or malformed) and `messages` has `mentions` (in `fields.message`; the server's, a client setting it is refused). `inbox` and `inbox_reads` have no API rules.
+Since 2026-11-10 (mentions, DESIGN.md §41) `users` has `handle` (in `fields.user`; set by its owner, refused with the reason when taken or malformed) and `messages` has `mentions` (in `fields.message`; the server's, what a client sends with a create is replaced, an update changing it is refused). `inbox` and `inbox_reads` have no API rules.
 
 Since 2026-11-09 (usage statistics, DESIGN.md §40) `site` has `no_stats` (hidden), and the realtime subscribe
 request's User-Agent says which app a connection is (the app's OkHttp default, `okhttp/…`: keep it, or the app is

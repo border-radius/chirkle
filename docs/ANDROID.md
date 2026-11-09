@@ -1620,3 +1620,12 @@ The web's DESIGN.md §41, ported. `User.handle` and `Message.mentions` are read 
 Tests: `VectorsTest` (mentions, `mentionToken`), `ContractTest`, `UiMentionsTest` (suggest and send, the "@" and count
 live, the inbox opening the message and reading clears the "@", the handle saved and a taken one refused). Looked at
 in Robolectric screenshots (room list, inbox, room with the suggestions).
+
+## 61. QA pass 34 (2026-11-10)
+
+docs/QA.md "QA pass 34".
+
+- **BUG-253:** the composer's "@" list (`People`) is at most 200dp high and scrolls; eight people over a phone's
+  keyboard had pushed the top bar and the messages off and squashed the field.
+- **BUG-254:** `InboxScreen` listens to `chat/inbox` while open and drops a row taken away (`ChirkleApi.subscribeInbox`
+  now hands over `InboxEvent`). `UiMentionsTest`.

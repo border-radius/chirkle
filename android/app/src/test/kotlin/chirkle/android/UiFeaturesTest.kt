@@ -355,6 +355,9 @@ class UiFeaturesTest {
         longPress("pass it on")
         compose.onNodeWithText("Forward").performClick()
         ui.waitFor("Forward message")
+        // The picker lists every room of the shared test server: narrowed, so the target is composed (lazy list).
+        compose.onNodeWithContentDescription("Search rooms and people").performTextInput(to.name)
+        ui.waitFor("#${to.name}")
         compose.onNodeWithText("#${to.name}").performClick()
         ui.waitFor("Message forwarded.")
         ui.until { a.api.page(Pages.latest(to.id)).singleOrNull()?.forwardedFrom == b.user.id }

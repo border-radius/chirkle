@@ -53,12 +53,56 @@ const CYRILLIC = {
   ў: "u",
 };
 
+/**
+ * Letters NFKD leaves whole (Ł, Ø, Æ, Þ…) and Greek, spelled in Latin: "Łukasz" was "ukasz", "Ørjan" "rjan" (QA BUG-255).
+ * @type {Record<string, string>}
+ */
+const LATIN = {
+  ł: "l",
+  ø: "o",
+  æ: "ae",
+  œ: "oe",
+  đ: "d",
+  ð: "d",
+  þ: "th",
+  ı: "i",
+  ħ: "h",
+  ŧ: "t",
+  ŋ: "ng",
+  α: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  ζ: "z",
+  η: "i",
+  θ: "th",
+  ι: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+};
+
 /** pb_hooks/lib/handles.js handleFrom. @param {string} name */
 function handleFrom(name) {
   let s = [...name.toLowerCase()].map((c) => CYRILLIC[c] ?? c).join("");
   if (typeof s.normalize === "function") s = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
   s = s
     .replace(/ß/g, "ss")
+    .replace(/[\u0080-\uffff]/g, (c) => LATIN[c] ?? c)
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 20)
@@ -74,7 +118,8 @@ migrate(
     /** @type {any} */ (users).indexes = [.../** @type {string[]} */ (/** @type {any} */ (users).indexes), HANDLE_INDEX];
     app.save(users);
 
-    const taken = new Set();
+    // Not the reserved ones ("@all" would mention whoever is called All, QA BUG-256).
+    const taken = new Set(["all", "everyone", "here", "room", "channel"]);
     const rows = arrayOf(new DynamicModel({ id: "", name: "" }));
     app.db().newQuery("SELECT id, name FROM users ORDER BY created, id").all(rows);
     for (const row of rows) {

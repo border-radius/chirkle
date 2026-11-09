@@ -6,7 +6,7 @@
 
 import { ApiError, errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
-import { clear, h, reconcile, uniqueId } from "../dom.ts";
+import { clear, h, holdKeys, reconcile, typeInto, uniqueId } from "../dom.ts";
 import { brand, jumpButton } from "../header.ts";
 import { SEARCH_KIT } from "../lazy.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
@@ -146,24 +146,33 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   /** The people search's chunk, once asked for; and a search is on its way (New message pressed while it loads). */
   let searchChunk: Promise<typeof import("../ui/user-search.ts")> | null = null;
   let opening = false;
+  /** What is typed while the chunk loads goes in the field once it shows (QA BUG-252). */
+  let held: { take(): string } | null = null;
 
   function toggleSearch(open: boolean) {
     if (open === (!!search || opening)) return;
     if (!open) {
+      held?.take();
+      held = null;
       opening = false;
       search = null;
       render();
       return;
     }
     opening = true;
+    held = holdKeys(scope.signal);
     searchChunk ??= import("../ui/user-search.ts");
     searchChunk.then(
       (m) => {
+        const early = held?.take() ?? "";
+        held = null;
         if (!opening || !scope.active) return;
         opening = false;
-        showSearch(m);
+        showSearch(m, early);
       },
       () => {
+        held?.take();
+        held = null;
         searchChunk = null;
         if (!opening) return;
         opening = false;
@@ -173,7 +182,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     );
   }
 
-  function showSearch({ createUserSearch, SearchError }: typeof import("../ui/user-search.ts")) {
+  function showSearch({ createUserSearch, SearchError }: typeof import("../ui/user-search.ts"), early = "") {
     search = createUserSearch({
       kit: SEARCH_KIT,
       // Not those who take no direct messages (§16.7). "ann@b.example" is someone on a linked instance (§33.5).
@@ -195,6 +204,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     });
     render();
     search.focus();
+    typeInto(search.el.querySelector("input"), early);
   }
 
   function toggleNewRoom(open: boolean) {

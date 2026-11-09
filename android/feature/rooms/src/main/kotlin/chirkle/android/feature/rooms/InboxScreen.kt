@@ -111,6 +111,20 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
         }
     }
     LaunchedEffect(Unit) { load(true) }
+    // A row taken away while you look (its message deleted, the mention edited out, the reaction taken back) goes,
+    // rather than opening a message that isn't there (QA BUG-254).
+    LaunchedEffect(Unit) {
+        val stop = runCatching {
+            services.api.subscribeInbox { ev ->
+                if (ev.action == "delete") scope.launch(services.main) { items = items.filter { it.id != ev.id } }
+            }
+        }.getOrNull() ?: return@LaunchedEffect
+        try {
+            kotlinx.coroutines.awaitCancellation()
+        } finally {
+            services.appScope.launch { runCatching { stop() } }
+        }
+    }
     // Something new while you look (the count went up): the top again.
     LaunchedEffect(Unit) {
         var prev = services.store.get().inbox

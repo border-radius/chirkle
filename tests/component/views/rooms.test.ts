@@ -470,6 +470,18 @@ describe("rooms view (§7.1)", () => {
       searchInput()!.dispatchEvent(new Event("input"));
     };
 
+    it("keys typed while the people search loads go in its field (QA BUG-252)", async () => {
+      await mount();
+      newDmButton().click();
+      for (const key of ["b", "x", "Backspace", "o", "b"]) document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      await vi.waitFor(() => expect(searchInput()).not.toBeNull());
+      expect(searchInput()!.value).toBe("bob");
+      // Held no longer: a key now reaches the page as usual.
+      const later = new KeyboardEvent("keydown", { key: "z", bubbles: true, cancelable: true });
+      document.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(false);
+    });
+
     it("lists open DMs by activity, titled after the other person with their avatar; no # prefix", async () => {
       const bob = await signedUp(`Bob ${uniq()}`);
       const cat = await signedUp(`Cat ${uniq()}`);

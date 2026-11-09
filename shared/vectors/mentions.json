@@ -18,6 +18,9 @@
     { "input": "李", "output": "user" },
     { "input": "Al", "output": "al_user" },
     { "input": "  __Ann  (B)__ ", "output": "ann_b" },
-    { "input": "A very long display name indeed", "output": "a_very_long_display" }
+    { "input": "A very long display name indeed", "output": "a_very_long_display" },
+    { "input": "Łukasz Ćwik", "output": "lukasz_cwik" },
+    { "input": "Ørjan Æsir Þór Ðað", "output": "orjan_aesir_thor_dad" },
+    { "input": "Σωκράτης Άλφα", "output": "sokratis_alfa" }
   ]
 }

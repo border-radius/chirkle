@@ -69,6 +69,19 @@ describe("inbox page (§41)", () => {
     expect(rows().some((r) => r.classList.contains("new"))).toBe(false);
   });
 
+  it("drops a row taken away while it is open (QA BUG-254)", async () => {
+    const other = await signedUp(`Other ${uniq()}`);
+    const room = await other.api.createRoom(`room-${uniq()}`);
+    store.set({ rooms: new Map([[room.id, room]]) });
+    const kept = await other.api.send({ id: newId(), room: room.id, text: `stays @${me.user.handle}` });
+    const gone = await other.api.send({ id: newId(), room: room.id, text: `goes @${me.user.handle}` });
+    await mount();
+    expect(rows()).toHaveLength(2);
+    await other.api.edit(gone.id, "goes nowhere");
+    await vi.waitFor(() => expect(rows()).toHaveLength(1), { timeout: 5000 });
+    expect(rows()[0]!.querySelector("a")!.getAttribute("href")).toBe(`/r/${room.id}/m/${kept.id}`);
+  });
+
   it("says when there is nothing", async () => {
     await mount();
     expect(rows()).toEqual([]);

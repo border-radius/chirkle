@@ -149,6 +149,21 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
   }
 
   more.addEventListener("click", () => void load(false), { signal });
+  // A row taken away while you look (its message deleted, the mention edited out, the reaction taken back) goes, rather
+  // than leading to a message that isn't there (QA BUG-254).
+  api
+    .subscribeInbox((ev) => {
+      if (signal.aborted || ev.action !== "delete" || !shown.some((i) => i.id === ev.id)) return;
+      shown = shown.filter((i) => i.id !== ev.id);
+      render();
+    })
+    .then(
+      (stop) => {
+        if (signal.aborted) void stop().catch(() => {});
+        else signal.addEventListener("abort", () => void stop().catch(() => {}), { once: true });
+      },
+      () => {}, // offline: the list is fetched again when something new comes
+    );
   // Something new (or taken back) while you look: the top again.
   signal.addEventListener(
     "abort",

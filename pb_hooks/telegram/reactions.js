@@ -38,6 +38,7 @@ const FALLBACK = "❤️";
 /**
  * The picker's emoji for `emoji`, or "" when neither it nor a near one is there.
  * @param {string} emoji
+ * @returns {string}
  */
 function pickerEmoji(emoji) {
   const bare = emoji.replace(/\uFE0F/g, "").replace(/\u200D[♂♀]$/, "");
@@ -77,7 +78,7 @@ function customEmoji(reactions) {
       if (s?.custom_emoji_id && typeof s.emoji === "string") out.set(String(s.custom_emoji_id), s.emoji);
     }
   } catch (err) {
-    console.warn(`telegram: custom emoji: ${err}`);
+    $app.logger().warn("telegram: custom emoji", "error", String(err));
   }
   return out;
 }

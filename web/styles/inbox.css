@@ -45,8 +45,11 @@
   white-space: nowrap;
 }
 
-.inbox-what {
+/* Who did what, where and when wraps: on a phone one line cut the room's name and the time off (QA BUG-251). */
+.inbox-body .inbox-what {
   color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .inbox-what strong {
@@ -55,6 +58,7 @@
 
 .inbox-what time {
   margin-left: 8px;
+  white-space: nowrap;
   color: var(--dim);
   font-size: 0.75rem;
 }

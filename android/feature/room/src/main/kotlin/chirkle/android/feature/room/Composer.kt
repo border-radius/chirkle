@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -283,16 +284,23 @@ private fun Suggestions(vm: RoomViewModel) {
     }
 }
 
-/** The people an "@" finds (DESIGN.md §41), in a column over the field: a tap puts their handle in; the chosen one is tinted. */
+/**
+ * The people an "@" finds (DESIGN.md §41), in a column over the field: a tap puts their handle in; the chosen one is
+ * tinted. At most about four rows high, scrolling past them: eight filled a phone's screen over its keyboard, squashing
+ * the field and the top bar (QA BUG-253).
+ */
 @Composable
 private fun People(vm: RoomViewModel) {
+    val scroll = androidx.compose.foundation.rememberScrollState()
     Column(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .padding(top = 6.dp)
+            .heightIn(max = PEOPLE_MAX_HEIGHT)
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            .verticalScroll(scroll)
             .semantics { contentDescription = "People" },
     ) {
         vm.people.forEachIndexed { i, u ->
@@ -314,6 +322,9 @@ private fun People(vm: RoomViewModel) {
         }
     }
 }
+
+/** How high the "@" list grows: four rows and half of the next, which says there are more. */
+private val PEOPLE_MAX_HEIGHT = 200.dp
 
 @Composable
 private fun Bar(title: String, detail: String, cancel: String, onCancel: () -> Unit) {

@@ -8,7 +8,7 @@
 
 import { errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
-import { clear, h, uniqueId } from "../dom.ts";
+import { clear, h, holdKeys, typeInto, uniqueId } from "../dom.ts";
 import { FORWARD_KIT, SEARCH_KIT } from "../lazy.ts";
 import { newer, older, PAGE_SIZE, withFiles } from "../lib/cursor.ts";
 import { attachmentName, isMedia, isVideo } from "../lib/files.ts";
@@ -823,13 +823,7 @@ export function createRoomView({
   async function openSearch() {
     if (search) return search.focus();
     // While the chunk loads: what is typed meanwhile, for the field once it shows, as Jump to keeps it (QA BUG-243).
-    let early = "";
-    const hold = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || (e.key.length !== 1 && e.key !== "Backspace")) return;
-      early = e.key === "Backspace" ? early.slice(0, -1) : early + e.key;
-      e.preventDefault();
-    };
-    document.addEventListener("keydown", hold, { capture: true, signal });
+    const held = holdKeys(signal);
     try {
       const { createSearch } = await import("./room/search.ts");
       const toggle = shell.querySelector<HTMLElement>(".search-toggle");
@@ -854,15 +848,11 @@ export function createRoomView({
       header.el.after(search.el);
       toggle?.setAttribute("aria-expanded", "true");
       search.focus();
-      const input = search.el.querySelector("input");
-      if (early && input) {
-        input.value = early;
-        input.dispatchEvent(new Event("input"));
-      }
+      typeInto(search.el.querySelector("input"), held.take());
     } catch {
       if (scope.active) notice.say("Couldn't open search. Check your connection.");
     } finally {
-      document.removeEventListener("keydown", hold, true);
+      held.take();
     }
   }
 
