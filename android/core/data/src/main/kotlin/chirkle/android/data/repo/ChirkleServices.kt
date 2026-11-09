@@ -167,6 +167,8 @@ class ChirkleServices(
 
     suspend fun signUp(email: String, password: String, name: String, inviteCode: String = ""): User = api.signUp(email, password, name, inviteCode)
 
+    suspend fun requestPasswordReset(email: String) = api.requestPasswordReset(email)
+
     /** Send what was read, then end the session; everything of it is cleared. */
     suspend fun logOut() = withContext(main) {
         unread.flush()

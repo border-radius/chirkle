@@ -29,6 +29,8 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
   a room with unread messages opens at the first of them, under a "New" line
 - What you were typing is kept per room, even across a reload; "Jump to latest" whenever you are scrolled up
 - Your own branding (title and logo) and, if you like, invite-only signups: set by the admin in PocketBase
+- Forgot password: once the admin sets up email, "Forgot password?" on the login page (web and Android) emails a link
+  that sets a new password and logs out every device
 - Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits, files and (with the bot an admin) reactions go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [Telegram integration](#telegram-integration)
 - Fast room switching: each room's latest messages are kept in the browser (IndexedDB) and shown at once while the
   server answers; unread rooms are fetched ahead. Attachment thumbnails are kept by the service worker, so going back
@@ -208,10 +210,17 @@ only people who have the code sign up (they enter it on the Sign up form; it is 
 the old one working; leave it empty to close signups. Existing accounts are unaffected, and you can still create
 accounts yourself under *Collections → users*.
 
+**Forgot password:** in the admin UI, set *Settings → Application → Application URL* to the server's public
+address (the emailed link starts with it) and the sender under *Settings → Mail settings*, and turn on *Use SMTP
+mail server* with your provider's host, port and login; *Send test email* checks it. Only then do the login pages
+offer "Forgot password?" (an SMTP server set but turned off isn't used). The link opens `/reset-password/…` on the
+web, works once for 30 minutes, and logs out every device of the account. The email's wording is under *Collections →
+users → Options → Default Password reset email template*; keep `{APP_URL}/reset-password/{TOKEN}` as its link.
+
 **Backups:** in the admin UI, *Settings → Backups* — schedule automatic backups (optionally to S3-compatible
 storage). Uploaded files (avatars, attachments) live in `pb_data/storage` (or S3, under *Settings → Files storage*) and
 are part of the backups, so plan disk space for them. **Rate limits** (per IP: messages 10 per 5 s, edits/deletes 20
-per 10 s, reactions 30 per 10 s, forwarding and deleting several messages 20 requests per minute each, password changes 5 per minute, new rooms 5 per minute, opening DMs 10 per minute, marking rooms read 120 per minute, signups 20 per minute; PocketBase defaults for the rest)
+per 10 s, reactions 30 per 10 s, forwarding and deleting several messages 20 requests per minute each, password changes 5 per minute, password reset emails 5 per 10 minutes, new rooms 5 per minute, opening DMs 10 per minute, marking rooms read 120 per minute, signups 20 per minute; PocketBase defaults for the rest)
 are set by the migrations and adjustable under *Settings → Rate limits*.
 
 ## Android app

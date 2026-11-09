@@ -55,7 +55,8 @@ import coil3.compose.AsyncImage
 
 /**
  * Log in or sign up (§7.1) on the account's server, which [onChangeServer] changes (ANDROID.md §17.2). [onGuest]: read
- * the Open Air rooms without an account (§23.3). Your other accounts are a tap away.
+ * the Open Air rooms without an account (§23.3). Your other accounts are a tap away. "Forgot password?" (§39) while the
+ * server sends email: asks where to send a reset link.
  */
 @Composable
 fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Unit) {
@@ -78,43 +79,50 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
                     Text("on ${serverLabel(services.server)}", color = Chirkle.colors.muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     TextButton(onClick = onChangeServer, enabled = !vm.busy) { Text("Change server") }
                 }
-                PrimaryTabRow(selectedTabIndex = vm.mode.ordinal) {
-                    Tab(vm.mode == AuthMode.LogIn, onClick = { vm.switch(AuthMode.LogIn) }, text = { Text("Log in") })
-                    Tab(vm.mode == AuthMode.SignUp, onClick = { vm.switch(AuthMode.SignUp) }, text = { Text("Sign up") })
-                }
-                val err = vm.fieldErrors
-                if (vm.mode == AuthMode.SignUp) {
-                    Field("Display name", vm.name, { vm.name = it }, err["name"], ContentType.PersonFullName)
-                }
-                Field("Email", vm.email, { vm.email = it }, err["email"], ContentType.EmailAddress, KeyboardType.Email)
-                Field(
-                    "Password",
-                    vm.password,
-                    { vm.password = it },
-                    err["password"],
-                    if (vm.mode == AuthMode.LogIn) ContentType.Password else ContentType.NewPassword,
-                    KeyboardType.Password,
-                    password = true,
-                    last = vm.mode == AuthMode.LogIn || !state.site.inviteOnly,
-                    onDone = vm::submit,
-                )
-                if (vm.mode == AuthMode.SignUp && state.site.inviteOnly) {
-                    Field("Invite code", vm.inviteCode, { vm.inviteCode = it }, err["invite_code"], null, last = true, onDone = vm::submit)
-                }
-                Text(
-                    vm.formError,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                Button(onClick = { if (!vm.busy) vm.submit() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                    Text(
-                        when {
-                            vm.busy && vm.mode == AuthMode.LogIn -> "Logging in…"
-                            vm.busy -> "Signing up…"
-                            vm.mode == AuthMode.LogIn -> "Log in"
-                            else -> "Sign up"
-                        },
+                if (vm.mode == AuthMode.Forgot) {
+                    ForgotPassword(vm)
+                } else {
+                    PrimaryTabRow(selectedTabIndex = vm.mode.ordinal) {
+                        Tab(vm.mode == AuthMode.LogIn, onClick = { vm.switch(AuthMode.LogIn) }, text = { Text("Log in") })
+                        Tab(vm.mode == AuthMode.SignUp, onClick = { vm.switch(AuthMode.SignUp) }, text = { Text("Sign up") })
+                    }
+                    val err = vm.fieldErrors
+                    if (vm.mode == AuthMode.SignUp) {
+                        Field("Display name", vm.name, { vm.name = it }, err["name"], ContentType.PersonFullName)
+                    }
+                    Field("Email", vm.email, { vm.email = it }, err["email"], ContentType.EmailAddress, KeyboardType.Email)
+                    Field(
+                        "Password",
+                        vm.password,
+                        { vm.password = it },
+                        err["password"],
+                        if (vm.mode == AuthMode.LogIn) ContentType.Password else ContentType.NewPassword,
+                        KeyboardType.Password,
+                        password = true,
+                        last = vm.mode == AuthMode.LogIn || !state.site.inviteOnly,
+                        onDone = vm::submit,
                     )
+                    if (vm.mode == AuthMode.SignUp && state.site.inviteOnly) {
+                        Field("Invite code", vm.inviteCode, { vm.inviteCode = it }, err["invite_code"], null, last = true, onDone = vm::submit)
+                    }
+                    if (vm.mode == AuthMode.LogIn && site.passwordReset) {
+                        TextButton(onClick = { vm.switch(AuthMode.Forgot) }, modifier = Modifier.align(Alignment.End)) { Text("Forgot password?") }
+                    }
+                    Text(
+                        vm.formError,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                    Button(onClick = { if (!vm.busy) vm.submit() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text(
+                            when {
+                                vm.busy && vm.mode == AuthMode.LogIn -> "Logging in…"
+                                vm.busy -> "Signing up…"
+                                vm.mode == AuthMode.LogIn -> "Log in"
+                                else -> "Sign up"
+                            },
+                        )
+                    }
                 }
                 TextButton(onClick = onGuest, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                     Text("Just looking? Read the Open Air rooms")
@@ -139,6 +147,27 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
             }
         }
     }
+}
+
+/** Forgot password (§39): the email to send the link to, then where it went. */
+@Composable
+private fun ForgotPassword(vm: AuthViewModel) {
+    Text("Reset password", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+    if (vm.sentTo.isNotEmpty()) {
+        Text(
+            "If an account uses ${vm.sentTo}, a link to set a new password is on its way. It works for 30 minutes.",
+            color = Chirkle.colors.muted,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    } else {
+        Text("Enter your account's email, and we'll send you a link to set a new password.", color = Chirkle.colors.muted)
+        Field("Email", vm.email, { vm.email = it }, vm.fieldErrors["email"], ContentType.EmailAddress, KeyboardType.Email, last = true, onDone = vm::submit)
+        Text(vm.formError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Button(onClick = { if (!vm.busy) vm.submit() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+            Text(if (vm.busy) "Sending…" else "Send link")
+        }
+    }
+    TextButton(onClick = { vm.switch(AuthMode.LogIn) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Back to log in") }
 }
 
 @Composable

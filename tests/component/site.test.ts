@@ -20,12 +20,12 @@ function memoryStorage(init: Record<string, string> = {}): Storage {
 }
 
 describe("site settings (§24)", () => {
-  it("loads the site record: the defaults' title, no logo, open signups", async () => {
-    expect(await newApi().site()).toEqual({ title: "Chirkle", logo: "", inviteOnly: false });
+  it("loads the site record: the defaults' title, no logo, open signups, no password reset without mail settings", async () => {
+    expect(await newApi().site()).toEqual({ title: "Chirkle", logo: "", inviteOnly: false, passwordReset: false });
   });
 
   it("shows the cached site right away, then the server's, and caches it", async () => {
-    const acme = { title: "Acme", logo: "/a.png", inviteOnly: true };
+    const acme = { title: "Acme", logo: "/a.png", inviteOnly: true, passwordReset: true };
     const storage = memoryStorage({ "chat.site": JSON.stringify({ title: "Old", logo: "", inviteOnly: false }) });
     const api = newApi();
     intercept(api, "site", () => async () => acme);
@@ -34,6 +34,13 @@ describe("site settings (§24)", () => {
     expect(store.get().site.title).toBe("Old");
     await vi.waitFor(() => expect(store.get().site).toEqual(acme));
     expect(cachedSite(storage)).toEqual(acme);
+    // A site cached before password reset existed (§39): not offered until the server says so.
+    expect(cachedSite(memoryStorage({ "chat.site": JSON.stringify({ title: "Old", logo: "", inviteOnly: false }) }))).toEqual({
+      title: "Old",
+      logo: "",
+      inviteOnly: false,
+      passwordReset: false,
+    });
   });
 
   it("a failed load keeps what is shown; a broken cache is ignored", async () => {

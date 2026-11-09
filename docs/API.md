@@ -27,11 +27,11 @@ Rules that more than one implementation must follow have test vectors in [`share
 
 | Collection | Web | App | How |
 |---|---|---|---|
-| `users` | ✓ | ✓ | auth (password, refresh), sign-up, profile update (`fields.user`) |
+| `users` | ✓ | ✓ | auth (password, refresh), sign-up, profile update (`fields.user`); `request-password-reset` (both, the email in lower case) and `confirm-password-reset` (web) since 2026-11-08 (DESIGN.md §39) |
 | `rooms` | ✓ | ✓ | get, create, update (`fields.room`); list: apps before 2026-10-29, and the app with a server from before then |
 | `messages` | ✓ | ✓ | get, create (multipart), update (`fields.message`); pages, search (`text_key ~`) and the notification check by filter: apps before 2026-10-29, and the app with a server from before then |
 | `hidden_rooms` | ✓ | ✓ | list, create, delete (`fields.roomRow`) |
-| `site` | ✓ | ✓ | the site record; the app also reads `min_android_version` |
+| `site` | ✓ | ✓ | the site record; the app also reads `min_android_version`; both read `password_reset` (not a field: the server's mail settings, DESIGN.md §39; absent before 2026-11-08) |
 | `collections`, `collection_items` | ✓ | ✓ | the collections pages (`fields.collectionItem`) |
 | `push_tokens` | | delete only | apps from before ANDROID.md §21 unregister their Firebase token |
 

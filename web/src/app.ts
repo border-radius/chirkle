@@ -40,8 +40,11 @@ export interface App {
 /** notify.ts's NOTIFY_KEY (§34): someone here turned notifications on. */
 export const NOTIFY_KEY = "chat.notify";
 
-/** The pages for logging in and signing up: only for guests, and never where to go back to after logging in. */
-const AUTH_PAGES = new Set(["/login", "/signup"]);
+/**
+ * The pages for logging in, signing up, and the emailed link that sets a new password (§39): never where to go back
+ * to after logging in.
+ */
+const isAuthPage = (path: string) => path === "/login" || path === "/signup" || path.startsWith("/reset-password/");
 
 /** Starts the main view of the mounted layout over (a room that came back, §23.4): one per app. */
 interface Panes {
@@ -194,9 +197,9 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     startNotify();
   };
   /** The page a guest was on before going to log in or sign up: where logging in takes them back to (§23.3). */
-  let lastPage = AUTH_PAGES.has(here()) ? "/" : here();
+  let lastPage = isAuthPage(here()) ? "/" : here();
   const onNavigate = (path: string) => {
-    if (!AUTH_PAGES.has(path)) lastPage = path;
+    if (!isAuthPage(path)) lastPage = path;
     // Who you are, at the sidebar's foot and in the app bar: lit while on your settings.
     for (const a of root.querySelectorAll("a.me-link")) {
       if (path === "/me") a.setAttribute("aria-current", "page");
@@ -232,7 +235,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
    * followed again as the new one (or as a guest), and the views start over.
    */
   function switchTo(next: User | null, after = "/") {
-    const fromAuthPage = AUTH_PAGES.has(here());
+    const fromAuthPage = isAuthPage(here());
     endSession();
     if (next) store.set({ user: next });
     startSession();
@@ -242,7 +245,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       history.replaceState(null, "", after);
       // After a logout, whoever logs in next starts from home, not from the page the previous user was on (their
       // profile, a room; QA BUG-59). An expired session is logged back into where it was.
-      if (!AUTH_PAGES.has(after)) lastPage = "/";
+      if (!isAuthPage(after)) lastPage = "/";
     }
     router.remount();
   }
@@ -298,7 +301,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
   const rooms = () => createRoomsView(ctx);
   const roomPage = withSidebar(panes, rooms, () => createRoomView(ctx), "", true);
 
-  const authPage = (mode: "login" | "signup") => () =>
+  const authPage = (mode: "login" | "signup" | "reset") => () =>
     createLoginView({
       api,
       store,
@@ -316,6 +319,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     routes: [
       { pattern: "/login", public: true, guestOnly: true, view: authPage("login") },
       { pattern: "/signup", public: true, guestOnly: true, view: authPage("signup") },
+      // The emailed link (§39): logged in or not, it sets that account's password.
+      { pattern: "/reset-password/:token", public: true, view: authPage("reset") },
       // Guests see the Open Air rooms (§23.3); a room they can't see says it doesn't exist.
       { pattern: "/", public: true, view: withSidebar(panes, rooms, () => createHomeView(ctx), "home") },
       { pattern: "/r/:id", public: true, view: roomPage },

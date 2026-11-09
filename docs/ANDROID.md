@@ -1544,3 +1544,16 @@ raised `#232428` (`surfaceContainer`), text `#ecece8`, `muted` `#b0b4ba`, `dim` 
 `#2a2c30`, and one lavender `#a58bff` for both the accent text (`primary`) and the fill (`primaryContainer`,
 `ChirkleColors.fill`). The fill is light now, so what is on it is ink `#16181a`: the new `ChirkleColors.onFill`
 (white in light) for unread badges, a collection's new count and the send icon. Light is unchanged.
+
+## 56. Forgot password (2026-11-08)
+
+DESIGN.md §39, ported the same day. While the site says `password_reset` (`Site.passwordReset`, from `SITE_FIELDS`;
+false from an older server, which doesn't send it), Log in shows "Forgot password?" under the password. It opens
+`AuthMode.Forgot` on the same screen, without the tabs: the email (the one typed to log in), "Send link"
+(`ChirkleApi.requestPasswordReset`, the address in lower case), then "If an account uses …, a link to set a new
+password is on its way. It works for 30 minutes." "Back to log in" returns. The emailed link isn't one of the app's
+(`/r/`, `/c/`), so it opens the web app's Set a new password page in the browser; the app's session on that account
+ends with every other, and the app asks to log in again as for a password changed elsewhere.
+
+Tests: `UiPasswordResetTest` (the site's flag and the request against the test server, the form on the screen, no
+link without mail settings).

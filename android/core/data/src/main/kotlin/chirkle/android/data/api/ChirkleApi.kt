@@ -66,7 +66,7 @@ const val ROOM_FIELDS =
         "expand.writers.id,expand.writers.name,expand.writers.avatar,expand.writers.no_dms,expand.writers.instance"
 private val ROOM_OPTS = mapOf("expand" to "members,writers", "fields" to ROOM_FIELDS)
 internal const val ROW_FIELDS = "id,room"
-private const val SITE_FIELDS = "id,title,logo,invite_only,min_android_version"
+private const val SITE_FIELDS = "id,title,logo,invite_only,min_android_version,password_reset"
 internal const val ACTIVITY_FIELDS = "id,room,author,deleted"
 /** What the profile calls return: never the email, even your own. */
 internal const val USER_FIELDS = "id,name,avatar,instance"
@@ -239,6 +239,15 @@ class ChirkleApi(val pb: PbClient) {
     suspend fun logIn(email: String, password: String): User =
         auth("/api/collections/users/auth-with-password", buildJsonObject { put("identity", email); put("password", password) })
 
+    /**
+     * Email a link to set a new password (§39), opened in the browser (the web app's /reset-password page). Returns the
+     * same whether or not the address has an account. In lower case, as emails are stored (QA BUG-47): PocketBase looks
+     * the address up as it is sent.
+     */
+    suspend fun requestPasswordReset(email: String) {
+        call("/api/collections/users/request-password-reset", "POST", body = Body.Json(buildJsonObject { put("email", email.trim().lowercase()) }))
+    }
+
     /** Re-validate the stored session, which renews it. Throws when it is no longer valid. */
     suspend fun refreshAuth(): User {
         if (currentUser() == null) throw ApiError("Not logged in.", 401)
@@ -276,6 +285,8 @@ class ChirkleApi(val pb: PbClient) {
             logo = if (logo.isEmpty()) "" else pb.fileUrl("site", str("id"), logo).toString(),
             inviteOnly = (row["invite_only"] as? JsonPrimitive)?.content == "true",
             minAndroidVersion = (row["min_android_version"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0,
+            // Not a field: from the server's mail settings (§39); absent on an older server.
+            passwordReset = (row["password_reset"] as? JsonPrimitive)?.content == "true",
         )
     }
 
