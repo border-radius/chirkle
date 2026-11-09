@@ -62,6 +62,7 @@ describe("initialState", () => {
       hidden: new Map(),
       unread: new Map(),
       roomsStatus: "idle",
+      listLoads: 0,
       activeRoomId: null,
       collections: null,
       activeCollectionId: null,

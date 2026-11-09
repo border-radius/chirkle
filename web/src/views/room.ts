@@ -34,6 +34,7 @@ import { roomSections } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import type { EmojiPicker, PickerRequest } from "../ui/emoji-picker.ts";
 import type { EmojiSuggest } from "../ui/emoji-suggest.ts";
+import { createLoadbar } from "../ui/loadbar.ts";
 import { createUserSearch, SearchError } from "../ui/user-search.ts";
 import type { RoomReader } from "../unread.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
@@ -391,10 +392,12 @@ export function createRoomView({
     "Only some people can post in this room. You can read along and react.",
   );
   const closedBanner = h("p", { class: "guest-banner reader-banner ic i-x" });
+  const bar = createLoadbar();
+  scope.defer(() => bar.set(false));
   const shell = h("section", { class: "room", "aria-labelledby": `${vid}-title` }, [
     header.el,
     notice.el,
-    h("div", { class: "room-body" }, [list, pill]),
+    h("div", { class: "room-body" }, [bar.el, list, pill]),
     footer,
     forwardDialog.el,
   ]);
@@ -952,6 +955,7 @@ export function createRoomView({
         nearBottom: () => (parked ? pinned : isNearBottom(list)),
         onChange: apply,
         onUpload: (id, fraction) => messages.setUpload(id, fraction),
+        onBusy: bar.set,
         cache,
         early: params.msgId ? undefined : early?.take(roomId),
         onEvent: (m, gone) => {

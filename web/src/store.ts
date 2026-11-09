@@ -40,6 +40,8 @@ export interface AppState {
   /** roomId → unread messages (§18); rooms without any are absent. UNCOUNTED until the counts are first in. */
   unread: Map<string, number>;
   roomsStatus: LoadStatus;
+  /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§7.9). */
+  listLoads: number;
   activeRoomId: string | null;
   /** Your collections and those you follow (§31); null until loaded (and for guests). */
   collections: Collections | null;
@@ -60,6 +62,7 @@ export const initialState = (): AppState => ({
   hidden: new Map(),
   unread: UNCOUNTED,
   roomsStatus: "idle",
+  listLoads: 0,
   activeRoomId: null,
   collections: null,
   activeCollectionId: null,
@@ -70,6 +73,11 @@ export const initialState = (): AppState => ({
 // ---- updates: pass to store.set(). Maps are replaced, never mutated, so listeners can compare by identity.
 
 type Update = (s: AppState) => Partial<AppState>;
+
+/** A room list request went out (1) or is back (-1). */
+export const listLoad =
+  (d: 1 | -1): Update =>
+  (s) => ({ listLoads: s.listLoads + d });
 
 export function upsertRoom(r: Room): Update {
   return (s) => ({ rooms: new Map(s.rooms).set(r.id, r) });

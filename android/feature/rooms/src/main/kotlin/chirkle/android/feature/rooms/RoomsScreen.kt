@@ -290,6 +290,8 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 }
             }
         }
+        // A fetch that takes a while (§58): over the top of the list, under the bar. Not over the first load's spinner.
+        chirkle.android.ui.LoadingLine(s.listLoads > 0 && s.rooms.isNotEmpty(), Modifier.padding(top = padding.calculateTopPadding()))
     }
 
     archiving?.let { r ->

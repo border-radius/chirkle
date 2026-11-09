@@ -4,7 +4,7 @@
 
 import { type Api, ApiError } from "./api.ts";
 import { createScope, type Scope } from "./scope.ts";
-import { type AppState, bumpUnread, clearUnread, type Store } from "./store.ts";
+import { type AppState, bumpUnread, clearUnread, listLoad, type Store } from "./store.ts";
 
 export interface Unread {
   /** Load the counts and follow them live. Call once a user is logged in. */
@@ -72,6 +72,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
 
   async function load(s: Scope) {
     inFlight++;
+    store.set(listLoad(1));
     try {
       const res = await api.unreadCounts(s.signal).catch(() => null);
       if (!res || !s.active || res.at < countedAt) return;
@@ -84,6 +85,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       if (following && !store.get().away) unread.delete(following);
       store.set({ unread });
     } finally {
+      store.set(listLoad(-1));
       if (--inFlight === 0) recent = [];
     }
   }

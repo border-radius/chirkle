@@ -43,7 +43,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** How long a message gone to (a quote, a search result) stays highlighted. */
@@ -114,6 +117,20 @@ class RoomController(
     val scrolls: Flow<Scroll> = scrollFlow.receiveAsFlow()
     val progress get() = outbox.progress
 
+    /** Fetches of the room's messages out now ([tracked]). */
+    private val fetching = MutableStateFlow(0)
+    /** The room is being fetched (a first load, history, a jump, catching up after a reconnect): a line shows (§58). */
+    val busy: Flow<Boolean> = fetching.map { it > 0 }.distinctUntilChanged()
+
+    private suspend fun <T> tracked(block: suspend () -> T): T {
+        fetching.update { it + 1 }
+        try {
+            return block()
+        } finally {
+            fetching.update { it - 1 }
+        }
+    }
+
     /** Is the list at (near) the bottom? Set by the screen; new messages are followed only then. */
     @Volatile var atBottom: Boolean = true
 
@@ -151,7 +168,7 @@ class RoomController(
         override fun patchLocal(id: String, fn: (Message) -> Message) = this@RoomController.patchLocal(id, fn)
         override fun publish(scroll: Scroll?) = this@RoomController.publish(scroll)
         override fun inPlace() = this@RoomController.inPlace()
-        override suspend fun toLatest() = jumpNow(PageKind.Latest)
+        override suspend fun toLatest() = tracked { jumpNow(PageKind.Latest) }
         override fun clearPill() {
             pill = null
         }
@@ -275,7 +292,7 @@ class RoomController(
 
     /** Extend the window at one end (the list neared it). One request per end at a time. */
     fun loadEdge(side: Side) {
-        scope.launch { loadEdgeNow(side) }
+        scope.launch { tracked { loadEdgeNow(side) } }
     }
 
     private suspend fun loadEdgeNow(side: Side) {
@@ -299,7 +316,7 @@ class RoomController(
 
     /** Reset the window to the latest or the first page. */
     fun jump(kind: PageKind) {
-        scope.launch { jumpNow(kind) }
+        scope.launch { tracked { jumpNow(kind) } }
     }
 
     private suspend fun jumpNow(kind: PageKind) {
@@ -316,34 +333,36 @@ class RoomController(
 
     /** Highlight and show message [id] (a reply's quote, a search result), loading the history around it when needed. */
     fun goTo(id: String) {
-        scope.launch {
-            val m = find(id)
-            if (m != null && m.status == null) {
-                setTarget(id)
-                notice = ""
-                return@launch publish(Scroll.Target)
-            }
-            val g = gen
-            val around = try {
-                windowAround(id) ?: Around.Missing
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null
-            }
-            if (g != gen || !run.active) return@launch
-            if (around !is Around.Found) {
-                notice = if (around == Around.Missing) "That message isn't available any more." else "Couldn't load that message. Check your connection."
-                return@launch publish()
-            }
-            gen++
-            loading.clear()
-            win = around.win
-            setTarget(around.target)
-            pill = null
+        scope.launch { tracked { goToNow(id) } }
+    }
+
+    private suspend fun goToNow(id: String) {
+        val m = find(id)
+        if (m != null && m.status == null) {
+            setTarget(id)
             notice = ""
-            publish(Scroll.Target)
+            return publish(Scroll.Target)
         }
+        val g = gen
+        val around = try {
+            windowAround(id) ?: Around.Missing
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (g != gen || !run.active) return
+        if (around !is Around.Found) {
+            notice = if (around == Around.Missing) "That message isn't available any more." else "Couldn't load that message. Check your connection."
+            return publish()
+        }
+        gen++
+        loading.clear()
+        win = around.win
+        setTarget(around.target)
+        pill = null
+        notice = ""
+        publish(Scroll.Target)
     }
 
     private sealed interface Around {
@@ -452,7 +471,7 @@ class RoomController(
         // A message sent after the page was read but before the server had the subscription reaches neither (QA BUG-61).
         if (!liveReady) scope.launch {
             live.await()
-            catchUp()
+            tracked { catchUp() }
         }
     }
 
@@ -512,7 +531,7 @@ class RoomController(
         if (phase != Phase.Failed || !run.active) return
         phase = Phase.Loading
         publish()
-        scope.launch { open() }
+        scope.launch { tracked { open() } }
     }
 
     /** After a reconnect: refetch what changed in the window while realtime was down (a delete must not keep its text). */
@@ -549,8 +568,8 @@ class RoomController(
         if (!run.active) return
         if (phase == Phase.Failed) return retry()
         if (!ready || stale) return
-        scope.launch { refreshWindow() }
-        if (!win.hasNewer) scope.launch { gapFill() }
+        scope.launch { tracked { refreshWindow() } }
+        if (!win.hasNewer) scope.launch { tracked { gapFill() } }
     }
 
     // ---------------------------------------------------------------- realtime
@@ -688,7 +707,7 @@ class RoomController(
         }
         // The room record (archived, access) arrives through the store, kept live by RoomsSync.
         scope.launch { store.flow.collect { if (ready) publish() } }
-        scope.launch { open() }
+        scope.launch { tracked { open() } }
     }
 
     /** The screen is gone: keep the window for next time, unsubscribe. Writes on their way go on. */

@@ -1568,3 +1568,20 @@ The server counts who is online and how much the apps are used, for a web page m
 connection is counted as Android because its subscribe request carries OkHttp's default User-Agent (`okhttp/…`).
 Setting a User-Agent of the app's own would need `stats.js appOf` to know it. The new `site.no_stats` field is hidden,
 so the app's read of `site` is unchanged. Server tests: `tests/integration/stats.test.ts`.
+
+## 58. A line while the room list or a room is fetched (2026-11-09)
+
+The web's loading line (DESIGN.md §7.9): when the app is slow there is something to see. `LoadingLine` (core/ui) is
+a 2 dp indeterminate bar in the accent, laid over the top of the room list (under the top bar) and of a room (under
+its header). It shows once a fetch has taken 400 ms (`LOADING_LINE_MS`, the web's `LOADBAR_MS`), so a quick one shows
+nothing, and goes as soon as nothing is out. Not over a first load's spinner (no rooms yet; a room still in
+`Phase.Loading`), and in a room not over search results.
+
+- Room list: `AppState.listLoads` counts the requests out now: `RoomsSync.load` (rooms and hidden rows) and
+  `UnreadSync.load` (the counts). A logout's reset keeps the count, so loads still out count back down to 0.
+- Room: `RoomController.busy` is true while any of its reads is out: the first load (and Retry), history at either
+  end, a jump (also the writes' jump to latest), going to a message, catching up once live, and the refetch and gap
+  fill after a reconnect. Writes have their own signs (pending rows, the upload bar).
+
+Tests: `ServicesTest` "the room list and a room say while they are being fetched" (the list's count goes up and back
+to 0; a room is no longer busy once ready). Web: `tests/e2e/loadbar.spec.ts`, `tests/unit/loadbar.test.ts`.

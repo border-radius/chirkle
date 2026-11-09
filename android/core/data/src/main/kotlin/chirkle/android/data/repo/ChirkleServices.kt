@@ -231,6 +231,6 @@ class ChirkleServices(
         const val CHECK_STALE_MS = 5 * 60 * 1000L
 
         /** What stays when the session ends: the site record and whether the app is visible. */
-        fun AppStateForSite(s: AppState) = AppState(site = s.site, away = s.away)
+        fun AppStateForSite(s: AppState) = AppState(site = s.site, away = s.away, listLoads = s.listLoads)
     }
 }

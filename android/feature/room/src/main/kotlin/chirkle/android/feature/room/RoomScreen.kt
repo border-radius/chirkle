@@ -133,6 +133,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     val rows by vm.rows.collectAsStateWithLifecycle()
     val app_ by services.store.flow.collectAsStateWithLifecycle()
     val progress by c.progress.collectAsStateWithLifecycle()
+    val busy by c.busy.collectAsStateWithLifecycle(false)
     val recent by services.recentEmoji.list.collectAsStateWithLifecycle()
     val room = app_.rooms[roomId]
     val me = app_.user
@@ -407,6 +408,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             }
             // Picking a result puts the keyboard away too: it would cover half of the message gone to.
             if (vm.searching) SearchResults(vm) { focusManager.clearFocus(); vm.pick(it) }
+            // A fetch that takes a while (§58); not over the first load's spinner.
+            else chirkle.android.ui.LoadingLine(busy && state.phase != Phase.Loading, Modifier.align(Alignment.TopCenter))
         }
     }
 

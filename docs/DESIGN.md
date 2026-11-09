@@ -643,6 +643,24 @@ Other rules:
   - Visible focus rings and full keyboard operability.
   - Color contrast of at least 4.5:1.
 
+### 7.9 Loading line (2026-11-09)
+
+When the app is slow there is something to see: a thin (2 px) line in the accent, a short gradient moving left to
+right, over the top of the room list (under the Jump to box; on a narrow screen under the app bar) and over the top
+of the room (under its header). It takes no room in the layout (`.loadbar`, a 0-height element whose `::before` is
+the line) and is hidden from screen readers (`aria-hidden`; the lists keep their `aria-busy`). With reduced motion
+it stands still as a faint line across the width.
+
+- It shows once a fetch has been out for `LOADBAR_MS` (400 ms), so a quick one shows nothing, and goes as soon as
+  nothing is out (`web/src/ui/loadbar.ts`). The delay is in JS: reduced motion turns off CSS transitions.
+- Room list: `AppState.listLoads` counts the requests out now, the room list and hidden rows (`sync.ts`) and the
+  unread counts (`unread.ts`). A logout's reset of the store keeps it, so loads still out count back down to 0.
+- Room: the controller's `onBusy` says when the first of its reads goes out and when the last is back: the first
+  load (and Retry), history at either end, a jump, going to a message, catching up once live, and the refetch and gap
+  fill after a reconnect. A room opened from the prefetched page (PERF.md §5) shows none. Writes have their own signs
+  (pending messages, the upload bar).
+- Android: the same line (ANDROID.md §58).
+
 ## 8. Build and dev tooling
 
 ### 8.1 Dependencies

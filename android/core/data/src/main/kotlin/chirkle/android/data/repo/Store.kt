@@ -21,6 +21,8 @@ data class AppState(
     val unread: Map<String, Int> = emptyMap(),
     val counted: Boolean = false,
     val roomsStatus: LoadStatus = LoadStatus.Idle,
+    /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§58). */
+    val listLoads: Int = 0,
     val activeRoomId: String? = null,
     /** Your media collections and those you follow (DESIGN.md §31): null until loaded (and for a guest). */
     val collections: chirkle.android.data.model.Collections? = null,

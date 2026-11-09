@@ -224,7 +224,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     void api.unsubscribeAll().catch(() => {});
     drafts.clear(store.get().user?.id ?? "");
     forgetCached(cache);
-    store.set({ ...initialState(), site: store.get().site });
+    // Loads still out count themselves back down as they end.
+    store.set({ ...initialState(), site: store.get().site, listLoads: store.get().listLoads });
   }
 
   /**

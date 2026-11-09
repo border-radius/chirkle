@@ -130,6 +130,8 @@ export function createRoomController(opts: {
   onChange: (change: Change) => void;
   /** A sending message's attachments are this far uploaded, 0 to 1 (§17.4). */
   onUpload?: (id: string, fraction: number) => void;
+  /** The room is being fetched (true: a first load, history, a jump, catching up after a reconnect), or no longer. */
+  onBusy?: (busy: boolean) => void;
   /** Where the room's latest messages are kept between visits (§7.5). */
   cache?: Cache;
   /** The latest page, asked for as the room's link was pressed (prefetch.ts `take`): the first load uses it. */
@@ -188,6 +190,16 @@ export function createRoomController(opts: {
   /** The room's realtime subscription, set up by start(); "ready" once the server has it. */
   let live: Promise<unknown> = Promise.resolve();
   let liveReady = false;
+
+  /** Fetches out now (`track`). */
+  let fetching = 0;
+  /** `p` is a fetch of the room's messages: `onBusy` while any is out (§7.9). */
+  const track = <T>(p: Promise<T>): Promise<T> => {
+    if (!fetching++) opts.onBusy?.(true);
+    return p.finally(() => {
+      if (!--fetching) opts.onBusy?.(false);
+    });
+  };
 
   const ready = () => phase === "ready";
   const room = (): Room | undefined => store.get().rooms.get(roomId);
@@ -423,13 +435,13 @@ export function createRoomController(opts: {
     phase = "ready";
     stale = false;
     emit(change);
-    if (wanted) void loadEdge(wanted);
+    if (wanted) void track(loadEdge(wanted));
     const pending = buffer;
     buffer = [];
     for (const [action, m] of pending) onMessage(action, m);
     // The page and the subscription are set up side by side. A message sent after the page was read but before the
     // server had the subscription reaches neither (QA BUG-61): once the subscription is there, fetch what is newer.
-    if (!liveReady) void live.then(catchUp);
+    if (!liveReady) void live.then(() => track(catchUp()));
   }
 
   /**
@@ -490,7 +502,7 @@ export function createRoomController(opts: {
     if (phase !== "failed" || !scope.active) return;
     phase = "loading";
     emit({ render: {} });
-    void open();
+    void track(open());
   }
 
   /**
@@ -533,8 +545,8 @@ export function createRoomController(opts: {
     if (!scope.active) return;
     if (phase === "failed") return retry(); // back online: try the first load again
     if (!ready() || stale) return; // the first page is on its way
-    void refreshWindow();
-    if (!win.hasNewer) void gapFill();
+    void track(refreshWindow());
+    if (!win.hasNewer) void track(gapFill());
   }
 
   // ---------------------------------------------------------------- realtime
@@ -617,7 +629,7 @@ export function createRoomController(opts: {
     patchLocal,
     emit,
     inPlace,
-    toLatest: () => jump("latest"),
+    toLatest: () => track(jump("latest")),
     clearPill: () => {
       pill = null;
     },
@@ -667,12 +679,12 @@ export function createRoomController(opts: {
         () => {},
       );
       scope.defer(api.onConnect((reconnect) => reconnect && onReconnect()));
-      void open();
+      void track(open());
     },
     retry,
-    loadEdge,
-    jump,
-    goTo,
+    loadEdge: (side) => track(loadEdge(side)),
+    jump: (kind) => track(jump(kind)),
+    goTo: (id) => track(goTo(id)),
     dismissPill() {
       if (pill !== "below") return;
       pill = null;

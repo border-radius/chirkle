@@ -83,6 +83,7 @@ class RoomsSync(private val api: ChirkleApi, private val store: Store, private v
             changedHidden = mutableSetOf()
         }
         if (store.get().roomsStatus != LoadStatus.Ready) store.update { it.copy(roomsStatus = LoadStatus.Loading) }
+        store.update { it.copy(listLoads = it.listLoads + 1) }
         try {
             val roomsP = r.scope.async { api.listRooms() }
             val hiddenP = r.scope.async { if (guest) emptyList() else api.listHidden() }
@@ -102,6 +103,7 @@ class RoomsSync(private val api: ChirkleApi, private val store: Store, private v
             if (r.active && seq >= applied) store.update { it.copy(roomsStatus = LoadStatus.Error) }
         } finally {
             inFlight--
+            store.update { it.copy(listLoads = it.listLoads - 1) }
         }
     }
 
@@ -174,6 +176,7 @@ class Unread(
 
     private suspend fun load(r: Run) {
         inFlight++
+        store.update { it.copy(listLoads = it.listLoads + 1) }
         try {
             val res = runCatching { api.unreadCounts() }.getOrNull()
             if (res == null || !r.active || res.at < countedAt) return
@@ -186,6 +189,7 @@ class Unread(
             store.update { it.copy(unread = unread, counted = true) }
             db.kv().put(KvEntity(Keys.UNREAD, PbJson.encodeToString(UnreadCounts.serializer(), UnreadCounts(res.at, unread))))
         } finally {
+            store.update { it.copy(listLoads = it.listLoads - 1) }
             if (--inFlight == 0) recent = mutableListOf()
         }
     }

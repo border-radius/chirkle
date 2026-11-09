@@ -17,6 +17,7 @@ import { createScope, type Scope } from "../scope.ts";
 import { roomSections, unreadCount } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import { collectionIcon } from "../ui/icon.ts";
+import { createLoadbar } from "../ui/loadbar.ts";
 import type { MenuItem } from "../ui/menu.ts";
 import { createUserSearch, SearchError, type UserSearch } from "../ui/user-search.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
@@ -75,6 +76,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   const shell = h("section", { class: "rooms", "aria-busy": "true" });
   const top = h("div", { class: "side-top" });
   const foot = h("div", { class: "side-foot" });
+  const bar = createLoadbar();
   /** What top and foot were drawn for. */
   let drawn: unknown[] = [];
 
@@ -611,13 +613,16 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       parts = skeleton();
       drawn = [];
       renderEnds();
-      shell.replaceChildren(top, alert, nav, foot);
+      shell.replaceChildren(top, bar.el, alert, nav, foot);
+      bar.set(store.get().listLoads > 0);
+      scope.defer(() => bar.set(false));
       clear(root);
       root.append(shell);
 
       scope.defer(
         store.subscribe((s, prev) => {
           if (s.roomsStatus !== prev.roomsStatus) renderAlert();
+          if (s.listLoads !== prev.listLoads) bar.set(s.listLoads > 0);
           if (
             s.rooms !== prev.rooms ||
             s.hidden !== prev.hidden ||

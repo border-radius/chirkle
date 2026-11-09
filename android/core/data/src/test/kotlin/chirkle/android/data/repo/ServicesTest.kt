@@ -18,6 +18,7 @@ import chirkle.android.data.model.Room
 import chirkle.android.data.pb.PbJson
 import chirkle.android.data.pb.Session
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,6 +43,24 @@ class ServicesTest {
         eventually(what = "saved") { runBlocking { s.db.rooms().all().any { it.id == room.id } } }
         u.api.setArchived(room.id, true)
         eventually(what = "archived") { s.store.get().rooms[room.id]?.archived == true }
+    }
+
+    @Test fun `the room list and a room say while they are being fetched (§58)`() = runBlocking {
+        val u = newUser()
+        val room = u.api.createRoom("r-${uniq()}")
+        val s = services(u)
+        val loads = java.util.Collections.synchronizedList(mutableListOf<Int>())
+        s.store.listen { st, prev -> if (st.listLoads != prev.listLoads) loads += st.listLoads }
+        s.rooms.reload()
+        eventually(what = "the list's loads back") { s.store.get().listLoads == 0 }
+        assertTrue("a load was counted: $loads", loads.any { it > 0 })
+        val c = s.openRoom(room.id)
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        val watch = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch { c.busy.collect { seen += it } }
+        eventually(what = "ready") { c.state.value.phase == Phase.Ready }
+        eventually(what = "no longer busy") { seen.lastOrNull() == false }
+        watch.cancel()
+        c.close()
     }
 
     @Test fun `a guest sees Open Air rooms only, and can't post`() = runBlocking {
