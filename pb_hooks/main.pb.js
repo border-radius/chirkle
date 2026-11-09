@@ -7,37 +7,62 @@ onBootstrap((e) => {
   require(`${__hooks}/lib/http.js`).trustProxy(e.app);
 });
 
-routerUse((e) => {
-  require(`${__hooks}/lib/http.js`).headers(e);
-  return e.next();
-});
+// No routerUse with a JS handler here: it holds a JS runtime of the pool (--hooksPool) for the whole request, so every
+// open realtime connection and every file on its way from S3 would keep some, and room pages, whose enrich hooks need
+// one each, would make new ones (docs/PERF.md §6). What one would do for every request is done by the routes and hooks
+// it concerns: the headers by the routes that serve pages (lib/http.js), the body limit by PocketBase (it sizes each
+// collection's create and update by its fields, DESIGN.md §17.1), the files and the anonymous rooms' checks below.
 
-// Bodies up to 10 attachments of 20 MB (§17.1): replaces PocketBase's default limit (same middleware id); lib/http.js
-// keeps the default for everything but a message create.
-routerUse($apis.bodyLimit(require(`${__hooks}/lib/http.js`).MESSAGE_BODY_LIMIT));
-routerUse((e) => require(`${__hooks}/lib/http.js`).bodyLimit(e));
-
-// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35).
-routerUse((e) => {
-  // Re-encoded: letters never are (%61uthor would pass a look at the raw query).
-  if (/author|forwarded_from/i.test(e.request?.url?.query().encode() ?? "")) require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  return e.next();
+// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35):
+// checked by everything that takes a filter, sort or expand (the routes here that enrich records do too).
+onRecordsListRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
 });
-// A message's or collection item's file is its shared `files` row's (§37): served without a file token.
-routerUse((e) => {
-  if (e.request?.url?.path.startsWith("/api/files/") && require(`${__hooks}/lib/files.js`).serve(e)) return;
-  return e.next();
+onRecordViewRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
 });
-
+onRecordCreateRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
+onRecordUpdateRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
+// Every auth answer (password, OAuth2, OTP, refresh, impersonation) has the record, expanded as asked.
+onRecordAuthRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
 onRealtimeSubscribeRequest((e) => {
   require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
   e.next();
 });
 
-// Not the app's index.html (PocketBase's fallback for any other path, §7.1) for a missing asset or API.
+// A message's or collection item's file is its shared `files` row's (§37): served without a file token, by routes more
+// specific than PocketBase's /api/files/{collection}/… (lib/files.js serve). The rows themselves never directly.
+routerAdd("GET", "/api/files/messages/{recordId}/{filename}", (e) => require(`${__hooks}/lib/files.js`).serve(e, "messages"));
+routerAdd("GET", "/api/files/collection_items/{recordId}/{filename}", (e) =>
+  require(`${__hooks}/lib/files.js`).serve(e, "collection_items"),
+);
+onFileDownloadRequest(() => {
+  throw new NotFoundError();
+}, "files");
+
+// The app's pages (index.html at any path that isn't a file, §7.1) and its files, with their headers (§5.6).
+routerAdd("GET", "/{path...}", (e) => require(`${__hooks}/lib/http.js`).page(e));
+// Not the app's index.html for a missing asset or API.
 routerAdd("GET", "/assets/{path...}", (e) => require(`${__hooks}/lib/http.js`).asset(e));
-routerAdd("GET", "/manifest.webmanifest", (e) => require(`${__hooks}/lib/site.js`).manifest(e));
-routerAdd("GET", "/.well-known/assetlinks.json", (e) => require(`${__hooks}/lib/site.js`).assetLinks(e));
+routerAdd("GET", "/manifest.webmanifest", (e) => {
+  require(`${__hooks}/lib/http.js`).headers(e);
+  return require(`${__hooks}/lib/site.js`).manifest(e);
+});
+routerAdd("GET", "/.well-known/assetlinks.json", (e) => {
+  require(`${__hooks}/lib/http.js`).headers(e);
+  return require(`${__hooks}/lib/site.js`).assetLinks(e);
+});
 routerAdd("GET", "/api/{path...}", () => {
   throw new NotFoundError();
 });
@@ -46,6 +71,7 @@ routerAdd("GET", "/api/chat/rooms", (e) => require(`${__hooks}/lib/lists.js`).ro
 routerAdd("GET", "/api/chat/rooms/{room}/messages", (e) => require(`${__hooks}/lib/lists.js`).messages(e));
 routerAdd("GET", "/api/chat/notifiable", (e) => require(`${__hooks}/lib/lists.js`).notifiable(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/dms", (e) => require(`${__hooks}/lib/dms.js`).openDm(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/live", (e) => require(`${__hooks}/lib/live.js`).info(e));
 routerAdd("GET", "/api/chat/unread", (e) => require(`${__hooks}/lib/reads.js`).unread(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/unread/{room}", (e) => require(`${__hooks}/lib/reads.js`).firstUnread(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reads", (e) => require(`${__hooks}/lib/reads.js`).markRead(e), $apis.requireAuth("users"));
@@ -242,6 +268,21 @@ onRecordCreate((e) => {
 onRecordAfterCreateSuccess((e) => {
   require(`${__hooks}/lib/messages.js`).afterMessageCreate(e);
   e.next();
+}, "messages");
+
+// Live (lib/live.js): each message once to everyone listening who can see its room, once committed. A failure to send
+// is logged, never the save's: the apps load what they missed when they reconnect.
+onRecordAfterCreateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "create");
+}, "messages");
+onRecordAfterUpdateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "update");
+}, "messages");
+onRecordAfterDeleteSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "delete");
 }, "messages");
 
 // Committed (with the message that queued it): the workers look at it now, not on their next look round.

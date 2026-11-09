@@ -13,7 +13,8 @@ import { ACCEPT, MEDIA } from "../../web/src/views/collection/shared.ts";
 /** A constant of a hooks module, read from its source (paths from the repo root): the modules need PocketBase's runtime to load. */
 function hookConst(file: string, name: string): unknown {
   const src = readFileSync(`pb_hooks/${file}`, "utf8");
-  const m = new RegExp(`^const ${name} = (.+);$`, "m").exec(src);
+  // The value may be on the next line, as the formatter puts a long one.
+  const m = new RegExp(`^const ${name} =\\s*([^;]+);$`, "m").exec(src);
   if (!m) throw new Error(`${name} not in pb_hooks/${file}`);
   return JSON.parse(m[1]!);
 }
@@ -36,6 +37,10 @@ describe("shared contract", () => {
   it("the hooks' limits are the contract's", () => {
     expect(hookConst("lib/bulk.js", "MAX_MESSAGES")).toBe(contract.limits.maxSelected);
     expect(hookConst("lib/access.js", "MAX_MEMBERS")).toBe(contract.limits.roomMembers);
+  });
+
+  it("live messages (pb_hooks/lib/live.js) carry the fields the apps ask for", () => {
+    expect(hookConst("lib/live.js", "FIELDS")).toBe(contract.fields.message);
   });
 
   it("the web and the server's shared files (pb_hooks/lib/files.js: the media grid, the worker) show the same files inline", () => {

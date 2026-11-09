@@ -35,6 +35,8 @@ const KINDS = {
  * @param {core.RequestEvent} e
  */
 function rooms(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const me = e.auth && !e.auth.isSuperuser() ? e.auth.id : "";
   const where = e.hasSuperuserAuth() ? "1" : me ? SEES_SQL : "r.visibility = 'open' AND NOT r.archived";
   const rows = arrayOf(new DynamicModel({ id: "" }));
@@ -59,6 +61,8 @@ function rooms(e) {
  * @param {core.RequestEvent} e
  */
 function messages(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const roomId = e.request?.pathValue("room") ?? "";
   const q = e.requestInfo().query;
   // Own keys only: "toString" and the like are the object's too (QA BUG-171).
@@ -123,6 +127,8 @@ function searchWhere(text, params) {
  * @param {core.RequestEvent} e
  */
 function notifiable(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const q = e.requestInfo().query;
   if (!q.since) throw new BadRequestError("Missing since.");
   const me = e.auth?.id ?? "";

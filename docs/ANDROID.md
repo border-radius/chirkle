@@ -1544,3 +1544,18 @@ raised `#232428` (`surfaceContainer`), text `#ecece8`, `muted` `#b0b4ba`, `dim` 
 `#2a2c30`, and one lavender `#a58bff` for both the accent text (`primary`) and the fill (`primaryContainer`,
 `ChirkleColors.fill`). The fill is light now, so what is on it is ink `#16181a`: the new `ChirkleColors.onFill`
 (white in light) for unread badges, a collection's new count and the send icon. Light is unchanged.
+
+## 56. Live messages on one topic (2026-11-09)
+
+The server sends each message once, on `chat/messages`, to everyone who can see its room (pb_hooks/lib/live.js,
+PERF.md §7). It no longer runs its JS enrich hook once for each listener of `messages/*`, which with 100 people
+listening made each message and reaction take seconds. `ChirkleApi.subscribeMessages` and `subscribeAllMessages`
+listen to that topic: the room's subscription keeps the events of its room, and the activity reads the same events.
+The app asks `GET /api/chat/live` once per server. On a 404 (a server from before) it subscribes to the messages
+collection as it did. Events are the same records (the contract's message fields, `author` and `forwarded_from`
+expanded), so nothing above `ChirkleApi` changed.
+
+Tests: `LegacyServerTest` "with a server from before live messages…" (the same events from both servers, one
+`/api/chat/live` each; `TestServer.legacyUrl` drops that route too), `ChirkleApiTest` realtime, and every screen
+test that waits for a live message. Server: `tests/integration/live.test.ts`, `access.matrix.test.ts` (live
+messages as one more way in).

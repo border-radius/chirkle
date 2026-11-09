@@ -259,10 +259,11 @@ export const MSG_FIELDS =
   "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name";
 const MSG_OPTS = { expand: "author,reply_to.author,forwarded_from", fields: MSG_FIELDS } as const;
 /**
- * Live events: without the message a reply answers, which costs the server ~5 ms a client for every reply (docs/PERF.md
- * §2.3). The room fills the quote in (views/room/controller.ts).
+ * Live messages (pb_hooks/lib/live.js, docs/PERF.md §7): the server sends each message once on this topic to everyone who
+ * can see its room, expanded with `author` and `forwarded_from` but not the message a reply answers (the room fills the
+ * quote in, views/room/controller.ts). A room's subscription and the activity of all rooms both listen to it.
  */
-const LIVE_OPTS = { expand: "author,forwarded_from", fields: MSG_FIELDS } as const;
+const LIVE_TOPIC = "chat/messages";
 /** Rooms with their members' public profile (DMs, §16.5); never emails. */
 export const ROOM_FIELDS =
   "id,name,archived,created_by,kind,visibility,members,posting,writers,last_message_at,created,shared," +
@@ -423,6 +424,13 @@ export function createApi(client: PbClient): Api {
         },
         query,
       ),
+    );
+  const live = (fn: (action: Action, m: Message) => void) =>
+    wrap(
+      pb.realtime.subscribe(LIVE_TOPIC, (e) => {
+        const { action, record } = e as { action: Action; record: Message };
+        fn(action, record);
+      }),
     );
   const me = () => {
     const u = api.currentUser();
@@ -610,10 +618,11 @@ export function createApi(client: PbClient): Api {
     request: (path, r) => wrap(pb.send(path, r)),
     media: (room, after, signal) => wrap(pb.send<MediaPage>(`/api/chat/media/${room}`, { query: after, signal })),
 
-    subscribeMessages: (room, fn) => subscribe("messages", fn, { ...LIVE_OPTS, filter: pb.filter("room = {:room}", { room }) }),
+    subscribeMessages: (room, fn) => live((action, m) => m.room === room && fn(action, m)),
     subscribeRooms: (fn) => subscribe("rooms", fn, ROOM_OPTS),
     subscribeHidden: (fn) => subscribe("hidden_rooms", fn, { fields: HIDDEN_FIELDS }),
-    subscribeAllMessages: (fn) => subscribe("messages", fn, { fields: ACTIVITY_FIELDS }),
+    subscribeAllMessages: (fn) =>
+      live((action, m) => fn(action, { id: m.id, room: m.room, author: m.author, deleted: m.deleted, reply_to: m.reply_to ?? "" })),
     subscribeReads: (fn) => subscribe("room_reads", fn, { fields: HIDDEN_FIELDS }),
 
     onConnect(fn) {

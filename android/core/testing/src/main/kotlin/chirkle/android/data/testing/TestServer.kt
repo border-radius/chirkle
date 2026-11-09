@@ -33,9 +33,9 @@ object TestServer {
     val url: String by lazy { start(File(root, "pb_hooks")) }
 
     /**
-     * A server from before the list routes (docs/API.md, pb_hooks/lib/lists.js), which the app falls back from: an old
-     * release's hooks when `chirkle.legacyHooks` names them (-Pchirkle.legacyHooks=…), else these hooks without the
-     * routes. The same migrations.
+     * A server from before the list routes (docs/API.md, pb_hooks/lib/lists.js) and live messages (GET /api/chat/live,
+     * pb_hooks/lib/live.js), which the app falls back from: an old release's hooks when `chirkle.legacyHooks` names them
+     * (-Pchirkle.legacyHooks=…), else these hooks without those routes. The same migrations.
      */
     val legacyUrl: String by lazy {
         start(System.getProperty("chirkle.legacyHooks")?.let(::File) ?: withoutListRoutes())
@@ -47,7 +47,7 @@ object TestServer {
         Runtime.getRuntime().addShutdownHook(Thread { dir.deleteRecursively() })
         val main = File(dir, "main.pb.js")
         val lines = main.readLines()
-        val kept = lines.filterNot { "lib/lists.js" in it && it.startsWith("routerAdd(") }
+        val kept = lines.filterNot { ("lib/lists.js" in it || "lib/live.js" in it) && it.startsWith("routerAdd(") }
         check(kept.size < lines.size) { "No list routes in main.pb.js" }
         main.writeText(kept.joinToString("\n"))
         return dir

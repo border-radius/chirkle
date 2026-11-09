@@ -56,9 +56,12 @@ private val MSG_OPTS = mapOf("expand" to "author,reply_to.author,forwarded_from"
 
 /**
  * Live events: without the message a reply answers, which costs the server ~5 ms a client for every reply (docs/PERF.md
- * §2.3). The room fills the quote in (RoomController). The web's LIVE_OPTS.
+ * §2.3). The room fills the quote in (RoomController). Only for a server from before GET /api/chat/live (LIVE_TOPIC).
  */
 private val LIVE_OPTS = mapOf("expand" to "author,forwarded_from", "fields" to MSG_FIELDS)
+
+/** Where a server sends each message once to everyone who can see its room (pb_hooks/lib/live.js, docs/PERF.md §7). */
+private const val LIVE_TOPIC = "chat/messages"
 
 const val ROOM_FIELDS =
     "id,name,archived,created_by,kind,visibility,members,posting,writers,last_message_at,created,shared," +
@@ -703,31 +706,63 @@ class ChirkleApi(val pb: PbClient) {
 
     // ---- realtime
 
+    /** A record event ({ action, record }) as a [Change], or null for one this app doesn't read. */
+    private fun <T> changeOf(e: JsonObject, s: KSerializer<T>): Change<T>? {
+        val action = when ((e["action"] as? JsonPrimitive)?.content) {
+            "create" -> Action.Create
+            "update" -> Action.Update
+            "delete" -> Action.Delete
+            else -> return null
+        }
+        val record = runCatching { PbJson.decodeFromJsonElement(s, e["record"] ?: return null) }.getOrNull() ?: return null
+        return Change(action, record)
+    }
+
     private suspend fun <T> subscribe(collection: String, query: Map<String, String>, s: KSerializer<T>, fn: (Change<T>) -> Unit): Unsubscribe =
         try {
-            pb.realtime.subscribe("$collection/*", query) { e ->
-                val action = when ((e["action"] as? JsonPrimitive)?.content) {
-                    "create" -> Action.Create
-                    "update" -> Action.Update
-                    "delete" -> Action.Delete
-                    else -> return@subscribe
-                }
-                val record = runCatching { PbJson.decodeFromJsonElement(s, e["record"] ?: return@subscribe) }.getOrNull() ?: return@subscribe
-                fn(Change(action, record))
+            pb.realtime.subscribe("$collection/*", query) { e -> changeOf(e, s)?.let(fn) }
+        } catch (e: Exception) {
+            throw e.toApiError()
+        }
+
+    /**
+     * Does this server send live messages on [LIVE_TOPIC] (GET /api/chat/live, docs/PERF.md §7)? One from before doesn't
+     * (404): the app then subscribes to the messages collection as it did, which costs that server a JS call for each listener.
+     */
+    @Volatile private var liveTopic: Boolean? = null
+
+    private suspend fun hasLiveTopic(): Boolean =
+        liveTopic ?: try {
+            call("/api/chat/live")
+            true
+        } catch (e: ApiError) {
+            if (e.status != 404) throw e
+            false
+        }.also { liveTopic = it }
+
+    /** Message events on [LIVE_TOPIC] whose record `keep` takes: one topic for a room's events and for all activity. */
+    private suspend fun <T> live(s: KSerializer<T>, keep: (JsonObject) -> Boolean, fn: (Change<T>) -> Unit): Unsubscribe =
+        try {
+            pb.realtime.subscribe(LIVE_TOPIC) { e ->
+                val record = e["record"] as? JsonObject ?: return@subscribe
+                if (keep(record)) changeOf(e, s)?.let(fn)
             }
         } catch (e: Exception) {
             throw e.toApiError()
         }
 
     suspend fun subscribeMessages(room: String, fn: (Change<Message>) -> Unit) =
-        subscribe("messages", LIVE_OPTS + ("filter" to pb.filter("room = {:room}", mapOf("room" to room))), Message.serializer(), fn)
+        if (hasLiveTopic()) live(Message.serializer(), { (it["room"] as? JsonPrimitive)?.content == room }, fn)
+        else subscribe("messages", LIVE_OPTS + ("filter" to pb.filter("room = {:room}", mapOf("room" to room))), Message.serializer(), fn)
 
     suspend fun subscribeRooms(fn: (Change<Room>) -> Unit) = subscribe("rooms", ROOM_OPTS, Room.serializer(), fn)
 
     suspend fun subscribeHidden(fn: (Change<RoomRow>) -> Unit) = subscribe("hidden_rooms", mapOf("fields" to ROW_FIELDS), RoomRow.serializer(), fn)
 
     /** Every message event in every room you can see, without text or files (§18.3). */
-    suspend fun subscribeAllMessages(fn: (Change<Activity>) -> Unit) = subscribe("messages", mapOf("fields" to ACTIVITY_FIELDS), Activity.serializer(), fn)
+    suspend fun subscribeAllMessages(fn: (Change<Activity>) -> Unit) =
+        if (hasLiveTopic()) live(Activity.serializer(), { true }, fn)
+        else subscribe("messages", mapOf("fields" to ACTIVITY_FIELDS), Activity.serializer(), fn)
 
     /** Your own room_reads rows, e.g. written on another device. */
     suspend fun subscribeReads(fn: (Change<RoomRow>) -> Unit) = subscribe("room_reads", mapOf("fields" to ROW_FIELDS), RoomRow.serializer(), fn)

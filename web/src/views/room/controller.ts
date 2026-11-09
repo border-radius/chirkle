@@ -551,7 +551,7 @@ export function createRoomController(opts: {
   const withQuote = (m: Message, q: Quoted): Message => ({ ...m, expand: { ...m.expand, reply_to: quoteOf(q) } });
 
   /**
-   * Live events come without the message a reply answers (api.ts LIVE_OPTS): the quote is the copy in the window, or
+   * Live events come without the message a reply answers (api.ts LIVE_TOPIC): the quote is the copy in the window, or
    * the one the message had there; failing both (a reply to a message far back), it is fetched.
    */
   function quoted(m: Message): Message {

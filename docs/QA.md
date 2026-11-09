@@ -2682,3 +2682,24 @@ KB: its budget was raised from 2 KB to 2.05 KB (DESIGN.md §7.7, the user's "rai
 - Server: no change, integration tests not rerun.
 - Build: every budget met: `app.js` 49.04/49.75 KB, `app.css` 11.04/11.25 KB, collections 6.72/6.75 KB and
   2.01/2.05 KB (raised), media 1.87/3 KB and 0.71/1 KB.
+
+## BUG-250 (2026-11-09, user report)
+
+| ID | Severity | Area | Problem | Status |
+|---|---|---|---|---|
+| BUG-250 | High | Server | autism.th61.com was slow at about 20% CPU: room pages took 0.2–0.6 s, then 6–46 s in bursts; 8 opened at once took 10–34 s each, while `/api/health` and the other routes stayed at about 140 ms | Fixed |
+
+**BUG-250:** four router middlewares in `main.pb.js` had JS handlers (headers, the body limit, the anonymous rooms'
+probe check, files). PocketBase runs a JS handler in a runtime from its pool (`--hooksPool=100`), and a middleware keeps
+it until `e.next()` returns, which is the whole request. So each open realtime connection held 4 runtimes for as long
+as it stayed open, and each file on its way from S3 (0.3–1 s, more when 10–20 load at once) held 4 too. Room pages
+enrich each message with a JS hook, one runtime per call: with the pool taken, each call made a new runtime (PERF.md
+§2.1). Locally, 25 open realtime connections were enough: a page went from 23 to 87 ms with nothing else running.
+Fixed by having no JS router middleware (PERF.md §6): the headers are set by the routes that serve pages, PocketBase's
+own limit sizes each create and update by the collection's fields (DESIGN.md §17.1), the probe check is in the record
+request hooks and the routes that enrich, and messages' and items' files have routes of their own. With 120 realtime
+connections open a page is 23 ms, as with none. Tests: `tests/unit/build/hooks.test.ts` (no `routerUse` with a JS
+handler), `anonymous.test.ts` (the probe check on an auth refresh, an update and our lists; it ran on every request
+before), `messages.files.test.ts` (an avatar over the users route's limit is a 413). Files are served by collection
+name only, as the apps and DESIGN.md §37.2 have them: `/api/files/{collection id}/…` (the PocketBase SDK's
+`files.getURL`) is a 404 for messages' and items' files now, and tests build names (`helpers.ts` `byName`).

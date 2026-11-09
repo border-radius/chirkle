@@ -10,7 +10,7 @@ import { PNG } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
 import { disableRateLimits, enableFederation, freePort, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 import { runSql } from "../support/sql.ts";
-import { sleep, status } from "./helpers.ts";
+import { byName, sleep, status } from "./helpers.ts";
 
 interface Instance {
   server: PocketBaseServer;
@@ -518,7 +518,7 @@ describe("a shared public room (§33.5)", () => {
     });
     expect(Object.values(copy.file_names)).toEqual(["dot.png"]);
     const token = await B.admin.files.getToken();
-    const res = await fetch(B.admin.files.getURL(copy, copy.files[0], { token }));
+    const res = await fetch(B.admin.files.getURL(byName(copy), copy.files[0], { token }));
     expect(res.status).toBe(200);
     expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(PNG))).toBe(true);
   }, 60_000);

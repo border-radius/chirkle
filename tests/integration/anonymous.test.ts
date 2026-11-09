@@ -147,9 +147,15 @@ describe("anonymous rooms (§35)", () => {
       () => b.pb.collection("messages").getList(1, 10, { filter: `forwarded_from != ""` }),
       () => b.pb.collection("users").getList(1, 10, { filter: `messages_via_author.room ?= "${room.id}"` }),
       () => b.pb.collection("users").getOne(a.user.id, { expand: "messages_via_author" }),
-      () => b.pb.collection("rooms").getList(1, 10, { filter: `@collection.messages.author ?= "${a.user.id}"` }),
+      // Every route that answers with records takes the expand: an auth answer, a save, and our own lists.
+      () => b.pb.collection("users").authRefresh({ expand: "messages_via_author" }),
+      () => b.pb.collection("users").update(b.user.id, { name: "B" }, { expand: "messages_via_author" }),
+      () => b.pb.send("/api/chat/rooms", { query: { expand: "created_by.messages_via_author" } }),
+      () => b.pb.send(`/api/chat/rooms/${room.id}/messages`, { query: { expand: "author.messages_via_author" } }),
     ];
-    for (const call of refused) expect(await status(call())).toBe(400);
+    for (const [i, call] of refused.entries()) expect(await status(call()), `refused[${i}]`).toBe(400);
+    // PocketBase's own refusal, before any hook of ours: only superusers filter by @collection.
+    expect(await status(b.pb.collection("rooms").getList(1, 10, { filter: `@collection.messages.author ?= "${a.user.id}"` }))).toBe(403);
     // Spelled with escapes, it is still the field.
     const escaped = await fetch(`${b.pb.baseURL}/api/collections/messages/records?filter=%61uthor%3D%22${a.user.id}%22`, {
       headers: { Authorization: b.pb.authStore.token },

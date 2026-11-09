@@ -317,7 +317,7 @@ loads the files in (by name).
 - **Edit stamp:** on a `messages` update where `text` actually changed (and it isn't a delete), set `edited_at = now`. An update that doesn't change the text leaves it untouched.
 - **Archive stamp:** on a `rooms` update, set `archived_at = now` when `archived` becomes true, and clear it when `archived` becomes false.
 - **Archived-room guard (defense in depth):** reject a message create, update or delete when the target room is archived. This repeats the API rule in case rule traversal through `@request.body.room.archived` behaves differently in the pinned PocketBase version. Integration tests cover both layers.
-- **Security headers** via `routerUse`: every response gets `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`. Static app paths also get `Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`. The hash allows index.html's one inline script, which sets the chosen theme before the first paint (§7.8). The CSP is *not* applied to `/api/*` or to the admin UI `/_/`, which sends its own CSP.
+- **Security headers**, set by the routes that serve the app (`lib/http.js` `headers`; not by a `routerUse` JS middleware, which would hold a JS runtime for every request, PERF.md §6): pages and the app's files get `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` (PocketBase sends nosniff with every API answer itself), and `Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`. The hash allows index.html's one inline script, which sets the chosen theme before the first paint (§7.8). The CSP is *not* applied to `/api/*` or to the admin UI `/_/`, which sends its own CSP.
 - **Cache headers:** `/assets/*` (content-hashed) gets `Cache-Control: public, max-age=31536000, immutable`. Every other static path, including `/` and `index.html`, gets `no-cache`.
 - **No `index.html` for a missing asset or API:** PocketBase serves `index.html` for any path that isn't a file (§7.1). Under `/assets/` (a route of ours, `GET /assets/{path...}`) a missing file is a 404 with `Cache-Control: no-store` instead: an old build's lazy chunk, asked for by a tab left open across a deploy, would otherwise get HTML (useless as a script) cached for a year under its hashed name. An unknown `/api/` path is a JSON 404 too, not the app's page.
 - **Rate limiting:** PocketBase's built-in limiter, enabled from the init migration. The limits are per client IP:
@@ -1363,12 +1363,13 @@ users (§26) have it, and a user may set it on their own record (the profile doe
 | `files` | file, multiple | `maxSelect` 10, `maxSize` 20 MB each (4 and 8 MB until 1760000018, raised to take a whole Telegram album, §26), **`protected: true`**, `thumbs`: `480x360` (center crop) and `240x180`. No `mimeTypes` allowlist: any file can be attached, because nothing is ever rendered from the file itself (§15 shared rules). |
 | `file_names` | json | stored name → original upload name, written only by the create hook from the uploads themselves (bidi and invisible characters removed, 200 characters max); cleared by a soft delete, never changed by an edit (QA BUG-28) |
 
-PocketBase's default request body limit (32 MB) doesn't fit 10 × 20 MB, and the records API is PocketBase's own, so
-one route can't get its own limit: `main.pb.js` replaces the default with 201 MB (`$apis.bodyLimit`, same middleware
-id), and a middleware (`lib/http.js` `bodyLimit`) holds any other request to 32 MB with PocketBase's own limiter,
-which counts what is read: 413 for one declaring more, and for a chunked one (no `Content-Length`) once it goes over
-(QA BUG-143; it went through to 201 MB, guests' logins too). Chunked bodies are still taken: the Android app sends
-one when it can't tell a file's size. Tests pin all three.
+PocketBase's default request body limit is 32 MB, and it sizes a collection's record create and update by their fields:
+32 MB plus each file field's and JSON field's `maxSize`. `messages.files` is JSON with `maxSize` 10 × 20 MB (§37,
+QA BUG-219), so a message create takes 10 files of 20 MB, and every other route keeps about 32 MB. The limiter counts
+what is read: 413 for a body declaring more, and for a chunked one (no `Content-Length`) once it goes over (QA
+BUG-143). Chunked bodies are still taken: the Android app sends one when it can't tell a file's size. Tests pin all
+three. No JS middleware does any of this: a `routerUse` JS handler holds a JS runtime for the whole request, realtime
+connections and file downloads too (PERF.md §6).
 
 **Text becomes optional when files are attached:** the hook rule "text is non-empty" (§5.6) changes to "text is
 non-empty **or** at least one file is attached". A message with neither is still rejected.
@@ -1723,7 +1724,7 @@ Every message read (`page`, `getMessage`, `changes`, `send`) expands `author,rep
 only what the quote shows: `reply_to`, and the original's `id, author, text, deleted, files` and author's
 `id, name` (`MSG_FIELDS` in `api.ts`). The expand follows the messages view rule, which the same-room check makes
 always true for someone who can see the reply. `NewMessage.replyTo` sends `reply_to`. Live events don't expand it
-(`LIVE_OPTS`, docs/PERF.md §2.3): it costs the server ~5 ms a client for every reply. The room controller fills the
+(docs/PERF.md §2.3; since 2026-11-09 they come once per message on `chat/messages`, PERF.md §7). The room controller fills the
 quote in from the original in its window, or from its own copy of the reply, and fetches the original only when it has
 neither.
 
@@ -3363,8 +3364,10 @@ routes (`/api/chat/rooms/{room}/messages`, search, `notifiable`) and realtime. T
 
 Filtering or sorting by `author` or `forwarded_from` would show who wrote what, as would expanding the back-relations
 `messages_via_author` and `messages_via_forwarded_from`. Relations reach messages from any collection
-(`@collection.messages.author`, `messages_via_room.author`). So `refuseProbes` (`routerUse`, every request) and
-`refuseSubscriptionProbes` (realtime subscriptions' options) refuse those with 400, quoted values aside. Two cases are
+(`@collection.messages.author`, `messages_via_room.author`). So `refuseProbes` (the record request hooks: list, view,
+create, update and every auth answer; and the routes that enrich records, PERF.md §6) and `refuseSubscriptionProbes`
+(realtime subscriptions' options) refuse those with 400, quoted values aside. `@collection` filters are PocketBase's
+own 403 for anyone but superusers. Two cases are
 allowed:
 - Superusers.
 - An author compared with the caller's own id (`author != {:me}`, `reply_to.author = {:me}`), which says only which
@@ -3547,9 +3550,13 @@ reverses: the down migration copies each file back into its messages and items.
 ### 37.2 URLs
 
 Unchanged: `/api/files/messages/{message}/{name}` and `/api/files/collection_items/{item}/{name}`, with `?thumb=`.
-A router middleware (`files.serve`) answers them: if the message shows that name (its own, or a forward's original's,
-§21.3; not deleted) or the item has it, the path is pointed at the `files` row and PocketBase's own handler serves it
-(thumbnails, ranges, `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…` itself.
+Routes of their own (`files.serve`, more specific than PocketBase's `/api/files/{collection}/…`) answer them: if the
+message shows that name (its own, or a forward's original's, §21.3; not deleted) or the item has it, the `files` row's
+file is served as PocketBase's handler would serve it (thumbnails of the field's sizes or 100x100, made when first
+asked for; ranges; `download`; `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…`
+itself (`onFileDownloadRequest`). They go by collection name: with the collection's id (as the PocketBase SDK's
+`files.getURL` builds them) a message's or an item's file is a 404 since 2026-11-09. Not a router middleware, which
+would hold a JS runtime for every request (PERF.md §6, QA BUG-250).
 Posters (`/api/chat/posters/{message}/{file}`, `/api/chat/posters/items/{item}/{file}`) are checked the same way.
 
 ### 37.3 Access by URL

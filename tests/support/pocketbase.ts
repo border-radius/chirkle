@@ -33,6 +33,8 @@ export interface StartOptions {
   fixtureRoute?: boolean;
   /** Extra environment variables for the PocketBase process. */
   env?: Record<string, string>;
+  /** Hooks other than the repo's pb_hooks (scripts/stress.ts compares two). Not with fixtureRoute. */
+  hooksDir?: string;
 }
 
 /**
@@ -92,7 +94,7 @@ export async function startPocketBase(opts: StartOptions = {}): Promise<PocketBa
   const tmp = await mkdtemp(join(tmpdir(), "chirkle-pb-"));
   const dataDir = opts.dataDir ?? join(tmp, "pb_data");
   const publicDir = opts.publicDir ?? join(tmp, "pb_public");
-  const hooksDir = opts.fixtureRoute ? await hooksWithFixtureRoute(tmp) : join(root, "pb_hooks");
+  const hooksDir = opts.fixtureRoute ? await hooksWithFixtureRoute(tmp) : (opts.hooksDir ?? join(root, "pb_hooks"));
   const dirArgs = [
     `--dir=${dataDir}`,
     `--migrationsDir=${join(root, "pb_migrations")}`,

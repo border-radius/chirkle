@@ -67,12 +67,15 @@ against a current server and one without the routes (or an old release's hooks, 
 **Custom routes** (`pb_hooks/main.pb.js`, `federation.pb.js`):
 `/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `ban`, `forward`, `media/{room}`,
 `posters/{message}/{file}`, `posters/items/{item}/{file}`, `collections`, `badges`, `items`, `items/{id}`, `saved`,
-`subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
+`subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; by collection name, `/api/files/messages/…` and `/api/files/collection_items/…`, not by its id, since 2026-11-09; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
 `/.well-known/assetlinks.json`.
 
-**Realtime** (`/api/realtime`): `rooms`, `messages` (one room's, expanding `author,forwarded_from` but not
-`reply_to` since 2026-10-30; or every room's with `fields.activity`),
-`hidden_rooms`, `room_reads`, `collections`, `collection_subs`, `chat/badges` and `PB_CONNECT`. Every connected client
+**Realtime** (`/api/realtime`): `rooms`, `chat/messages` (since 2026-11-09, PERF.md §7: each message created, updated or
+deleted, once, to everyone who can see its room, as `{ action, record }` with `fields.message` and `author`,
+`forwarded_from` expanded; the web's room and activity both listen to it; the app asks `GET /api/chat/live` first,
+`{ "topic": "chat/messages" }`, and on a 404 subscribes as before), `messages` (still served, for apps from before:
+one room's, expanding `author,forwarded_from` but not `reply_to` since 2026-10-30; or every room's with
+`fields.activity`; each listener costs the server a JS call per message), `hidden_rooms`, `room_reads`, `collections`, `collection_subs`, `chat/badges` and `PB_CONNECT`. Every connected client
 also gets `chat/keepalive` (`{}`) every 3 minutes, so that PocketBase doesn't close a quiet connection; clients ignore
 it.
 

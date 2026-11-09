@@ -5,8 +5,8 @@
 //
 // - A message's `files` and an item's `file` hold stored names, as they did when they were file fields, so clients
 //   build the same URLs: /api/files/messages/{message}/{name} and /api/files/collection_items/{item}/{name}. serve()
-//   answers those with the shared file (PocketBase's own handler, the path pointed at the `files` row), checking only
-//   that the message or item still has it. No file token: whoever has the URL has the file (§37.3).
+//   (routes of their own, by collection name) answers those with the shared file, as PocketBase's handler would,
+//   checking only that the message or item still has it. No file token: whoever has the URL has the file (§37.3).
 // - `refs` counts the messages and items that name a file. link() and unlink() keep it in the same save; a file named
 //   by nothing is deleted, and PocketBase deletes what is stored once that is committed.
 // - The media worker (lib/media.js) makes each file's thumbnails and video poster once, whoever names it.
@@ -286,64 +286,56 @@ function shownBy(app, collection, id, name) {
   return shows ? byName(app, name) : null;
 }
 
-/**
- * GET /api/files/{collection}/{record}/{name} (a router middleware, before PocketBase's own route): a message's or a
- * collection item's file is served from its `files` row, by PocketBase's handler (thumbnails, ranges, the headers that
- * keep it from running as a page), the path pointed at that row. The token clients still send is ignored. 404 when
- * the message or item doesn't show it (deleted, taken out). The `files` rows themselves only through these. True when
- * it has answered (a file not moved yet), false to go on to PocketBase's route.
- * @param {core.RequestEvent} e
- * @returns {boolean}
- */
-function serve(e) {
-  const req = e.request;
-  if (!req || (req.method !== "GET" && req.method !== "HEAD")) return false;
-  const collection = req.pathValue("collection");
-  const id = req.pathValue("recordId");
-  const name = req.pathValue("filename");
-  if (!collection || !id || !name) return false;
-  let coll;
-  try {
-    coll = e.app.findCachedCollectionByNameOrId(collection);
-  } catch {
-    return false; // PocketBase answers 404
-  }
-  if (coll.name === "files") throw new NotFoundError();
-  if (coll.name !== "messages" && coll.name !== "collection_items") return false;
-  const row = shownBy(e.app, coll.name, id, name);
-  if (!row) throw new NotFoundError();
-  if (row.getString("src")) {
-    serveUnmoved(e, row);
-    return true;
-  }
-  req.setPathValue("collection", row.collection().id);
-  req.setPathValue("recordId", row.id);
-  return false;
-}
+/** The images PocketBase makes thumbnails of, and the size it makes for any file field besides the field's own. */
+const THUMB_EXT = ["jpg", "jpeg", "png", "gif", "webp"];
+const DEFAULT_THUMB = "100x100";
 
 /**
- * A file not moved to its folder yet, served from its old place (src): a thumbnail asked for if it is there (the old
- * folders have those that were ever asked for), else the file itself. PocketBase's handler would make a missing one,
- * but serves only a file field's own files. As it does, `download` makes it an attachment.
+ * GET /api/files/messages/{recordId}/{filename} and /api/files/collection_items/{recordId}/{filename}: a message's or
+ * a collection item's file, served from its `files` row (§37). Routes of their own, more specific than PocketBase's
+ * /api/files/{collection}/…, so no other request runs JS for this: a router middleware would hold a JS runtime for every
+ * request, realtime connections and file downloads too (docs/PERF.md §6). As PocketBase's handler does: `thumb` (one of
+ * the field's sizes, or 100x100) serves that thumbnail of an image, made when first asked for; `download` makes it an
+ * attachment; ranges, and the headers that keep a file from running as a page (fs.serve). The token clients still
+ * send is ignored. 404 when the message or item doesn't show it (deleted, taken out). A file not moved to its row's
+ * folder yet is served from its old place (`src`), with a thumbnail only if one is there already: those folders have
+ * the ones that were ever asked for. The `files` rows themselves are served only through these (main.pb.js).
  * @param {core.RequestEvent} e
- * @param {core.Record} row
+ * @param {"messages" | "collection_items"} collection
  */
-function serveUnmoved(e, row) {
-  const key = row.getString("src");
-  const name = row.getString("file");
-  const q = e.request?.url?.query();
+function serve(e, collection) {
+  const req = e.request;
+  const id = req?.pathValue("recordId") ?? "";
+  const name = req?.pathValue("filename") ?? "";
+  const row = shownBy(e.app, collection, id, name);
+  if (!row) throw new NotFoundError();
+  const moved = !row.getString("src");
+  const key = keyOf(row);
+  const file = row.getString("file");
+  const q = req?.url?.query();
   const thumb = q?.get("thumb") ?? "";
   const sizes = /** @type {any} */ (row.collection().fields.getByName("file")).thumbs ?? [];
   const fs = e.app.newFilesystem();
   try {
     let served = key;
-    if (thumb && sizes.includes(thumb) && isImage(name) && fs.exists(thumbKeyOf(key, thumb))) served = thumbKeyOf(key, thumb);
-    else if (!fs.exists(key)) throw new NotFoundError();
+    if (thumb && (thumb === DEFAULT_THUMB || sizes.includes(thumb)) && THUMB_EXT.includes(ext(file))) {
+      const at = thumbKeyOf(key, thumb);
+      if (fs.exists(at)) served = at;
+      else if (moved && fs.exists(key)) {
+        try {
+          fs.createThumb(key, at, thumb);
+          served = at;
+        } catch {
+          served = key; // as PocketBase does: the file itself when it can't make one
+        }
+      }
+    }
+    if (served === key && !fs.exists(key)) throw new NotFoundError();
     const download = q?.get("download") ?? "";
     if (download && download !== "0" && download !== "false") {
-      e.response.header().set("Content-Disposition", `attachment; filename=${name}`);
+      e.response.header().set("Content-Disposition", `attachment; filename=${file}`);
     }
-    fs.serve(e.response, /** @type {any} */ (e.request), served, name);
+    fs.serve(e.response, /** @type {any} */ (req), served, file);
   } finally {
     fs.close();
   }

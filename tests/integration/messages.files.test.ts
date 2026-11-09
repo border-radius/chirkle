@@ -55,9 +55,10 @@ describe("attachments (§17.1)", () => {
       Array.from({ length: 10 }, (_, i) => file(`b${i}.bin`, "application/octet-stream", 20 * 1024 * 1024)),
     );
     expect(m.files).toHaveLength(10);
-    // An avatar is not a message: PocketBase's default limit still holds.
+    // An avatar is not a message: PocketBase's own limit for the users route holds (its default, 32 MB, and the avatar's
+    // 2 MB: it sizes each collection's create and update by its fields).
     const big = new FormData();
-    big.append("avatar", file("big.png", "image/png", 33 * 1024 * 1024));
+    big.append("avatar", file("big.png", "image/png", 40 * 1024 * 1024));
     const res = await fetch(`${a.pb.baseURL}/api/collections/users/records/${a.user.id}`, {
       method: "PATCH",
       headers: { Authorization: a.pb.authStore.token },

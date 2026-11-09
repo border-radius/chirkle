@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   barrier,
+  byName,
   client,
   collect,
   eventually,
@@ -219,8 +220,8 @@ describe("Open Air rooms and guests (§23.3)", () => {
     const open = await roomWith(a, "open");
     const inOpen = await a.pb.collection("messages").create({ room: open.id, author: a.user.id, text: "", files: [pngFile()] });
     const shown = await client().collection("messages").getOne(inOpen.id);
-    expect((await fetch(a.pb.files.getURL(shown, shown.files[0]))).status).toBe(200);
-    expect((await fetch(a.pb.files.getURL(shown, shown.files[0], { thumb: "480x240f" }))).status).toBe(200);
+    expect((await fetch(a.pb.files.getURL(byName(shown), shown.files[0]))).status).toBe(200);
+    expect((await fetch(a.pb.files.getURL(byName(shown), shown.files[0], { thumb: "480x240f" }))).status).toBe(200);
   });
 
   it("guests get open rooms' messages live, and nothing from other rooms", async () => {
@@ -323,15 +324,15 @@ describe("probing a private room from outside (§23.1)", () => {
     const m = await a.pb.collection("messages").create({ room: room.id, author: a.user.id, text: "", files: [pngFile()] });
     expect(await status(c.pb.collection("messages").getOne(m.id))).toBe(404);
     const name = m.files[0] as string;
-    expect((await fetch(a.pb.files.getURL(m, name))).status).toBe(200);
+    expect((await fetch(a.pb.files.getURL(byName(m), name))).status).toBe(200);
     // The stored name's random part is the secret: the original name, or another suffix, finds nothing.
-    expect((await fetch(a.pb.files.getURL(m, "image.png"))).status).toBe(404);
-    expect((await fetch(a.pb.files.getURL(m, name.replace(/_[a-z0-9]+\./, "_aaaaaaaaaa.")))).status).toBe(404);
+    expect((await fetch(a.pb.files.getURL(byName(m), "image.png"))).status).toBe(404);
+    expect((await fetch(a.pb.files.getURL(byName(m), name.replace(/_[a-z0-9]+\./, "_aaaaaaaaaa.")))).status).toBe(404);
     // Nor through another message, nor the files collection itself.
     const other = await post(a, room.id, "no files");
-    expect((await fetch(a.pb.files.getURL(other, name))).status).toBe(404);
+    expect((await fetch(a.pb.files.getURL(byName(other), name))).status).toBe(404);
     await a.pb.collection("messages").update(m.id, { deleted: true });
-    expect((await fetch(a.pb.files.getURL(m, name))).status).toBe(404);
+    expect((await fetch(a.pb.files.getURL(byName(m), name))).status).toBe(404);
   });
 
   it("subscribing to it by id gets nothing, signed in or not", async () => {
