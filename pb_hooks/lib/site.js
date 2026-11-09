@@ -99,4 +99,4 @@ function assetLinks(e) {
   ]);
 }
 
-module.exports = { checkInvite, checkOAuth2Signup, manifest, assetLinks };
+module.exports = { siteOf, checkInvite, checkOAuth2Signup, manifest, assetLinks };

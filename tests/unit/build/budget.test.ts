@@ -19,6 +19,8 @@ describe("checkBudget", () => {
       notifyJs: 3 * 1024,
       emojiJs: 13 * 1024,
       emojiCss: 1024,
+      statsJs: 5.5 * 1024,
+      statsCss: 3.5 * 1024,
     });
   });
 
@@ -40,6 +42,8 @@ describe("checkBudget", () => {
         notifyJs: 1000,
         emojiJs: 1000,
         emojiCss: 500,
+        statsJs: 500,
+        statsCss: 500,
       }),
     ).toEqual([]);
   });
@@ -66,6 +70,8 @@ describe("checkBudget", () => {
         notifyJs: 10,
         emojiJs: 10,
         emojiCss: 10,
+        statsJs: 10,
+        statsCss: 10,
       }),
     ).toEqual(["js", "html", "viewerCss", "collCss"]);
   });
@@ -89,6 +95,8 @@ describe("formatSizes", () => {
       notifyJs: 1024,
       emojiJs: 1024,
       emojiCss: 512,
+      statsJs: 512,
+      statsCss: 512,
     });
     expect(out).toContain("js          2.00 KB / 49.75 KB");
     expect(out).toContain("viewerJs    1.00 KB / 4.00 KB");

@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -38,6 +38,8 @@ onRecordAuthRequest((e) => {
 });
 onRealtimeSubscribeRequest((e) => {
   require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
+  // Which app the connection is, and its account active today, for the statistics (§40).
+  require(`${__hooks}/lib/stats.js`).subscribed(e);
   e.next();
 });
 
@@ -54,6 +56,7 @@ onFileDownloadRequest(() => {
 // The app's pages (index.html at any path that isn't a file, §7.1) and its files, with their headers (§5.6).
 routerAdd("GET", "/{path...}", (e) => require(`${__hooks}/lib/http.js`).page(e));
 // Not the app's index.html for a missing asset or API.
+routerAdd("GET", "/stats", (e) => require(`${__hooks}/lib/http.js`).statsPage(e));
 routerAdd("GET", "/assets/{path...}", (e) => require(`${__hooks}/lib/http.js`).asset(e));
 routerAdd("GET", "/manifest.webmanifest", (e) => {
   require(`${__hooks}/lib/http.js`).headers(e);
@@ -90,6 +93,8 @@ routerAdd("DELETE", "/api/chat/items/{id}", (e) => require(`${__hooks}/lib/colle
 routerAdd("POST", "/api/chat/subs", (e) => require(`${__hooks}/lib/collections.js`).subscribe(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/subs/seen", (e) => require(`${__hooks}/lib/collections.js`).markSeen(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/keepalive/tick", (e) => require(`${__hooks}/lib/keepalive.js`).tick(e), $apis.requireSuperuserAuth());
+routerAdd("GET", "/api/chat/stats", (e) => require(`${__hooks}/lib/stats.js`).get(e));
+routerAdd("POST", "/api/stats/tick", (e) => require(`${__hooks}/lib/stats.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/media/tick", (e) => require(`${__hooks}/lib/media.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("GET", "/api/chat/users", (e) => require(`${__hooks}/lib/users.js`).searchUsers(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/password", (e) => require(`${__hooks}/lib/account.js`).changePassword(e), $apis.requireAuth("users"));
@@ -357,6 +362,13 @@ if (require(`${__hooks}/lib/previews.js`).enabled()) {
 // Quiet realtime connections kept open: PocketBase closes them after 5 minutes, and clients then load everything again
 // (lib/keepalive.js).
 cronAdd("keepalive", "*/3 * * * *", () => require(`${__hooks}/lib/keepalive.js`).run($app));
+
+// Usage statistics (§40): a sample of who is online every 5 minutes (unless site.no_stats), old rows dropped daily.
+// STATS_CRON=off leaves them to POST /api/stats/tick (tests).
+if ($os.getenv("STATS_CRON").trim().toLowerCase() !== "off") {
+  cronAdd("stats", "*/5 * * * *", () => require(`${__hooks}/lib/stats.js`).run($app));
+  cronAdd("stats-prune", "23 3 * * *", () => require(`${__hooks}/lib/stats.js`).prune($app));
+}
 
 // The media grid's thumbnails and video posters (§30.1): made by a worker, a minute's run at a time. MEDIA_CRON=off
 // leaves them to POST /api/media/tick (tests).

@@ -31,7 +31,7 @@ function headers(e) {
     if (/^\/assets\/.+-[A-Z0-9]{8}\.(js|css|woff2)(\.map)?$/.test(path)) h.set("Cache-Control", "public, max-age=31536000, immutable");
     else h.set("Cache-Control", "no-cache");
     // A page (the app's index.html, at any path without a file name): what it loads first.
-    if (e.request?.method === "GET" && !path.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(path)) {
+    if (e.request?.method === "GET" && path !== STATS_PATH && !path.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(path)) {
       const link = preloads();
       if (link) h.set("Link", link);
     }
@@ -135,4 +135,24 @@ function trustProxy(app) {
   app.save(settings);
 }
 
-module.exports = { headers, page, asset, trustProxy };
+/** The usage statistics page (§40): a page of its own, not the app's. */
+const STATS_PATH = "/stats";
+
+/**
+ * GET /stats: the statistics page (stats.html, built from web/stats.html), to anyone: it asks GET /api/chat/stats, which
+ * only moderators and superusers get. Not built yet (the dev build has it too): a 404.
+ * @param {core.RequestEvent} e
+ */
+function statsPage(e) {
+  headers(e);
+  /** @type {string} */
+  let html;
+  try {
+    html = toString($os.readFile($filepath.join(publicDir(), "stats.html")));
+  } catch {
+    throw new NotFoundError();
+  }
+  return e.html(200, html);
+}
+
+module.exports = { headers, page, asset, statsPage, trustProxy };

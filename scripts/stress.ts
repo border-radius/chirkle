@@ -353,7 +353,16 @@ try {
   for (const [name, e] of errors) if (!times.has(name)) rows.push({ action: name, n: 0, errors: e.n });
   console.table(rows);
   console.log(`steady state (after the first ${STEADY_AFTER_MS / 1000} s):`);
-  const steady = [...steadyTimes.entries()].sort().map(([action, xs]) => ({ action, n: xs.length, p50: round(pct(xs, 50)), p95: round(pct(xs, 95)), p99: round(pct(xs, 99)), max: round(pct(xs, 100)) }));
+  const steady = [...steadyTimes.entries()]
+    .sort()
+    .map(([action, xs]) => ({
+      action,
+      n: xs.length,
+      p50: round(pct(xs, 50)),
+      p95: round(pct(xs, 95)),
+      p99: round(pct(xs, 99)),
+      max: round(pct(xs, 100)),
+    }));
   console.table(steady);
   for (const [name, e] of errors) console.log(`errors in ${name}: ${e.n}, first: ${e.first}`);
   const expected = sent * USERS;

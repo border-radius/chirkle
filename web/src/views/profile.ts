@@ -311,6 +311,16 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
             },
             [h("h2", { id: `${vid}-pw-title` }, "Password"), pw.current.el, pw.next.el, pw.confirm.el, pwBtn, pwStatus],
           ),
+          // Moderators see the usage statistics (§40), a page of its own.
+          store.get().user?.moderator
+            ? h("section", { class: "card profile-session", "aria-labelledby": `${vid}-stats-title` }, [
+                h("div", {}, [
+                  h("h2", { id: `${vid}-stats-title` }, "Moderation"),
+                  h("p", { class: "field-status" }, "How many people are online and use the app, as counts."),
+                ]),
+                h("a", { href: "/stats" }, "Usage statistics"),
+              ])
+            : null,
           h("section", { class: "card profile-session", "aria-labelledby": `${vid}-session-title` }, [
             h("div", {}, [h("h2", { id: `${vid}-session-title` }, "Session"), signedIn]),
             h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, "Log out"),

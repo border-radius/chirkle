@@ -1560,3 +1560,11 @@ Tests: `LegacyServerTest` "with a server from before live messages…" (the same
 `/api/chat/live` each; `TestServer.legacyUrl` drops that route too), `ChirkleApiTest` realtime, and every screen
 test that waits for a live message. Server: `tests/integration/live.test.ts`, `access.matrix.test.ts` (live
 messages as one more way in).
+
+## 57. Usage statistics (server, 2026-11-09)
+
+The server counts who is online and how much the apps are used, for a web page moderators and superusers open
+(`/stats`, DESIGN.md §40). The app has no screen for it, on the user's choice, and nothing in it changed: its realtime
+connection is counted as Android because its subscribe request carries OkHttp's default User-Agent (`okhttp/…`).
+Setting a User-Agent of the app's own would need `stats.js appOf` to know it. The new `site.no_stats` field is hidden,
+so the app's read of `site` is unchanged. Server tests: `tests/integration/stats.test.ts`.

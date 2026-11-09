@@ -20,6 +20,8 @@ import {
   outputOf,
   SEARCH,
   STATIC_DIR,
+  STATS,
+  STATS_OPTIONS,
   SW_OPTIONS,
   staticImports,
   VIEWER,
@@ -76,6 +78,14 @@ await cp(STATIC_DIR, OUTDIR, { recursive: true });
 const html = injectAssets(await readFile("web/index.html", "utf8"), { ...assets, font: latinFont(result.metafile, OUTDIR) });
 await writeFile(`${OUTDIR}/index.html`, html);
 
+// The statistics page (§40), built on its own.
+const stats = await esbuild.build({ ...STATS_OPTIONS, ...shared });
+const statsAssets = entryOutputs(stats.metafile, OUTDIR, STATS);
+await writeFile(
+  `${OUTDIR}/stats.html`,
+  injectAssets(await readFile(STATS.html, "utf8"), { ...statsAssets, font: latinFont(stats.metafile, OUTDIR) }),
+);
+
 const gz = async (/** @type {string} */ path) => gzipSync(await readFile(path), { level: 9 }).length;
 const sizes = {
   js: await gz(`${OUTDIR}/${assets.js}`),
@@ -93,6 +103,8 @@ const sizes = {
   notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
   emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
   emojiCss: await gz(`${OUTDIR}/${emojiCssPath}`),
+  statsJs: await gz(`${OUTDIR}/${statsAssets.js}`),
+  statsCss: await gz(`${OUTDIR}/${statsAssets.css}`),
 };
 
 console.log(`built ${OUTDIR}/ (gzipped):\n${formatSizes(sizes)}`);

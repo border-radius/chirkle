@@ -46,6 +46,12 @@ through `POST /api/chat/delete` (the records API still allows only the author) a
 access and `archived` through the records API, as its creator does. `POST /api/chat/ban { user, banned }` is theirs
 only.
 
+Since 2026-11-09 (usage statistics, DESIGN.md §40) `site` has `no_stats` (hidden), and the realtime subscribe
+request's User-Agent says which app a connection is (the app's OkHttp default, `okhttp/…`: keep it, or the app is
+counted as neither). `GET /api/chat/stats?tz=<minutes east of UTC>` answers moderators and superusers (403 otherwise)
+with counts only; the web's `/stats` page uses it, the app doesn't. `stats_samples` and `stats_activity` have no
+API rules.
+
 The clients send filters in PocketBase's filter syntax. Apps from before 2026-10-29 name the fields `room`, `created`,
 `id`, `updated`, `files`, `forward_of`, `text_key`, `author`, `deleted`, `room.kind`, `reply_to.author` and
 `collection`; apps from then on (with a current server) only `id` (users), `room` (`room_reads`, the live room),
