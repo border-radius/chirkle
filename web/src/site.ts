@@ -12,7 +12,7 @@ export function cachedSite(storage: Storage | null): Site | null {
   try {
     const v = JSON.parse(storage?.getItem(KEY) ?? "null") as Partial<Site> | null;
     if (!v || typeof v.title !== "string" || !v.title || typeof v.logo !== "string" || typeof v.inviteOnly !== "boolean") return null;
-    return { title: v.title, logo: v.logo, inviteOnly: v.inviteOnly };
+    return { title: v.title, logo: v.logo, inviteOnly: v.inviteOnly, passwordReset: v.passwordReset === true };
   } catch {
     return null;
   }
@@ -27,7 +27,12 @@ export function startSite(api: Api, store: Store<AppState>, storage: Storage | n
     (site) => {
       if (ac.signal.aborted) return;
       const cur = store.get().site;
-      if (site.title !== cur.title || site.logo !== cur.logo || site.inviteOnly !== cur.inviteOnly) store.set({ site });
+      const changed =
+        site.title !== cur.title ||
+        site.logo !== cur.logo ||
+        site.inviteOnly !== cur.inviteOnly ||
+        site.passwordReset !== cur.passwordReset;
+      if (changed) store.set({ site });
       try {
         // Storage can throw (quota, disabled in a private window): the cache is a convenience.
         if (site === DEFAULT_SITE) storage?.removeItem(KEY);

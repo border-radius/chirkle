@@ -3440,6 +3440,12 @@
       "audience": "@guest",
       "duration": 60,
       "maxRequests": 20
+    },
+    {
+      "label": "users:requestPasswordReset",
+      "audience": "",
+      "duration": 600,
+      "maxRequests": 5
     }
   ]
 }

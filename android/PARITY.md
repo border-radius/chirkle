@@ -5,7 +5,7 @@ without an entry here fails review. **Covered**: the scenario runs on the app's 
 PocketBase). **Partial**: the behaviour is tested below the screens (API, services, room controller), or only some of
 the spec's cases are. **Not yet**: no Android test.
 
-Test classes: `UiFlowTest`, `UiFeaturesTest`, `UiPortsTest`, `UiCollectionsTest`, `UiNotifyTest`, `UiLinkedTest`, `RoutesTest` (`app/src/test`); `ServicesTest`, `ChirkleApiTest`, `CollectionsTest`, `NotifyCheckTest`, the
+Test classes: `UiFlowTest`, `UiFeaturesTest`, `UiPortsTest`, `UiPasswordResetTest`, `UiCollectionsTest`, `UiNotifyTest`, `UiLinkedTest`, `RoutesTest` (`app/src/test`); `ServicesTest`, `ChirkleApiTest`, `CollectionsTest`, `NotifyCheckTest`, the
 `lib` tests (`core/data/src/test`), among them `ContractTest`, `VectorsTest`, `WindowVectorsTest` and `LegacyPagesTest`, which run the web's shared
 contract and vectors (`shared/`, docs/API.md); and `RoomScenariosTest` (`core/data`, repo), which replays the web room
 controller's recorded scenarios (`shared/vectors/room.json`).
@@ -16,6 +16,7 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | `signup` | `UiFeaturesTest`: signing up logs you in; `ChirkleApiTest`: sign up | Covered |
 | `session` | `UiFlowTest`: a wrong password says so; `ServicesTest`: logging out clears the session's data, and so does a session that ran out while the app was closed (QA BUG-145, web: `app.test.ts`); a session revoked elsewhere ends on coming back or when a room of yours "doesn't exist" (QA BUG-183) | Partial: two sessions |
 | `accounts` | `UiFeaturesTest`: renaming yourself | Partial: password change |
+| `password_reset` | `UiPasswordResetTest`: "Forgot password?" only with mail settings, the form sends the link and says where it went; setting the new password is the web page's (the link opens in the browser) | Covered |
 | `avatar` | — | Not yet (the photo picker can't be driven on Robolectric; changed by hand on the emulator, ANDROID.md §22.3) |
 | `realtime` | `UiFlowTest`: a live message; `ServicesTest`, `ChirkleApiTest`: realtime events | Covered |
 | `reconnect` | `ChirkleApiTest`: reconnect after a pause says events may have been missed | Partial: gap fill after it |

@@ -202,6 +202,8 @@ export interface Site {
   logo: string;
   /** Signing up needs an invite code. */
   inviteOnly: boolean;
+  /** The server emails password reset links: "Forgot password?" is offered (§39). */
+  passwordReset: boolean;
 }
 
 /** A row of the "Mentions & replies" inbox (§41, GET /api/chat/inbox). */
@@ -233,4 +235,4 @@ export interface InboxEvent {
 }
 
 /** What the app shows before (or without) the site record. */
-export const DEFAULT_SITE: Site = { title: "Chirkle", logo: "", inviteOnly: false };
+export const DEFAULT_SITE: Site = { title: "Chirkle", logo: "", inviteOnly: false, passwordReset: false };

@@ -83,4 +83,16 @@ function findLoginByEmail(e) {
   }
 }
 
-module.exports = { beforeUserSave, findLoginByEmail, searchUsers };
+/**
+ * users request-password-reset (§39): no email to a stand-in (Telegram, another instance): its address is made
+ * up (`….invalid`) and nobody can log in as it. Answered like any other request, as PocketBase does for an unknown
+ * address, so it doesn't tell which addresses have accounts. Only called for an address that matched: PocketBase
+ * answers an unknown one before the hooks, so the clients send it in lower case, the way emails are stored (QA BUG-47).
+ * @param {core.RecordRequestPasswordResetRequestEvent} e
+ */
+function skipStandInReset(e) {
+  if (e.record?.getString("email").endsWith(".invalid")) return e.noContent(204);
+  return e.next();
+}
+
+module.exports = { beforeUserSave, findLoginByEmail, searchUsers, skipStandInReset };

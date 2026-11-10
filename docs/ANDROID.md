@@ -1629,3 +1629,26 @@ docs/QA.md "QA pass 34".
   keyboard had pushed the top bar and the messages off and squashed the field.
 - **BUG-254:** `InboxScreen` listens to `chat/inbox` while open and drops a row taken away (`ChirkleApi.subscribeInbox`
   now hands over `InboxEvent`). `UiMentionsTest`.
+
+## 62. Forgot password (2026-11-08)
+
+DESIGN.md §39, ported the same day. While the site says `password_reset` (`Site.passwordReset`, from `SITE_FIELDS`;
+false from an older server, which doesn't send it), Log in shows "Forgot password?" under the password. It opens
+`AuthMode.Forgot` on the same screen, without the tabs: the email (the one typed to log in), "Send link"
+(`ChirkleApi.requestPasswordReset`, the address in lower case), then "If an account uses …, a link to set a new
+password is on its way. It works for 30 minutes." "Back to log in" returns. The emailed link isn't one of the app's
+(`/r/`, `/c/`), so it opens the web app's Set a new password page in the browser; the app's session on that account
+ends with every other, and the app asks to log in again as for a password changed elsewhere.
+
+Tests: `UiPasswordResetTest` (the site's flag and the request against the test server, the form on the screen, no
+link without mail settings).
+
+## 63. Forgetting an account mid-request (2026-11-10)
+
+CI's `UiAccountsTest` (switching accounts while requests are in flight) failed once with `SQLException: connection is
+closed`, the same crash as §48 by another way: a new account left before logging in is forgotten, its database closes,
+and a database call still running in its stopped services fails with that, not with a cancellation. The services'
+scopes (`appScope` and each `Run`) are `endingScope`s now: an error after the scope was cancelled is dropped, since
+that work is thrown away anyway. An error while the scope runs still ends the app, as before.
+
+Tests: `EndingScopeTest` (dropped after the cancel, not before), `UiAccountsTest`.

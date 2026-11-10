@@ -292,3 +292,106 @@ describe("login view: the site's branding and invite-only signups (§24)", () =>
     await vi.waitFor(() => expect(alertText(root)).toBe("Enter your invite code."));
   });
 });
+
+describe("forgot password (§39)", () => {
+  let root: HTMLElement;
+  let onLogin: (u: User) => void;
+
+  beforeEach(() => {
+    root = document.createElement("main");
+    document.body.append(root);
+    onLogin = vi.fn();
+  });
+  afterEach(() => {
+    root.remove();
+    vi.restoreAllMocks();
+  });
+
+  const mount = (opts: { site?: Partial<Site>; mode?: "login" | "reset"; token?: string }, api = newApi()) => {
+    const store = createStore<AppState>({ ...initialState(), site: { ...DEFAULT_SITE, ...opts.site } });
+    const view = createLoginView({ kit: LOGIN_KIT, api, onLogin, store, mode: opts.mode ?? "login" });
+    view.mount(root, opts.token ? { token: opts.token } : {});
+    return { view, api, store };
+  };
+  const button = (name: string) => [...root.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === name);
+  /** A token shaped like PocketBase's: its claims carry the email. */
+  const tokenFor = (email: string) => `x.${btoa(JSON.stringify({ email, type: "passwordReset" })).replace(/=+$/, "")}.sig`;
+
+  it("is offered only while the server sends email", () => {
+    const { store } = mount({});
+    expect(button("Forgot password?")).toBeUndefined();
+    store.set({ site: { ...DEFAULT_SITE, passwordReset: true } });
+    expect(button("Forgot password?")).toBeDefined();
+    tab(root, "Sign up").click();
+    expect(button("Forgot password?")).toBeUndefined();
+  });
+
+  it("asks for the email (the one typed to log in), sends the link, and says where it went", async () => {
+    const api = newApi();
+    let sent = "";
+    intercept(api, "requestPasswordReset", () => async (email) => {
+      sent = email;
+    });
+    mount({ site: { passwordReset: true } }, api);
+    fill(root, { email: "ada@test.local" });
+    button("Forgot password?")!.click();
+    expect(root.querySelector("h2")!.textContent).toBe("Reset password");
+    expect(root.querySelector('[role="tablist"]')).toBeNull();
+    expect(fieldNames(root)).toEqual(["email"]);
+    expect(root.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe("ada@test.local");
+    submit(root);
+    await vi.waitFor(() => expect(root.querySelector('[role="status"]')!.textContent).toContain("If an account uses ada@test.local"));
+    expect(sent).toBe("ada@test.local");
+    expect(root.querySelector("form")).toBeNull();
+    button("Back to log in")!.click();
+    expect(tab(root, "Log in").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("the API sends the address in lower case, as emails are stored (QA BUG-47)", async () => {
+    const api = newApi();
+    await api.requestPasswordReset("  Ada@Test.Local ");
+    // Resolves, as for every address: nothing tells whether it has an account.
+    await expect(api.requestPasswordReset(`${uniq()}@test.local`)).resolves.toBeUndefined();
+  });
+
+  it("the link's page sets the new password and logs in with it", async () => {
+    const ada = await signedUp("Ada");
+    const api = newApi();
+    let got: [string, string] | undefined;
+    intercept(api, "confirmPasswordReset", () => async (token, password) => {
+      got = [token, password];
+    });
+    const token = tokenFor(ada.email);
+    mount({ mode: "reset", token }, api);
+    expect(root.querySelector("h2")!.textContent).toBe("Set a new password");
+    expect(fieldNames(root)).toEqual(["password"]);
+    expect(root.querySelector('input[name="password"]')!.getAttribute("autocomplete")).toBe("new-password");
+    fill(root, { password: ada.password });
+    submit(root);
+    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: ada.user.id, name: "Ada", avatar: "", handle: ada.user.handle }));
+    expect(got).toEqual([token, ada.password]);
+    expect(root.querySelector('a[href="/login"]')!.textContent).toBe("Back to log in");
+  });
+
+  it("if logging in afterwards fails, it says the password changed and offers Log in with the email filled", async () => {
+    const api = newApi();
+    intercept(api, "confirmPasswordReset", () => async () => {});
+    instrument(api).failNext("logIn", new ApiError("Too many requests.", 429));
+    mount({ mode: "reset", token: tokenFor("grace@test.local") }, api);
+    fill(root, { password: "password-123" });
+    submit(root);
+    await vi.waitFor(() => expect(alertText(root)).toBe("Your password was changed. Log in with it."));
+    expect(tab(root, "Log in").getAttribute("aria-selected")).toBe("true");
+    expect(root.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe("grace@test.local");
+  });
+
+  it("an expired or used link says so; a short password is the browser's to refuse (minlength)", async () => {
+    const api = newApi();
+    mount({ mode: "reset", token: "not-a-token" }, api);
+    expect(root.querySelector('input[name="password"]')!.getAttribute("minlength")).toBe("8");
+    fill(root, { password: "password-123" });
+    submit(root);
+    await vi.waitFor(() => expect(alertText(root)).toBe("This link has expired or was already used. Ask for a new one."));
+    expect(onLogin).not.toHaveBeenCalled();
+  });
+});

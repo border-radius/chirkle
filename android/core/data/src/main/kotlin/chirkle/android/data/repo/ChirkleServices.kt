@@ -11,9 +11,7 @@ import chirkle.android.data.model.User
 import chirkle.android.data.pb.AuthStore
 import chirkle.android.data.pb.PbClient
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +43,7 @@ class ChirkleServices(
     settings: DeviceSettings? = null,
 ) {
     /** Lives as long as the process: writes (sends, edits, reads) outlive the screen that made them. */
-    val appScope = CoroutineScope(SupervisorJob() + main)
+    val appScope = endingScope(null, main)
 
     val pb = PbClient(serverUrl, http, authStore)
 
@@ -166,6 +164,8 @@ class ChirkleServices(
     suspend fun logIn(email: String, password: String): User = api.logIn(email, password)
 
     suspend fun signUp(email: String, password: String, name: String, inviteCode: String = ""): User = api.signUp(email, password, name, inviteCode)
+
+    suspend fun requestPasswordReset(email: String) = api.requestPasswordReset(email)
 
     /** Send what was read, then end the session; everything of it is cleared. */
     suspend fun logOut() = withContext(main) {

@@ -166,7 +166,7 @@ describe("app boot (§7.1)", () => {
 
   it("the app bar, the login page and the tab show the site's title and logo, also after logging out (§24)", async () => {
     const { api } = await signedUp();
-    intercept(api, "site", () => async () => ({ title: "Acme", logo: "/acme.png", inviteOnly: true }));
+    intercept(api, "site", () => async () => ({ title: "Acme", logo: "/acme.png", inviteOnly: true, passwordReset: false }));
     app = startApp({ api, root });
     const brand = () => root.querySelector<HTMLAnchorElement>("header.app-bar a.brand")!;
     await vi.waitFor(() => expect(brand().textContent).toBe("Acme"));
@@ -183,7 +183,7 @@ describe("app boot (§7.1)", () => {
   it("the sidebar and the login page say the site chirps on Chirkle, linked, unless it is called Chirkle", async () => {
     const { api } = await signedUp();
     let title = "Acme";
-    intercept(api, "site", () => async () => ({ title, logo: "", inviteOnly: false }));
+    intercept(api, "site", () => async () => ({ title, logo: "", inviteOnly: false, passwordReset: false }));
     app = startApp({ api, root });
     const top = () => root.querySelector("aside.sidebar .side-top")!;
     await vi.waitFor(() => expect(top().querySelector(".brand-by")?.textContent).toBe("chirps on Chirkle"));

@@ -5,7 +5,7 @@ describe("checkBudget", () => {
   it("matches the design doc budget (§7.7)", () => {
     expect(BUDGET).toEqual({
       js: 49.75 * 1024,
-      css: 11.25 * 1024,
+      css: 11.3 * 1024,
       html: 1536,
       viewerJs: 4 * 1024,
       viewerCss: 1.5 * 1024,
@@ -23,7 +23,7 @@ describe("checkBudget", () => {
       inboxCss: 1024,
       mentionJs: 2 * 1024,
       profileJs: 3.5 * 1024,
-      loginJs: 2 * 1024,
+      loginJs: 2.3 * 1024,
       forwardJs: 1.5 * 1024,
       peopleJs: 1.5 * 1024,
       statsJs: 5.5 * 1024,
@@ -128,7 +128,7 @@ describe("formatSizes", () => {
     });
     expect(out).toContain("js          2.00 KB / 49.75 KB");
     expect(out).toContain("viewerJs    1.00 KB / 4.00 KB");
-    expect(out).toMatch(/css\s+12\.00 KB \/ 11\.25 KB\s+OVER/);
+    expect(out).toMatch(/css\s+12\.00 KB \/ 11\.30 KB\s+OVER/);
     expect(out).not.toMatch(/js .*OVER/);
   });
 });

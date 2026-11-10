@@ -148,7 +148,10 @@ enum class SendStatus { Pending, Failed }
 @Serializable
 data class LocalFile(val uri: String, val name: String, val type: String, val size: Long)
 
-/** The site's branding and signup policy (§24), and the oldest app it still serves (ANDROID.md §12.4). */
+/**
+ * The site's branding and signup policy (§24), the oldest app it still serves (ANDROID.md §12.4), and whether it emails
+ * password reset links (§39).
+ */
 @Serializable
 data class Site(
     val title: String = "Chirkle",
@@ -156,6 +159,7 @@ data class Site(
     val logo: String = "",
     val inviteOnly: Boolean = false,
     val minAndroidVersion: Int = 0,
+    val passwordReset: Boolean = false,
 ) {
     companion object {
         val DEFAULT = Site()

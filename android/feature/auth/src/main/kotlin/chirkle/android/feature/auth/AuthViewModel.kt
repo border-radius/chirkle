@@ -1,4 +1,5 @@
-// Log in and sign up (DESIGN.md §22, §24.2; web/src/views/login.ts): the same fields, checks and messages.
+// Log in and sign up (DESIGN.md §22, §24.2; web/src/views/login.ts): the same fields, checks and messages. Forgot
+// password (§39) asks for the email to send a reset link to; the link opens the web app's page in the browser.
 package chirkle.android.feature.auth
 
 import androidx.compose.runtime.getValue
@@ -15,7 +16,7 @@ import chirkle.android.data.repo.ChirkleServices
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-enum class AuthMode { LogIn, SignUp }
+enum class AuthMode { LogIn, SignUp, Forgot }
 
 class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : ViewModel() {
     var mode by mutableStateOf(initial)
@@ -25,6 +26,9 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
     var password by mutableStateOf("")
     var inviteCode by mutableStateOf("")
     var busy by mutableStateOf(false)
+        private set
+    /** Forgot: where the reset link went, once sent ("" before). */
+    var sentTo by mutableStateOf("")
         private set
     /** An error above the button: network, rate limit, a refused login. */
     var formError by mutableStateOf("")
@@ -38,6 +42,7 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
     fun switch(to: AuthMode) {
         if (to == mode || busy) return
         mode = to
+        sentTo = ""
         formError = ""
         fieldErrors = emptyMap()
     }
@@ -45,6 +50,7 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
     /** The fields on screen in this mode. */
     private fun fields(): Set<String> = when (mode) {
         AuthMode.LogIn -> setOf("email", "password")
+        AuthMode.Forgot -> setOf("email")
         AuthMode.SignUp -> setOf("name", "email", "password") + if (inviteOnly) setOf("invite_code") else emptySet()
     }
 
@@ -63,8 +69,14 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
         busy = true
         viewModelScope.launch {
             try {
-                if (mode == AuthMode.LogIn) services.logIn(email.trim(), password)
-                else services.signUp(email.trim(), password, name, if (inviteOnly) inviteCode.trim() else "")
+                when (mode) {
+                    AuthMode.LogIn -> services.logIn(email.trim(), password)
+                    AuthMode.SignUp -> services.signUp(email.trim(), password, name, if (inviteOnly) inviteCode.trim() else "")
+                    AuthMode.Forgot -> {
+                        services.requestPasswordReset(email)
+                        sentTo = email.trim()
+                    }
+                }
                 // Signed in: the app's session listener takes it from here.
             } catch (e: CancellationException) {
                 throw e

@@ -158,6 +158,13 @@ onRecordAuthWithPasswordRequest((e) => {
   e.next();
 }, "users");
 
+onRecordRequestPasswordResetRequest((e) => require(`${__hooks}/lib/users.js`).skipStandInReset(e), "users");
+
+onRecordEnrich((e) => {
+  require(`${__hooks}/lib/site.js`).showPasswordReset(e);
+  e.next();
+}, "site");
+
 onRecordCreateRequest((e) => {
   require(`${__hooks}/lib/rooms.js`).beforeRoomCreateRequest(e);
   e.next();

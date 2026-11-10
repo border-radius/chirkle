@@ -99,4 +99,15 @@ function assetLinks(e) {
   ]);
 }
 
-module.exports = { siteOf, checkInvite, checkOAuth2Signup, manifest, assetLinks };
+/**
+ * site enrich: `password_reset`, whether "Forgot password?" is offered (§39). Only once a superuser set up SMTP
+ * (*Settings → Mail settings*): without it, the reset emails would go nowhere while the app said they were sent.
+ * @param {core.RecordEnrichEvent} e
+ */
+function showPasswordReset(e) {
+  if (!e.record) return;
+  e.record.withCustomData(true);
+  e.record.set("password_reset", e.app.settings().smtp.enabled);
+}
+
+module.exports = { siteOf, checkInvite, checkOAuth2Signup, manifest, assetLinks, showPasswordReset };

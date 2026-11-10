@@ -78,6 +78,10 @@ export interface Api {
   /** `inviteCode`: needed while the site is invite-only (§24). */
   signUp(input: { email: string; password: string; name: string; inviteCode?: string }): Promise<User>;
   logIn(email: string, password: string): Promise<User>;
+  /** Email a link to set a new password (§39). Resolves the same whether or not the address has an account. */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Set a new password with the token from that link (one use). Every session of the account is signed out. */
+  confirmPasswordReset(token: string, password: string): Promise<void>;
   /** Re-validate the stored session with the server, which renews it. Rejects when it is no longer valid. */
   refreshAuth(): Promise<User>;
   /** When the stored session expires (epoch ms), or 0 without one. */
@@ -280,12 +284,14 @@ export const ROOM_FIELDS =
 const ROOM_OPTS = { expand: "members,writers", fields: ROOM_FIELDS } as const;
 export const HIDDEN_FIELDS = "id,room";
 /** The site record (§24); its invite code is hidden from everyone but superusers. */
-const SITE_FIELDS = "id,title,logo,invite_only";
+const SITE_FIELDS = "id,title,logo,invite_only,password_reset";
 interface SiteRow {
   id: string;
   title?: string;
   logo?: string;
   invite_only?: boolean;
+  /** Not a field: from the server's mail settings (§39). */
+  password_reset?: boolean;
 }
 /** reply_to: notifications (§34) look closer at replies only. */
 export const ACTIVITY_FIELDS = "id,room,author,deleted,reply_to,mentions";
@@ -381,6 +387,8 @@ function records(pb: PbClient, collection: string) {
       if (pb.authStore.token === sent) pb.authStore.save(token, record);
       return record;
     },
+    /** POST to one of the collection's own auth actions (`request-password-reset`, …) that answer 204. */
+    action: (name: string, body: Record<string, unknown>) => pb.send(`${path}/${name}`, { method: "POST", body }),
     /** A custom route that answers like a login. */
     authAt: (url: string, body: Record<string, unknown>) => auth(pb.send(url, { method: "POST", body })),
   };
@@ -465,6 +473,13 @@ export function createApi(client: PbClient): Api {
     async logIn(email, password) {
       return toUser(await wrap(users.authWithPassword(email, password)));
     },
+    async requestPasswordReset(email) {
+      // In lower case, as emails are stored (QA BUG-47): PocketBase looks the address up as it is sent.
+      await wrap(users.action("request-password-reset", { email: email.trim().toLowerCase() }));
+    },
+    async confirmPasswordReset(token, password) {
+      await wrap(users.action("confirm-password-reset", { token, password, passwordConfirm: password }));
+    },
     async refreshAuth() {
       if (!api.currentUser()) throw new ApiError("Not logged in.", 401);
       return toUser(await wrap(users.authRefresh()));
@@ -497,6 +512,7 @@ export function createApi(client: PbClient): Api {
         title: row.title || DEFAULT_SITE.title,
         logo: row.logo ? pb.fileUrl("site", row.id, row.logo) : "",
         inviteOnly: row.invite_only === true,
+        passwordReset: row.password_reset === true,
       };
     },
 

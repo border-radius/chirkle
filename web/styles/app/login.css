@@ -84,6 +84,26 @@
   height: 42px;
 }
 
+/* Forgot password (§39): the link under the password, the reset forms' heading, hint and way back. */
+.auth-forgot {
+  display: block;
+  margin: -6px 0 10px auto;
+}
+
+.auth-card h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.auth-hint {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.auth-back {
+  align-self: center;
+}
+
 .auth-form button[type="submit"] {
   width: 100%;
   height: 44px;
