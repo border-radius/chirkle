@@ -46,6 +46,14 @@ through `POST /api/chat/delete` (the records API still allows only the author) a
 access and `archived` through the records API, as its creator does. `POST /api/chat/ban { user, banned }` is theirs
 only.
 
+Since 2026-11-10 (mentions, DESIGN.md §41) `users` has `handle` (in `fields.user`; set by its owner, refused with the reason when taken or malformed) and `messages` has `mentions` (in `fields.message`; the server's, what a client sends with a create is replaced, an update changing it is refused). `inbox` and `inbox_reads` have no API rules.
+
+Since 2026-11-09 (usage statistics, DESIGN.md §40) `site` has `no_stats` (hidden), and the realtime subscribe
+request's User-Agent says which app a connection is (the app's OkHttp default, `okhttp/…`: keep it, or the app is
+counted as neither). `GET /api/chat/stats?tz=<minutes east of UTC>` answers moderators and superusers (403 otherwise)
+with counts only; the web's `/stats` page uses it, the app doesn't. `stats_samples` and `stats_activity` have no
+API rules.
+
 The clients send filters in PocketBase's filter syntax. Apps from before 2026-10-29 name the fields `room`, `created`,
 `id`, `updated`, `files`, `forward_of`, `text_key`, `author`, `deleted`, `room.kind`, `reply_to.author` and
 `collection`; apps from then on (with a current server) only `id` (users), `room` (`room_reads`, the live room),
@@ -56,7 +64,7 @@ already installed.
 `GET /api/chat/rooms` and `GET /api/chat/rooms/{room}/messages?kind=latest|first|older|newer|changed` (cursor
 `created`, `id`; for `changed` `since`, `from`, `to`; `files=1`; `q`, search's words, which the server folds and
 escapes; `limit` ≤ 200; `page`). The app's notification check is `GET /api/chat/notifiable?rooms=a,b&since=…&every=a`
-(signed in; other people's DMs and replies to you, and every message of the `every` rooms; rooms you can't see left
+(signed in; other people's DMs, replies to you and, since 2026-11-10, mentions of you, and every message of the `every` rooms; rooms you can't see left
 out). All answer a plain array of
 records, with `expand` and `fields` as the records API takes them, and see what its rules let the caller see (a room you can't
 see has no messages). A message page also has an `ETag` (of its body, `expand` and `fields`) and `Cache-Control: no-store`: asked again with `If-None-Match`, an unchanged page is `304` with no body, so a client that kept the page shows it as it is (the web, since 2026-11-03, docs/PERF.md §5; the app doesn't ask). The app falls back to the records API when a route answers 404 (a server from before the
@@ -67,12 +75,15 @@ against a current server and one without the routes (or an old release's hooks, 
 **Custom routes** (`pb_hooks/main.pb.js`, `federation.pb.js`):
 `/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `ban`, `forward`, `media/{room}`,
 `posters/{message}/{file}`, `posters/items/{item}/{file}`, `collections`, `badges`, `items`, `items/{id}`, `saved`,
-`subs`, `subs/seen`, `users`, `password`, `remote-users`. Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
+`subs`, `subs/seen`, `users`, `password`, `remote-users`, and since 2026-11-10 (DESIGN.md §41) `mentionable`, `inbox`, `inbox/seen` (`unread` also answers `inbox` and `mentions`). Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; by collection name, `/api/files/messages/…` and `/api/files/collection_items/…`, not by its id, since 2026-11-09; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
 `/.well-known/assetlinks.json`.
 
-**Realtime** (`/api/realtime`): `rooms`, `messages` (one room's, expanding `author,forwarded_from` but not
-`reply_to` since 2026-10-30; or every room's with `fields.activity`),
-`hidden_rooms`, `room_reads`, `collections`, `collection_subs`, `chat/badges` and `PB_CONNECT`. Every connected client
+**Realtime** (`/api/realtime`): `rooms`, `chat/messages` (since 2026-11-09, PERF.md §7: each message created, updated or
+deleted, once, to everyone who can see its room, as `{ action, record }` with `fields.message` and `author`,
+`forwarded_from` expanded; the web's room and activity both listen to it; the app asks `GET /api/chat/live` first,
+`{ "topic": "chat/messages" }`, and on a 404 subscribes as before), `messages` (still served, for apps from before:
+one room's, expanding `author,forwarded_from` but not `reply_to` since 2026-10-30; or every room's with
+`fields.activity`; each listener costs the server a JS call per message), `hidden_rooms`, `room_reads`, `collections`, `collection_subs`, `chat/badges`, `chat/inbox` (since 2026-11-10: your inbox rows added and taken away, `{ action, id, kind, room, message, created }`) and `PB_CONNECT`. Every connected client
 also gets `chat/keepalive` (`{}`) every 3 minutes, so that PocketBase doesn't close a quiet connection; clients ignore
 it.
 

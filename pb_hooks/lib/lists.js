@@ -35,6 +35,8 @@ const KINDS = {
  * @param {core.RequestEvent} e
  */
 function rooms(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const me = e.auth && !e.auth.isSuperuser() ? e.auth.id : "";
   const where = e.hasSuperuserAuth() ? "1" : me ? SEES_SQL : "r.visibility = 'open' AND NOT r.archived";
   const rows = arrayOf(new DynamicModel({ id: "" }));
@@ -59,6 +61,8 @@ function rooms(e) {
  * @param {core.RequestEvent} e
  */
 function messages(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const roomId = e.request?.pathValue("room") ?? "";
   const q = e.requestInfo().query;
   // Own keys only: "toString" and the like are the object's too (QA BUG-171).
@@ -118,11 +122,13 @@ function searchWhere(text, params) {
 
 /**
  * GET /api/chat/notifiable?rooms=a,b&since=…[&every=a] → other people's messages in `rooms` since `since` that are
- * DMs or replies to you, or any message in an `every` room (ANDROID.md §21.2, §24): newest first, `limit` of them. The
+ * DMs, replies to you or mentions of you (DESIGN.md §41), or any message in an `every` room (ANDROID.md §21.2, §24): newest first, `limit` of them. The
  * rooms you can't see are left out.
  * @param {core.RequestEvent} e
  */
 function notifiable(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const q = e.requestInfo().query;
   if (!q.since) throw new BadRequestError("Missing since.");
   const me = e.auth?.id ?? "";
@@ -144,7 +150,7 @@ function notifiable(e) {
     "created > {:since}",
     "author != {:me}",
     "deleted = false",
-    `(room.kind = "dm" || reply_to.author = {:me}${all})`,
+    `(room.kind = "dm" || reply_to.author = {:me} || mentions.id ?= {:me}${all})`,
   ];
   return e.json(200, list(e, where, "-created,-id", q, params, rooms));
 }

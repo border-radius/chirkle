@@ -113,7 +113,7 @@ test("turned on in the profile: a DM and a reply to you pop up in a background t
   await page.goto("/me");
   const box = page.getByRole("group", { name: "Notifications" });
   await box.getByLabel("Direct messages").check();
-  await box.getByLabel("Replies to you").check();
+  await box.getByLabel("Mentions and replies").check();
   await expect(box.getByLabel("Show a pop-up")).toBeChecked(); // chosen for you with the first
   await expect(box.getByRole("status")).toHaveText("");
   await following(page, () => page.goto("/"));
@@ -137,7 +137,7 @@ test("turned on in the profile: a DM and a reply to you pop up in a background t
 
   // Off again (from the header, not a reload: the recorder stays): silent.
   await page.locator("a.me-link:visible").click();
-  for (const label of ["Direct messages", "Replies to you"]) await box.getByLabel(label).uncheck();
+  for (const label of ["Direct messages", "Mentions and replies"]) await box.getByLabel(label).uncheck();
   await apiSend(bob, { id: dm.id, name: "" }, "anyone?");
   await page.waitForTimeout(1000);
   expect(await popups(page)).toHaveLength(2);

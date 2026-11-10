@@ -2682,3 +2682,97 @@ KB: its budget was raised from 2 KB to 2.05 KB (DESIGN.md §7.7, the user's "rai
 - Server: no change, integration tests not rerun.
 - Build: every budget met: `app.js` 49.04/49.75 KB, `app.css` 11.04/11.25 KB, collections 6.72/6.75 KB and
   2.01/2.05 KB (raised), media 1.87/3 KB and 0.71/1 KB.
+
+## BUG-250 (2026-11-09, user report)
+
+| ID | Severity | Area | Problem | Status |
+|---|---|---|---|---|
+| BUG-250 | High | Server | autism.th61.com was slow at about 20% CPU: room pages took 0.2–0.6 s, then 6–46 s in bursts; 8 opened at once took 10–34 s each, while `/api/health` and the other routes stayed at about 140 ms | Fixed |
+
+**BUG-250:** four router middlewares in `main.pb.js` had JS handlers (headers, the body limit, the anonymous rooms'
+probe check, files). PocketBase runs a JS handler in a runtime from its pool (`--hooksPool=100`), and a middleware keeps
+it until `e.next()` returns, which is the whole request. So each open realtime connection held 4 runtimes for as long
+as it stayed open, and each file on its way from S3 (0.3–1 s, more when 10–20 load at once) held 4 too. Room pages
+enrich each message with a JS hook, one runtime per call: with the pool taken, each call made a new runtime (PERF.md
+§2.1). Locally, 25 open realtime connections were enough: a page went from 23 to 87 ms with nothing else running.
+Fixed by having no JS router middleware (PERF.md §6): the headers are set by the routes that serve pages, PocketBase's
+own limit sizes each create and update by the collection's fields (DESIGN.md §17.1), the probe check is in the record
+request hooks and the routes that enrich, and messages' and items' files have routes of their own. With 120 realtime
+connections open a page is 23 ms, as with none. Tests: `tests/unit/build/hooks.test.ts` (no `routerUse` with a JS
+handler), `anonymous.test.ts` (the probe check on an auth refresh, an update and our lists; it ran on every request
+before), `messages.files.test.ts` (an avatar over the users route's limit is a 413). Files are served by collection
+name only, as the apps and DESIGN.md §37.2 have them: `/api/files/{collection id}/…` (the PocketBase SDK's
+`files.getURL`) is a 404 for messages' and items' files now, and tests build names (`helpers.ts` `byName`).
+
+# QA pass 34 — mentions, handles and the lazy pages
+
+2026-11-10, user: "test app heavily. list all bugs. then fix them". The day's new code got the most attention: handles,
+mentions and Mentions & replies (DESIGN.md §41, ANDROID.md §60) and the pages moved into lazy chunks (profile, login,
+the forward picker, people search). The server was driven over its API on a copy of the emulator's seeded data (mentions
+and replies made, edited out, deleted, forwarded, reacted to and taken back; anonymous and private rooms; inbox paging,
+`inbox/seen` with bad dates; `mentionable` with `%`, `_`, `@`, long queries and rooms you can't see; handles set to
+reserved, taken, upper-case, accented and short ones; sign-ups with Cyrillic, Greek, Polish, Nordic, Turkish, Chinese
+and Arabic names). The web ran in headless Chromium (1280 px, 390 px and 360 px, light and dark) with a second user
+acting live, and with chunk loads slowed by 1.5 s. The app ran in Robolectric screenshots at 360dp, also 380dp high
+(a phone with its keyboard up).
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-251 | Low | Web | On a phone each Mentions & replies row was one line cut with "…": the room's name ("#gene…", "reacted ❤ to your messa…") and the time didn't show | Fixed |
+| BUG-252 | Low | Web | Keys typed just after New message, while the people search's chunk loaded, were lost (the search came up empty) | Fixed |
+| BUG-253 | Medium | Android | The "@" list grew to eight rows over the field: on a phone with its keyboard up it took the screen, the top bar and the message list went and the text field and Send were squashed to a line | Fixed |
+| BUG-254 | Low | Web, Android | A row taken away while Mentions & replies was open (its message deleted, the mention edited out, the reaction taken back) stayed, leading to a message that isn't there | Fixed |
+| BUG-255 | Low | Server | A handle made from a name dropped letters Unicode doesn't decompose: "Łukasz Ćwik" got `ukasz_cwik`, "Ø Æ" and Greek names `user2`, `user3`… | Fixed |
+| BUG-256 | Low | Server | The migration that gave everyone a handle didn't skip the reserved ones: an account named All, Here, Room… got `all`, `here`, `room`, so "@all" mentioned that one person | Fixed |
+
+**BUG-251:** the row's first line (who, what, where, when) wraps; the time doesn't break. The quote and the message stay
+one line. (The app's rows already wrapped.)
+
+**BUG-252:** `holdKeys()` (dom.ts) keeps printable keys and Backspace typed while a chunk loads and `typeInto()` puts
+them in the field once it shows, as the room's search did (BUG-243, now using it too). New message holds them from the
+press until the search shows, or until it is closed. Component: `rooms.test.ts`.
+
+**BUG-253:** `People` (Composer.kt) is at most 200dp high (four rows and half the next, which says there are more) and
+scrolls. Seen in a Robolectric screenshot at 360×380dp, before and after.
+
+**BUG-254:** the page (web `views/inbox.ts`, app `InboxScreen`) listens to `chat/inbox` while open and drops a row
+told `delete`. The app's `subscribeInbox` now hands over the event (`InboxEvent`: action, id, room). Component:
+`inbox.test.ts`; Android: `UiMentionsTest`.
+
+**BUG-255:** `handleFrom` (handles.js, and its copy in `1760000045_mentions.js`) spells ł, ø, æ, œ, đ, ð, þ, ı, ħ, ŧ, ŋ
+and Greek letters in Latin after dropping accents: `lukasz_cwik`, `orjan_aesir_thor_dad`, `sokratis_alfa`
+(`shared/vectors/mentions.json`). Existing handles are kept.
+
+**BUG-256:** `1760000045_mentions.js` now counts the reserved handles as taken, and `1760000046_reserved_handles.js`
+gives an account holding one the next free one (`all2`, `all3`…), as a new account gets. Tried on a copy of the
+seeded data with two accounts set to `all` and `here`.
+
+## Checked and fine
+
+- Mentions follow edits (added, removed), a reply that also mentions its parent's author tells them once (a reply), a
+  forward mentions no one, a deleted message takes its rows, a reaction taken back takes its row; an anonymous room
+  shows the room as the actor; a private room's non-member is never mentioned; your own "@" mentions no one.
+- `inbox/seen` with garbage, a date in 2099, a number or null keeps to now; paging by cursor lists each row once.
+- Live on the web: the room's "@" and the inbox count follow a mention, its edit out, a delete, a reply, a reaction and
+  its undo, and a read on another device.
+- Handles: "@NewName" saves as `newname`, taken/short/accented/too long are refused with the reason, a rename keeps
+  the handle; people search finds "@bob_ok".
+- A client's `mentions` on a create is replaced by the server's (an update changing it is a 400): DESIGN.md §41.2 and
+  API.md said both were refused, now they say so.
+- Every "@word" is drawn as a mention, also one no account has: as DESIGN.md §41.2 says.
+- `npm run typecheck` and `biome check` failed on code from before this pass (`telegram/reactions.js`: `console` and a
+  missing return type; `scripts/build.mjs` import order): fixed so that `npm run check` runs.
+- `tests/e2e/search.spec.ts` hung on `.forward-list`, which the forward dialog no longer leaves in the page since it
+  became a lazy chunk the same day: the spec now checks a stand-in list of the same classes.
+
+## Tests
+
+- typecheck, `biome check` (warnings from before only), the HTML sinks check; build within every budget: `app.js`
+  46.42/49.75 KB, `app.css` 11.23/11.25 KB, inbox 1.41/2 KB and 0.45/1 KB.
+- Unit and component: 806 passed (new: `rooms.test.ts` BUG-252, `inbox.test.ts` BUG-254; `vectors.test.ts` runs the
+  new `handleFrom` cases).
+- Server integration: `mentions`, `lists`, `schema`: 31 passed. Migration `1760000046` tried on a data copy.
+- E2E Chromium: `mentions`, `search`, `dm`, `smoke`, `forward`, `mobile`, `a11y`: all passed.
+- Android: all 196 unit and Robolectric tests (new: `UiMentionsTest` BUG-254). `UiFeaturesTest` "messages are forwarded…"
+  failed in two full runs (passing alone): the picker lists every room of the shared test server, and the target was
+  beyond the lazy list's composed rows. A test bug, not the app's: the test now types the room's name first.

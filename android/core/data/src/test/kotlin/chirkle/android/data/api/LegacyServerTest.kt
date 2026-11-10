@@ -102,4 +102,34 @@ class LegacyServerTest {
         assertEquals(oldCalls.toString(), 1, oldCalls.count { it.startsWith("404") })
         assertTrue(oldCalls.toString(), oldCalls.none { it.contains("/api/chat/rooms/") || it.endsWith("/api/chat/notifiable") })
     }
+
+    /** What a room's subscription and the activity of all rooms hear on the server at [at], and the client's requests. */
+    private fun live(at: String): Pair<List<String>, List<String>> = runBlocking {
+        val me = Recorded(at)
+        val name = "live-${uniq()}"
+        me.api.signUp("$name@test.local", TestServer.PASSWORD, name)
+        val room = me.api.createRoom("live-${uniq()}")
+        val other = me.api.createRoom("live-${uniq()}")
+        val heard = Collections.synchronizedList(mutableListOf<String>())
+        val offRoom = me.api.subscribeMessages(room.id) { heard += "room ${it.action} ${it.record.text}" }
+        val offAll = me.api.subscribeAllMessages { heard += "all ${it.action}" }
+        val m = me.api.send(NewMessage(newId(), room.id, "here"))
+        me.api.send(NewMessage(newId(), other.id, "there"))
+        me.api.edit(m.id, "here, edited")
+        kotlinx.coroutines.withTimeout(10_000) { while (heard.size < 5) kotlinx.coroutines.delay(20) }
+        offRoom()
+        offAll()
+        me.api.pb.realtime.unsubscribeAll()
+        heard.sorted() to me.calls.toList()
+    }
+
+    @Test fun `with a server from before live messages, the app subscribes to the messages collection and hears the same`() {
+        val (now, nowCalls) = live(TestServer.url)
+        val (old, oldCalls) = live(TestServer.legacyUrl)
+        assertEquals(listOf("all Create", "all Create", "all Update", "room Create here", "room Update here, edited"), now)
+        assertEquals(now, old)
+        // Asked once each: a current server says it sends them, an old one is a 404.
+        assertEquals(nowCalls.toString(), 1, nowCalls.count { it == "200 GET /api/chat/live" })
+        assertEquals(oldCalls.toString(), 1, oldCalls.count { it == "404 GET /api/chat/live" })
+    }
 }

@@ -1,12 +1,12 @@
 // Room access (§23) as one table: every kind of room × every kind of viewer × every way in. The rule is written in four
 // places (the API rules of 1760000014_room_access.js, canSee in pb_hooks/lib/access.js, the unread SQL in
-// pb_hooks/lib/reads.js and the room list in lib/lists.js, and the hooks that call canSee); this checks they all agree with `sees` below, and lists every
+// pb_hooks/lib/reads.js and the room list in lib/lists.js, and the hooks that call canSee, live messages among them); this checks they all agree with `sees` below, and lists every
 // disagreement at once.
 
 import type PocketBase from "pocketbase";
 import type { RecordModel } from "pocketbase";
 import { describe, expect, it } from "vitest";
-import { client, newRoom, newUser, openDm, pngFile, post, status, type TestUser } from "./helpers.ts";
+import { adminClient, byName, client, eventually, newRoom, newUser, openDm, pngFile, post, status, type TestUser } from "./helpers.ts";
 
 type Visibility = "public" | "private" | "open";
 type ViewerName = "guest" | "creator" | "member" | "outsider";
@@ -16,6 +16,8 @@ interface Fixture {
   room: RecordModel;
   /** Written by the creator, with an attachment. */
   probe: RecordModel;
+  /** Written by the member (deleted for good by a superuser for the live messages' check). */
+  other: string;
   visibility: Visibility;
   archived: boolean;
 }
@@ -43,16 +45,16 @@ async function setUp() {
   /** A message by the creator, with an attachment, and one by the member (unread for the creator too). */
   async function probe(roomId: string) {
     const m = await creator.pb.collection("messages").create({ room: roomId, author: creator.user.id, text: "probe", files: [pngFile()] });
-    await post(member, roomId, "from the member");
-    return m;
+    const other = await post(member, roomId, "from the member");
+    return { m, other: other.id };
   }
 
   async function room(name: string, visibility: Visibility, archived: boolean): Promise<Fixture> {
     let r = await newRoom(creator);
     r = await creator.pb.collection("rooms").update(r.id, { visibility, members: visibility === "private" ? [member.user.id] : [] });
-    const m = await probe(r.id);
+    const { m, other } = await probe(r.id);
     if (archived) r = await creator.pb.collection("rooms").update(r.id, { archived: true });
-    return { name, room: r, probe: m, visibility, archived };
+    return { name, room: r, probe: m, other, visibility, archived };
   }
 
   const fixtures = await Promise.all([
@@ -64,7 +66,8 @@ async function setUp() {
     room("open, archived", "open", true),
   ]);
   const dm = await openDm(creator, member);
-  fixtures.push({ name: "dm", room: dm, probe: await probe(dm.id), visibility: "private", archived: false });
+  const inDm = await probe(dm.id);
+  fixtures.push({ name: "dm", room: dm, probe: inDm.m, other: inDm.other, visibility: "private", archived: false });
 
   const viewers: Viewer[] = [
     { name: "guest", pb: client(), user: null },
@@ -110,13 +113,34 @@ describe("room access matrix (§23.1)", () => {
               check(f, v, "GET /api/chat/notifiable", can, notifiable.length > 0);
             }
             // An attachment opens by its URL alone, for whoever has it (§37.3): the URL is the secret.
-            const file = (await fetch(creator.pb.files.getURL(f.probe, f.probe.files[0]))).status;
+            const file = (await fetch(creator.pb.files.getURL(byName(f.probe), f.probe.files[0]))).status;
             check(f, v, "attachment by URL", true, ok(file), ` (got ${file})`);
             if (v.user) check(f, v, "unread count", can, (unread[roomId] ?? 0) > 0);
           }),
         );
       }),
     );
+
+    // Live messages (pb_hooks/lib/live.js): the member's message in each room, deleted for good by a superuser (archived
+    // rooms take no edits), reaches those who see its room. The open room's goes last, and every viewer sees that one:
+    // once it is in, every event before it on the same connection is too.
+    const admin = await adminClient();
+    const live = await Promise.all(
+      viewers.map(async (v) => {
+        const ids: string[] = [];
+        const off = await v.pb.realtime.subscribe("chat/messages", (e) => ids.push((e as { record: { id: string } }).record.id));
+        return { v, ids, off };
+      }),
+    );
+    const open = fixtures.find((f) => f.name === "open")!;
+    for (const f of [...fixtures.filter((f) => f !== open), open]) await admin.collection("messages").delete(f.other);
+    await eventually(() => {
+      for (const l of live) expect(l.ids).toContain(open.other);
+    });
+    for (const l of live) {
+      for (const f of fixtures) check(f, l.v, "live messages (chat/messages)", sees(f, l.v.name), l.ids.includes(f.other));
+      await l.off();
+    }
 
     // Writes. A guest is always refused; a signed-in viewer only where `writes` (or, for hiding and reads, `sees`) says.
     await Promise.all(

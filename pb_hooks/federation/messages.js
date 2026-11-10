@@ -8,6 +8,7 @@
 const { reactionsOf, setReaction } = require(`${__hooks}/lib/reactions.js`);
 /** @typedef {{ emoji: string, users: string[] }} Reaction */
 const { isReactionEmoji } = require(`${__hooks}/lib/emoji.js`);
+const { accessOf, canSee } = require(`${__hooks}/lib/access.js`);
 const { enqueue, enqueueWork, fromPeer, gid, isMine, jsonOf, newId, originOf, peerById, peerHost, splitGid } = require(
   `${__hooks}/federation/config.js`,
 );
@@ -83,6 +84,7 @@ function messageEvent(app, rec, peer) {
   const author = rec.getString("author");
   const from = rec.getString("forwarded_from");
   const reactions = reactionsOf(rec);
+  const mentions = rec.getStringSlice("mentions");
   return {
     type: "message",
     room: roomGid(room),
@@ -95,8 +97,9 @@ function messageEvent(app, rec, peer) {
       created: rec.getString("created"),
       files,
       reactions: reactionsOut(app, rec),
+      mentions: mentions.map((u) => gidOf(app, u)),
     },
-    people: peopleFor(app, peer, [author, from, ...reactions.flatMap((/** @type {Reaction} */ r) => r.users)]),
+    people: peopleFor(app, peer, [author, from, ...mentions, ...reactions.flatMap((/** @type {Reaction} */ r) => r.users)]),
   };
 }
 
@@ -186,7 +189,16 @@ function messageChanged(app, rec, was) {
       enqueue(
         app,
         peerId,
-        deleted ? { type: "delete", room: rg, message: g } : { type: "edit", room: rg, message: g, text: rec.getString("text") },
+        deleted
+          ? { type: "delete", room: rg, message: g }
+          : {
+              type: "edit",
+              room: rg,
+              message: g,
+              text: rec.getString("text"),
+              mentions: rec.getStringSlice("mentions").map((u) => gidOf(app, u)),
+              people: peerById(app, peerId) ? peopleFor(app, peerById(app, peerId), rec.getStringSlice("mentions")) : {},
+            },
       );
     }
   }
@@ -285,6 +297,7 @@ function applyMessage(app, sender, ev, files) {
     if (from) rec.set("forwarded_from", from);
   }
   if (files?.length) require(`${__hooks}/lib/files.js`).attachUploads(app, rec, files);
+  rec.set("mentions", mentionsIn(app, sender, room, author, m.mentions, people));
   if (ev.backfill && typeof m.created === "string" && /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d/.test(m.created)) {
     rec.setRaw("created", m.created);
     rec.setRaw("updated", m.created);
@@ -294,6 +307,35 @@ function applyMessage(app, sender, ev, files) {
   const list = Array.isArray(m.reactions) ? m.reactions : [];
   if (list.length) setReactions(app, sender, rec, list, people);
 }
+
+/**
+ * Who a peer's message mentions (§41): the people its event names by global id (its text's "@handle"s are the sender's
+ * handles, not ours) who can see the room here, but not its author. An instance from before mentions sends none.
+ * @param {core.App} app
+ * @param {core.Record} sender
+ * @param {core.Record} room
+ * @param {string} author
+ * @param {unknown} list
+ * @param {Record<string, any>} people
+ * @returns {string[]}
+ */
+function mentionsIn(app, sender, room, author, list, people) {
+  if (!Array.isArray(list)) return [];
+  const access = accessOf(room);
+  const out = new Set();
+  for (const g of list.slice(0, 20)) {
+    const id = userOf(app, sender, g, people);
+    if (id && id !== author && canSee(access, id)) out.add(id);
+  }
+  return [...out];
+}
+
+/**
+ * Is this save of a message a linked instance's (it then says whom the message mentions, mentionsIn)?
+ * @param {core.App} app
+ * @param {core.Record} rec
+ */
+const isFromPeer = (app, rec) => !!originOf(app, rec.id);
 
 /**
  * Set a message's reactions from a list naming people by global id.
@@ -348,6 +390,9 @@ function applyEdit(app, sender, ev) {
   const text = String(ev.text || "").slice(0, 2000);
   if (text === rec.getString("text")) return;
   rec.set("text", text);
+  const { room } = roomOf(app, sender, ev);
+  const people = ev.people && typeof ev.people === "object" ? ev.people : {};
+  rec.set("mentions", mentionsIn(app, sender, room, rec.getString("author"), ev.mentions, people));
   saveFor(app, rec, sender);
 }
 
@@ -417,4 +462,5 @@ module.exports = {
   applyDelete,
   applyReact,
   applyReactions,
+  isFromPeer,
 };

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../web/src/api.ts";
+import { LOGIN_KIT } from "../../../web/src/lazy.ts";
 import { DEFAULT_SITE, type Site, type User } from "../../../web/src/lib/types.ts";
 import { type AppState, createStore, initialState } from "../../../web/src/store.ts";
 import { createLoginView } from "../../../web/src/views/login.ts";
@@ -34,7 +35,7 @@ describe("login view (§7.1)", () => {
   });
 
   const mount = (api = newApi()) => {
-    const view = createLoginView({ api, onLogin });
+    const view = createLoginView({ kit: LOGIN_KIT, api, onLogin });
     view.mount(root, {});
     return { view, api };
   };
@@ -59,7 +60,7 @@ describe("login view (§7.1)", () => {
     const { api } = mount();
     fill(root, { email: ada.email, password: ada.password });
     submit(root);
-    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: ada.user.id, name: "Ada", avatar: "" }));
+    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: ada.user.id, name: "Ada", avatar: "", handle: ada.user.handle }));
     expect(api.currentUser()).toEqual(ada.user);
   });
 
@@ -68,7 +69,9 @@ describe("login view (§7.1)", () => {
     tab(root, "Sign up").click();
     fill(root, { name: "Grace", email: `${uniq()}@test.local`, password: "password-123" });
     submit(root);
-    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: expect.any(String), name: "Grace", avatar: "" }));
+    await vi.waitFor(() =>
+      expect(onLogin).toHaveBeenCalledWith({ id: expect.any(String), name: "Grace", avatar: "", handle: expect.any(String) }),
+    );
     expect(api.currentUser()?.name).toBe("Grace");
   });
 
@@ -85,7 +88,7 @@ describe("login view (§7.1)", () => {
     expect(tab(root, "Log in").getAttribute("aria-selected")).toBe("true");
     expect(root.querySelector<HTMLInputElement>('input[name="email"]')!.value).toBe(email);
     submit(root);
-    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: expect.any(String), name, avatar: "" }));
+    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: expect.any(String), name, avatar: "", handle: expect.any(String) }));
   });
 
   it("a display name someone else has is refused next to the name field (§22.1)", async () => {
@@ -223,7 +226,7 @@ describe("login view: the site's branding and invite-only signups (§24)", () =>
 
   const mount = (site: Partial<Site>, api = newApi()) => {
     const store = createStore<AppState>({ ...initialState(), site: { ...DEFAULT_SITE, ...site } });
-    const view = createLoginView({ api, onLogin, store, mode: "signup" });
+    const view = createLoginView({ kit: LOGIN_KIT, api, onLogin, store, mode: "signup" });
     view.mount(root, {});
     return { view, api, store };
   };

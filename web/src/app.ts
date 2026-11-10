@@ -12,7 +12,9 @@ import { createDrafts } from "./drafts.ts";
 import { startFavicon } from "./favicon.ts";
 import { createHeader } from "./header.ts";
 import { startJumpTo } from "./jump.ts";
+import { LOGIN_KIT, lazyView, PROFILE_KIT } from "./lazy.ts";
 import { roomTitle } from "./lib/rooms.ts";
+import { formatTime, parsePb } from "./lib/time.ts";
 import type { User } from "./lib/types.ts";
 import { createPrefetch } from "./prefetch.ts";
 import { createRenewal } from "./renewal.ts";
@@ -20,12 +22,11 @@ import { createRouter, here, type Router, type View } from "./router.ts";
 import { startSite } from "./site.ts";
 import { type AppState, createStore, initialState, type Store } from "./store.ts";
 import { createSync } from "./sync.ts";
+import { avatar } from "./ui/avatar.ts";
 import { createUnread } from "./unread.ts";
 import { startUpdates } from "./update.ts";
 import { createCollectionView } from "./views/collection.ts";
 import { createHomeView } from "./views/home.ts";
-import { createLoginView } from "./views/login.ts";
-import { createProfileView } from "./views/profile.ts";
 import { createRoomView } from "./views/room.ts";
 import { createRoomsView } from "./views/rooms.ts";
 
@@ -227,7 +228,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     void api.unsubscribeAll().catch(() => {});
     drafts.clear(store.get().user?.id ?? "");
     forgetCached(cache);
-    store.set({ ...initialState(), site: store.get().site });
+    // Loads still out count themselves back down as they end.
+    store.set({ ...initialState(), site: store.get().site, listLoads: store.get().listLoads });
   }
 
   /**
@@ -299,19 +301,77 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     early: prefetch,
   };
   const rooms = () => createRoomsView(ctx);
+  /** "Mentions & replies" (§41): a lazy chunk, given what it needs of app.js. */
+  const inboxPage = (): View => {
+    let stop = new AbortController();
+    return {
+      mount(el) {
+        stop = new AbortController();
+        const { signal } = stop;
+        el.replaceChildren(h("p", { class: "empty", role: "status" }, "Loading…"));
+        import("./views/inbox.ts").then(
+          (m) =>
+            void (
+              !signal.aborted &&
+              m.mountInbox(el, {
+                api,
+                h,
+                store,
+                signal,
+                avatar: (u) => avatar(u, 32, api.avatarUrl),
+                roomName: (id) => {
+                  const r = store.get().rooms.get(id);
+                  return r ? roomTitle(r, store.get().user) : "";
+                },
+                when: (c) => formatTime(parsePb(c)),
+              })
+            ),
+          () => {
+            if (!signal.aborted) el.textContent = "Couldn't open your mentions and replies. Check your connection.";
+          },
+        );
+      },
+      unmount() {
+        stop.abort();
+      },
+    };
+  };
   const roomPage = withSidebar(panes, rooms, () => createRoomView(ctx), "", true);
 
-  const authPage = (mode: "login" | "signup" | "reset") => () =>
-    createLoginView({
-      api,
-      store,
-      mode,
-      onLogin: (user) => {
-        // Usually followed already: logging in changed the session (onAuthChange).
-        if (store.get().user?.id !== user.id) switchTo(user);
-        router.navigate(lastPage);
-      },
+  /** The login and signup page (a lazy chunk), started at once for someone not signed in: it is what they may want first. */
+  let loginChunk: Promise<typeof import("./views/login.ts")> | null = null;
+  const loadLogin = () => {
+    loginChunk ??= import("./views/login.ts").catch((e: unknown) => {
+      loginChunk = null;
+      throw e;
     });
+    return loginChunk;
+  };
+  if (!store.get().user) void loadLogin().catch(() => {});
+  const authPage = (mode: "login" | "signup" | "reset") => () =>
+    lazyView(
+      () =>
+        loadLogin().then((m) =>
+          m.createLoginView({
+            kit: LOGIN_KIT,
+            api,
+            store,
+            mode,
+            onLogin: (user) => {
+              // Usually followed already: logging in changed the session (onAuthChange).
+              if (store.get().user?.id !== user.id) switchTo(user);
+              router.navigate(lastPage);
+            },
+          }),
+        ),
+      "Couldn't open this page. Check your connection.",
+    );
+  /** Settings (a lazy chunk). */
+  const profilePage = () =>
+    lazyView(
+      () => import("./views/profile.ts").then((m) => m.createProfileView({ ...ctx, kit: PROFILE_KIT })),
+      "Couldn't open Settings. Check your connection.",
+    );
   const router = createRouter({
     onNavigate,
     root: main,
@@ -326,7 +386,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       { pattern: "/r/:id", public: true, view: roomPage },
       { pattern: "/r/:id/m/:msgId", public: true, view: roomPage },
       { pattern: "/c/:id", public: true, view: withSidebar(panes, rooms, () => createCollectionView(ctx)) },
-      { pattern: "/me", view: withSidebar(panes, rooms, () => createProfileView(ctx)) },
+      { pattern: "/me", view: withSidebar(panes, rooms, profilePage) },
+      { pattern: "/inbox", view: withSidebar(panes, rooms, inboxPage) },
     ],
   });
 

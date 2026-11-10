@@ -7,6 +7,7 @@ import { MSG_FIELDS } from "../../web/src/api.ts";
 import { MAX_SELECTED } from "../../web/src/lib/limits.ts";
 import {
   adminClient,
+  byName,
   client,
   collect,
   eventually,
@@ -200,7 +201,7 @@ describe("forward messages (§21.3)", () => {
     expect(stored(copy!.id)).toMatchObject({ files: "[]" });
     // By URL (§37.3): the original's, or the forward's own, whoever has it.
     const fileStatus = async (u: TestUser, of = msg) => {
-      const res = await fetch(u.pb.files.getURL(of, msg.files[0]));
+      const res = await fetch(u.pb.files.getURL(byName(of), msg.files[0]));
       return [res.status, res.status === 200 ? res.headers.get("content-type") : null];
     };
     expect(await fileStatus(b)).toEqual([200, "image/png"]);
@@ -212,7 +213,7 @@ describe("forward messages (§21.3)", () => {
     const [shown] = await fwd(a, [msg.id], open.id);
     const guest = client();
     expect((await guest.collection("messages").getOne(shown!.id)).files).toEqual(msg.files);
-    expect((await fetch(guest.files.getURL(msg, msg.files[0]))).status).toBe(200);
+    expect((await fetch(guest.files.getURL(byName(msg), msg.files[0]))).status).toBe(200);
   });
 
   it("the readers of a forward see only that message of the original's room, and only while the forward is there", async () => {

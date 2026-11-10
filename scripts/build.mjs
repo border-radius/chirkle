@@ -11,15 +11,23 @@ import {
   EMOJI,
   ENTRIES,
   entryOutputs,
+  FORWARD,
   formatSizes,
+  INBOX,
   injectAssets,
+  LOGIN,
   latinFont,
   MEDIA,
+  MENTION,
   NOTIFY,
   OUTDIR,
   outputOf,
+  PEOPLE,
+  PROFILE,
   SEARCH,
   STATIC_DIR,
+  STATS,
+  STATS_OPTIONS,
   SW_OPTIONS,
   staticImports,
   VIEWER,
@@ -48,6 +56,7 @@ const viewerCss = await esbuild.build({
     { in: COLLECTIONS.css, out: "collections" },
     { in: ACCESS.css, out: "access" },
     { in: EMOJI.css, out: "emoji" },
+    { in: INBOX.css, out: "inbox" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -57,11 +66,12 @@ const mediaCssPath = outputOf(viewerCss.metafile, OUTDIR, MEDIA.css);
 const collCssPath = outputOf(viewerCss.metafile, OUTDIR, COLLECTIONS.css);
 const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
 const emojiCssPath = outputOf(viewerCss.metafile, OUTDIR, EMOJI.css);
+const inboxCssPath = outputOf(viewerCss.metafile, OUTDIR, INBOX.css);
 
 const result = await esbuild.build({
   ...BASE_OPTIONS,
   ...shared,
-  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath),
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath),
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
@@ -75,6 +85,14 @@ await cp(STATIC_DIR, OUTDIR, { recursive: true });
 
 const html = injectAssets(await readFile("web/index.html", "utf8"), { ...assets, font: latinFont(result.metafile, OUTDIR) });
 await writeFile(`${OUTDIR}/index.html`, html);
+
+// The statistics page (§40), built on its own.
+const stats = await esbuild.build({ ...STATS_OPTIONS, ...shared });
+const statsAssets = entryOutputs(stats.metafile, OUTDIR, STATS);
+await writeFile(
+  `${OUTDIR}/stats.html`,
+  injectAssets(await readFile(STATS.html, "utf8"), { ...statsAssets, font: latinFont(stats.metafile, OUTDIR) }),
+);
 
 const gz = async (/** @type {string} */ path) => gzipSync(await readFile(path), { level: 9 }).length;
 const sizes = {
@@ -93,6 +111,15 @@ const sizes = {
   notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
   emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
   emojiCss: await gz(`${OUTDIR}/${emojiCssPath}`),
+  inboxJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, INBOX.js)}`),
+  inboxCss: await gz(`${OUTDIR}/${inboxCssPath}`),
+  mentionJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, MENTION.js)}`),
+  profileJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, PROFILE.js)}`),
+  loginJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, LOGIN.js)}`),
+  forwardJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, FORWARD.js)}`),
+  peopleJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, PEOPLE.js)}`),
+  statsJs: await gz(`${OUTDIR}/${statsAssets.js}`),
+  statsCss: await gz(`${OUTDIR}/${statsAssets.css}`),
 };
 
 console.log(`built ${OUTDIR}/ (gzipped):\n${formatSizes(sizes)}`);

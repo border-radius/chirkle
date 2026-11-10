@@ -110,4 +110,4 @@ function showPasswordReset(e) {
   e.record.set("password_reset", e.app.settings().smtp.enabled);
 }
 
-module.exports = { checkInvite, checkOAuth2Signup, manifest, assetLinks, showPasswordReset };
+module.exports = { siteOf, checkInvite, checkOAuth2Signup, manifest, assetLinks, showPasswordReset };

@@ -19,6 +19,15 @@ describe("checkBudget", () => {
       notifyJs: 3 * 1024,
       emojiJs: 13 * 1024,
       emojiCss: 1024,
+      inboxJs: 2 * 1024,
+      inboxCss: 1024,
+      mentionJs: 2 * 1024,
+      profileJs: 3.5 * 1024,
+      loginJs: 2 * 1024,
+      forwardJs: 1.5 * 1024,
+      peopleJs: 1.5 * 1024,
+      statsJs: 5.5 * 1024,
+      statsCss: 3.5 * 1024,
     });
   });
 
@@ -40,6 +49,15 @@ describe("checkBudget", () => {
         notifyJs: 1000,
         emojiJs: 1000,
         emojiCss: 500,
+        inboxJs: 500,
+        inboxCss: 500,
+        mentionJs: 500,
+        profileJs: 500,
+        loginJs: 500,
+        forwardJs: 500,
+        peopleJs: 500,
+        statsJs: 500,
+        statsCss: 500,
       }),
     ).toEqual([]);
   });
@@ -66,6 +84,15 @@ describe("checkBudget", () => {
         notifyJs: 10,
         emojiJs: 10,
         emojiCss: 10,
+        inboxJs: 10,
+        inboxCss: 10,
+        mentionJs: 10,
+        profileJs: 10,
+        loginJs: 10,
+        forwardJs: 10,
+        peopleJs: 10,
+        statsJs: 10,
+        statsCss: 10,
       }),
     ).toEqual(["js", "html", "viewerCss", "collCss"]);
   });
@@ -89,6 +116,15 @@ describe("formatSizes", () => {
       notifyJs: 1024,
       emojiJs: 1024,
       emojiCss: 512,
+      inboxJs: 512,
+      inboxCss: 512,
+      mentionJs: 512,
+      profileJs: 512,
+      loginJs: 512,
+      forwardJs: 512,
+      peopleJs: 512,
+      statsJs: 512,
+      statsCss: 512,
     });
     expect(out).toContain("js          2.00 KB / 49.75 KB");
     expect(out).toContain("viewerJs    1.00 KB / 4.00 KB");

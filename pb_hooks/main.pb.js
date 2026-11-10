@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -7,37 +7,65 @@ onBootstrap((e) => {
   require(`${__hooks}/lib/http.js`).trustProxy(e.app);
 });
 
-routerUse((e) => {
-  require(`${__hooks}/lib/http.js`).headers(e);
-  return e.next();
-});
+// No routerUse with a JS handler here: it holds a JS runtime of the pool (--hooksPool) for the whole request, so every
+// open realtime connection and every file on its way from S3 would keep some, and room pages, whose enrich hooks need
+// one each, would make new ones (docs/PERF.md §6). What one would do for every request is done by the routes and hooks
+// it concerns: the headers by the routes that serve pages (lib/http.js), the body limit by PocketBase (it sizes each
+// collection's create and update by its fields, DESIGN.md §17.1), the files and the anonymous rooms' checks below.
 
-// Bodies up to 10 attachments of 20 MB (§17.1): replaces PocketBase's default limit (same middleware id); lib/http.js
-// keeps the default for everything but a message create.
-routerUse($apis.bodyLimit(require(`${__hooks}/lib/http.js`).MESSAGE_BODY_LIMIT));
-routerUse((e) => require(`${__hooks}/lib/http.js`).bodyLimit(e));
-
-// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35).
-routerUse((e) => {
-  // Re-encoded: letters never are (%61uthor would pass a look at the raw query).
-  if (/author|forwarded_from/i.test(e.request?.url?.query().encode() ?? "")) require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  return e.next();
+// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35):
+// checked by everything that takes a filter, sort or expand (the routes here that enrich records do too).
+onRecordsListRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
 });
-// A message's or collection item's file is its shared `files` row's (§37): served without a file token.
-routerUse((e) => {
-  if (e.request?.url?.path.startsWith("/api/files/") && require(`${__hooks}/lib/files.js`).serve(e)) return;
-  return e.next();
+onRecordViewRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
 });
-
+onRecordCreateRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
+onRecordUpdateRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
+// Every auth answer (password, OAuth2, OTP, refresh, impersonation) has the record, expanded as asked.
+onRecordAuthRequest((e) => {
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  e.next();
+});
 onRealtimeSubscribeRequest((e) => {
   require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
+  // Which app the connection is, and its account active today, for the statistics (§40).
+  require(`${__hooks}/lib/stats.js`).subscribed(e);
   e.next();
 });
 
-// Not the app's index.html (PocketBase's fallback for any other path, §7.1) for a missing asset or API.
+// A message's or collection item's file is its shared `files` row's (§37): served without a file token, by routes more
+// specific than PocketBase's /api/files/{collection}/… (lib/files.js serve). The rows themselves never directly.
+routerAdd("GET", "/api/files/messages/{recordId}/{filename}", (e) => require(`${__hooks}/lib/files.js`).serve(e, "messages"));
+routerAdd("GET", "/api/files/collection_items/{recordId}/{filename}", (e) =>
+  require(`${__hooks}/lib/files.js`).serve(e, "collection_items"),
+);
+onFileDownloadRequest(() => {
+  throw new NotFoundError();
+}, "files");
+
+// The app's pages (index.html at any path that isn't a file, §7.1) and its files, with their headers (§5.6).
+routerAdd("GET", "/{path...}", (e) => require(`${__hooks}/lib/http.js`).page(e));
+// Not the app's index.html for a missing asset or API.
+routerAdd("GET", "/stats", (e) => require(`${__hooks}/lib/http.js`).statsPage(e));
 routerAdd("GET", "/assets/{path...}", (e) => require(`${__hooks}/lib/http.js`).asset(e));
-routerAdd("GET", "/manifest.webmanifest", (e) => require(`${__hooks}/lib/site.js`).manifest(e));
-routerAdd("GET", "/.well-known/assetlinks.json", (e) => require(`${__hooks}/lib/site.js`).assetLinks(e));
+routerAdd("GET", "/manifest.webmanifest", (e) => {
+  require(`${__hooks}/lib/http.js`).headers(e);
+  return require(`${__hooks}/lib/site.js`).manifest(e);
+});
+routerAdd("GET", "/.well-known/assetlinks.json", (e) => {
+  require(`${__hooks}/lib/http.js`).headers(e);
+  return require(`${__hooks}/lib/site.js`).assetLinks(e);
+});
 routerAdd("GET", "/api/{path...}", () => {
   throw new NotFoundError();
 });
@@ -46,6 +74,7 @@ routerAdd("GET", "/api/chat/rooms", (e) => require(`${__hooks}/lib/lists.js`).ro
 routerAdd("GET", "/api/chat/rooms/{room}/messages", (e) => require(`${__hooks}/lib/lists.js`).messages(e));
 routerAdd("GET", "/api/chat/notifiable", (e) => require(`${__hooks}/lib/lists.js`).notifiable(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/dms", (e) => require(`${__hooks}/lib/dms.js`).openDm(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/live", (e) => require(`${__hooks}/lib/live.js`).info(e));
 routerAdd("GET", "/api/chat/unread", (e) => require(`${__hooks}/lib/reads.js`).unread(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/unread/{room}", (e) => require(`${__hooks}/lib/reads.js`).firstUnread(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reads", (e) => require(`${__hooks}/lib/reads.js`).markRead(e), $apis.requireAuth("users"));
@@ -64,8 +93,13 @@ routerAdd("DELETE", "/api/chat/items/{id}", (e) => require(`${__hooks}/lib/colle
 routerAdd("POST", "/api/chat/subs", (e) => require(`${__hooks}/lib/collections.js`).subscribe(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/subs/seen", (e) => require(`${__hooks}/lib/collections.js`).markSeen(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/keepalive/tick", (e) => require(`${__hooks}/lib/keepalive.js`).tick(e), $apis.requireSuperuserAuth());
+routerAdd("GET", "/api/chat/stats", (e) => require(`${__hooks}/lib/stats.js`).get(e));
+routerAdd("POST", "/api/stats/tick", (e) => require(`${__hooks}/lib/stats.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/media/tick", (e) => require(`${__hooks}/lib/media.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("GET", "/api/chat/users", (e) => require(`${__hooks}/lib/users.js`).searchUsers(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/mentionable", (e) => require(`${__hooks}/lib/handles.js`).mentionable(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/inbox", (e) => require(`${__hooks}/lib/inbox.js`).list(e), $apis.requireAuth("users"));
+routerAdd("POST", "/api/chat/inbox/seen", (e) => require(`${__hooks}/lib/inbox.js`).markSeen(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/password", (e) => require(`${__hooks}/lib/account.js`).changePassword(e), $apis.requireAuth("users"));
 
 // The core collections' hooks (messages, rooms, users) are all here, with the optional features' parts (lib/features.js)
@@ -234,12 +268,18 @@ onRecordDelete((e) => {
 onRecordCreate((e) => {
   const messages = require(`${__hooks}/lib/messages.js`);
   messages.beforeMessageCreate(e);
-  if (e.record) messages.setTextKey(e.record);
+  const features = require(`${__hooks}/lib/features.js`);
+  if (e.record) {
+    messages.setTextKey(e.record);
+    // Who it mentions (§41): from its text, or as the linked instance it comes from says.
+    const fed = features.federation(e.app);
+    require(`${__hooks}/lib/handles.js`).setMentions(e.app, e.record, !!fed && fed.messages.isFromPeer(e.app, e.record));
+  }
   e.next();
   const rec = e.record;
   if (!rec) return;
-  // Saved: what each feature does with a new message is queued, in the save's transaction.
-  const features = require(`${__hooks}/lib/features.js`);
+  // Saved: whom it tells (§41), and what each feature does with a new message is queued, in the save's transaction.
+  require(`${__hooks}/lib/inbox.js`).messageCreated(e.app, rec);
   features.telegram()?.outbound.queueCreate(e.app, rec);
   require(`${__hooks}/lib/previews.js`).queue(e.app, rec);
   require(`${__hooks}/lib/media.js`).add(e.app, rec);
@@ -250,6 +290,31 @@ onRecordAfterCreateSuccess((e) => {
   require(`${__hooks}/lib/messages.js`).afterMessageCreate(e);
   e.next();
 }, "messages");
+
+// Live (lib/live.js): each message once to everyone listening who can see its room, once committed. A failure to send
+// is logged, never the save's: the apps load what they missed when they reconnect.
+onRecordAfterCreateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "create");
+}, "messages");
+onRecordAfterUpdateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "update");
+}, "messages");
+onRecordAfterDeleteSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "delete");
+}, "messages");
+
+// The inbox (§41): each row added or removed, once committed, to its person's apps.
+onRecordAfterCreateSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/inbox.js`).tell(e.app, e.record, "create");
+}, "inbox");
+onRecordAfterDeleteSuccess((e) => {
+  e.next();
+  require(`${__hooks}/lib/inbox.js`).tell(e.app, e.record, "delete");
+}, "inbox");
 
 // Committed (with the message that queued it): the workers look at it now, not on their next look round.
 onRecordAfterCreateSuccess((e) => {
@@ -273,8 +338,11 @@ onRecordUpdate((e) => {
   const was = fed ? fed.messages.before(rec) : null;
   if (fed) fed.messages.checkMirrorChange(e.app, rec);
   const messages = require(`${__hooks}/lib/messages.js`);
+  const inbox = require(`${__hooks}/lib/inbox.js`);
+  const told = inbox.before(rec);
   messages.beforeMessageUpdate(e);
   messages.setTextKey(rec);
+  require(`${__hooks}/lib/handles.js`).setMentions(e.app, rec, !!fed && fed.messages.isFromPeer(e.app, rec));
   const touch = messages.changesForwards(rec);
   const edited = rec.getString("text") !== rec.original().getString("text");
   const deleted = rec.getBool("deleted") && !rec.original().getBool("deleted");
@@ -283,6 +351,8 @@ onRecordUpdate((e) => {
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
   e.next();
+  // Saved: mentions, replies and reactions told or taken back (§41).
+  inbox.messageChanged(e.app, rec, told);
   if (tg) tg.outbound.queueUpdate(e.app, rec, change);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);
@@ -323,6 +393,13 @@ if (require(`${__hooks}/lib/previews.js`).enabled()) {
 // Quiet realtime connections kept open: PocketBase closes them after 5 minutes, and clients then load everything again
 // (lib/keepalive.js).
 cronAdd("keepalive", "*/3 * * * *", () => require(`${__hooks}/lib/keepalive.js`).run($app));
+
+// Usage statistics (§40): a sample of who is online every 5 minutes (unless site.no_stats), old rows dropped daily.
+// STATS_CRON=off leaves them to POST /api/stats/tick (tests).
+if ($os.getenv("STATS_CRON").trim().toLowerCase() !== "off") {
+  cronAdd("stats", "*/5 * * * *", () => require(`${__hooks}/lib/stats.js`).run($app));
+  cronAdd("stats-prune", "23 3 * * *", () => require(`${__hooks}/lib/stats.js`).prune($app));
+}
 
 // The media grid's thumbnails and video posters (§30.1): made by a worker, a minute's run at a time. MEDIA_CRON=off
 // leaves them to POST /api/media/tick (tests).

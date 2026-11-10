@@ -41,6 +41,17 @@ describe("sync (room list + hidden rows)", () => {
     expect(store.get().hidden.get(r.id)).toBe(row.id);
   });
 
+  it("counts its load in listLoads while it is out (§7.9)", async () => {
+    start();
+    expect(store.get().listLoads).toBe(1);
+    await ready();
+    await vi.waitFor(() => expect(store.get().listLoads).toBe(0));
+    const reload = sync!.reload();
+    expect(store.get().listLoads).toBe(1);
+    await reload;
+    expect(store.get().listLoads).toBe(0);
+  });
+
   it("applies live room and hidden-row events", async () => {
     start();
     await ready();

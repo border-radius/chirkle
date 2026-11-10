@@ -182,12 +182,17 @@ dialog.switcher[open] {
 }
 
 .switcher kbd,
-.jump-button kbd {
+.jump-button kbd,
+.focus-key {
   padding: 1px 6px;
   border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--muted);
-  font: 600 0.6875rem / 1.5 inherit;
+  /* Not `font: … inherit` (invalid in the shorthand, so kbd stayed monospace). */
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 /* What the keys do, under the list (not on touch screens). */

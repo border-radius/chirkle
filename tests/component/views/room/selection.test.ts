@@ -19,6 +19,11 @@ describe("room view", () => {
     const targets = () => targetEls().map((b) => b.lastElementChild!.textContent);
     const target = (label: string) => targetEls().find((b) => b.lastElementChild!.textContent === label)!;
     const select = (id: string) => button(msgEl(id), "Select")!.click();
+    /** Forward pressed: the dialog is a lazy chunk, open once it has loaded. */
+    const forward = async (el: HTMLElement | null) => {
+      button(el!, "Forward")!.click();
+      await vi.waitFor(() => expect(root.querySelector<HTMLDialogElement>("dialog.forward")?.open).toBe(true));
+    };
 
     it("Select starts selecting: checkboxes on every message, a bar instead of the composer", async () => {
       const room = await newRoom();
@@ -98,7 +103,7 @@ describe("room view", () => {
       await vi.waitFor(() => expect(store.get().rooms.has(room.id)).toBe(true));
       const release = ctl.hold("forward");
       ctl.failNext("forward", new ApiError("Failed to fetch", 0));
-      button(msgEl(m.id), "Forward")!.click();
+      await forward(msgEl(m.id));
       target(room.name).click();
       expect(button(dialog(), "Cancel")!.disabled).toBe(true);
       const cancel = new Event("cancel", { cancelable: true });
@@ -117,7 +122,7 @@ describe("room view", () => {
       const room = await newRoom();
       const m = await me.api.send({ id: newId(), room: room.id, text: "x" });
       await mount(room);
-      button(msgEl(m.id), "Forward")!.click();
+      await forward(msgEl(m.id));
       const search = dialog().querySelector<HTMLInputElement>("input")!;
       const status = () => dialog().querySelector(".search-status")!.textContent;
       search.value = name;
@@ -190,7 +195,7 @@ describe("room view", () => {
       await vi.waitFor(() => expect(store.get().rooms.has(elsewhere.id)).toBe(true));
       select(m2.id);
       box(m1.id)!.click();
-      button(bar(), "Forward")!.click();
+      await forward(bar());
       expect(dialog().open).toBe(true);
       expect(dialog().querySelector("h2")!.textContent).toBe("Forward 2 messages");
       expect(targets()).toEqual(expect.arrayContaining(["Bob", room.name, elsewhere.name]));
@@ -219,7 +224,7 @@ describe("room view", () => {
       const room = await newRoom();
       const m = await me.api.send({ id: newId(), room: room.id, text: "psst" });
       await mount(room);
-      button(msgEl(m.id), "Forward")!.click();
+      await forward(msgEl(m.id));
       expect(dialog().querySelector("h2")!.textContent).toBe("Forward message");
       const search = dialog().querySelector<HTMLInputElement>("input")!;
       search.value = name;
@@ -241,7 +246,7 @@ describe("room view", () => {
       const m = await me.api.send({ id: newId(), room: room.id, text: "for Pat alone" });
       await mount(team);
       await vi.waitFor(() => expect(store.get().rooms.get(team.id)?.members).toContain(pat.user.id));
-      button(msgEl(m.id), "Forward")!.click();
+      await forward(msgEl(m.id));
       const search = dialog().querySelector<HTMLInputElement>("input")!;
       search.value = name;
       search.dispatchEvent(new Event("input"));
@@ -255,7 +260,7 @@ describe("room view", () => {
       await mount(room);
       await vi.waitFor(() => expect(store.get().rooms.has(room.id)).toBe(true));
       ctl.failNext("forward", new ApiError("Failed to fetch", 0));
-      button(msgEl(m.id), "Forward")!.click();
+      await forward(msgEl(m.id));
       target(room.name).click();
       await vi.waitFor(() => expect(dialog().textContent).toContain("Couldn't forward. Can't reach the server."));
       expect(dialog().open).toBe(true);
@@ -279,7 +284,7 @@ describe("room view", () => {
       await vi.waitFor(() => expect(store.get().rooms.has(elsewhere.id)).toBe(true));
       select(mine.id);
       box(theirs.id)!.click();
-      button(bar(), "Forward")!.click();
+      await forward(bar());
       await bob.api.softDelete(theirs.id);
       await vi.waitFor(() => expect(bodyOf(theirs.id)).toBe("Message deleted"));
       target(elsewhere.name).click();
@@ -289,12 +294,12 @@ describe("room view", () => {
 
       // What the server says is wrong is shown, not just "Failed to forward the messages.".
       ctl.failNext("forward", new ApiError("Failed to forward the messages.", 400, { room: "This room is archived and read-only." }));
-      button(msgEl(mine.id), "Forward")!.click();
+      await forward(msgEl(mine.id));
       target(elsewhere.name).click();
       await vi.waitFor(() => expect(dialog().textContent).toContain("Couldn't forward. This room is archived and read-only."));
       // Deleted before you pick where: nothing is sent.
       dialog().querySelector<HTMLButtonElement>("button.cancel")!.click();
-      button(msgEl(mine.id), "Forward")!.click();
+      await forward(msgEl(mine.id));
       await me.api.softDelete(mine.id);
       await vi.waitFor(() => expect(bodyOf(mine.id)).toBe("Message deleted"));
       const sent = ctl.calls("forward");

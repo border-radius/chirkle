@@ -317,7 +317,7 @@ loads the files in (by name).
 - **Edit stamp:** on a `messages` update where `text` actually changed (and it isn't a delete), set `edited_at = now`. An update that doesn't change the text leaves it untouched.
 - **Archive stamp:** on a `rooms` update, set `archived_at = now` when `archived` becomes true, and clear it when `archived` becomes false.
 - **Archived-room guard (defense in depth):** reject a message create, update or delete when the target room is archived. This repeats the API rule in case rule traversal through `@request.body.room.archived` behaves differently in the pinned PocketBase version. Integration tests cover both layers.
-- **Security headers** via `routerUse`: every response gets `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin`. Static app paths also get `Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`. The hash allows index.html's one inline script, which sets the chosen theme before the first paint (§7.8). The CSP is *not* applied to `/api/*` or to the admin UI `/_/`, which sends its own CSP.
+- **Security headers**, set by the routes that serve the app (`lib/http.js` `headers`; not by a `routerUse` JS middleware, which would hold a JS runtime for every request, PERF.md §6): pages and the app's files get `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` (PocketBase sends nosniff with every API answer itself), and `Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-…'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`. The hash allows index.html's one inline script, which sets the chosen theme before the first paint (§7.8). The CSP is *not* applied to `/api/*` or to the admin UI `/_/`, which sends its own CSP.
 - **Cache headers:** `/assets/*` (content-hashed) gets `Cache-Control: public, max-age=31536000, immutable`. Every other static path, including `/` and `index.html`, gets `no-cache`.
 - **No `index.html` for a missing asset or API:** PocketBase serves `index.html` for any path that isn't a file (§7.1). Under `/assets/` (a route of ours, `GET /assets/{path...}`) a missing file is a 404 with `Cache-Control: no-store` instead: an old build's lazy chunk, asked for by a tab left open across a deploy, would otherwise get HTML (useless as a script) cached for a year under its hashed name. An unknown `/api/` path is a JSON 404 too, not the app's page.
 - **Rate limiting:** PocketBase's built-in limiter, enabled from the init migration. The limits are per client IP:
@@ -552,6 +552,12 @@ while its first page loads.
 - Input is kept on failure, so nothing the user typed is lost.
 - Message text is rendered with `white-space: pre-wrap`. No markdown in the MVP.
 - **Up arrow** in an empty composer starts editing the user's most recent message in the current window. Deleted messages are skipped.
+- **Ctrl+/** (⌘/ on a Mac) anywhere in the room puts the caret in the composer; by the key's place too (`Slash`), for
+  layouts where it types something else. While the textarea isn't focused, a key badge in the composer row ("Ctrl /",
+  "⌘/", the Jump to button's style) says so; it hides while the textarea is focused, and on touch screens
+  (`hover: none`). The textarea carries `aria-keyshortcuts`. A room kept in the background, a banner instead of the
+  composer, or a modal dialog over it (the composer inert) leaves focus where it is. Test: `keyboard.test.ts`.
+  Android: Ctrl+/ from a hardware keyboard (ANDROID.md §7.2), no badge.
 
 ### 7.6.1 Editing messages
 
@@ -592,7 +598,7 @@ while its first page loads.
 | Asset | Budget (gzipped) |
 |---|---|
 | `app.js` (including the PocketBase client) | **≤ 49.75 KB** (25 KB for the MVP; raised for §15–§17, §19, §22, §23, §24, video attachments, the QA pass 8 and 9 fixes, bigger attachments, audio attachments, §27, the room cache and its prefetching, opening at the first unread message, the QA pass 11 fixes, service messages, the room cache without waiting for the network, the QA pass 12 fixes, prefetching rooms not yet kept, the QA pass 13 fixes, thumbnail caching, the QA pass 14 fixes, Ctrl+Up/Down to pick the reply, link previews, the room access dialog fix, who can post, message search, message permalinks, the media grid, the QA pass 16 fixes, video posters in the room, the QA pass 17 fixes, media collections, Jump to, Appearance, the room in the tab title, the QA pass 19 fixes, live collection badges, the security audit fixes, the room kept as the page goes, the prefetch herd fix, the QA pass 23 fixes, live replies quoted by the room, the 2026-10-31 redesign, taps on touch screens that also have a mouse, the new version line (§27.4), taps on WebKit and Android touch screens, see §13) |
-| `app.css` | **≤ 11.25 KB** (11.15 KB until "chirps on Chirkle" (§24.3), 11.05 KB until QA pass 31, 10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
+| `app.css` | **≤ 11.30 KB** (11.25 KB until forgot password (§39) met mentions (§41) in one build, 11.15 KB until "chirps on Chirkle" (§24.3), 11.05 KB until QA pass 31, 10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
 | `index.html` | ≤ 1.5 KB |
 | Image viewer (§17.7), loaded on first use | ≤ 4 KB script, ≤ 1.5 KB stylesheet |
 | Message search (§29), loaded on first use | ≤ 2 KB script (its styles are in `app.css`) |
@@ -600,6 +606,12 @@ while its first page loads.
 | Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
 | Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2.05 KB stylesheet |
 | Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
+| "Mentions & replies" page (§41.4), loaded when it is opened | ≤ 2 KB script (`views/inbox.ts`), ≤ 1 KB stylesheet (`web/styles/inbox.css`) |
+| The composer's "@" suggestions (§41.3), loaded when an "@" is typed | ≤ 2 KB script (`ui/mention-suggest.ts`; styled by `emoji.css`) |
+| Settings (`/me`, `views/profile.ts`), loaded when it is opened (since 2026-11-10) | ≤ 3.5 KB script |
+| Log in and sign up (`views/login.ts`), loaded for those pages, at once for someone not signed in (since 2026-11-10) | ≤ 2.30 KB script (2 KB until forgot password's modes (§39) joined it) |
+| The forward dialog (§21.3, `views/room/forward.ts`), loaded when Forward is first chosen (since 2026-11-10) | ≤ 1.5 KB script |
+| The people search (§16.5, `ui/user-search.ts`): New message, and loaded with the room access dialog (since 2026-11-10) | ≤ 1.5 KB script |
 | Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
 | Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
@@ -613,7 +625,10 @@ Other rules:
 - A feature most visits never use can be a lazy chunk (`import()`, esbuild code splitting) with its own budget, like
   the image viewer (§17.7). A lazy module must not import a module `app.js` uses: esbuild would move it into a shared
   chunk that `app.js` loads on every visit (a fourth request). The build fails if `app.js` imports any chunk; such a
-  module gets what it needs from `app.js` as arguments.
+  module imports types only and gets what it needs from `app.js` as arguments: its "kit" (`web/src/lazy.ts`, which
+  also has `lazyView`, a page made once its chunk is in). Two lazy chunks importing the same module would share a
+  third chunk too, so one that another needs is loaded beside it and handed over (the room access dialog and the
+  people search).
 
 ### 7.8 Styling
 
@@ -636,6 +651,24 @@ Other rules:
   - The message list has `aria-live="polite"`.
   - Visible focus rings and full keyboard operability.
   - Color contrast of at least 4.5:1.
+
+### 7.9 Loading line (2026-11-09)
+
+When the app is slow there is something to see: a thin (2 px) line in the accent, a short gradient moving left to
+right, over the top of the room list (under the Jump to box; on a narrow screen under the app bar) and over the top
+of the room (under its header). It takes no room in the layout (`.loadbar`, a 0-height element whose `::before` is
+the line) and is hidden from screen readers (`aria-hidden`; the lists keep their `aria-busy`). With reduced motion
+it stands still as a faint line across the width.
+
+- It shows once a fetch has been out for `LOADBAR_MS` (400 ms), so a quick one shows nothing, and goes as soon as
+  nothing is out (`web/src/ui/loadbar.ts`). The delay is in JS: reduced motion turns off CSS transitions.
+- Room list: `AppState.listLoads` counts the requests out now, the room list and hidden rows (`sync.ts`) and the
+  unread counts (`unread.ts`). A logout's reset of the store keeps it, so loads still out count back down to 0.
+- Room: the controller's `onBusy` says when the first of its reads goes out and when the last is back: the first
+  load (and Retry), history at either end, a jump, going to a message, catching up once live, and the refetch and gap
+  fill after a reconnect. A room opened from the prefetched page (PERF.md §5) shows none. Writes have their own signs
+  (pending messages, the upload bar).
+- Android: the same line (ANDROID.md §58).
 
 ## 8. Build and dev tooling
 
@@ -1083,6 +1116,7 @@ Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `p
 | Bundle budget (WebKit taps) | `app.js` raised from 49.60 KB to 49.75 KB (§7.7), the user's call (2026-11-02): two phone tap fixes found by the WebKit e2e run took it from 49.59 KB to 49.69 KB. A tap on a message's text counts for the message even when the browser's touch adjustment moves the click onto a link near it (WebKit; Chrome on Android does it too): it went to the time's permalink. And a touch ending outside the messages hides the tapped message's buttons, since WebKit (iOS Safari too) sends no click for a tap on something that takes none, such as the room's name. |
 | Bundle budget (emoji by name) | The emoji chunk raised from 4.25 KB to 13 KB (§7.7), 2026-11-06: the user asked for emoji search and ":name" in the composer on the grounds that the picker is a lazy chunk now. The names (`lib/emoji-names.ts`, one line per emoji with the emoji itself, so it can be read and kept) are about 7.4 KB of the 12.83 KB; lines without the emoji would save about 2 KB. The picker's styles moved out of `app.css` (11.19 → 11.00 KB) into `web/styles/emoji.css` (new `emojiCss` budget, 1 KB) rather than raise `app.css` for the search box and the suggestions. `app.js` grew by about 0.13 KB (the composer spotting ":na"). |
 | Bundle budget (collection chips) | The collections chunk raised from 6.70 KB to 6.75 KB script and 1.95 KB to 2 KB stylesheet (§7.7), the user's call (2026-11-02): the picker's collections as a row of chips, as the app's, instead of a select (§31.3) took them from 6.65 KB and 1.94 KB to 6.75 KB and 1.98 KB. |
+| Bundle size (pages out of app.js) | 2026-11-10, the user's call ("move profile/settings, login/sign-up, forward picker, dm people search to separate bundles"): mentions (§41) had taken `app.js` to 50.54 KB, over its 49.75 KB. Settings, log in and sign up, the forward dialog and the people search became lazy chunks with budgets of their own (§7.7): `app.js` 46.36 KB, its budget unchanged. Each opens after its chunk loads the first time (log in's is started at once for someone not signed in). Measured but not done: re-minifying with terser, −2.8 KB (2026-11-02). |
 | Bundle budget (QA pass 33) | The collections stylesheet raised from 2 KB to 2.05 KB (§7.7), 2026-11-07, the user's call ("raise budget if needed"): on a phone the collection page's Delete went up by the back arrow, as it wrapped to a line of its own, and its buttons got narrower (QA BUG-246), which took it from 1.97 KB to 2.00 KB. |
 
 ### Decided (2026-10-24, linked instances)
@@ -1363,12 +1397,13 @@ users (§26) have it, and a user may set it on their own record (the profile doe
 | `files` | file, multiple | `maxSelect` 10, `maxSize` 20 MB each (4 and 8 MB until 1760000018, raised to take a whole Telegram album, §26), **`protected: true`**, `thumbs`: `480x360` (center crop) and `240x180`. No `mimeTypes` allowlist: any file can be attached, because nothing is ever rendered from the file itself (§15 shared rules). |
 | `file_names` | json | stored name → original upload name, written only by the create hook from the uploads themselves (bidi and invisible characters removed, 200 characters max); cleared by a soft delete, never changed by an edit (QA BUG-28) |
 
-PocketBase's default request body limit (32 MB) doesn't fit 10 × 20 MB, and the records API is PocketBase's own, so
-one route can't get its own limit: `main.pb.js` replaces the default with 201 MB (`$apis.bodyLimit`, same middleware
-id), and a middleware (`lib/http.js` `bodyLimit`) holds any other request to 32 MB with PocketBase's own limiter,
-which counts what is read: 413 for one declaring more, and for a chunked one (no `Content-Length`) once it goes over
-(QA BUG-143; it went through to 201 MB, guests' logins too). Chunked bodies are still taken: the Android app sends
-one when it can't tell a file's size. Tests pin all three.
+PocketBase's default request body limit is 32 MB, and it sizes a collection's record create and update by their fields:
+32 MB plus each file field's and JSON field's `maxSize`. `messages.files` is JSON with `maxSize` 10 × 20 MB (§37,
+QA BUG-219), so a message create takes 10 files of 20 MB, and every other route keeps about 32 MB. The limiter counts
+what is read: 413 for a body declaring more, and for a chunked one (no `Content-Length`) once it goes over (QA
+BUG-143). Chunked bodies are still taken: the Android app sends one when it can't tell a file's size. Tests pin all
+three. No JS middleware does any of this: a `routerUse` JS handler holds a JS runtime for the whole request, realtime
+connections and file downloads too (PERF.md §6).
 
 **Text becomes optional when files are attached:** the hook rule "text is non-empty" (§5.6) changes to "text is
 non-empty **or** at least one file is attached". A message with neither is still rejected.
@@ -1723,7 +1758,7 @@ Every message read (`page`, `getMessage`, `changes`, `send`) expands `author,rep
 only what the quote shows: `reply_to`, and the original's `id, author, text, deleted, files` and author's
 `id, name` (`MSG_FIELDS` in `api.ts`). The expand follows the messages view rule, which the same-room check makes
 always true for someone who can see the reply. `NewMessage.replyTo` sends `reply_to`. Live events don't expand it
-(`LIVE_OPTS`, docs/PERF.md §2.3): it costs the server ~5 ms a client for every reply. The room controller fills the
+(docs/PERF.md §2.3; since 2026-11-09 they come once per message on `chat/messages`, PERF.md §7). The room controller fills the
 quote in from the original in its window, or from its own copy of the reply, and fetches the original only when it has
 neither.
 
@@ -3363,8 +3398,10 @@ routes (`/api/chat/rooms/{room}/messages`, search, `notifiable`) and realtime. T
 
 Filtering or sorting by `author` or `forwarded_from` would show who wrote what, as would expanding the back-relations
 `messages_via_author` and `messages_via_forwarded_from`. Relations reach messages from any collection
-(`@collection.messages.author`, `messages_via_room.author`). So `refuseProbes` (`routerUse`, every request) and
-`refuseSubscriptionProbes` (realtime subscriptions' options) refuse those with 400, quoted values aside. Two cases are
+(`@collection.messages.author`, `messages_via_room.author`). So `refuseProbes` (the record request hooks: list, view,
+create, update and every auth answer; and the routes that enrich records, PERF.md §6) and `refuseSubscriptionProbes`
+(realtime subscriptions' options) refuse those with 400, quoted values aside. `@collection` filters are PocketBase's
+own 403 for anyone but superusers. Two cases are
 allowed:
 - Superusers.
 - An author compared with the caller's own id (`author != {:me}`, `reply_to.author = {:me}`), which says only which
@@ -3547,9 +3584,13 @@ reverses: the down migration copies each file back into its messages and items.
 ### 37.2 URLs
 
 Unchanged: `/api/files/messages/{message}/{name}` and `/api/files/collection_items/{item}/{name}`, with `?thumb=`.
-A router middleware (`files.serve`) answers them: if the message shows that name (its own, or a forward's original's,
-§21.3; not deleted) or the item has it, the path is pointed at the `files` row and PocketBase's own handler serves it
-(thumbnails, ranges, `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…` itself.
+Routes of their own (`files.serve`, more specific than PocketBase's `/api/files/{collection}/…`) answer them: if the
+message shows that name (its own, or a forward's original's, §21.3; not deleted) or the item has it, the `files` row's
+file is served as PocketBase's handler would serve it (thumbnails of the field's sizes or 100x100, made when first
+asked for; ranges; `download`; `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…`
+itself (`onFileDownloadRequest`). They go by collection name: with the collection's id (as the PocketBase SDK's
+`files.getURL` builds them) a message's or an item's file is a 404 since 2026-11-09. Not a router middleware, which
+would hold a JS runtime for every request (PERF.md §6, QA BUG-250).
 Posters (`/api/chat/posters/{message}/{file}`, `/api/chat/posters/items/{item}/{file}`) are checked the same way.
 
 ### 37.3 Access by URL
@@ -3642,9 +3683,11 @@ the admin set up email, with the emailed link opening the app's page instead of 
   `minlength`), "Set password". Then it logs in with the new password, as the email in the token's claims, and goes
   home. If that login fails, it shows Log in with the email filled and "Your password was changed. Log in with it."
   A link that ran out or was used: "This link has expired or was already used. Ask for a new one."
-- Two more modes of the login view rather than a lazy chunk: +0.57 KB gzipped (app.js 49.70 of 49.75 KB).
+- Two more modes of the login view rather than a lazy chunk: +0.57 KB gzipped (app.js 49.70 of 49.75 KB). Since the login
+  view became a lazy chunk (2026-11-10) they are in it: `loginJs` 2.24 KB, its budget raised from 2 to 2.30 KB, and
+  `app.css` 11.27 KB with mentions, its budget raised from 11.25 to 11.30 KB (the user's call, 2026-11-10).
 
-### 39.3 Android (ANDROID.md §56)
+### 39.3 Android (ANDROID.md §62)
 
 The auth screen has the same "Forgot password?" and Reset password form (`AuthMode.Forgot`). The link opens in the
 browser: the app's links (`/r/`, `/c/`) don't include `/reset-password/`, and the web page logs that browser in.
@@ -3659,3 +3702,130 @@ browser: the app's links (`/r/`, `/c/`) don't include `/reset-password/`, and th
   login after the reset and its fallback, the expired link. `site.test.ts`: the flag and an old cache.
 - `tests/e2e/password_reset.spec.ts`: the whole flow in a browser, the email read from the test SMTP server.
 - Android `UiPasswordResetTest`: the site's flag, the request, the form on the screen and its absence without mail.
+
+## 40. Usage statistics (2026-11-09)
+
+The user: "a separate web page accessible only to superadmin or moderators where you can see how much people online
+currently (no names, just count), how much they are using app, etc." and "make a switch for superadmin in db to disable
+statistic (so it will not take space over time)". No Android screen (the user's choice): the app is counted, nothing
+in it changed.
+
+### 40.1 The page (`/stats`)
+
+A page of its own, not one of the app's: `web/stats.html`, `web/src/stats/main.ts` and `web/styles/stats.css`, built
+apart from app.js (`STATS_OPTIONS` in `scripts/lib/build-utils.mjs`; budgets `statsJs`, `statsCss`), so the app's
+bundle doesn't carry it. `GET /stats` (`lib/http.js statsPage`) serves the built `stats.html` to anyone, with the app's
+headers but not its preloads; 404 before a build. The service worker leaves it alone (it would keep it as the app's
+offline shell).
+
+It asks `GET /api/chat/stats` with the session the browser has: the app's (`pocketbase_auth`, a moderator), else the
+admin UI's (`__pb_superusers__/_`, PocketBase 0.40, a superuser signed in at `/_/` on the same server). Anyone else gets
+"Page not found". Moderators find it on Settings (a Moderation card); superusers open `/stats` themselves. Refreshed
+every 30 s while the tab is visible.
+
+- **Now**: people online (distinct accounts), on the web, on Android (someone on both counts in each), guests (open
+  connections without an account), the peak today and in 7 days.
+- **Usage**: active in the last 24 hours, 7 and 30 days (and the share of accounts); person-hours online today and in
+  7 days, and per active person; a chart of people online over 24 hours or 7 days (a gap of more than two samples breaks
+  the line).
+- **Messages**: today, 7 and 30 days with the people who posted, the DMs' share, files sent, reactions on the 30 days'
+  messages; a column per day for 30 days. Days are the viewer's (`tz`).
+- **Accounts**: total, new in 7 days, moderators, banned.
+
+Counts are of this server's own accounts: not a linked server's people (§33), nor the Telegram bridge's stand-ins
+(§26). The charts are drawn at their box's width (text stays 11 px on a phone), with a tooltip on hover or focus (← →
+step through the samples) and their numbers in a table under each.
+
+### 40.2 What is recorded (`pb_hooks/lib/stats.js`, `pb_migrations/1760000044_stats.js`)
+
+- **Online now** is read from the realtime broker when asked: each client with at least one subscription; its
+  account from its `auth`, superusers (the admin UI) left out. A client's app is noted when it subscribes
+  (`onRealtimeSubscribeRequest`) from its User-Agent: `okhttp/` is the Android app, `Mozilla/` a browser. Not on
+  connecting: a JS hook on `GET /api/realtime` would hold a JS runtime for as long as the connection is open (PERF.md
+  §6). In that hook `e.request` is undefined in the JS runtime: the header comes from `requestInfo().headers.user_agent`.
+- **`stats_samples`**: every 5 minutes (cron `stats`) the counts, no ids. Kept a year.
+- **`stats_activity`**: a row per account and UTC day it was online, with `last_at`; written by the 5-minute run for
+  everyone online and by a subscription (at most once an hour per account, `app.store()`), so a visit shorter than 5
+  minutes counts. "Active in the last 24 hours" is `last_at` within them. Kept 90 days; deleted with its account.
+- Neither table has API rules: only `GET /api/chat/stats` reads them, and it answers counts.
+- **`site.no_stats`** (hidden, ticked by a superuser in the admin UI): nothing more is recorded. Live numbers and the
+  message counts still show, with a note; what was recorded ages out as before (the daily prune, cron `stats-prune`,
+  runs either way).
+- An index on `messages.created` keeps the 30 days' counts a range scan.
+- `STATS_CRON=off` (tests) leaves the run and the prune to `POST /api/stats/tick` (superusers).
+
+Cost: a row every 5 minutes, and per account at most one upsert per hour while connected, plus one per online account
+in the 5-minute run (one transaction). Nothing per message.
+
+### 40.3 Tests
+
+`tests/integration/stats.test.ts` (who sees it, no API rules, no names in the answer, the page served; online by app and
+guests, superusers left out, gone on disconnect; recording, `no_stats`, the prune and a deleted account; messages,
+DMs, files, reactions, accounts; the viewer's days), `tests/unit/stats.test.ts` (person-hours, peaks, runs, the 30 days,
+axis tops). Looked at in Chromium (light, dark, 390 px; as a moderator, another account, and a superuser through `/_/`).
+
+## 41. Handles, mentions and "Mentions & replies" (2026-11-10)
+
+The user: "user should have nicknames/handles. and there should be a way to mention them like @nickname (with
+auto-complete). mentions should act like replies (notifications and highlight in room). also room in roomlist should
+show if room have any mentions/replies. in sidebar right after jump to should be a new section "mentions & replies"
+where user can see all mentions and replies for them and jump to chat where they are. info about reactions should also
+be there (somebody set reaction to your message)". Web, server and the Android app (ANDROID.md §60).
+
+### 41.1 Handles (`users.handle`, `pb_hooks/lib/handles.js`)
+
+3 to 24 of `a–z`, `0–9`, `_`, unique, stored in lower case; "all", "everyone", "here", "room" and "channel" are
+reserved. Every account has one: a new account's is made from its name (Latin and Cyrillic letters transliterated,
+accents dropped, anything else "_", at most 20, a number added when taken), and migration `1760000045_mentions.js`
+gave existing accounts theirs the same way (it repeats the code: migrations can't require hooks). A Telegram stand-in
+takes its Telegram username when it is free. You change yours on Settings (web) or Your profile (app); an "@" typed
+first is dropped. Refused with the reason on `handle`: "Use 3 to 24 letters a–z, digits or underscores.", "This handle
+is taken. Choose another one.". A rename keeps the handle. People search (`/api/chat/users`) finds by handle too.
+
+### 41.2 Mentions (`messages.mentions`)
+
+"@handle" after the start or anything but a letter, digit, "_", "@", "." or "/", and not followed by one of those
+(so not an email, `@ann@b.example` or a path), case ignored: `MENTION` in `handles.js`, `web/src/lib/mentions.ts`,
+the app's `lib/Mentions.kt`, all run on `shared/vectors/mentions.json`. The server resolves them on create and on an
+edit of the text into `mentions` (users, at most 20): people who can see the room, not the author; none for a forward,
+a deleted or a service message. Clients can't set it: a create's is replaced, an update changing it is a 400. A linked server's events carry them by global id (§33).
+
+In a room each "@handle" is marked (`.mention`, accent and bold); yours more (`.mention.me`), and a message that
+mentions you is highlighted as a reply to you is (`.to-me`).
+
+### 41.3 Suggestions as "@" is typed
+
+`GET /api/chat/mentionable?room=&q=` (signed in; 404 for a room you can't see): up to 8 people who can see the room,
+whose handle starts with `q` or whose name holds it, those who wrote there lately first (not in an anonymous room,
+§35); never you or a banned account. The web's composer spots "@" and loads `ui/mention-suggest.ts`, which asks
+after a 120 ms pause and shows a list over the composer like the ":name" emoji (§20.6): ↑/↓, Enter or Tab put
+"@handle ", Escape closes it. The app shows a column of people over its field; a tap puts the handle in.
+
+### 41.4 The inbox (`inbox`, `inbox_reads`, `pb_hooks/lib/inbox.js`)
+
+A row per thing told to you: `mention`, `reply` (to your message) or `reaction` (to your message, with its emoji);
+`actor`, `message`, `room`. Written in the messages hooks: a mention added or removed by an edit, a reaction taken
+back and a deleted message take theirs away; your own doings, stand-ins and the reply's author mentioned too get none.
+No API rules: `GET /api/chat/inbox?before=<cursor>&limit=` lists yours, newest first, leaving out rooms you can't see
+now; in an anonymous room the room is the actor of a mention or reply. `POST /api/chat/inbox/seen { at }` moves
+`inbox_reads.seen_at`. Each row added or taken away is sent to its user's clients on `chat/inbox`
+(`{ action, id, kind, room, message, created }`).
+
+`GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100) and `mentions` (per room, the unread
+messages that mention or reply to you). The sidebar's first row, right under Jump to, is **Mentions & replies**
+(`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
+`chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
+in #room", "replied to you" (with your message quoted) or "reacted 👍 to your message", newest first, "Show older",
+what is new tinted; each opens its message in its room. Opening it sees everything listed.
+
+### 41.5 Notifications
+
+A mention of you notifies as a reply does (§34, the "Mentions and replies" choice; "Ada mentioned you in #room"). The
+app's check (`GET /api/chat/notifiable`) now includes mentions (`mentions.id ?= {:me}`: PocketBase's `mentions ?=`
+on a multi-relation matched nothing), on the channel renamed "Mentions and replies".
+
+### 41.6 Tests
+
+Server `tests/integration/mentions.test.ts`, `lists.test.ts` (notifiable); web `tests/unit/vectors.test.ts`,
+`tests/component/views/room/mentions.test.ts`, `views/inbox.test.ts`, `views/rooms.test.ts`, `unread.test.ts`,
+`notify.test.ts`, `tests/e2e/mentions.spec.ts`; app `VectorsTest`, `ContractTest`, `UiMentionsTest`.

@@ -91,8 +91,8 @@ sw.addEventListener("fetch", (e) => {
     e.respondWith(thumbnail(e, `${url.origin}${url.pathname}${thumb ? `?thumb=${encodeURIComponent(thumb)}` : ""}`));
     return;
   }
-  // Files (opened in a tab) and the admin UI are not the app's pages.
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_/")) return;
+  // Files (opened in a tab), the admin UI and the statistics page (§40) are not the app's pages.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/_/") || url.pathname === "/stats") return;
   if (req.mode === "navigate") e.respondWith(page(e));
   else if (HASHED.test(url.pathname)) e.respondWith(asset(req));
 });

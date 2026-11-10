@@ -5,7 +5,7 @@
 
 import type { Api } from "./api.ts";
 import { createScope, type Scope } from "./scope.ts";
-import { type AppState, markHidden, removeRoom, type Store, unmarkHidden, upsertRoom } from "./store.ts";
+import { type AppState, listLoad, markHidden, removeRoom, type Store, unmarkHidden, upsertRoom } from "./store.ts";
 
 type Update = ReturnType<typeof upsertRoom>;
 
@@ -58,6 +58,7 @@ export function createSync({ api, store }: { api: Api; store: Store<AppState> })
     const seq = ++issued;
     if (!inFlight++) changed = { rooms: new Set<string>(), hidden: new Set<string>() };
     if (store.get().roomsStatus !== "ready") store.set({ roomsStatus: "loading" });
+    store.set(listLoad(1));
     try {
       const [rooms, hidden] = await Promise.all([api.listRooms(s.signal), guest ? [] : api.listHidden(s.signal)]);
       if (!s.active || seq < applied) return;
@@ -74,6 +75,7 @@ export function createSync({ api, store }: { api: Api; store: Store<AppState> })
       if (s.active && seq >= applied) store.set({ roomsStatus: "error" });
     } finally {
       inFlight--;
+      store.set(listLoad(-1));
     }
   }
 

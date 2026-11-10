@@ -83,6 +83,7 @@ class RoomsSync(private val api: ChirkleApi, private val store: Store, private v
             changedHidden = mutableSetOf()
         }
         if (store.get().roomsStatus != LoadStatus.Ready) store.update { it.copy(roomsStatus = LoadStatus.Loading) }
+        store.update { it.copy(listLoads = it.listLoads + 1) }
         try {
             val roomsP = r.scope.async { api.listRooms() }
             val hiddenP = r.scope.async { if (guest) emptyList() else api.listHidden() }
@@ -102,6 +103,7 @@ class RoomsSync(private val api: ChirkleApi, private val store: Store, private v
             if (r.active && seq >= applied) store.update { it.copy(roomsStatus = LoadStatus.Error) }
         } finally {
             inFlight--
+            store.update { it.copy(listLoads = it.listLoads - 1) }
         }
     }
 
@@ -174,6 +176,7 @@ class Unread(
 
     private suspend fun load(r: Run) {
         inFlight++
+        store.update { it.copy(listLoads = it.listLoads + 1) }
         try {
             val res = runCatching { api.unreadCounts() }.getOrNull()
             if (res == null || !r.active || res.at < countedAt) return
@@ -182,10 +185,15 @@ class Unread(
             val unread = res.rooms.toMutableMap()
             for ((room, id) in recent) if (id !in accounted) unread[room] = (unread[room] ?: 0) + 1
             // The room you are caught up in is the room screen's to clear; not while the app is away (then nobody reads it).
-            if (!store.get().away) following?.let { unread.remove(it) }
-            store.update { it.copy(unread = unread, counted = true) }
+            val mentions = res.mentions.toMutableMap()
+            if (!store.get().away) following?.let {
+                unread.remove(it)
+                mentions.remove(it)
+            }
+            store.update { it.copy(unread = unread, counted = true, mentions = mentions, inbox = res.inbox) }
             db.kv().put(KvEntity(Keys.UNREAD, PbJson.encodeToString(UnreadCounts.serializer(), UnreadCounts(res.at, unread))))
         } finally {
+            store.update { it.copy(listLoads = it.listLoads - 1) }
             if (--inFlight == 0) recent = mutableListOf()
         }
     }
@@ -303,6 +311,8 @@ class Unread(
                         }
                 }
             }
+            // Mentioned, replied to or reacted to (or one taken back): the room's "@" and the inbox's count (DESIGN.md §41).
+            r.sub { api.subscribeInbox { r.post { refresh() } } }
             r.sub {
                 api.subscribeReads { c ->
                     r.post { if (c.record.room != following || store.get().away) refresh() }

@@ -1231,6 +1231,178 @@
       ]
     },
     {
+      "name": "inbox",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "user",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "name": "kind",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "select",
+          "values": [
+            "mention",
+            "reply",
+            "reaction"
+          ]
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "message",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "messages"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "room",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "rooms"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "actor",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 32,
+          "min": 0,
+          "name": "emoji",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": false,
+          "system": false,
+          "type": "text"
+        },
+        {
+          "hidden": false,
+          "name": "created",
+          "onCreate": true,
+          "onUpdate": false,
+          "presentable": false,
+          "system": false,
+          "type": "autodate"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_inbox_one ON inbox (user, message, kind, actor, emoji)",
+        "CREATE INDEX idx_inbox_user_created ON inbox (user, created)",
+        "CREATE INDEX idx_inbox_message ON inbox (message)"
+      ]
+    },
+    {
+      "name": "inbox_reads",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "user",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": "",
+          "min": "",
+          "name": "seen_at",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "date"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_inbox_reads_user ON inbox_reads (user)"
+      ]
+    },
+    {
       "name": "link_queue",
       "type": "base",
       "listRule": null,
@@ -1692,12 +1864,26 @@
           "required": false,
           "system": false,
           "type": "json"
+        },
+        {
+          "cascadeDelete": false,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 20,
+          "minSelect": 0,
+          "name": "mentions",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
         }
       ],
       "indexes": [
         "CREATE INDEX `idx_messages_room_created` ON `messages` (`room`, `created`, `id`)",
         "CREATE INDEX `idx_messages_forward_of` ON `messages` (`forward_of`)",
-        "CREATE UNIQUE INDEX idx_messages_remote ON messages (room, remote_id) WHERE remote_id != ''"
+        "CREATE UNIQUE INDEX idx_messages_remote ON messages (room, remote_id) WHERE remote_id != ''",
+        "CREATE INDEX idx_messages_created ON messages (created)"
       ]
     },
     {
@@ -2158,9 +2344,173 @@
           "required": false,
           "system": false,
           "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": true,
+          "name": "no_stats",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "stats_activity",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "user",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 10,
+          "min": 0,
+          "name": "day",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": true,
+          "system": false,
+          "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": "",
+          "min": "",
+          "name": "last_at",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "date"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_stats_activity_user_day ON stats_activity (user, day)",
+        "CREATE INDEX idx_stats_activity_last ON stats_activity (last_at)",
+        "CREATE INDEX idx_stats_activity_day ON stats_activity (day)"
+      ]
+    },
+    {
+      "name": "stats_samples",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": "",
+          "min": "",
+          "name": "at",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "date"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "online",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "guests",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "web",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "android",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_stats_samples_at ON stats_samples (at)"
+      ]
     },
     {
       "name": "storage_cleanup",
@@ -2952,12 +3302,27 @@
           "required": false,
           "system": false,
           "type": "bool"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 24,
+          "min": 0,
+          "name": "handle",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": false,
+          "system": false,
+          "type": "text"
         }
       ],
       "indexes": [
         "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
         "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''",
-        "CREATE UNIQUE INDEX `idx_users_name_key` ON `users` (`name_key`) WHERE `name_key` != ''"
+        "CREATE UNIQUE INDEX `idx_users_name_key` ON `users` (`name_key`) WHERE `name_key` != ''",
+        "CREATE UNIQUE INDEX idx_users_handle ON users (handle) WHERE handle != ''"
       ]
     }
   ],

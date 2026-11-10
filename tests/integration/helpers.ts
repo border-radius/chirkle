@@ -8,6 +8,12 @@ import { SUPERUSER } from "../support/pocketbase.ts";
 
 export { PNG, pngFile } from "../support/files.ts";
 export { uniq } from "../support/ids.ts";
+/**
+ * A record as the files URL of a message's or a collection item's file names it: by its collection's name, as the apps
+ * build them. Those files are served by routes of their own, which go by name (pb_hooks/lib/files.js); pass this to
+ * `pb.files.getURL`, which uses the id when there is one.
+ */
+export const byName = <T extends { collectionName: string }>(rec: T) => ({ ...rec, collectionId: rec.collectionName });
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Fresh SDK client with an in-memory auth store, so clients never share tokens. */

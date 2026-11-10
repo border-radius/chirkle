@@ -194,6 +194,17 @@ describe("notifications: live (§34)", () => {
     expect(FakeNotification.made[0]!.opts.body).toBe("to you");
   });
 
+  it("§41: a mention of you in a room, as Mentions and replies; not someone else's", async () => {
+    const room = await me.api.createRoom(`notify-${uniq()}`);
+    await start(room);
+    await say(other, room, `hi @${other.user.handle}`);
+    await settle();
+    expect(FakeNotification.made).toEqual([]);
+    await say(other, room, `hi @${me.user.handle}`);
+    await vi.waitFor(() => expect(FakeNotification.made).toHaveLength(1), { timeout: 3000 });
+    expect(FakeNotification.made[0]!.title).toBe(`${other.user.name} mentioned you in #${room.name}`);
+  });
+
   it('§34.5: every message of a room chosen, "… in #room"; not another room\'s', async () => {
     const room = await me.api.createRoom(`notify-${uniq()}`);
     const elsewhere = await me.api.createRoom(`notify-${uniq()}`);

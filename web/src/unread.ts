@@ -4,7 +4,7 @@
 
 import { type Api, ApiError } from "./api.ts";
 import { createScope, type Scope } from "./scope.ts";
-import { type AppState, bumpUnread, clearUnread, type Store } from "./store.ts";
+import { type AppState, bumpUnread, clearUnread, listLoad, type Store } from "./store.ts";
 
 export interface Unread {
   /** Load the counts and follow them live. Call once a user is logged in. */
@@ -72,6 +72,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
 
   async function load(s: Scope) {
     inFlight++;
+    store.set(listLoad(1));
     try {
       const res = await api.unreadCounts(s.signal).catch(() => null);
       if (!res || !s.active || res.at < countedAt) return;
@@ -81,9 +82,14 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
       for (const b of recent) if (!accounted.has(b.id)) unread.set(b.room, (unread.get(b.room) ?? 0) + 1);
       // The room you are caught up in is the room view's to clear; the server may not have its latest read yet. Not
       // while the tab is away: then the room view reads nothing, and the server's count is the one to show.
-      if (following && !store.get().away) unread.delete(following);
-      store.set({ unread });
+      const mentions = new Map(Object.entries(res.mentions ?? {}));
+      if (following && !store.get().away) {
+        unread.delete(following);
+        mentions.delete(following);
+      }
+      store.set({ unread, mentions, inbox: res.inbox ?? 0 });
     } finally {
+      store.set(listLoad(-1));
       if (--inFlight === 0) recent = [];
     }
   }
@@ -184,6 +190,8 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
           } else if (action === "update" && m.deleted && unread.has(m.room)) refresh(); // was it unread?
         }),
       );
+      // A mention, reply or reaction for you, or one taken back (§41): counted again.
+      s.sub(api.subscribeInbox(() => s.active && refresh()));
       s.sub(
         api.subscribeReads((_action, row) => {
           // Read in another tab or on another device. The room you are caught up in is already at 0 here, unless the

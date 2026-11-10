@@ -80,8 +80,9 @@ const save = (u: TestUser, body: Record<string, unknown>) => u.pb.send<Item>("/a
 const listed = (u: TestUser) => u.pb.send<Listed>("/api/chat/collections", {});
 const sub = (u: TestUser, collection: string, on = true) =>
   u.pb.send<{ on: boolean; seen_at: string }>("/api/chat/subs", { method: "POST", body: { collection, on } });
-const fileUrl = (rec: { collectionId: string; id: string }, file: string) =>
-  `${inject("pbUrl")}/api/files/${rec.collectionId}/${rec.id}/${file}`;
+// By collection name, as the apps build them: the routes that serve messages' and items' files go by name (lib/files.js).
+const fileUrl = (rec: { collectionName: string; id: string }, file: string) =>
+  `${inject("pbUrl")}/api/files/${rec.collectionName}/${rec.id}/${file}`;
 
 /** A message with an image in a new room of `u`'s, and an item saved from it into a new collection of theirs. */
 async function savedItem(u: TestUser, extra: Record<string, unknown> = {}) {
@@ -377,7 +378,7 @@ describe("attaching items to a message (§31)", () => {
     expect(m.file_names[m.files[1]]).toBe("cat.png");
     expect(m.file_sources).toEqual({ [m.files[1]]: coll.id });
     // The room's readers see it by the message's URL, though the collection is private.
-    const res = await fetch(fileUrl(m as unknown as { collectionId: string; id: string }, m.files[1]));
+    const res = await fetch(fileUrl(m as unknown as { collectionName: string; id: string }, m.files[1]));
     expect(res.status).toBe(200);
     // JSON bodies too, items alone.
     const only = await a.pb.send<RecordModel>("/api/collections/messages/records", {

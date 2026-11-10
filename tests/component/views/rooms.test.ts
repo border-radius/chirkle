@@ -310,6 +310,35 @@ describe("rooms view (§7.1)", () => {
     });
   });
 
+  describe("mentions and replies (§41)", () => {
+    it("lists Mentions & replies first, with how many are new; a room that mentions you has an @", async () => {
+      const a = await room();
+      const b = await room();
+      await mount();
+      const inbox = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
+      expect(section("inbox" as Section)).toBe(root.querySelector("nav")!.firstElementChild);
+      expect(inbox.getAttribute("href")).toBe("/inbox");
+      expect(inbox.textContent).toBe("Mentions & replies");
+      store.set({
+        inbox: 3,
+        unread: new Map([
+          [a.id, 2],
+          [b.id, 1],
+        ]),
+        mentions: new Map([[a.id, 1]]),
+      });
+      const now = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
+      expect(now.textContent).toBe("Mentions & replies3 new");
+      expect(now.classList.contains("unread")).toBe(true);
+      const badges = (r: Room) => [...row(r)!.querySelectorAll(".badge")].map((x) => x.textContent);
+      expect(badges(a)).toEqual(["@ mentions you,", "2 unread"]);
+      expect(badges(b)).toEqual(["1 unread"]);
+      // Read: no count, no @.
+      store.set({ unread: new Map([[b.id, 1]]) });
+      expect(badges(a)).toEqual([]);
+    });
+  });
+
   describe("unread badges (§18.4)", () => {
     const badge = (r: Room) => row(r)?.querySelector(".badge") ?? null;
 
@@ -431,10 +460,27 @@ describe("rooms view (§7.1)", () => {
     const newDmButton = () => root.querySelector<HTMLButtonElement>("button.new-dm")!;
     const searchInput = () => root.querySelector<HTMLInputElement>(".user-search input");
     const results = () => [...root.querySelectorAll<HTMLButtonElement>(".user-search button.person")];
+    /** New message pressed: the search is a lazy chunk, there once it has loaded. */
+    const openSearch = async () => {
+      newDmButton().click();
+      await vi.waitFor(() => expect(searchInput()).not.toBeNull());
+    };
     const searchFor = (q: string) => {
       searchInput()!.value = q;
       searchInput()!.dispatchEvent(new Event("input"));
     };
+
+    it("keys typed while the people search loads go in its field (QA BUG-252)", async () => {
+      await mount();
+      newDmButton().click();
+      for (const key of ["b", "x", "Backspace", "o", "b"]) document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      await vi.waitFor(() => expect(searchInput()).not.toBeNull());
+      expect(searchInput()!.value).toBe("bob");
+      // Held no longer: a key now reaches the page as usual.
+      const later = new KeyboardEvent("keydown", { key: "z", bubbles: true, cancelable: true });
+      document.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(false);
+    });
 
     it("lists open DMs by activity, titled after the other person with their avatar; no # prefix", async () => {
       const bob = await signedUp(`Bob ${uniq()}`);
@@ -489,7 +535,7 @@ describe("rooms view (§7.1)", () => {
       const ctl = instrument(me.api);
       await mount();
       await vi.waitFor(() => expect(sectionOf(dm)).toBe("dms"));
-      newDmButton().click();
+      await openSearch();
       searchFor(`Bobby ${tag}`);
       await vi.waitFor(() => expect(results()).toHaveLength(1));
       results()[0]!.click();
@@ -501,7 +547,7 @@ describe("rooms view (§7.1)", () => {
       const bob = await signedUp(`Bob ${uniq()}`);
       const stub = vi.spyOn(me.api, "remoteUser").mockResolvedValueOnce({ ...bob.user, instance: "b.example" });
       await mount();
-      newDmButton().click();
+      await openSearch();
       searchFor("bob@b.example");
       await vi.waitFor(() => expect(results()).toHaveLength(1));
       expect(stub).toHaveBeenCalledWith("bob@b.example");
@@ -509,7 +555,7 @@ describe("rooms view (§7.1)", () => {
       results()[0]!.click();
       await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/r\//)));
       stub.mockRejectedValueOnce(new ApiError("Failed to find them.", 400, { address: "This instance isn't linked to b.example." }));
-      newDmButton().click();
+      await openSearch();
       searchFor("zed@b.example");
       await vi.waitFor(() =>
         expect(root.querySelector(".user-search .search-status")!.textContent).toBe("This instance isn't linked to b.example."),
@@ -522,7 +568,7 @@ describe("rooms view (§7.1)", () => {
       const ctl = instrument(me.api);
       ctl.failNext("openDm", new ApiError("Too many requests.", 429));
       await mount();
-      newDmButton().click();
+      await openSearch();
       searchFor(`Bobby ${tag}`);
       await vi.waitFor(() => expect(results()).toHaveLength(1));
       results()[0]!.click();
@@ -536,7 +582,7 @@ describe("rooms view (§7.1)", () => {
       const ctl = instrument(me.api);
       await mount();
       expect(searchInput()).toBeNull();
-      newDmButton().click();
+      await openSearch();
       expect(newDmButton().getAttribute("aria-expanded")).toBe("true");
       expect(document.activeElement).toBe(searchInput());
       searchFor("Bob");
@@ -552,7 +598,7 @@ describe("rooms view (§7.1)", () => {
 
     it("the search says when nobody matches, and Escape closes it, returning focus to +", async () => {
       await mount();
-      newDmButton().click();
+      await openSearch();
       searchFor(`nobody-${uniq()}`);
       await vi.waitFor(() => expect(root.querySelector(".search-status")!.textContent).toBe("No one found."));
       searchInput()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -565,7 +611,7 @@ describe("rooms view (§7.1)", () => {
       await signedUp(`Arrow ${tag} 1`);
       await signedUp(`Arrow ${tag} 2`);
       await mount();
-      newDmButton().click();
+      await openSearch();
       searchFor(`Arrow ${tag}`);
       await vi.waitFor(() => expect(results()).toHaveLength(2));
       const down = (el: Element, key = "ArrowDown") => el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));

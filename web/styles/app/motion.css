@@ -31,3 +31,10 @@
     transition: none !important;
   }
 }
+
+/* Without the motion, the loading line (§7.9) stands still across the whole width. */
+@media (prefers-reduced-motion: reduce) {
+  .loadbar.on::before {
+    background: var(--tint);
+  }
+}

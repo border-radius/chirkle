@@ -59,6 +59,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -126,6 +133,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     val rows by vm.rows.collectAsStateWithLifecycle()
     val app_ by services.store.flow.collectAsStateWithLifecycle()
     val progress by c.progress.collectAsStateWithLifecycle()
+    val busy by c.busy.collectAsStateWithLifecycle(false)
     val recent by services.recentEmoji.list.collectAsStateWithLifecycle()
     val room = app_.rooms[roomId]
     val me = app_.user
@@ -257,11 +265,17 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         onSave = if (me == null) null else ({ m, f -> saving = chirkle.android.data.model.SaveFrom.File(m.forwardOf.ifEmpty { m.id }, f) }),
         badge = { badges[it] },
         onCollection = nav.collection,
+        myHandle = me?.handle.orEmpty(),
     )
 
     Scaffold(
         // Swiping the room to the right goes back to the rooms, unless a mode (selection, search) is open.
-        modifier = Modifier.swipeBack(enabled = !vm.selecting && !vm.searching, onBack = nav.back),
+        modifier = Modifier.swipeBack(enabled = !vm.selecting && !vm.searching, onBack = nav.back)
+            // Ctrl+/ from a hardware keyboard: to the composer, as on the web (§7.6). Nothing while there is none (a banner).
+            .onPreviewKeyEvent { e ->
+                e.type == KeyEventType.KeyDown && e.isCtrlPressed && !e.isAltPressed && e.key == Key.Slash &&
+                    runCatching { focus.requestFocus() }.isSuccess
+            },
         topBar = {
             when {
                 vm.selecting -> TopAppBar(
@@ -395,6 +409,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             }
             // Picking a result puts the keyboard away too: it would cover half of the message gone to.
             if (vm.searching) SearchResults(vm) { focusManager.clearFocus(); vm.pick(it) }
+            // A fetch that takes a while (§58); not over the first load's spinner.
+            else chirkle.android.ui.LoadingLine(busy && state.phase != Phase.Loading, Modifier.align(Alignment.TopCenter))
         }
     }
 
@@ -455,7 +471,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     saving?.let { from -> chirkle.android.ui.SaveToCollectionSheet(from) { saving = null } }
     if (pickingItems) CollectionPickerSheet(vm.filesLeft, onPick = { pickingItems = false; vm.attachItems(it) }) { pickingItems = false }
     forwarding?.let { ids ->
-        ForwardSheet(ids.size, forwardTargets(app_), me?.id, onPick = { r -> forwarding = null; vm.forward(ids, r.id) {} }, onDismiss = { forwarding = null })
+        ForwardSheet(ids.size, forwardTargets(app_), me?.id, onPick = { to -> forwarding = null; vm.forward(ids, to) }, onDismiss = { forwarding = null })
     }
 }
 

@@ -8,7 +8,8 @@
 
 import { errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
-import { clear, h, uniqueId } from "../dom.ts";
+import { clear, h, holdKeys, typeInto, uniqueId } from "../dom.ts";
+import { FORWARD_KIT, SEARCH_KIT } from "../lazy.ts";
 import { newer, older, PAGE_SIZE, withFiles } from "../lib/cursor.ts";
 import { attachmentName, isMedia, isVideo } from "../lib/files.ts";
 import { LIMITS } from "../lib/limits.ts";
@@ -34,13 +35,13 @@ import { roomSections } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
 import type { EmojiPicker, PickerRequest } from "../ui/emoji-picker.ts";
 import type { EmojiSuggest } from "../ui/emoji-suggest.ts";
-import { createUserSearch, SearchError } from "../ui/user-search.ts";
+import { createLoadbar } from "../ui/loadbar.ts";
 import type { RoomReader } from "../unread.ts";
 import { chunkContext, collectionChunk } from "./collection.ts";
 import type { AccessDialog } from "./room/access.ts";
 import { createComposer, validEdit } from "./room/composer.ts";
 import { type Change, createRoomController, type Phase, type RoomController } from "./room/controller.ts";
-import { createForwardDialog } from "./room/forward.ts";
+import type { ForwardDialog } from "./room/forward.ts";
 import { createRoomHeader } from "./room/header.ts";
 import { createMessageList } from "./room/messages.ts";
 import { createNameLookup } from "./room/names.ts";
@@ -215,9 +216,10 @@ export function createRoomView({
   let accessDialog: AccessDialog | null = null;
   async function openAccess() {
     try {
-      const { createAccessDialog } = await import("./room/access.ts");
+      // With the people search (another lazy chunk) it adds members with.
+      const [{ createAccessDialog }, search] = await Promise.all([import("./room/access.ts"), import("../ui/user-search.ts")]);
       if (!scope.active) return;
-      accessDialog ??= newAccessDialog(createAccessDialog);
+      accessDialog ??= newAccessDialog(createAccessDialog, search);
       let r = room();
       // A moderator's in someone else's room (§36): its creator by name, who isn't expanded unless a member.
       const u = me();
@@ -232,12 +234,13 @@ export function createRoomView({
       if (scope.active) notice.say("Couldn't open room access. Check your connection.");
     }
   }
-  const newAccessDialog = (create: typeof import("./room/access.ts").createAccessDialog) => {
+  const newAccessDialog = (
+    create: typeof import("./room/access.ts").createAccessDialog,
+    { createUserSearch, SearchError }: typeof import("../ui/user-search.ts"),
+  ) => {
     const dialog = create({
       kit: {
-        h,
-        uniqueId,
-        avatar,
+        ...SEARCH_KIT,
         createUserSearch,
         SearchError,
         reasonOf,
@@ -289,7 +292,7 @@ export function createRoomView({
     onReply: (id) => reply.start(id),
     selectable: (m) => ctl.selectable(m),
     onSelect: (id) => selection.toggle(id),
-    onForward: (id) => openForward([id]),
+    onForward: (id) => void openForward([id]),
     reactable: (m) => ctl.reactable(m),
     reactions: (m) => ctl.reactions(m),
     onReact: (id, emoji, on) => void react(id, emoji, on),
@@ -332,6 +335,7 @@ export function createRoomView({
       void openPicker(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
     },
     onEmojiName: (textarea) => void suggestEmoji(textarea),
+    onMention: (textarea) => void suggestPeople(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).
     onChange: (text) => {
       if (roomId) drafts.set(roomId, text);
@@ -339,36 +343,40 @@ export function createRoomView({
     onCollections: pickItems,
     signal,
   });
-  const forwardDialog = createForwardDialog({
-    rooms: () => {
-      const s = roomSections(store.get());
-      // Only where you may post (§23.6), and not into a DM that takes no messages (§16.7).
-      return [...s.dms, ...s.rooms, ...s.hidden].filter((r) => canPost(r, me()) && !dmClosed(r, me()));
-    },
-    me,
-    searchUsers: (q, sig) => api.searchUsers(q, sig),
-    avatarUrl: api.avatarUrl,
-    onPick: async (to) => {
-      // Not those deleted since the dialog opened: one would fail the whole forward.
-      const ids = forwarding.filter((id) => {
-        const m = ctl.find(id);
-        return !m || !(m.deleted || emptyForward(m));
-      });
-      if (!ids.length) return "Couldn't forward. A message was deleted.";
-      try {
-        const target = "room" in to ? to.room : await actions.openDm(to.user.id);
-        const n = (await api.forward(ids, target.id)).length;
-        if (!scope.active) return null;
-        selection.end();
-        if (target.id !== roomId) navigate(`/r/${target.id}`);
-        else notice.flash(n === 1 ? "Message forwarded." : `${n} messages forwarded.`);
-        return null;
-      } catch (e) {
-        return `Couldn't forward. ${reasonOf(e)}`;
-      }
-    },
-    signal,
-  });
+  /** The forward dialog (§21.3), once Forward was chosen: a lazy chunk. */
+  let forwardDialog: ForwardDialog | null = null;
+  const newForwardDialog = (create: typeof import("./room/forward.ts").createForwardDialog) =>
+    create({
+      kit: FORWARD_KIT,
+      rooms: () => {
+        const s = roomSections(store.get());
+        // Only where you may post (§23.6), and not into a DM that takes no messages (§16.7).
+        return [...s.dms, ...s.rooms, ...s.hidden].filter((r) => canPost(r, me()) && !dmClosed(r, me()));
+      },
+      me,
+      searchUsers: (q, sig) => api.searchUsers(q, sig),
+      avatarUrl: api.avatarUrl,
+      onPick: async (to) => {
+        // Not those deleted since the dialog opened: one would fail the whole forward.
+        const ids = forwarding.filter((id) => {
+          const m = ctl.find(id);
+          return !m || !(m.deleted || emptyForward(m));
+        });
+        if (!ids.length) return "Couldn't forward. A message was deleted.";
+        try {
+          const target = "room" in to ? to.room : await actions.openDm(to.user.id);
+          const n = (await api.forward(ids, target.id)).length;
+          if (!scope.active) return null;
+          selection.end();
+          if (target.id !== roomId) navigate(`/r/${target.id}`);
+          else notice.flash(n === 1 ? "Message forwarded." : `${n} messages forwarded.`);
+          return null;
+        } catch (e) {
+          return `Couldn't forward. ${reasonOf(e)}`;
+        }
+      },
+      signal,
+    });
   const list = messages.el;
   const pill = h("button", { type: "button", class: "new-messages ic i-down", hidden: true });
   const footer = h("footer", { class: "room-footer" });
@@ -391,12 +399,13 @@ export function createRoomView({
     "Only some people can post in this room. You can read along and react.",
   );
   const closedBanner = h("p", { class: "guest-banner reader-banner ic i-x" });
+  const bar = createLoadbar();
+  scope.defer(() => bar.set(false));
   const shell = h("section", { class: "room", "aria-labelledby": `${vid}-title` }, [
     header.el,
     notice.el,
-    h("div", { class: "room-body" }, [list, pill]),
+    h("div", { class: "room-body" }, [bar.el, list, pill]),
     footer,
-    forwardDialog.el,
   ]);
 
   const reply = createReply({
@@ -422,7 +431,7 @@ export function createRoomView({
       if (list) render({ anchor: true });
     },
     focusComposer: () => composer.focus(),
-    onForward: (ids) => openForward(ids),
+    onForward: (ids) => void openForward(ids),
     onDelete: (ids) => void deleteSelected(ids),
     notice,
     signal,
@@ -495,11 +504,21 @@ export function createRoomView({
     if (failed && scope.active) notice.say(`Couldn't delete those messages. ${reasonOf(failed)}`);
   }
 
-  function openForward(ids: string[]) {
+  async function openForward(ids: string[]) {
     if (!ids.length) return;
     forwarding = ids;
     picker?.close();
-    forwardDialog.open(ids.length);
+    try {
+      const { createForwardDialog } = await import("./room/forward.ts");
+      if (!scope.active || forwarding !== ids) return;
+      if (!forwardDialog) {
+        forwardDialog = newForwardDialog(createForwardDialog);
+        shell.append(forwardDialog.el);
+      }
+      forwardDialog.open(ids.length);
+    } catch {
+      if (scope.active) notice.say("Couldn't open Forward. Check your connection.");
+    }
   }
 
   /**
@@ -768,7 +787,7 @@ export function createRoomView({
     shown = "not-found";
     awaitReturn();
     picker?.close();
-    forwardDialog.close();
+    forwardDialog?.close();
     accessDialog?.close();
     const back = h("a", { href: "/" }, "Back to rooms");
     shell.replaceChildren(notFound("You can't see this room any more.", [back]));
@@ -804,13 +823,7 @@ export function createRoomView({
   async function openSearch() {
     if (search) return search.focus();
     // While the chunk loads: what is typed meanwhile, for the field once it shows, as Jump to keeps it (QA BUG-243).
-    let early = "";
-    const hold = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || (e.key.length !== 1 && e.key !== "Backspace")) return;
-      early = e.key === "Backspace" ? early.slice(0, -1) : early + e.key;
-      e.preventDefault();
-    };
-    document.addEventListener("keydown", hold, { capture: true, signal });
+    const held = holdKeys(signal);
     try {
       const { createSearch } = await import("./room/search.ts");
       const toggle = shell.querySelector<HTMLElement>(".search-toggle");
@@ -835,15 +848,11 @@ export function createRoomView({
       header.el.after(search.el);
       toggle?.setAttribute("aria-expanded", "true");
       search.focus();
-      const input = search.el.querySelector("input");
-      if (early && input) {
-        input.value = early;
-        input.dispatchEvent(new Event("input"));
-      }
+      typeInto(search.el.querySelector("input"), held.take());
     } catch {
       if (scope.active) notice.say("Couldn't open search. Check your connection.");
     } finally {
-      document.removeEventListener("keydown", hold, true);
+      held.take();
     }
   }
 
@@ -912,7 +921,7 @@ export function createRoomView({
       if (!scope.active || !opener.isConnected) return;
       if (!picker) {
         picker = createEmojiPicker({ h, signal });
-        forwardDialog.el.before(picker.el);
+        shell.append(picker.el);
       }
       picker.open(opener, req);
     } catch {
@@ -936,6 +945,21 @@ export function createRoomView({
     );
   }
 
+  /** People by handle in the composer (§41), a lazy chunk: once loaded it follows the textarea. Quietly not, offline. */
+  let people = false;
+  function suggestPeople(textarea: HTMLTextAreaElement) {
+    if (people) return;
+    people = true;
+    void import("../ui/mention-suggest.ts").then(
+      ({ createMentionSuggest }) =>
+        scope.active &&
+        createMentionSuggest({ h, api, textarea, room: () => roomId, avatar: (u) => avatar(u, 24, api.avatarUrl), signal }).update(),
+      () => {
+        people = false;
+      },
+    );
+  }
+
   // ---------------------------------------------------------------- lifecycle
 
   /** Single use: the router and the sidebar layout create a fresh view for every mount. */
@@ -952,6 +976,7 @@ export function createRoomView({
         nearBottom: () => (parked ? pinned : isNearBottom(list)),
         onChange: apply,
         onUpload: (id, fraction) => messages.setUpload(id, fraction),
+        onBusy: bar.set,
         cache,
         early: params.msgId ? undefined : early?.take(roomId),
         onEvent: (m, gone) => {
@@ -977,7 +1002,7 @@ export function createRoomView({
       shell.addEventListener(
         "keydown",
         (e) => {
-          if (e.key !== "Escape" || e.defaultPrevented || forwardDialog.el.open) return;
+          if (e.key !== "Escape" || e.defaultPrevented || forwardDialog?.el.open) return;
           if (selection.escape()) e.preventDefault();
         },
         { signal },
@@ -1002,6 +1027,19 @@ export function createRoomView({
           getSelection()!.isCollapsed &&
           !matchMedia("(hover:none)").matches &&
           composer.focus(),
+        { signal },
+      );
+      // Ctrl+/ (⌘/ on a Mac) anywhere: to the composer, as its key badge says (§7.6). By the key's place too, for layouts
+      // where it types something else (Cyrillic: "."). Not for a room kept in the background, nor while there is no
+      // composer (a banner instead); behind a modal dialog the composer is inert, so focus stays there.
+      document.addEventListener(
+        "keydown",
+        (e) => {
+          if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "/" && e.code !== "Slash")) return;
+          if (parked || !footer.contains(composer.el)) return;
+          e.preventDefault();
+          composer.focus();
+        },
         { signal },
       );
       // When the list gets shorter (the attachment tray opens, the textarea grows, the keyboard opens) while it is
@@ -1080,7 +1118,7 @@ export function createRoomView({
       onScreen.abort();
       onScreen = new AbortController();
       picker?.close();
-      forwardDialog.close();
+      forwardDialog?.close();
       accessDialog?.close();
       ctl.park();
     },

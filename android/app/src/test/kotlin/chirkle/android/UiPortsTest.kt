@@ -1,5 +1,6 @@
 package chirkle.android
 
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
@@ -118,6 +119,25 @@ class UiPortsTest {
         ui.waitFor(field) // still open
         ctrlK(repeat = 0)
         ui.until { compose.onAllNodes(field).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test fun `Ctrl+Slash from a hardware keyboard focuses the composer, as on the web (§7 6)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("ck-${uniq()}") }
+        ui.signedIn(a)
+        ui.openRoom(room.name)
+        compose.onNodeWithContentDescription("Search messages").performClick()
+        val search = hasSetTextAction() and hasContentDescription("Search messages")
+        ui.waitFor(search)
+        compose.onNode(search).performClick()
+        compose.onNode(search).assertIsFocused()
+        compose.onNode(search).performKeyPress(
+            androidx.compose.ui.input.key.KeyEvent(
+                android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_SLASH, 0, android.view.KeyEvent.META_CTRL_ON or android.view.KeyEvent.META_CTRL_LEFT_ON),
+            ),
+        )
+        ui.pump()
+        compose.onNode(hasSetTextAction() and hasContentDescription("Message")).assertIsFocused()
     }
 
     @Test fun `the media grid shows a room's images and opens the viewer (media spec)`() {

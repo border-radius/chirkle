@@ -19,8 +19,11 @@ function searchUsers(e) {
   const key = nameKey(typeof raw === "string" ? raw.trim() : "");
   if (!key) return e.json(200, []);
   // `~` treats a % in the value as a wildcard (and then stops adding its own): escape it (QA BUG-34). `_` is escaped.
-  const found = e.app.findRecordsByFilter("users", "name_key ~ {:q} && id != {:me}", "name", LIMIT, 0, {
+  // "@ann" finds Ann by her handle (§41) as well as by name.
+  const handle = key.replace(/^@/, "");
+  const found = e.app.findRecordsByFilter("users", "(name_key ~ {:q} || handle ~ {:h}) && id != {:me}", "name", LIMIT, 0, {
     q: key.replace(/%/g, "\\%"),
+    h: handle.replace(/%/g, "\\%"),
     me: me.id,
   });
   // Only the public profile, never the email (§6).
@@ -32,6 +35,7 @@ function searchUsers(e) {
             {
               id: u.id,
               name: u.getString("name"),
+              handle: u.getString("handle"),
               avatar: u.getString("avatar"),
               no_dms: u.getBool("no_dms"),
               instance: u.getString("instance"),
@@ -60,6 +64,7 @@ function beforeUserSave(e) {
   } else {
     setNameKey(e.app, "users", rec, "This display name is taken. Choose another one.");
   }
+  require(`${__hooks}/lib/handles.js`).setHandle(e.app, rec);
   assertImagesFit(rec, "avatar");
   originalNames(rec, "avatar"); // only for the upload's own name (QA BUG-35)
 }

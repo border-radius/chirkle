@@ -220,6 +220,13 @@ describe("the notification check as a route", () => {
       .getList(1, 100, { filter: me.pb.filter(filter, params), sort: "-created,-id", skipTotal: true });
     expect(old.items.map((m) => m.id)).toEqual(found.map((m) => m.id));
 
+    // A mention of you (DESIGN.md §41) is news too; the old filter has none.
+    const handle = (await me.pb.collection("users").getOne(me.user.id)).handle as string;
+    const mention = await post(bob, room.id, `hey @${handle}`);
+    expect(mention.mentions).toEqual([me.user.id]);
+    const withMention = await me.pb.send<Items>("/api/chat/notifiable", { query: { rooms: room.id, since, fields: "id" } });
+    expect(withMention.map((m) => m.id)).toEqual([mention.id, want[1]]);
+
     expect(await me.pb.send("/api/chat/notifiable", { query: { rooms: priv.id, since } })).toEqual([]);
     expect(await status(me.pb.send("/api/chat/notifiable", { query: { rooms: room.id } }))).toBe(400);
     expect(await status(client().send("/api/chat/notifiable", { query: { rooms: room.id, since } }))).toBe(401);

@@ -148,6 +148,8 @@ function originalOf(app, m) {
  * @param {core.RequestEvent} e
  */
 function forward(e) {
+  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
+  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
   const me = e.auth;
   if (!me) throw new UnauthorizedError("The request requires a logged-in user.");
   const what = "Failed to forward the messages.";

@@ -1,6 +1,6 @@
 // Pure helpers for scripts/build.mjs. Kept side-effect free so they can be unit-tested.
 
-/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number, emojiJs: number, emojiCss: number }} Sizes gzipped byte sizes */
+/** @typedef {{ js: number, css: number, html: number, viewerJs: number, viewerCss: number, searchJs: number, accessJs: number, accessCss: number, mediaJs: number, mediaCss: number, collJs: number, collCss: number, notifyJs: number, emojiJs: number, emojiCss: number, inboxJs: number, inboxCss: number, mentionJs: number, profileJs: number, loginJs: number, forwardJs: number, peopleJs: number, statsJs: number, statsCss: number }} Sizes gzipped byte sizes */
 
 /** Where builds go: PocketBase serves this directory. */
 export const OUTDIR = "pb_public";
@@ -35,6 +35,42 @@ export const NOTIFY = Object.freeze({ js: "web/src/notify.ts" });
  */
 export const EMOJI = Object.freeze({ js: "web/src/ui/emoji-picker.ts", css: "web/styles/emoji.css" });
 
+/** "Mentions & replies" (§41): the page, a lazy chunk with a stylesheet it links (`INBOX_CSS`). */
+export const INBOX = Object.freeze({ js: "web/src/views/inbox.ts", css: "web/styles/inbox.css" });
+
+/** The composer's "@" suggestions (§41): a lazy chunk; its list is styled by the emoji picker's stylesheet, which it links. */
+export const MENTION = Object.freeze({ js: "web/src/ui/mention-suggest.ts" });
+
+/** Pages and dialogs moved out of app.js (2026-11-10): lazy chunks given what they use of it (web/src/lazy.ts). */
+export const PROFILE = Object.freeze({ js: "web/src/views/profile.ts" });
+export const LOGIN = Object.freeze({ js: "web/src/views/login.ts" });
+export const FORWARD = Object.freeze({ js: "web/src/views/room/forward.ts" });
+export const PEOPLE = Object.freeze({ js: "web/src/ui/user-search.ts" });
+
+/**
+ * The usage statistics page (§40): a page of its own, stats.html from this template, with its own script and
+ * stylesheet. Built apart from the app (no chunks shared with it), so nothing of it is in app.js.
+ */
+export const STATS = Object.freeze({ html: "web/stats.html", js: "web/src/stats/main.ts", css: "web/styles/stats.css" });
+
+/**
+ * esbuild options for the statistics page, shared by `build` and `dev`.
+ * @satisfies {import("esbuild").BuildOptions}
+ */
+export const STATS_OPTIONS = {
+  entryPoints: [
+    { in: STATS.js, out: "stats" },
+    { in: STATS.css, out: "stats" },
+  ],
+  bundle: true,
+  format: /** @type {const} */ ("esm"),
+  target: "es2022",
+  outdir: OUTDIR,
+  loader: { ".woff2": "file" },
+  assetNames: "assets/[name]-[hash]",
+  external: ["/icons/*"],
+};
+
 /**
  * The service worker (§27): built on its own, unhashed, to the root of the public dir (a worker controls only the paths
  * under its own). It is a classic script, so an IIFE.
@@ -57,13 +93,15 @@ export const STATIC_DIR = "web/public";
  * @param {string} collCssPath the collections' (§31)
  * @param {string} accessCssPath the room access dialog's (§23.2)
  * @param {string} emojiCssPath the emoji picker's (§20.4)
+ * @param {string} inboxCssPath the inbox's (§41)
  */
-export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath) => ({
+export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath) => ({
   VIEWER_CSS: JSON.stringify(`/${cssPath}`),
   MEDIA_CSS: JSON.stringify(`/${mediaCssPath}`),
   COLLECTIONS_CSS: JSON.stringify(`/${collCssPath}`),
   ACCESS_CSS: JSON.stringify(`/${accessCssPath}`),
   EMOJI_CSS: JSON.stringify(`/${emojiCssPath}`),
+  INBOX_CSS: JSON.stringify(`/${inboxCssPath}`),
 });
 
 /**
@@ -117,6 +155,15 @@ export const BUDGET = Object.freeze({
   notifyJs: 3 * 1024,
   emojiJs: 13 * 1024,
   emojiCss: 1024,
+  inboxJs: 2 * 1024,
+  inboxCss: 1024,
+  mentionJs: 2 * 1024,
+  profileJs: 3.5 * 1024,
+  loginJs: 2 * 1024,
+  forwardJs: 1.5 * 1024,
+  peopleJs: 1.5 * 1024,
+  statsJs: 5.5 * 1024,
+  statsCss: 3.5 * 1024,
 });
 
 /**

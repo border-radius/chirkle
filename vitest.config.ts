@@ -10,6 +10,7 @@ const define = {
   COLLECTIONS_CSS: JSON.stringify("/assets/collections.css"),
   ACCESS_CSS: JSON.stringify("/assets/access.css"),
   EMOJI_CSS: JSON.stringify("/assets/emoji.css"),
+  INBOX_CSS: JSON.stringify("/assets/inbox.css"),
 };
 
 export default defineConfig({

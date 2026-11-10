@@ -1,5 +1,5 @@
 // Notifications (ANDROID.md §8.3): DMs, replies to you and the messages of rooms chosen (§24), found by CheckWorker.
-// MessagingStyle, one channel per kind (Direct messages, Replies, Room messages), one notification per account and room (§17.4) with Reply and Mark as read. A room's
+// MessagingStyle, one channel per kind (Direct messages, Mentions and replies, Room messages), one notification per account and room (§17.4) with Reply and Mark as read. A room's
 // notification goes once it is read: opened here, or read elsewhere (its count drops to 0, seen live or by the next
 // check). The launcher badge is the unread count.
 package chirkle.android.notify
@@ -46,7 +46,7 @@ object Notifications {
         nm.createNotificationChannels(
             listOf(
                 NotificationChannel(DMS, "Direct messages", NotificationManager.IMPORTANCE_HIGH).apply { setShowBadge(true) },
-                NotificationChannel(ROOMS, "Replies", NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
+                NotificationChannel(ROOMS, "Mentions and replies", NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
                 NotificationChannel(ROOM_ALL, "Room messages", NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
                 NotificationChannel(SENDING, "Sending", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
             ),
@@ -108,7 +108,7 @@ object Notifications {
             .build()
         val channel = when {
             room.isDm -> DMS
-            m.expand?.replyTo?.author == me.id -> ROOMS
+            m.expand?.replyTo?.author == me.id || me.id in m.mentions -> ROOMS
             else -> ROOM_ALL
         }
         val n = NotificationCompat.Builder(context, channel)

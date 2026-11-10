@@ -68,3 +68,30 @@ export function reconcile(parent: Element, nodes: readonly Node[]): void {
     if (at !== node) parent.insertBefore(node, at ?? null);
   });
 }
+
+/**
+ * Keep what is typed while a lazy chunk loads (a search field that isn't there yet), for the field once it shows:
+ * printable keys and Backspace, not shortcuts. `take()` stops holding and says what was typed (QA BUG-243, BUG-252).
+ */
+export function holdKeys(signal: AbortSignal): { take(): string } {
+  let early = "";
+  const hold = (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || (e.key.length !== 1 && e.key !== "Backspace")) return;
+    early = e.key === "Backspace" ? early.slice(0, -1) : early + e.key;
+    e.preventDefault();
+  };
+  document.addEventListener("keydown", hold, { capture: true, signal });
+  return {
+    take() {
+      document.removeEventListener("keydown", hold, true);
+      return early;
+    },
+  };
+}
+
+/** Put `text` held by holdKeys() in `input`, as if typed there. */
+export function typeInto(input: HTMLInputElement | null | undefined, text: string): void {
+  if (!text || !input) return;
+  input.value += text;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}

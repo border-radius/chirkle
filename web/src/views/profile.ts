@@ -1,16 +1,36 @@
 // Profile (§15.5, §22.2): change or remove your avatar, change your display name (unique, §22.1), pick this
 // device's theme (§7.8) and notifications (§34, a lazy chunk), change your password, log out.
+//
+// A lazy chunk: app.ts loads it for /me. It imports types only, and gets what it uses of app.js in `kit` (lazy.ts
+// PROFILE_KIT).
 
-import { ApiError, errorMessage } from "../api.ts";
+import type { ApiError, errorMessage } from "../api.ts";
 import type { Ctx } from "../context.ts";
-import { clear, h, uniqueId } from "../dom.ts";
-import { prepareImage } from "../lib/image.ts";
-import { LIMITS, textLength } from "../lib/limits.ts";
+import type { clear, h, uniqueId } from "../dom.ts";
+import type { prepareImage } from "../lib/image.ts";
+import type { LIMITS, textLength } from "../lib/limits.ts";
 import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
-import { createScope } from "../scope.ts";
-import { savedTheme, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
-import { avatar } from "../ui/avatar.ts";
+import type { createScope } from "../scope.ts";
+import type { savedTheme, setTheme, THEME_KEY, THEMES, Theme } from "../theme.ts";
+import type { avatar } from "../ui/avatar.ts";
+
+export interface ProfileKit {
+  h: typeof h;
+  clear: typeof clear;
+  uniqueId: typeof uniqueId;
+  avatar: typeof avatar;
+  ApiError: typeof ApiError;
+  errorMessage: typeof errorMessage;
+  prepareImage: typeof prepareImage;
+  LIMITS: typeof LIMITS;
+  textLength: typeof textLength;
+  createScope: typeof createScope;
+  savedTheme: typeof savedTheme;
+  setTheme: typeof setTheme;
+  THEME_KEY: typeof THEME_KEY;
+  THEMES: typeof THEMES;
+}
 
 /** Longest edge of an uploaded avatar (§15.3). */
 const AVATAR_EDGE = 512;
@@ -18,16 +38,19 @@ const AVATAR_EDGE = 512;
 const NOT_AN_IMAGE = "Choose a JPEG, PNG, WebP or GIF image.";
 
 /** Why `file` can't be an avatar (after preparation), or "". */
-export function avatarProblem(file: File): string {
+export function avatarProblem(file: File, LIMITS: ProfileKit["LIMITS"]): string {
   if (!(LIMITS.avatarTypes as readonly string[]).includes(file.type)) return NOT_AN_IMAGE;
   if (file.size > LIMITS.avatarBytes) return `That image is too large (max ${LIMITS.avatarBytes / 1024 / 1024} MB).`;
   return "";
 }
 
-const fieldMessage = (e: unknown, field: string) => (e instanceof ApiError && e.fields[field]) || errorMessage(e);
-
 /** Why a new password can't be used, or "" (the server checks again). */
-export function passwordProblem(current: string, next: string, confirm: string): Partial<Record<"current" | "next" | "confirm", string>> {
+export function passwordProblem(
+  current: string,
+  next: string,
+  confirm: string,
+  LIMITS: ProfileKit["LIMITS"],
+): Partial<Record<"current" | "next" | "confirm", string>> {
   if (!current) return { current: "Enter your current password." };
   if (next.length < LIMITS.passwordMin) return { next: `Must be at least ${LIMITS.passwordMin} characters.` };
   if (next === current) return { next: "That is your current password. Choose a new one." };
@@ -35,7 +58,16 @@ export function passwordProblem(current: string, next: string, confirm: string):
   return {};
 }
 
-export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api" | "store" | "logOut" | "notify">): View {
+export function createProfileView({
+  kit,
+  api,
+  store,
+  logOut,
+  notify,
+}: Pick<Ctx, "api" | "store" | "logOut" | "notify"> & { kit: ProfileKit }): View {
+  const { h, clear, uniqueId, avatar, ApiError, errorMessage, prepareImage, LIMITS, textLength, createScope } = kit;
+  const { savedTheme, setTheme, THEME_KEY, THEMES } = kit;
+  const fieldMessage = (e: unknown, field: string) => (e instanceof ApiError && e.fields[field]) || errorMessage(e);
   const vid = uniqueId("profile");
   const scope = createScope();
   const { signal } = scope;
@@ -62,6 +94,17 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   const nameInput = h("input", { id: `${vid}-name`, name: "name", autocomplete: "nickname", "aria-describedby": `${vid}-name-status` });
   const saveBtn = h("button", { type: "submit", class: "primary" }, "Save");
   const nameStatus = h("p", { id: `${vid}-name-status`, class: "field-status", role: "status" });
+  // The handle (§41): what "@handle" names in messages.
+  const handleInput = h("input", {
+    id: `${vid}-handle`,
+    name: "handle",
+    autocomplete: "username",
+    autocapitalize: "none",
+    spellcheck: false,
+    "aria-describedby": `${vid}-handle-status`,
+  });
+  const handleBtn = h("button", { type: "submit", class: "primary" }, "Save");
+  const handleStatus = h("p", { id: `${vid}-handle-status`, class: "field-status", role: "status" }, "People mention you by it: @handle.");
 
   // Password (§22.2): each field with its own error under it.
   const pwField = (key: "current" | "next" | "confirm", label: string, autocomplete: string) => {
@@ -127,7 +170,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     if (!file || busy) return;
     avatarError.textContent = "";
     // Check the type before decoding; the size after preparation (which usually shrinks it).
-    const typeProblem = avatarProblem(new File([], file.name, { type: file.type }));
+    const typeProblem = avatarProblem(new File([], file.name, { type: file.type }), LIMITS);
     if (typeProblem) {
       avatarError.textContent = typeProblem;
       return;
@@ -135,7 +178,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     busy = true;
     const prepared = await prepareImage(file, AVATAR_EDGE);
     if (!scope.active) return;
-    const problem = avatarProblem(prepared);
+    const problem = avatarProblem(prepared, LIMITS);
     if (problem) {
       busy = false;
       avatarError.textContent = problem;
@@ -167,39 +210,46 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     }
   }
 
-  async function rename(e: Event) {
+  /** Save the display name (§22.1) or the handle (§41), with what is wrong with it said under it. */
+  async function saveField(e: Event, key: "name" | "handle") {
     e.preventDefault();
-    const name = nameInput.value.trim();
-    nameStatus.classList.remove("error");
-    const problem = !name
-      ? "A display name can't be empty."
-      : textLength(name) > LIMITS.userName
-        ? `Must be no more than ${LIMITS.userName} characters.`
-        : "";
+    const [input, status, btn] = key === "name" ? [nameInput, nameStatus, saveBtn] : [handleInput, handleStatus, handleBtn];
+    const value = key === "name" ? input.value.trim() : input.value.trim().replace(/^@/, "").toLowerCase();
+    status.classList.remove("error");
+    const problem =
+      key === "handle"
+        ? /^[a-z0-9_]{3,24}$/.test(value)
+          ? ""
+          : "Use 3 to 24 letters a–z, digits or underscores."
+        : !value
+          ? "A display name can't be empty."
+          : textLength(value) > LIMITS.userName
+            ? `Must be no more than ${LIMITS.userName} characters.`
+            : "";
     if (problem) {
-      nameStatus.textContent = problem;
-      nameStatus.classList.add("error");
-      nameInput.setAttribute("aria-invalid", "true");
+      status.textContent = problem;
+      status.classList.add("error");
+      input.setAttribute("aria-invalid", "true");
       return;
     }
-    // Your own name back (after "taken", say): nothing to save, and nothing wrong any more (QA BUG-56).
-    nameStatus.textContent = "";
-    nameInput.removeAttribute("aria-invalid");
-    if (name === me()?.name) return;
-    saveBtn.disabled = true;
+    // Your own one back (after "taken", say): nothing to save, and nothing wrong any more (QA BUG-56).
+    status.textContent = "";
+    input.removeAttribute("aria-invalid");
+    if (value === me()?.[key]) return;
+    btn.disabled = true;
     try {
-      const user = await api.rename(name);
+      const user = await (key === "name" ? api.rename(value) : api.setHandle(value));
       if (!scope.active) return;
       store.set({ user });
-      nameInput.value = user.name;
-      nameStatus.textContent = "Saved.";
+      input.value = user[key] ?? "";
+      status.textContent = "Saved.";
     } catch (err) {
       if (!scope.active) return;
-      nameStatus.textContent = fieldMessage(err, "name");
-      nameStatus.classList.add("error");
-      nameInput.setAttribute("aria-invalid", "true");
+      status.textContent = fieldMessage(err, key);
+      status.classList.add("error");
+      input.setAttribute("aria-invalid", "true");
     } finally {
-      saveBtn.disabled = false;
+      btn.disabled = false;
     }
   }
 
@@ -220,7 +270,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     const next = pw.next.input.value;
     pwStatus.textContent = "";
     pwStatus.classList.remove("error");
-    const problem = passwordProblem(current, next, pw.confirm.input.value);
+    const problem = passwordProblem(current, next, pw.confirm.input.value, LIMITS);
     showPasswordErrors(problem);
     if (Object.keys(problem).length) return;
     pwBtn.disabled = true;
@@ -251,6 +301,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     mount(el) {
       root = el;
       nameInput.value = me()?.name ?? "";
+      handleInput.value = me()?.handle ?? "";
       fileInput.addEventListener(
         "change",
         () => {
@@ -288,10 +339,15 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
               ]),
             ]),
             avatarError,
-            h("form", { class: "profile-name", on: { submit: (e) => void rename(e) }, signal }, [
+            h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "name") }, signal }, [
               h("label", { for: `${vid}-name` }, "Display name"),
               h("div", { class: "row" }, [nameInput, saveBtn]),
               nameStatus,
+            ]),
+            h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "handle") }, signal }, [
+              h("label", { for: `${vid}-handle` }, "Handle"),
+              h("div", { class: "row" }, [handleInput, handleBtn]),
+              handleStatus,
             ]),
           ]),
           h("fieldset", { class: "card profile-theme", "aria-describedby": `${vid}-theme-hint` }, [
@@ -311,6 +367,16 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
             },
             [h("h2", { id: `${vid}-pw-title` }, "Password"), pw.current.el, pw.next.el, pw.confirm.el, pwBtn, pwStatus],
           ),
+          // Moderators see the usage statistics (§40), a page of its own.
+          store.get().user?.moderator
+            ? h("section", { class: "card profile-session", "aria-labelledby": `${vid}-stats-title` }, [
+                h("div", {}, [
+                  h("h2", { id: `${vid}-stats-title` }, "Moderation"),
+                  h("p", { class: "field-status" }, "How many people are online and use the app, as counts."),
+                ]),
+                h("a", { href: "/stats" }, "Usage statistics"),
+              ])
+            : null,
           h("section", { class: "card profile-session", "aria-labelledby": `${vid}-session-title` }, [
             h("div", {}, [h("h2", { id: `${vid}-session-title` }, "Session"), signedIn]),
             h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, "Log out"),
@@ -343,6 +409,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
           // Renamed in another tab: show the new name, unless a change is being typed here. Saving the old one
           // would quietly undo the rename.
           if (s.user && nameInput.value.trim() === prev.user?.name) nameInput.value = s.user.name;
+          if (s.user && handleInput.value.trim() === (prev.user?.handle ?? "")) handleInput.value = s.user.handle ?? "";
         }),
       );
       scope.defer(dropPreview);

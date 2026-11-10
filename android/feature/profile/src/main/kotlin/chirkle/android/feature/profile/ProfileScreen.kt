@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -78,6 +79,9 @@ fun passwordProblem(current: String, next: String, confirm: String): Map<String,
 
 private fun fieldMessage(e: Throwable, field: String) = (e as? ApiError)?.fields?.get(field) ?: errorMessage(e)
 
+/** A handle as the server takes it (pb_hooks/lib/handles.js HANDLE). */
+private val HANDLE = Regex("^[a-z0-9_]{3,24}$")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(onBack: () -> Unit) {
@@ -92,6 +96,9 @@ fun ProfileScreen(onBack: () -> Unit) {
     var name by remember(me.id) { mutableStateOf(me.name) }
     var nameStatus by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
+    var handle by remember(me.id) { mutableStateOf(me.handle) }
+    var handleStatus by remember { mutableStateOf("") }
+    var handleError by remember { mutableStateOf(false) }
     var current by remember { mutableStateOf("") }
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
@@ -185,6 +192,34 @@ fun ProfileScreen(onBack: () -> Unit) {
                             .onFailure { nameStatus = fieldMessage(it, "name"); nameError = true }
                     }
                 }) { Text("Save") }
+                // What "@handle" names you by (DESIGN.md §41): letters a–z, digits, underscores; an "@" typed is dropped.
+                OutlinedTextField(
+                    handle,
+                    { handle = it; handleStatus = ""; handleError = false },
+                    label = { Text("Handle") },
+                    prefix = { Text("@") },
+                    singleLine = true,
+                    isError = handleError,
+                    supportingText = { Text(handleStatus.ifEmpty { "People mention you as @${me.handle}." }, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Ascii,
+                    ),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Handle" },
+                )
+                Button(onClick = {
+                    val h = handle.trim().removePrefix("@").lowercase()
+                    val problem = if (!HANDLE.matches(h)) "Use 3 to 24 letters a–z, digits or underscores." else ""
+                    handleError = problem.isNotEmpty()
+                    handleStatus = problem
+                    if (problem.isNotEmpty() || h == me.handle) return@Button
+                    scope.launch {
+                        runCatching { services.api.setHandle(h) }
+                            .onSuccess { handle = it.handle; handleStatus = "Saved." }
+                            .onFailure { handleStatus = fieldMessage(it, "handle"); handleError = true }
+                    }
+                }, modifier = Modifier.semantics { contentDescription = "Save handle" }) { Text("Save") }
                 HorizontalDivider(color = Chirkle.colors.border)
 
                 Section("Appearance")

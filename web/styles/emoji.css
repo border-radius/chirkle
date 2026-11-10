@@ -118,3 +118,8 @@
 .emoji-suggest [aria-selected="true"] {
   background: var(--hover);
 }
+
+/* The composer's "@" suggestions (§41): a person's handle after their name. */
+.emoji-suggest .handle {
+  color: var(--dim);
+}

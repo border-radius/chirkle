@@ -9,10 +9,13 @@ import {
   BASE_OPTIONS,
   COLLECTIONS,
   EMOJI,
+  INBOX,
   injectAssets,
   MEDIA,
   OUTDIR,
   STATIC_DIR,
+  STATS,
+  STATS_OPTIONS,
   SW_OPTIONS,
   VIEWER,
   viewerDefine,
@@ -49,8 +52,16 @@ const ctx = await esbuild.context({
     { in: COLLECTIONS.css, out: "collections" },
     { in: ACCESS.css, out: "access" },
     { in: EMOJI.css, out: "emoji" },
+    { in: INBOX.css, out: "inbox" },
   ],
-  define: viewerDefine("assets/viewer.css", "assets/media.css", "assets/collections.css", "assets/access.css", "assets/emoji.css"),
+  define: viewerDefine(
+    "assets/viewer.css",
+    "assets/media.css",
+    "assets/collections.css",
+    "assets/access.css",
+    "assets/emoji.css",
+    "assets/inbox.css",
+  ),
   sourcemap: "inline",
   entryNames: "assets/[name]",
   logLevel: "info",
@@ -60,6 +71,13 @@ await ctx.watch();
 await cp(STATIC_DIR, OUTDIR, { recursive: true });
 const swCtx = await esbuild.context({ ...SW_OPTIONS, logLevel: "info" });
 await swCtx.watch();
+// The statistics page (§40), unhashed.
+await writeFile(
+  `${OUTDIR}/stats.html`,
+  injectAssets(await readFile(STATS.html, "utf8"), { js: "assets/stats.js", css: "assets/stats.css" }),
+);
+const statsCtx = await esbuild.context({ ...STATS_OPTIONS, sourcemap: "inline", entryNames: "assets/[name]", logLevel: "info" });
+await statsCtx.watch();
 
 const pb = spawn(
   "bin/pocketbase",
@@ -83,6 +101,7 @@ const stop = async (code = 0) => {
   pb.kill("SIGTERM");
   await ctx.dispose();
   await swCtx.dispose();
+  await statsCtx.dispose();
   process.exit(code);
 };
 

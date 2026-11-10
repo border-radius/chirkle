@@ -82,6 +82,7 @@ import chirkle.android.data.lib.roomSections
 import chirkle.android.data.lib.textLength
 import chirkle.android.data.lib.title
 import chirkle.android.data.lib.unreadBadge
+import chirkle.android.data.repo.mentioned
 import chirkle.android.data.lib.visibilityOrDefault
 import chirkle.android.data.model.Room
 import chirkle.android.data.model.Visibility
@@ -113,7 +114,7 @@ private enum class Section { Rooms, Dms, Hidden, Archived }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: () -> Unit, onOpenCollection: (String) -> Unit = {}, onAccounts: () -> Unit = {}) {
+fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: () -> Unit, onOpenCollection: (String) -> Unit = {}, onAccounts: () -> Unit = {}, onInbox: () -> Unit = {}) {
     val services = LocalServices.current
     val s by services.store.flow.collectAsStateWithLifecycle()
     val me = s.user
@@ -268,6 +269,8 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             fun shown(section: String, list: List<Room>) =
                 if (section in folded) list.filter { unreadBadge(it, s.unread, s.hidden.keys) > 0 } else list
             val toggle = services.settings::toggleFolded
+            // Mentions & replies (DESIGN.md §41): right after Jump to, with how many are new.
+            item(key = "inbox") { InboxRow(s.inbox, onInbox) }
             foldHeader("rooms", "Rooms", "rooms" in folded, toggle, "New room") { newRoom = true }
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
                 empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) "No other rooms. Hidden and archived ones are listed below." else "No rooms yet. Create the first one.")
@@ -290,6 +293,8 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 }
             }
         }
+        // A fetch that takes a while (§58): over the top of the list, under the bar. Not over the first load's spinner.
+        chirkle.android.ui.LoadingLine(s.listLoads > 0 && s.rooms.isNotEmpty(), Modifier.padding(top = padding.calculateTopPadding()))
     }
 
     archiving?.let { r ->
@@ -355,6 +360,49 @@ private fun JumpRow(t: chirkle.android.data.lib.JumpTarget, s: AppState, me: Str
         Text(t.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (badge > 0) FontWeight.Bold else FontWeight.Normal)
         if (t.note.isNotEmpty()) Text(t.note, style = MaterialTheme.typography.labelMedium, color = Chirkle.colors.muted)
         if (badge > 0) UnreadBadge(badge)
+    }
+}
+
+@Composable
+private fun MentionBadge() {
+    Box(Modifier.size(24.dp).background(Chirkle.colors.fill, CircleShape), contentAlignment = Alignment.Center) {
+        Text("@", color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = "Mentions you" })
+    }
+}
+
+/** The "Mentions & replies" row (DESIGN.md §41): an "@" where a room has its icon, and how many are new. */
+@Composable
+private fun InboxRow(new: Int, onOpen: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Chirkle.colors.tint), contentAlignment = Alignment.Center) {
+            Text("@", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
+        Text(
+            "Mentions & replies",
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = if (new > 0) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (new > 0) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
+        )
+        if (new > 0) {
+            Box(
+                Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (new > 99) "99+" else new.toString(), color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, modifier = Modifier.semantics { contentDescription = "$new new" })
+            }
+        }
     }
 }
 
@@ -595,6 +643,8 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
             if (!r.isDm && v != Visibility.Public) {
                 Icon(v.icon(), contentDescription = v.label, tint = Chirkle.colors.dim, modifier = Modifier.size(15.dp))
             }
+            // Unread messages that mention or reply to you (DESIGN.md §41): an "@" before the count, as on the web.
+            if (badge > 0 && s.mentioned(r.id)) MentionBadge()
             if (badge > 0) UnreadBadge(badge)
             if (menu.isNotEmpty()) {
                 // The menu opens at the button (a long press on the row opens it there too).

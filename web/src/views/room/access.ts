@@ -12,17 +12,14 @@
 // options (`kit`).
 
 import type { reasonOf } from "../../api.ts";
-import type { h, uniqueId } from "../../dom.ts";
 import type { isAddress, postingOf, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
 import type { Posting, Room, User, Visibility } from "../../lib/types.ts";
-import type { AvatarUrl, avatar } from "../../ui/avatar.ts";
-import type { createUserSearch, SearchError, UserSearch } from "../../ui/user-search.ts";
+import type { AvatarUrl } from "../../ui/avatar.ts";
+import type { createUserSearch, SearchError, SearchKit, UserSearch } from "../../ui/user-search.ts";
 
 /** What the dialog uses of app.js. */
-export interface AccessKit {
-  h: typeof h;
-  uniqueId: typeof uniqueId;
-  avatar: typeof avatar;
+export interface AccessKit extends SearchKit {
+  /** The people search, another lazy chunk the room view loads with this one. */
   createUserSearch: typeof createUserSearch;
   SearchError: typeof SearchError;
   reasonOf: typeof reasonOf;
@@ -103,7 +100,7 @@ export function createAccessDialog(opts: {
 }): AccessDialog {
   const { signal } = opts;
   const { h, uniqueId, avatar, createUserSearch, SearchError, reasonOf, isAddress, postingOf, visibilityOf, VISIBILITY } = opts.kit;
-  const LIMITS = { roomMembers: opts.kit.maxMembers };
+  const { maxMembers } = opts.kit;
   const id = uniqueId("access");
   const title = h("h2", { id: `${id}-title` });
   const sub = h("p", { class: "dialog-sub" });
@@ -178,10 +175,10 @@ export function createAccessDialog(opts: {
         // Hidden, it lists nobody: only the lists in use are in the page.
         const shown = el.hidden ? [] : p.list.filter(listed);
         head.textContent = `${label} · ${shown.length}`;
-        const full = p.list.length >= LIMITS.roomMembers;
+        const full = p.list.length >= maxMembers;
         addBtn.hidden = !editable || search?.p === p;
         addBtn.disabled = full;
-        addBtn.title = full ? `A room can have up to ${LIMITS.roomMembers} ${label.toLowerCase()}.` : "";
+        addBtn.title = full ? `A room can have up to ${maxMembers} ${label.toLowerCase()}.` : "";
         ul.replaceChildren(
           ...shown.map((u) => {
             const owner = u.id === room?.created_by;
@@ -290,8 +287,8 @@ export function createAccessDialog(opts: {
     if (has(p, u)) {
       p.list = p.list.filter((x) => x.id !== u.id);
       if (p === members) writers.list = writers.list.filter((x) => x.id !== u.id);
-    } else if (p.list.length >= LIMITS.roomMembers) {
-      error.textContent = `A room can have up to ${LIMITS.roomMembers} ${p === members ? "members" : "people who post"}.`;
+    } else if (p.list.length >= maxMembers) {
+      error.textContent = `A room can have up to ${maxMembers} ${p === members ? "members" : "people who post"}.`;
       return;
     } else p.list = [...p.list, u];
     error.textContent = "";
@@ -309,6 +306,7 @@ export function createAccessDialog(opts: {
       const ac = new AbortController();
       signal.addEventListener("abort", () => ac.abort(), { once: true });
       const ui = createUserSearch({
+        kit: opts.kit,
         search: async (q, sig) => {
           if (!isAddress(q) || !room || !sharedHosts().length || !opts.remoteUser) {
             return (await opts.searchUsers(q, sig)).filter((u) => listed(u) && p.pickable(u));

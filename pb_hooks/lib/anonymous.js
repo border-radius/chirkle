@@ -144,15 +144,19 @@ function probes(q, me) {
 const REFUSAL = "Messages can't be filtered, sorted or grouped by who wrote them.";
 
 /**
- * Every request: refused when its query filters, sorts or groups by author (the records API's ?filter, ?sort, ?expand,
- * on any collection, as a relation or back-relation can reach messages from any of them). Superusers may.
+ * A request refused when its query filters, sorts or groups by author (the records API's ?filter, ?sort, ?expand, on any
+ * collection, as a relation or back-relation can reach messages from any of them; our routes' ?expand). Called by the
+ * record request hooks (main.pb.js) and by each route that enriches records. Superusers may.
  * @param {core.RequestEvent} e
  */
 function refuseProbes(e) {
-  const q = e.request?.url?.query();
-  if (!q || (!q.has("filter") && !q.has("sort") && !q.has("expand"))) return;
-  if (!probes({ filter: q.get("filter"), sort: q.get("sort"), expand: q.get("expand") }, e.auth?.id ?? "")) return;
-  if (e.hasSuperuserAuth()) return;
+  // requestInfo, not e.request: the record request hooks' events have no `request` in JS. Its values are decoded
+  // (%61uthor is "author").
+  const info = e.requestInfo();
+  const q = { filter: info.query.filter ?? "", sort: info.query.sort ?? "", expand: info.query.expand ?? "" };
+  if (!/author|forwarded_from/i.test(`${q.filter} ${q.sort} ${q.expand}`)) return;
+  if (!probes(q, info.auth?.id ?? "")) return;
+  if (info.auth?.isSuperuser()) return;
   throw new BadRequestError(REFUSAL);
 }
 

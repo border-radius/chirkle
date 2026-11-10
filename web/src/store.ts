@@ -39,7 +39,13 @@ export interface AppState {
   hidden: Map<string, string>;
   /** roomId → unread messages (§18); rooms without any are absent. UNCOUNTED until the counts are first in. */
   unread: Map<string, number>;
+  /** roomId → its unread mentions of you and replies to you (§41); rooms without any are absent. */
+  mentions: Map<string, number>;
+  /** Rows of your "Mentions & replies" inbox you haven't seen (§41), at most 100. */
+  inbox: number;
   roomsStatus: LoadStatus;
+  /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§7.9). */
+  listLoads: number;
   activeRoomId: string | null;
   /** Your collections and those you follow (§31); null until loaded (and for guests). */
   collections: Collections | null;
@@ -59,7 +65,10 @@ export const initialState = (): AppState => ({
   rooms: new Map(),
   hidden: new Map(),
   unread: UNCOUNTED,
+  mentions: new Map(),
+  inbox: 0,
   roomsStatus: "idle",
+  listLoads: 0,
   activeRoomId: null,
   collections: null,
   activeCollectionId: null,
@@ -70,6 +79,11 @@ export const initialState = (): AppState => ({
 // ---- updates: pass to store.set(). Maps are replaced, never mutated, so listeners can compare by identity.
 
 type Update = (s: AppState) => Partial<AppState>;
+
+/** A room list request went out (1) or is back (-1). */
+export const listLoad =
+  (d: 1 | -1): Update =>
+  (s) => ({ listLoads: s.listLoads + d });
 
 export function upsertRoom(r: Room): Update {
   return (s) => ({ rooms: new Map(s.rooms).set(r.id, r) });
@@ -110,10 +124,12 @@ export function bumpUnread(roomId: string): Update {
 /** The room has been read (§18.3). */
 export function clearUnread(roomId: string): Update {
   return (s) => {
-    if (!s.unread.has(roomId)) return {};
+    if (!s.unread.has(roomId) && !s.mentions.has(roomId)) return {};
     const unread = new Map(s.unread);
+    const mentions = new Map(s.mentions);
     unread.delete(roomId);
-    return { unread };
+    mentions.delete(roomId);
+    return { unread, mentions };
   };
 }
 
@@ -127,6 +143,9 @@ export function unreadCount(s: AppState, room: Room): number {
   if (room.archived || s.hidden.has(room.id)) return 0;
   return s.unread.get(room.id) ?? 0;
 }
+
+/** A room's "@" (§41): it has unread messages that mention you or reply to you. */
+export const mentioned = (s: AppState, room: Room): boolean => !!unreadCount(s, room) && !!s.mentions.get(room.id);
 
 /** One collator for every sort: `localeCompare` with options builds a new one per comparison, which is slow. */
 const collator = new Intl.Collator(undefined, { sensitivity: "base" });

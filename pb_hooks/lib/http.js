@@ -15,7 +15,8 @@ const CSP = [
 ].join("; ");
 
 /**
- * Security + cache headers for every response (§5.6).
+ * Security + cache headers (§5.6), set by the routes that serve the app (page, asset, the manifest). Not by a router
+ * middleware for every request (main.pb.js): PocketBase's own already sends nosniff with every API answer.
  * @param {core.RequestEvent} e
  */
 function headers(e) {
@@ -30,7 +31,7 @@ function headers(e) {
     if (/^\/assets\/.+-[A-Z0-9]{8}\.(js|css|woff2)(\.map)?$/.test(path)) h.set("Cache-Control", "public, max-age=31536000, immutable");
     else h.set("Cache-Control", "no-cache");
     // A page (the app's index.html, at any path without a file name): what it loads first.
-    if (e.request?.method === "GET" && !path.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(path)) {
+    if (e.request?.method === "GET" && path !== STATS_PATH && !path.startsWith("/assets/") && !/\.[a-z0-9]+$/i.test(path)) {
       const link = preloads();
       if (link) h.set("Link", link);
     }
@@ -73,26 +74,6 @@ function preloads() {
   return links;
 }
 
-/** PocketBase's own request body limit, which every request but a message create keeps. */
-const DEFAULT_BODY_LIMIT = 32 << 20;
-
-/** A message create: 10 attachments of 20 MB (DESIGN.md §17.1), and room for the rest of the form. */
-const MESSAGE_BODY_LIMIT = 10 * 20 * 1024 * 1024 + (1 << 20);
-
-/**
- * The body limit is MESSAGE_BODY_LIMIT for every route (main.pb.js replaces PocketBase's default, as one route can't
- * have its own: the records API is PocketBase's): hold a body to the default anywhere but a message create, as
- * PocketBase's limiter does, counting what is read. Not by Content-Length alone: a chunked body has none (-1), and was
- * let through to MESSAGE_BODY_LIMIT, signups and logins too (QA BUG-143). The Android app sends chunked uploads when a
- * file's size is unknown, so those are limited, not refused. Goes on with the request (e.next) when within it.
- * @param {core.RequestEvent} e
- */
-function bodyLimit(e) {
-  const req = e.request;
-  if (req?.method === "POST" && req.url?.path === "/api/collections/messages/records") return e.next();
-  return $apis.bodyLimit(DEFAULT_BODY_LIMIT).func(e);
-}
-
 /** The directory the app is served from: `--publicDir`, else PocketBase's default, pb_public beside the executable. */
 function publicDir() {
   const args = $os.args;
@@ -110,6 +91,7 @@ function publicDir() {
  * @param {core.RequestEvent} e
  */
 function asset(e) {
+  headers(e);
   const dir = $filepath.join(publicDir(), "assets");
   const path = e.request?.pathValue("path") ?? "";
   try {
@@ -120,6 +102,16 @@ function asset(e) {
     throw new NotFoundError();
   }
   return $apis.static(dir, false)(e);
+}
+
+/**
+ * GET /{path...}: the app's files in the public directory, and index.html at any path that isn't one (§7.1), as
+ * PocketBase serves them when no route of ours does, with the headers.
+ * @param {core.RequestEvent} e
+ */
+function page(e) {
+  headers(e);
+  return $apis.static(publicDir(), true)(e);
 }
 
 /**
@@ -143,4 +135,24 @@ function trustProxy(app) {
   app.save(settings);
 }
 
-module.exports = { headers, bodyLimit, asset, trustProxy, MESSAGE_BODY_LIMIT };
+/** The usage statistics page (§40): a page of its own, not the app's. */
+const STATS_PATH = "/stats";
+
+/**
+ * GET /stats: the statistics page (stats.html, built from web/stats.html), to anyone: it asks GET /api/chat/stats, which
+ * only moderators and superusers get. Not built yet (the dev build has it too): a 404.
+ * @param {core.RequestEvent} e
+ */
+function statsPage(e) {
+  headers(e);
+  /** @type {string} */
+  let html;
+  try {
+    html = toString($os.readFile($filepath.join(publicDir(), "stats.html")));
+  } catch {
+    throw new NotFoundError();
+  }
+  return e.html(200, html);
+}
+
+module.exports = { headers, page, asset, statsPage, trustProxy };

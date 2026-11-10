@@ -18,6 +18,8 @@ export interface User {
   email: string;
   password: string;
   token: string;
+  /** What "@handle" names (§41). */
+  handle: string;
 }
 export interface Room {
   id: string;
@@ -44,12 +46,12 @@ export async function apiUser(name = "User", base = E2E_BASE): Promise<User> {
       base,
     ),
   );
-  const auth = await call<{ token: string; record: { id: string } }>(
+  const auth = await call<{ token: string; record: { id: string; handle: string } }>(
     "/api/collections/users/auth-with-password",
     { method: "POST", body: JSON.stringify({ identity: email, password }) },
     base,
   );
-  return { id: auth.record.id, name, email, password, token: auth.token };
+  return { id: auth.record.id, name, email, password, token: auth.token, handle: auth.record.handle };
 }
 
 export async function apiRoom(owner: User, name = `room-${uniq()}`, base = E2E_BASE): Promise<Room> {

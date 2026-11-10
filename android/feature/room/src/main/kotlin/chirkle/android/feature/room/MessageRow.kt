@@ -86,6 +86,8 @@ class RowActions(
     val badge: (String) -> chirkle.android.data.model.Badge? = { null },
     /** Open a collection's page (a badge was tapped). */
     val onCollection: (String) -> Unit = {},
+    /** Your handle (DESIGN.md §41): an "@" of it is marked more. */
+    val myHandle: String = "",
 )
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -104,8 +106,8 @@ fun MessageRow(
     val highlight by animateColorAsState(if (target) Chirkle.colors.highlight else Color.Transparent, tween(if (target) 150 else 1200), label = "target")
     val author = m.expand?.author ?: User(m.author, "Unknown")
     val accent = MaterialTheme.colorScheme.primary
-    // A reply to one of my messages, by someone else: a tinted card (the web's .to-me).
-    val toMe = me != null && m.author != me && m.replyTo.isNotEmpty() && m.expand?.replyTo?.author == me
+    // A reply to one of my messages or a mention of me (DESIGN.md §41), by someone else: a tinted card (the web's .to-me).
+    val toMe = me != null && m.author != me && ((m.replyTo.isNotEmpty() && m.expand?.replyTo?.author == me) || me in m.mentions)
     Box {
         Row(
             Modifier
@@ -161,8 +163,9 @@ fun MessageRow(
                             val muted = Chirkle.colors.muted
                             val edited = m.editedAt.isNotEmpty()
                             // "(edited)" follows the text on its line, as on the web.
-                            val text = remember(m.text, accent, edited, muted) {
-                                val t = linked(m.text, accent) { openLink(context, it) }
+                            val mark = Chirkle.colors.tint
+                            val text = remember(m.text, accent, edited, muted, actions.myHandle, mark) {
+                                val t = linked(m.text, accent, actions.myHandle, mark) { openLink(context, it) }
                                 if (!edited) t else androidx.compose.ui.text.buildAnnotatedString {
                                     append(t)
                                     append(" ")

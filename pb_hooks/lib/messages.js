@@ -366,6 +366,10 @@ function beforeMessageUpdateRequest(e) {
   for (const f of ["reactions", "previews", "file_dims"]) {
     if (rec.getString(f) !== rec.original().getString(f)) throw fieldError(f, "This field can't be changed.");
   }
+  // Only the hooks set who a message mentions, from its text (§41).
+  if (rec.getStringSlice("mentions").join(",") !== rec.original().getStringSlice("mentions").join(",")) {
+    throw fieldError("mentions", "This field can't be changed.");
+  }
 }
 
 /**

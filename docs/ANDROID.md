@@ -242,7 +242,8 @@ is a route.
 Multi-line field with the 2,000-character limit counted in code points (`textLength`); emoji, attach, send. One rounded
 field holds emoji at its start and attach at its end, both kept at the bottom as the text grows to six lines, then the
 send circle: the text gets the width. Enter makes
-a new line; a hardware keyboard sends with Enter and Ctrl+Up/Down pick the reply as on the web. Replying and editing
+a new line; a hardware keyboard sends with Enter and Ctrl+Up/Down pick the reply as on the web, and Ctrl+/ anywhere in
+the room focuses the field (web §7.6; no key badge, as the app is for touch screens; `UiPortsTest`). Replying and editing
 show a bar above the field. A room you may only read shows why instead of the composer (archived, Open Air guest, not a
 writer: §23.6).
 
@@ -1545,7 +1546,91 @@ raised `#232428` (`surfaceContainer`), text `#ecece8`, `muted` `#b0b4ba`, `dim` 
 `ChirkleColors.fill`). The fill is light now, so what is on it is ink `#16181a`: the new `ChirkleColors.onFill`
 (white in light) for unread badges, a collection's new count and the send icon. Light is unchanged.
 
-## 56. Forgot password (2026-11-08)
+## 56. Live messages on one topic (2026-11-09)
+
+The server sends each message once, on `chat/messages`, to everyone who can see its room (pb_hooks/lib/live.js,
+PERF.md §7). It no longer runs its JS enrich hook once for each listener of `messages/*`, which with 100 people
+listening made each message and reaction take seconds. `ChirkleApi.subscribeMessages` and `subscribeAllMessages`
+listen to that topic: the room's subscription keeps the events of its room, and the activity reads the same events.
+The app asks `GET /api/chat/live` once per server. On a 404 (a server from before) it subscribes to the messages
+collection as it did. Events are the same records (the contract's message fields, `author` and `forwarded_from`
+expanded), so nothing above `ChirkleApi` changed.
+
+Tests: `LegacyServerTest` "with a server from before live messages…" (the same events from both servers, one
+`/api/chat/live` each; `TestServer.legacyUrl` drops that route too), `ChirkleApiTest` realtime, and every screen
+test that waits for a live message. Server: `tests/integration/live.test.ts`, `access.matrix.test.ts` (live
+messages as one more way in).
+
+## 57. Usage statistics (server, 2026-11-09)
+
+The server counts who is online and how much the apps are used, for a web page moderators and superusers open
+(`/stats`, DESIGN.md §40). The app has no screen for it, on the user's choice, and nothing in it changed: its realtime
+connection is counted as Android because its subscribe request carries OkHttp's default User-Agent (`okhttp/…`).
+Setting a User-Agent of the app's own would need `stats.js appOf` to know it. The new `site.no_stats` field is hidden,
+so the app's read of `site` is unchanged. Server tests: `tests/integration/stats.test.ts`.
+
+## 58. A line while the room list or a room is fetched (2026-11-09)
+
+The web's loading line (DESIGN.md §7.9): when the app is slow there is something to see. `LoadingLine` (core/ui) is
+a 2 dp indeterminate bar in the accent, laid over the top of the room list (under the top bar) and of a room (under
+its header). It shows once a fetch has taken 400 ms (`LOADING_LINE_MS`, the web's `LOADBAR_MS`), so a quick one shows
+nothing, and goes as soon as nothing is out. Not over a first load's spinner (no rooms yet; a room still in
+`Phase.Loading`), and in a room not over search results.
+
+- Room list: `AppState.listLoads` counts the requests out now: `RoomsSync.load` (rooms and hidden rows) and
+  `UnreadSync.load` (the counts). A logout's reset keeps the count, so loads still out count back down to 0.
+- Room: `RoomController.busy` is true while any of its reads is out: the first load (and Retry), history at either
+  end, a jump (also the writes' jump to latest), going to a message, catching up once live, and the refetch and gap
+  fill after a reconnect. Writes have their own signs (pending rows, the upload bar).
+
+Tests: `ServicesTest` "the room list and a room say while they are being fetched" (the list's count goes up and back
+to 0; a room is no longer busy once ready). Web: `tests/e2e/loadbar.spec.ts`, `tests/unit/loadbar.test.ts`.
+
+## 59. Searching the forward picker (2026-11-09)
+
+The forward sheet (§21.3) had only a list to scroll. It now has the web's search field (`web/src/views/room/forward.ts`,
+"Search rooms and people") over the list. Typing narrows the rooms and DMs to those whose title holds the text, with
+case and accents folded as in Jump to (`jumpFold`) and a leading "#" or "@" ignored. After a 200 ms pause (the web's
+`SEARCH_DEBOUNCE_MS`) the people search runs too: the people it finds come after the rooms, except those you already
+have a DM with (they show as that DM) and those who take no DMs (§16.7). Picking one of them opens the DM
+(`RoomActions.openDm`) and forwards there (`ForwardTo.ToUser`). The keyboard's Done forwards to the first match.
+The field isn't focused when the sheet opens, so the keyboard doesn't cover the list, the same as the emoji sheet.
+The list keeps the height of the full list while you type, so the sheet doesn't shrink under your finger. Test:
+`UiFeaturesTest` "the forward picker searches rooms and finds people with no DM yet".
+
+## 60. Handles, mentions and Mentions & replies (2026-11-10)
+
+The web's DESIGN.md §41, ported. `User.handle` and `Message.mentions` are read (`fields.user`, `fields.message`).
+
+- **Messages**: `linked()` (core/ui) marks each "@handle" (`splitMentions`, `lib/Mentions.kt`, on the web's vectors) in
+  the accent and bold, yours on the tint; a message mentioning you gets the reply-to-you card.
+- **Composer**: "@" before the caret (`mentionToken`) asks `GET /api/chat/mentionable` after 120 ms; the people show
+  in a column over the field (`People`, content description "Name @handle"); a tap, or Enter/Tab with a keyboard,
+  puts "@handle " in. Emoji suggestions and people never show at once.
+- **Room list**: a "Mentions & replies" row first (an "@" tile, "N new"), opening `InboxScreen` (route `Inbox`); a room
+  with unread mentions or replies shows an "@" (`MentionBadge`, "Mentions you") before its count. `UnreadSync` keeps
+  `AppState.mentions` and `inbox` from `GET /api/chat/unread` and refetches on `chat/inbox` (a server from before
+  sends none and its counts lack both: no "@", no count).
+- **InboxScreen** (feature/rooms): the web's page; opening it sees all (`POST /api/chat/inbox/seen`); a tap opens the
+  message (`Room(id, msgId)`).
+- **Profile**: a Handle field with its own Save.
+- **Notifications**: the check's `notifiable` includes mentions on the server; they go on the "Mentions and replies"
+  channel (was "Replies"; same id).
+
+Tests: `VectorsTest` (mentions, `mentionToken`), `ContractTest`, `UiMentionsTest` (suggest and send, the "@" and count
+live, the inbox opening the message and reading clears the "@", the handle saved and a taken one refused). Looked at
+in Robolectric screenshots (room list, inbox, room with the suggestions).
+
+## 61. QA pass 34 (2026-11-10)
+
+docs/QA.md "QA pass 34".
+
+- **BUG-253:** the composer's "@" list (`People`) is at most 200dp high and scrolls; eight people over a phone's
+  keyboard had pushed the top bar and the messages off and squashed the field.
+- **BUG-254:** `InboxScreen` listens to `chat/inbox` while open and drops a row taken away (`ChirkleApi.subscribeInbox`
+  now hands over `InboxEvent`). `UiMentionsTest`.
+
+## 62. Forgot password (2026-11-08)
 
 DESIGN.md §39, ported the same day. While the site says `password_reset` (`Site.passwordReset`, from `SITE_FIELDS`;
 false from an older server, which doesn't send it), Log in shows "Forgot password?" under the password. It opens

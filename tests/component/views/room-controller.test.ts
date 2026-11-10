@@ -16,6 +16,8 @@ describe("room controller (§7.5, no DOM)", () => {
   let scope: Scope;
   let ctl: RoomController;
   let changes: Change[];
+  /** What onBusy was told, in order. */
+  let busy: boolean[];
   /** What the view would answer to "is the list at the bottom?". */
   let nearBottom: boolean;
   /** The room cache, for the tests that use one. */
@@ -46,6 +48,7 @@ describe("room controller (§7.5, no DOM)", () => {
   function start(room: Room | string, msgId?: string, api: Api = me.api) {
     scope = createScope();
     changes = [];
+    busy = [];
     ctl = createRoomController({
       api,
       store,
@@ -54,6 +57,7 @@ describe("room controller (§7.5, no DOM)", () => {
       scope,
       nearBottom: () => nearBottom,
       onChange: (c) => changes.push(c),
+      onBusy: (b) => busy.push(b),
       ...(cache && { cache }),
     });
     ctl.start();
@@ -73,6 +77,22 @@ describe("room controller (§7.5, no DOM)", () => {
     expect(from).toBeGreaterThanOrEqual(0);
     expect(shown).toEqual(all.slice(from, from + shown.length).map((m) => m.id));
   }
+
+  it("is busy while it fetches: the first load, history (§7.9)", async () => {
+    const room = await newRoom();
+    await seedMessages(room.id, me.user.id, 120);
+    start(room);
+    expect(busy).toEqual([true]);
+    await ready();
+    await vi.waitFor(() => expect(busy.at(-1)).toBe(false));
+    // Never told the same twice in a row.
+    expect(busy.every((b, k) => b === (k % 2 === 0))).toBe(true);
+    const n = busy.length;
+    const edge = ctl.loadEdge("top");
+    expect(busy.slice(n)).toEqual([true]);
+    await edge;
+    expect(busy.slice(n)).toEqual([true, false]);
+  });
 
   /** Drop realtime message events while `offline` (a dropped connection); `dropped` counts them. */
   function gateRealtime(api: Api) {

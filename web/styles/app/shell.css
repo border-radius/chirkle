@@ -345,3 +345,26 @@ a.button.primary,
   margin: 0;
   color: var(--muted);
 }
+
+/* A fetch that takes a while (§7.9): a thin moving line over the room list or the room; takes no room itself. */
+.loadbar {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  height: 0;
+}
+
+.loadbar.on::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) -70% 0 / 40% 100% no-repeat;
+  animation: loadbar 1.2s ease-in-out infinite;
+}
+
+@keyframes loadbar {
+  to {
+    background-position: 170% 0;
+  }
+}
