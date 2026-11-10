@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-// Forgot password (DESIGN.md §39, ANDROID.md §56): offered while the server sends email; asks where to send the link.
+// Forgot password (DESIGN.md §39, ANDROID.md §62): offered while the server sends email; asks where to send the link.
 // The mail settings point at a closed port: PocketBase answers at once and sends in the background, and nobody reads it.
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class)

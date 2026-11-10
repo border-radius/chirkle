@@ -309,7 +309,7 @@ describe("forgot password (§39)", () => {
 
   const mount = (opts: { site?: Partial<Site>; mode?: "login" | "reset"; token?: string }, api = newApi()) => {
     const store = createStore<AppState>({ ...initialState(), site: { ...DEFAULT_SITE, ...opts.site } });
-    const view = createLoginView({ api, onLogin, store, mode: opts.mode ?? "login" });
+    const view = createLoginView({ kit: LOGIN_KIT, api, onLogin, store, mode: opts.mode ?? "login" });
     view.mount(root, opts.token ? { token: opts.token } : {});
     return { view, api, store };
   };
@@ -368,7 +368,7 @@ describe("forgot password (§39)", () => {
     expect(root.querySelector('input[name="password"]')!.getAttribute("autocomplete")).toBe("new-password");
     fill(root, { password: ada.password });
     submit(root);
-    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: ada.user.id, name: "Ada", avatar: "" }));
+    await vi.waitFor(() => expect(onLogin).toHaveBeenCalledWith({ id: ada.user.id, name: "Ada", avatar: "", handle: ada.user.handle }));
     expect(got).toEqual([token, ada.password]);
     expect(root.querySelector('a[href="/login"]')!.textContent).toBe("Back to log in");
   });
