@@ -2,12 +2,12 @@
 
 A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) binary is the whole backend
 (auth, data, realtime, static files); the frontend is vanilla TypeScript bundled by esbuild — no framework,
-~49 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 49.75 KB of JS,
-11.25 KB of CSS; rarer screens such as the image viewer, search, room access and collections load on first use).
+~47 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 49.75 KB of JS,
+11.3 KB of CSS; rarer screens such as the image viewer, search, room access, collections, the emoji picker and Mentions & replies load on first use).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img alt="A room in Chirkle: the room list with unread counts on the left; messages with avatars, a reply, a photo and emoji reactions on the right" src="docs/screenshot-light.png">
+  <img alt="A room in Chirkle: the room list with unread counts on the left; messages with avatars, a reply, an @mention of you, a photo and emoji reactions on the right" src="docs/screenshot-light.png">
 </picture>
 
 - Runs on a $5 VPS (1 vCPU, 1 GB of RAM): about 500 people online at a normal pace, or 100 chatting nonstop
@@ -21,8 +21,14 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
 - Avatars (or colored initials) and a profile page to change your picture, display name (unique) and password, and to log out
 - Search in any room or DM: every word you type, in any case ("привет" finds "Привет"), newest first; pick a result to go to it, however far back
 - Replies: answer any message with a quote of it; click the quote to jump to the original, however far back
+- Handles and @mentions: everyone has an @handle (made from their name, changeable in Settings); type "@" in the
+  composer to pick someone. A message that mentions you is highlighted and notifies you like a reply, and rooms with
+  unread mentions or replies show an "@" by their count
+- Mentions & replies: one page, right under Jump to, of every mention of you, reply to you and reaction to your
+  messages, newest first; each opens its message in its room
 - Links in messages are clickable and open in a new tab (http, https and www. addresses only)
-- Emoji: a picker in the composer, and reactions on any message (as many different ones as you like), live for everyone
+- Emoji: a picker in the composer with search by name, ":name" suggestions as you type, and reactions on any message
+  (as many different ones as you like), live for everyone
 - Attachments: up to 10 files of 20 MB per message, with an upload progress bar; images shown as thumbnails and videos as their first frame (4 tiles, then "+N"); files are private to whoever can read the message
 - Image viewer: click a thumbnail to see it full size (or a video to play it) and step through the room's images and videos (buttons, arrow keys, swipe);
   loaded only when first used, so it adds nothing to the page's first load
@@ -31,6 +37,11 @@ A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) bin
 - Unread counts on every room and DM, live, and in sync across your tabs and devices; the total shows in the tab's favicon and title;
   a room with unread messages opens at the first of them, under a "New" line
 - What you were typing is kept per room, even across a reload; "Jump to latest" whenever you are scrolled up
+- Moderators, chosen by the admin: they delete anyone's messages, change any room's access, archive rooms, and ban or
+  unban people (a banned account can't log in); DMs and private rooms they aren't in stay out of their reach
+- Usage statistics at `/stats` for moderators and the admin: people online now, messages and active people over
+  time, no names (the admin can turn collecting them off)
+- Anonymous rooms, set by the admin: messages show the room's name instead of their authors
 - Your own branding (title and logo) and, if you like, invite-only signups: set by the admin in PocketBase
 - Forgot password: once the admin sets up email, "Forgot password?" on the login page (web and Android) emails a link
   that sets a new password and logs out every device
@@ -212,6 +223,11 @@ are shown in the app bar, on the login page and in the tab's title. Tick `invite
 only people who have the code sign up (they enter it on the Sign up form; it is case-sensitive). Change the code to stop
 the old one working; leave it empty to close signups. Existing accounts are unaffected, and you can still create
 accounts yourself under *Collections → users*.
+
+**Moderators and statistics:** in the admin UI, *Collections → users*, tick `moderator` on someone's record. They
+then delete messages, change room access, archive rooms and ban people from the app (`banned` on the same record
+undoes a ban), and find usage statistics on Settings; superusers signed in to the admin UI open `/stats` directly.
+Tick `no_stats` on the *site* record to stop recording them.
 
 **Forgot password:** in the admin UI, set *Settings → Application → Application URL* to the server's public
 address (the emailed link starts with it) and the sender under *Settings → Mail settings*, and turn on *Use SMTP

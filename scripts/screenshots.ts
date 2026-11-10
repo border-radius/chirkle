@@ -79,7 +79,7 @@ const DESIGN: Line[] = [
   {
     by: "maya",
     ago: 33,
-    text: "Updated mocks with Sam's change are in. Last call for comments 🙌",
+    text: "Updated mocks with @sam_rivera's change are in. Last call for comments, @alex_morgan 🙌",
     reactions: [
       ["👍", ["leo", "sam", "yuki", "alex"]],
       ["🎉", ["priya"]],
