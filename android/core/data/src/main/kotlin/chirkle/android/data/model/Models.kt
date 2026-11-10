@@ -192,6 +192,8 @@ data class InboxItem(
     /** A reaction's emoji, "" otherwise. */
     val emoji: String = "",
     val created: String = "",
+    /** A mention or reply already read in its room: not new here. False from older servers. */
+    val read: Boolean = false,
     val room: String = "",
     /** The mention, the reply, or your message reacted to. */
     val message: InboxMessage = InboxMessage(""),

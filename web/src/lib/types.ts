@@ -215,6 +215,8 @@ export interface InboxItem {
   /** A reaction's emoji, "" otherwise. */
   emoji: string;
   created: string;
+  /** A mention or reply already read in its room: not new here. Missing from servers before. */
+  read?: boolean;
   room: string;
   /** The message: the mention, the reply, or your message reacted to. Its text cut short, how many files it has. */
   message: { id: string; text: string; files: number; created: string };

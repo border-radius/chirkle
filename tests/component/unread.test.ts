@@ -67,10 +67,12 @@ describe("unread counts (§18.3)", () => {
       await other.api.send({ id: newId(), room: r.id, text: "re", replyTo: mine.id });
       await vi.waitFor(() => expect(store.get().mentions.get(r.id)).toBe(2));
       expect(store.get().inbox).toBe(2);
-      // Read: the room's mentions go with its count.
-      unread!.open(r.id).seen(new Date(Date.now() + 1000).toISOString().replace("T", " "), true);
+      // Read: the room's mentions go with its count, and once the read is in, the inbox's count too (seen in the room).
+      const last = await say(other, r.id, "after");
+      unread!.open(r.id).seen(last.created, true);
       expect(store.get().mentions.has(r.id)).toBe(false);
       expect(count(r.id)).toBeUndefined();
+      await vi.waitFor(() => expect(store.get().inbox).toBe(0), { timeout: 5000 });
     });
   });
 

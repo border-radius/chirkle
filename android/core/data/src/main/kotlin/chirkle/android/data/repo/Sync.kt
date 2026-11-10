@@ -235,8 +235,9 @@ class Unread(
                     runCatching { api.markRead(roomId, at) }
                         .onSuccess {
                             failures = 0
-                            // What is still unread below the screen: the server counts it.
-                            if (!caughtUpNow && live()) refresh()
+                            // What is still unread below the screen: the server counts it. So does the inbox's count: a
+                            // mention or reply read in its room is seen there too (DESIGN.md §41.4).
+                            if ((!caughtUpNow || store.get().inbox > 0) && live()) refresh()
                         }
                         .onFailure { e ->
                             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room

@@ -219,7 +219,15 @@ const VISIBLE_SQL = `FROM inbox i JOIN messages m ON m.id = i.message JOIN rooms
 WHERE i.user = {:me} AND m.deleted = FALSE AND ${SEES_SQL}`;
 
 /**
- * For GET /api/chat/unread: how many rows `user` hasn't seen (at most CAP), and per room the mentions of them and
+ * A mention or reply whose message you have read in its room: seen there, so not new in the inbox either (2026-11-10,
+ * user: no reading it twice). A reaction is only seen in the inbox: it comes after the message it is on.
+ */
+const READ_IN_ROOM_SQL = `(i.kind != 'reaction' AND m.created <= COALESCE((SELECT rr.last_read_at FROM room_reads rr
+  WHERE rr.user = {:me} AND rr.room = i.room), ''))`;
+
+/**
+ * For GET /api/chat/unread: how many rows `user` hasn't seen (at most CAP): newer than when they last looked at the
+ * inbox, and (a mention or reply) not read in its room already, and per room the mentions of them and
  * replies to them that are still unread there (newer than their read position, or signup).
  * @param {core.App} app
  * @param {core.Record} user
@@ -228,7 +236,7 @@ function counts(app, user) {
   const unseen = new DynamicModel({ n: 0 });
   app
     .db()
-    .newQuery(`SELECT COUNT(*) AS n FROM (SELECT 1 ${VISIBLE_SQL} AND i.created > {:seen} LIMIT ${CAP})`)
+    .newQuery(`SELECT COUNT(*) AS n FROM (SELECT 1 ${VISIBLE_SQL} AND i.created > {:seen} AND NOT ${READ_IN_ROOM_SQL} LIMIT ${CAP})`)
     .bind({ me: user.id, seen: seenAt(app, user.id) })
     .one(unseen);
   const rows = arrayOf(new DynamicModel({ room: "", n: 0 }));
@@ -273,7 +281,8 @@ function shown(app, msg) {
 
 /**
  * GET /api/chat/inbox?before=&limit= → { items, more, seen_at }: the caller's rows, newest first, PAGE at a time
- * (`before`: the last item's `cursor`). Each item: { id, cursor, kind, emoji, created, room, message: { id, text, files,
+ * (`before`: the last item's `cursor`). Each item: { id, cursor, kind, emoji, created, read (a mention or reply read in
+ * its room: not new, whatever seen_at says), room, message: { id, text, files,
  * created }, quote (a reply's: the caller's message it answers, { id, text, files }), actor: { id, name, avatar,
  * instance } }. In an anonymous room (§35) a mention or reply shows the room, not who wrote it.
  * @param {core.RequestEvent} e
@@ -285,11 +294,12 @@ function list(e) {
   const limit = Math.max(1, Math.min(PAGE, Number.parseInt(String(q.limit ?? PAGE), 10) || PAGE));
   const before = typeof q.before === "string" ? q.before : "";
   const [bCreated, bId] = before.includes("|") ? before.split("|") : ["", ""];
-  const rows = arrayOf(new DynamicModel({ id: "", kind: "", emoji: "", created: "", room: "", message: "", actor: "" }));
+  const rows = arrayOf(new DynamicModel({ id: "", kind: "", emoji: "", created: "", room: "", message: "", actor: "", read: false }));
   e.app
     .db()
     .newQuery(
-      `SELECT i.id AS id, i.kind AS kind, i.emoji AS emoji, i.created AS created, i.room AS room, i.message AS message, i.actor AS actor
+      `SELECT i.id AS id, i.kind AS kind, i.emoji AS emoji, i.created AS created, i.room AS room, i.message AS message, i.actor AS actor,
+         ${READ_IN_ROOM_SQL} AS read
        ${VISIBLE_SQL} ${bCreated ? "AND (i.created < {:bc} OR (i.created = {:bc} AND i.id < {:bi}))" : ""}
        ORDER BY i.created DESC, i.id DESC LIMIT ${limit + 1}`,
     )
@@ -325,6 +335,7 @@ function list(e) {
         kind: row.kind,
         emoji: row.emoji,
         created: row.created,
+        read: !!row.read,
         room: row.room,
         message: { id: msg.id, created: msg.getString("created"), ...shown(e.app, msg) },
         quote,

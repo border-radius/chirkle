@@ -69,6 +69,20 @@ describe("inbox page (§41)", () => {
     expect(rows().some((r) => r.classList.contains("new"))).toBe(false);
   });
 
+  it("doesn't mark a mention or reply read in its room as new; a reaction still is", async () => {
+    const other = await signedUp(`Other ${uniq()}`);
+    const room = await other.api.createRoom(`room-${uniq()}`);
+    store.set({ rooms: new Map([[room.id, room]]) });
+    const mine = await me.api.send({ id: newId(), room: room.id, text: "my words" });
+    await other.api.send({ id: newId(), room: room.id, text: `hi @${me.user.handle}` });
+    const reply = await other.api.send({ id: newId(), room: room.id, text: "answer", replyTo: mine.id });
+    await other.api.react(mine.id, "👍", true);
+    await me.api.markRead(room.id, reply.created);
+    expect((await me.api.unreadCounts()).inbox).toBe(1);
+    await mount();
+    expect(rows().map((r) => r.classList.contains("new"))).toEqual([true, false, false]);
+  });
+
   it("drops a row taken away while it is open (QA BUG-254)", async () => {
     const other = await signedUp(`Other ${uniq()}`);
     const room = await other.api.createRoom(`room-${uniq()}`);

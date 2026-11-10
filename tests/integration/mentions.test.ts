@@ -22,6 +22,7 @@ interface InboxItem {
   kind: "mention" | "reply" | "reaction";
   emoji: string;
   created: string;
+  read: boolean;
   room: string;
   message: { id: string; text: string; files: number; created: string };
   quote: { id: string; text: string; files: number } | null;
@@ -189,6 +190,37 @@ describe("inbox (§41)", () => {
     expect(got.items).toEqual([]);
     // b has nothing: their own doings aren't told to them.
     expect((await inbox(b)).items).toEqual([]);
+  });
+
+  it("a mention or reply read in its room is seen in the inbox too; a reaction isn't", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const room = await newRoom(a);
+    const mine = await post(a, room.id, "my words");
+    await post(b, room.id, `hey @${await handleOf(a)}`);
+    await post(b, room.id, "answer", { reply_to: mine.id });
+    await react(b, mine.id, "👍");
+    let got = await inbox(a);
+    expect(got.items.map((i) => [i.kind, i.read])).toEqual([
+      ["reaction", false],
+      ["reply", false],
+      ["mention", false],
+    ]);
+    expect((await counts(a)).inbox).toBe(3);
+
+    await a.pb.send("/api/chat/reads", { method: "POST", body: { room: room.id } });
+    got = await inbox(a);
+    expect(got.items.map((i) => [i.kind, i.read])).toEqual([
+      ["reaction", false],
+      ["reply", true],
+      ["mention", true],
+    ]);
+    expect((await counts(a)).inbox).toBe(1);
+
+    // A new mention after the read is new again.
+    await post(b, room.id, `again @${await handleOf(a)}`);
+    expect((await inbox(a)).items[0]).toMatchObject({ kind: "mention", read: false });
+    expect((await counts(a)).inbox).toBe(2);
   });
 
   it("pages with a cursor", async () => {

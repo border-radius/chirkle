@@ -143,7 +143,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(items, key = { it.id }) { item ->
-                val new = seenAt != null && item.created > seenAt!!
+                val new = seenAt != null && item.created > seenAt!! && !item.read
                 val room = app.rooms[item.room]?.title(app.user?.id).orEmpty()
                 Row(
                     Modifier

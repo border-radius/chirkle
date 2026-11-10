@@ -1,6 +1,6 @@
 // "Mentions & replies" (§41), /inbox, next to the room list: the messages that mention you, the replies to your
-// messages and the reactions to them, newest first, each a link to it in its room. What you hadn't seen is marked, and
-// opening the page sees it. New ones come in at the top while it is open.
+// messages and the reactions to them, newest first, each a link to it in its room. What you hadn't seen is marked (not
+// a mention or reply you have read in its room), and opening the page sees it. New ones come in at the top while it is open.
 //
 // A lazy chunk with its own stylesheet (styles/inbox.css), like the media grid (§30.2): app.ts import()s it for the
 // route. It imports types only; what it needs from app.js comes in its options.
@@ -95,7 +95,7 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
     const room = o.roomName(item.room);
     return h(
       "li",
-      { class: seenAt !== null && item.created > seenAt ? "new" : "" },
+      { class: seenAt !== null && item.created > seenAt && !item.read ? "new" : "" },
       h("a", { href: `/r/${item.room}/m/${item.message.id}` }, [
         o.avatar(item.actor),
         h("div", { class: "inbox-body" }, [

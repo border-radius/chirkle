@@ -1659,3 +1659,12 @@ Tests: `EndingScopeTest` (dropped after the cancel, not before), `UiAccountsTest
 back to the rooms. Only sideways drags count, so the list scrolls as before.
 
 Tests: `UiMentionsTest` "swiping Mentions and replies to the right goes back to the rooms".
+
+## 65. Read in the room, seen in the inbox (2026-11-10)
+
+DESIGN.md §41.4, the same day as the web: a mention or reply you have read in its room no longer counts as new in
+Mentions & replies. The server leaves it out of `inbox` in `GET /api/chat/unread` and marks it `read` in
+`GET /api/chat/inbox` (`InboxItem.read`, false from an older server); `InboxScreen` doesn't tint it, and a read sent
+while the inbox count isn't 0 makes `UnreadSync` fetch the counts again. A reaction is still only seen in the inbox.
+
+Tests: server `tests/integration/mentions.test.ts`; `UiMentionsTest`.

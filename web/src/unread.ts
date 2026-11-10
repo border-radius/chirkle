@@ -126,8 +126,9 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
         return api.markRead(roomId, at).then(
           () => {
             failures = 0;
-            // What is still unread below the screen: the server counts it.
-            if (!caughtUpNow && live()) refresh();
+            // What is still unread below the screen: the server counts it. So does the inbox's count: a mention or reply
+            // read in its room is seen there too (§41.4).
+            if ((!caughtUpNow || store.get().inbox) && live()) refresh();
           },
           (e: unknown) => {
             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room on screen

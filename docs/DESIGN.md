@@ -3817,12 +3817,14 @@ now; in an anonymous room the room is the actor of a mention or reply. `POST /ap
 `inbox_reads.seen_at`. Each row added or taken away is sent to its user's clients on `chat/inbox`
 (`{ action, id, kind, room, message, created }`).
 
-`GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100) and `mentions` (per room, the unread
+`GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100, leaving out mentions and replies already
+read in their room: no reading one twice; a reaction is only seen here) and `mentions` (per room, the unread
 messages that mention or reply to you). The sidebar's first row, right under Jump to, is **Mentions & replies**
 (`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
 `chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
 in #room", "replied to you" (with your message quoted) or "reacted 👍 to your message", newest first, "Show older",
-what is new tinted; each opens its message in its room. Opening it sees everything listed.
+what is new tinted (each item's `read`: a mention or reply read in its room isn't new; a read sent while the inbox
+count isn't 0 fetches the counts again); each opens its message in its room. Opening it sees everything listed.
 
 ### 41.5 Notifications
 

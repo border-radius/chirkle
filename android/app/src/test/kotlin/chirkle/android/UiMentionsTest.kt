@@ -81,6 +81,22 @@ class UiMentionsTest {
         ui.until { a.api.unreadCounts().mentions[room.id] == null }
     }
 
+    @Test fun `a mention read in its room is seen in Mentions and replies too (ANDROID md 65)`() {
+        val a = newUser()
+        val b = newUser("ada-${uniq()}")
+        val room = runBlocking { b.api.createRoom("rd-${uniq()}") }
+        runBlocking { b.api.send(NewMessage(newId(), room.id, "read here @${a.user.handle}")) }
+        ui.signedIn(a)
+        ui.waitFor(hasContentDescription("1 new"))
+        ui.openRoom(room.name)
+        ui.waitFor(hasContentDescription("Messages"))
+        compose.onNodeWithContentDescription("Messages").performScrollToIndex(0)
+        ui.until { a.api.unreadCounts().inbox == 0 }
+        ui.until { ui.services!!.store.get().inbox == 0 }
+        val item = runBlocking { a.api.inbox() }.items.single()
+        assertEquals(true, item.read)
+    }
+
     @Test fun `a row taken away while Mentions and replies is open goes (QA BUG-254)`() {
         val a = newUser()
         val b = newUser("ada-${uniq()}")
