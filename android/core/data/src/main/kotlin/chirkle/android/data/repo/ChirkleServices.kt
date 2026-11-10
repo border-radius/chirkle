@@ -11,9 +11,7 @@ import chirkle.android.data.model.User
 import chirkle.android.data.pb.AuthStore
 import chirkle.android.data.pb.PbClient
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +43,7 @@ class ChirkleServices(
     settings: DeviceSettings? = null,
 ) {
     /** Lives as long as the process: writes (sends, edits, reads) outlive the screen that made them. */
-    val appScope = CoroutineScope(SupervisorJob() + main)
+    val appScope = endingScope(null, main)
 
     val pb = PbClient(serverUrl, http, authStore)
 

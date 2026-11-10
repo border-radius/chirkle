@@ -2,6 +2,7 @@ package chirkle.android.data.repo
 
 import chirkle.android.data.pb.Unsubscribe
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineScope
@@ -12,11 +13,26 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
+ * A scope for work that is thrown away when it ends: an error after [CoroutineScope.cancel] is dropped, not a crash. A
+ * request or database call already running when an account is switched away from or forgotten fails as it can (its
+ * database closed: `SQLException`), not with a cancellation (ANDROID.md §63). Errors while it runs crash as before.
+ */
+fun endingScope(parent: Job?, main: CoroutineDispatcher): CoroutineScope {
+    val job = SupervisorJob(parent)
+    val handler = CoroutineExceptionHandler { _, e ->
+        if (job.isCancelled) return@CoroutineExceptionHandler
+        val t = Thread.currentThread()
+        t.uncaughtExceptionHandler?.uncaughtException(t, e)
+    }
+    return CoroutineScope(job + main + handler)
+}
+
+/**
  * One run of a service (the web's Scope): its coroutines, and what to undo when it ends. Callbacks hold on to their run,
  * so a restart can't revive them.
  */
 class Run(parent: Job?, val main: CoroutineDispatcher) {
-    val scope = CoroutineScope(SupervisorJob(parent) + main)
+    val scope = endingScope(parent, main)
     private val undo = mutableListOf<() -> Unit>()
 
     val active: Boolean get() = scope.isActive

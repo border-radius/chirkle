@@ -1642,3 +1642,13 @@ ends with every other, and the app asks to log in again as for a password change
 
 Tests: `UiPasswordResetTest` (the site's flag and the request against the test server, the form on the screen, no
 link without mail settings).
+
+## 63. Forgetting an account mid-request (2026-11-10)
+
+CI's `UiAccountsTest` (switching accounts while requests are in flight) failed once with `SQLException: connection is
+closed`, the same crash as §48 by another way: a new account left before logging in is forgotten, its database closes,
+and a database call still running in its stopped services fails with that, not with a cancellation. The services'
+scopes (`appScope` and each `Run`) are `endingScope`s now: an error after the scope was cancelled is dropped, since
+that work is thrown away anyway. An error while the scope runs still ends the app, as before.
+
+Tests: `EndingScopeTest` (dropped after the cancel, not before), `UiAccountsTest`.
