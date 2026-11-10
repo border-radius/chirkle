@@ -183,7 +183,10 @@ function mappings(app, messageId, chatId, filter = "") {
 }
 
 /**
- * Record what Telegram messages a chat message became.
+ * Record what Telegram messages a chat message became. Telegram has just given the id to this message, so a row that
+ * has it already is stale (a group that became a supergroup, whose new ids started over: QA BUG-257) and gives way.
+ * The message is in Telegram now whatever happens here: a failure is logged, not thrown, or the worker would send it
+ * again and again.
  * @param {core.App} app
  * @param {string} messageId
  * @param {string} chatId
@@ -191,13 +194,25 @@ function mappings(app, messageId, chatId, filter = "") {
  * @param {"text" | "caption" | "media"} kind
  */
 function remember(app, messageId, chatId, sent, kind) {
-  const row = new Record(app.findCollectionByNameOrId("tg_messages"));
-  row.set("message", messageId);
-  row.set("chat_id", chatId);
-  row.set("tg_message_id", sent.message_id);
-  row.set("direction", "out");
-  row.set("kind", kind);
-  app.save(row);
+  try {
+    app.runInTransaction((tx) => {
+      for (const old of tx.findRecordsByFilter("tg_messages", "chat_id = {:chat} && tg_message_id = {:id}", "", 0, 0, {
+        chat: chatId,
+        id: sent.message_id,
+      })) {
+        if (old) tx.delete(old);
+      }
+      const row = new Record(tx.findCollectionByNameOrId("tg_messages"));
+      row.set("message", messageId);
+      row.set("chat_id", chatId);
+      row.set("tg_message_id", sent.message_id);
+      row.set("direction", "out");
+      row.set("kind", kind);
+      tx.save(row);
+    });
+  } catch (err) {
+    app.logger().error("telegram: remember", "message", messageId, "chat", chatId, "tg", sent?.message_id, "error", String(err));
+  }
 }
 
 /**

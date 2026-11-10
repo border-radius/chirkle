@@ -2776,3 +2776,26 @@ seeded data with two accounts set to `all` and `here`.
 - Android: all 196 unit and Robolectric tests (new: `UiMentionsTest` BUG-254). `UiFeaturesTest` "messages are forwarded…"
   failed in two full runs (passing alone): the picker lists every room of the shared test server, and the target was
   beyond the lazy list's composed rows. A test bug, not the app's: the test now types the room's name first.
+
+# BUG-257 — a group that became a supergroup
+
+2026-11-10, user: a room linked to a Telegram group sent each message 10 times to the group, the group's messages
+didn't come to the room, and the logs were full of `GoError: chat_id: Value must be unique; part: Value must be
+unique; tg_message_id: Value must be unique`.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-257 | High | Telegram | After a group became a supergroup, the room's messages went to it up to 8 times each and its messages didn't come over | Fixed |
+
+**BUG-257:** `moveLink` (links.js, BUG-89) moved the old group's `tg_messages` to the supergroup's chat id, but a
+supergroup numbers its messages afresh, so its new messages took ids the old rows had. Inbound, `bringOver` took them
+for repeat deliveries and dropped them. Outbound, `remember` failed on the unique (chat_id, tg_message_id, part) after
+the message had gone out; the worker counted that as passing and sent it again, up to `MAX_TRIES`. Worse, a room
+delete, edit or reaction of an old message would have hit the new group's message with its id.
+- `moveLink` moves only the queue (not album items, which are brought over first under the old id).
+- `remember` replaces a row with the id Telegram has just given, in a transaction, and logs a failure instead of
+  throwing. Inbound, a mapping made over 5 minutes before the Telegram message's date is stale (`current`): it is
+  passed over for repeat deliveries, replies and edits, and `forgetStale` drops it when the message comes over.
+- `1760000047_telegram_supergroup_ids.js` drops the moved rows where the logs show the collisions: a chat's rows from
+  before its link was last saved or its first such failure, whichever is earlier.
+- Tests: `telegram.test.ts` "a supergroup's ids, which start over…", `telegram.migration.test.ts`.

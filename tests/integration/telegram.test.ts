@@ -1023,6 +1023,63 @@ describe("Telegram bridge (§26)", () => {
       expect(links.map((l) => [l.chat_id, l.room, l.enabled])).toEqual([[String(neu), room.id, true]]);
     }
   });
+
+  it("a supergroup's ids, which start over, aren't taken for the old group's messages (QA BUG-257)", async () => {
+    const owner = await signUp();
+    const { room, chat: old } = await linkedRoom(owner);
+    const rowsOf = (chat: number) =>
+      admin.collection("tg_messages").getFullList({ filter: admin.filter("chat_id = {:c}", { c: String(chat) }) });
+    // Both ways in the old group.
+    const sentOld = await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "old out" });
+    const out = await eventually(async () => {
+      const [row] = await admin
+        .collection("tg_messages")
+        .getFullList({ filter: admin.filter("message = {:m} && chat_id = {:c}", { m: sentOld.id, c: String(old) }) });
+      expect(row).toBeTruthy();
+      return row!;
+    });
+    const oldIn = tgMessage(old, { chat: { id: old, type: "group", title: "Group" }, text: "old in" });
+    await deliver({ message: oldIn });
+    await eventually(async () => expect(await rowsOf(old)).toHaveLength(2));
+
+    const neu = newChat();
+    await deliver({ message: tgMessage(old, { chat: { id: old, type: "group", title: "Group" }, migrate_to_chat_id: neu }) });
+    await deliver({ message: tgMessage(neu, { migrate_from_chat_id: old }) });
+    expect(await rowsOf(old)).toHaveLength(2);
+    expect(await rowsOf(neu)).toEqual([]);
+
+    // The new group's messages with the old ones' ids come over.
+    await deliver({ message: tgMessage(neu, { message_id: out.tg_message_id, text: "new in 1" }) });
+    await deliver({ message: tgMessage(neu, { message_id: oldIn.message_id, text: "new in 2" }) });
+    await eventually(async () =>
+      expect((await messagesOf(room.id)).map((m) => m.text)).toEqual(["old out", "old in", "new in 1", "new in 2"]),
+    );
+
+    // Mappings moved by the old code, with the ids Telegram gives next (other tests' sends may take one): the message
+    // goes once, and its id is its own.
+    const next = stub.nextMessageId();
+    for (let i = 0; i < 10; i++) {
+      await admin
+        .collection("tg_messages")
+        .create({ message: sentOld.id, chat_id: String(neu), tg_message_id: next + i, direction: "out", kind: "text" });
+    }
+    const sentNew = await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "new out" });
+    const toNew = () =>
+      stub.callsOf("sendMessage").filter((c) => c.params.chat_id === String(neu) && String(c.params.text).includes("new out"));
+    await eventually(() => expect(toNew()).toHaveLength(1));
+    await tick();
+    await tick();
+    expect(toNew()).toHaveLength(1);
+    const [mine] = await admin
+      .collection("tg_messages")
+      .getFullList({ filter: admin.filter("chat_id = {:c} && message = {:m}", { c: String(neu), m: sentNew.id }) });
+    expect(mine!.tg_message_id).toBeGreaterThanOrEqual(next);
+    expect(mine!.tg_message_id).toBeLessThan(next + 10);
+    const sameId = await admin
+      .collection("tg_messages")
+      .getFullList({ filter: admin.filter("chat_id = {:c} && tg_message_id = {:id}", { c: String(neu), id: mine!.tg_message_id }) });
+    expect(sameId.map((r) => r.message)).toEqual([sentNew.id]);
+  });
 });
 
 describe("Telegram bridge without a webhook URL: polling, for development (§26.2)", () => {

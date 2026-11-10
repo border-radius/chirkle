@@ -88,9 +88,10 @@ function moveLink(app, from, to) {
     }
     link.set("chat_id", to);
     tx.save(link);
-    for (const table of ["tg_messages", "tg_queue"]) {
-      tx.db().newQuery(`UPDATE ${table} SET chat_id = {:to} WHERE chat_id = {:from}`).bind({ to, from }).execute();
-    }
+    // What waits to go to Telegram goes to the new group. tg_messages stays with the old one: the new group numbers
+    // its messages afresh, so the old ids would stand for its new messages (QA BUG-257). Queued album items are the
+    // old group's messages, brought over before this (handleUpdate).
+    tx.db().newQuery("UPDATE tg_queue SET chat_id = {:to} WHERE chat_id = {:from} AND op != 'album'").bind({ to, from }).execute();
   });
 }
 

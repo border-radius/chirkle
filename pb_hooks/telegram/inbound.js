@@ -162,32 +162,60 @@ function orderedIds(n) {
 }
 
 /**
- * What a Telegram message came over as: its tg_messages rows (either way), first part first.
+ * What a Telegram message came over as: its tg_messages rows (either way), first part first. `date` is the Telegram
+ * message's, when known: rows older than it are stale and left out (`current`).
  * @param {core.App} app
  * @param {string} chatId
  * @param {number} tgId
+ * @param {number} [date]
  */
-function partsMapped(app, chatId, tgId) {
+function partsMapped(app, chatId, tgId, date = 0) {
   return app
     .findRecordsByFilter("tg_messages", "chat_id = {:chat} && tg_message_id = {:id}", "part", 0, 0, { chat: chatId, id: tgId })
-    .filter((r) => !!r);
+    .filter((r) => !!r)
+    .filter((r) => current(r, date));
 }
 
 /**
+ * Clock skew allowed between Telegram and this server when telling a mapping from a stale one.
+ * A mapping is made once its Telegram message exists, so one made well before it was sent is another message's: a
+ * group that became a supergroup, before its mappings stayed with the old group (QA BUG-257), had the new group's ids,
+ * which start over, stand for its old messages.
+ */
+const SKEW_MS = 5 * 60_000;
+
+/**
+ * Is a tg_messages row this Telegram message's, which was sent at `date` (Unix seconds; 0 when unknown)?
+ * @param {core.Record} row
+ * @param {number} date
+ */
+const current = (row, date) => !date || row.getDateTime("created").time().unixMilli() >= date * 1000 - SKEW_MS;
+
+/**
  * The chat message a Telegram message is (either way; its first part, when it came over as several), or null.
+ * `date` is the Telegram message's, when known: a mapping older than it is stale.
  * @param {core.App} app
  * @param {string} chatId
  * @param {number} tgId
+ * @param {number} [date]
  */
-function mapped(app, chatId, tgId) {
-  try {
-    const row = app.findFirstRecordByFilter("tg_messages", "chat_id = {:chat} && tg_message_id = {:id} && part = 0", {
-      chat: chatId,
-      id: tgId,
-    });
-    return app.findRecordById("messages", row.getString("message"));
-  } catch {
-    return null;
+function mapped(app, chatId, tgId, date = 0) {
+  const row = partsMapped(app, chatId, tgId, date).find((r) => r.getInt("part") === 0);
+  return row ? findMessage(app, row.getString("message")) : null;
+}
+
+/**
+ * Drop the stale mappings of a Telegram message (see `current`), before it gets its own.
+ * @param {core.App} tx
+ * @param {string} chatId
+ * @param {number} tgId
+ */
+function forgetStale(tx, chatId, tgId) {
+  for (const row of tx.findRecordsByFilter("tg_messages", "chat_id = {:chat} && tg_message_id = {:id}", "", 0, 0, {
+    chat: chatId,
+    id: tgId,
+  })) {
+    if (row) tx.delete(row);
   }
 }
 
@@ -260,7 +288,7 @@ function bringOver(app, link, room, msgs) {
   // Delivered twice (a webhook retry): brought over already, or an album item queued twice, which would fail the save
   // of the whole album on the unique (chat_id, tg_message_id) (QA BUG-147).
   const seen = new Set();
-  msgs = msgs.filter((m) => !seen.has(m.message_id) && seen.add(m.message_id) && !mapped(app, chatId, m.message_id));
+  msgs = msgs.filter((m) => !seen.has(m.message_id) && seen.add(m.message_id) && !mapped(app, chatId, m.message_id, m.date));
   if (!msgs.length) return;
   msgs.sort((a, b) => a.message_id - b.message_id);
   const first = msgs[0];
@@ -286,7 +314,7 @@ function bringOver(app, link, room, msgs) {
       notes.push(`[${f.name}: couldn't be brought over from Telegram]`);
     }
   }
-  const reply = first.reply_to_message ? mapped(app, chatId, first.reply_to_message.message_id) : null;
+  const reply = first.reply_to_message ? mapped(app, chatId, first.reply_to_message.message_id, first.reply_to_message.date) : null;
   const known = !!reply && reply.getString("room") === room.id && !reply.getBool("deleted");
   const textOf = (/** @type {boolean} */ withReply) =>
     [forwardLine(first), ...quoteLines(first, withReply && known), ...parts.map((p) => p.text), ...notes].filter(Boolean).join("\n");
@@ -308,6 +336,7 @@ function bringOver(app, link, room, msgs) {
       if (withReply && known && reply) rec.set("reply_to", reply.id);
       tx.save(rec);
       msgs.forEach((m, i) => {
+        forgetStale(tx, chatId, m.message_id);
         rememberIn(tx, rec.id, chatId, m.message_id, i === 0 ? "text" : "media", 0);
       });
       for (let i = 1; i < pieces.length; i++) {
@@ -330,7 +359,7 @@ function bringOver(app, link, room, msgs) {
  */
 function editOver(app, msg) {
   const chatId = String(msg.chat.id);
-  const rows = partsMapped(app, chatId, msg.message_id);
+  const rows = partsMapped(app, chatId, msg.message_id, msg.date);
   const rec = rows[0]?.getInt("part") === 0 ? findMessage(app, rows[0].getString("message")) : null;
   if (!rec || rec.getBool("deleted") || rec.getString("forwarded_from")) return;
   const quoted = quoteLines(msg, !!rec.getString("reply_to"));
@@ -490,8 +519,15 @@ function handleUpdate(app, update) {
     return;
   }
   // A group that became a supergroup: Telegram says so in both, in either order (QA BUG-89).
-  if (msg.migrate_to_chat_id) return moveLink(app, chatId, String(msg.migrate_to_chat_id));
-  if (msg.migrate_from_chat_id) return moveLink(app, String(msg.migrate_from_chat_id), chatId);
+  // The old group's albums come over first, under its id: their messages are its own.
+  if (msg.migrate_to_chat_id) {
+    flushAlbums(app, chatId);
+    return moveLink(app, chatId, String(msg.migrate_to_chat_id));
+  }
+  if (msg.migrate_from_chat_id) {
+    flushAlbums(app, String(msg.migrate_from_chat_id));
+    return moveLink(app, String(msg.migrate_from_chat_id), chatId);
+  }
   const link = ensureLink(app, msg.chat);
   if (posted && COMMAND.test(msg.text || "")) return sayStatus(app, chatId);
   const room = activeLink(app, link);
