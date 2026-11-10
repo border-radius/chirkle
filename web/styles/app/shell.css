@@ -206,13 +206,11 @@ div.brand .brand-title::after {
   overflow-y: auto;
 }
 
+/* The site's name, over the rows (Jump to first) with no line between. */
 .side-top {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 14px 17px;
-  /* The line under it stops short of the edges, as the rows below do. */
-  background: linear-gradient(var(--line), var(--line)) bottom / calc(100% - 32px) 1px no-repeat;
+  padding: 14px 14px 12px;
 }
 
 .side-top .brand {
@@ -221,17 +219,20 @@ div.brand .brand-title::after {
   color: var(--fg);
 }
 
-/* Jump to (§32): looks like a search field. */
+/* Jump to (§32): the sidebar's first row, set like the rows under it, with its shortcut on the right. */
 .jump-button {
   display: flex;
+  flex: 1;
   gap: 10px;
   align-items: center;
-  height: 38px;
-  padding: 0 8px 0 12px;
-  border-color: var(--border);
-  background: var(--bg);
-  color: var(--dim);
-  font-weight: 400;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-weight: 500;
   text-align: left;
 }
 
@@ -242,6 +243,15 @@ div.brand .brand-title::after {
 
 .jump-button span {
   flex: 1;
+}
+
+.jump-button kbd {
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.jump-row:hover kbd {
+  opacity: 1;
 }
 
 .jump-button:active:not(:disabled) {

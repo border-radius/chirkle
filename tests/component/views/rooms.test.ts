@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Api, ApiError } from "../../../web/src/api.ts";
+import { JUMP } from "../../../web/src/jump.ts";
 import { newId } from "../../../web/src/lib/id.ts";
 import type { Room } from "../../../web/src/lib/types.ts";
 import type { View } from "../../../web/src/router.ts";
@@ -310,13 +311,34 @@ describe("rooms view (§7.1)", () => {
     });
   });
 
+  describe("Jump to (§32)", () => {
+    it("is the first row, over Mentions & replies; it opens Jump to and keeps focus while the count changes", async () => {
+      await mount();
+      const rows = [...section("inbox" as Section).querySelectorAll("li")];
+      const jump = rows[0]!.querySelector<HTMLButtonElement>("button.jump-button")!;
+      expect(jump.getAttribute("aria-label")).toBe("Jump to");
+      expect(jump.querySelector("kbd")!.textContent).toMatch(/^(Ctrl K|⌘K)$/);
+      expect(rows[1]!.querySelector("a")!.getAttribute("href")).toBe("/inbox");
+      expect(root.querySelector(".side-top .jump-button")).toBeNull(); // no longer a field under the site's name
+      const opened = vi.fn();
+      document.addEventListener(JUMP, opened);
+      jump.click();
+      document.removeEventListener(JUMP, opened);
+      expect(opened).toHaveBeenCalledOnce();
+      jump.focus();
+      store.set({ inbox: 2 });
+      expect(section("inbox" as Section).querySelector("a")!.textContent).toBe("Mentions & replies2 new");
+      expect(document.activeElement).toBe(jump);
+    });
+  });
+
   describe("mentions and replies (§41)", () => {
     it("lists Mentions & replies first, with how many are new; a room that mentions you has an @", async () => {
       const a = await room();
       const b = await room();
       await mount();
       const inbox = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
-      expect(section("inbox" as Section)).toBe(root.querySelector("nav")!.firstElementChild);
+      expect(section("inbox" as Section)).toBe(root.querySelector("nav")!.firstElementChild); // under Jump to
       expect(inbox.getAttribute("href")).toBe("/inbox");
       expect(inbox.textContent).toBe("Mentions & replies");
       store.set({

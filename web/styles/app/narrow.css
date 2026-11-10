@@ -6,8 +6,10 @@
     display: none;
   }
 
+  /* The app bar has Jump to (an icon), the brand and you. */
   #app:has(.layout:not(.home)) > .app-bar,
   .side-top,
+  .jump-row,
   .side-foot {
     display: none;
   }

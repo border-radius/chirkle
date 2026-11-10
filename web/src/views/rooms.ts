@@ -81,12 +81,12 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   /** What top and foot were drawn for. */
   let drawn: unknown[] = [];
 
-  /** The site's name and Jump to; at the foot, who you are and your settings, or (a guest) the way in. */
+  /** The site's name; at the foot, who you are and your settings, or (a guest) the way in. */
   function renderEnds() {
     const { site, user } = store.get();
     if (drawn[0] === site && drawn[1] === user) return;
     drawn = [site, user];
-    top.replaceChildren(brand(site, true), jumpButton(true));
+    top.replaceChildren(brand(site, true));
     foot.replaceChildren(
       ...(user
         ? [
@@ -427,22 +427,23 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       collList: h("ul"),
       more: collapsible(),
       inbox: h("div", { class: "room-section", dataset: { section: "inbox" } }),
+      inboxList: h("ul"),
+      /** "Jump to…" (§32): the first row, a search icon and its shortcut, rather than a search field. */
+      jump: h("li", { class: "jump-row" }, jumpButton(true)),
+      /** The "Mentions & replies" row, rebuilt when its count or the page changes. */
+      inboxItem: null as HTMLElement | null,
     };
   }
 
   /** "Mentions & replies" (§41), right after Jump to, with how many you haven't seen. */
   function inboxRow(n: number) {
     return h(
-      "ul",
+      "li",
       {},
-      h(
-        "li",
-        {},
-        h("a", { href: "/inbox", class: n ? "unread" : "", "aria-current": location.pathname === "/inbox" ? "page" : null }, [
-          h("span", {}, "Mentions & replies"),
-          n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")]) : null,
-        ]),
-      ),
+      h("a", { href: "/inbox", class: n ? "unread" : "", "aria-current": location.pathname === "/inbox" ? "page" : null }, [
+        h("span", {}, "Mentions & replies"),
+        n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")]) : null,
+      ]),
     );
   }
 
@@ -511,8 +512,11 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const key = `${s.inbox} ${location.pathname}`;
     if (p.inbox.dataset.k !== key) {
       p.inbox.dataset.k = key;
-      p.inbox.replaceChildren(inboxRow(s.inbox));
+      p.inboxItem = inboxRow(s.inbox);
     }
+    // Jump to is kept (not redrawn with the count), so it keeps focus.
+    reconcile(p.inboxList, [p.jump, p.inboxItem!]);
+    reconcile(p.inbox, [p.inboxList]);
     reconcile(nav, [p.inbox, p.main, p.direct, p.colls, m.el]);
     for (const b of nav.querySelectorAll<HTMLElement>("[data-fold]"))
       b.setAttribute("aria-expanded", String(!folded.has(b.dataset.fold as string)));
@@ -550,6 +554,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const loading = s.roomsStatus === "idle" || s.roomsStatus === "loading";
     shell.setAttribute("aria-busy", String(loading));
     nav.replaceChildren(
+      h("div", { class: "room-section", dataset: { section: "jump" } }, h("ul", {}, parts.jump)),
       h("div", { class: "room-section", dataset: { section: "rooms" } }, [
         h("div", { class: "section-head" }, h("h2", { class: "section-title" }, "Open Air rooms")),
         rooms.length

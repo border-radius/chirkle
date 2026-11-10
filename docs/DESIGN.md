@@ -376,8 +376,8 @@ server can change its schema under them (docs/API.md). The clients still write a
 | `/r/:roomId` | room: message list + composer | on wide screens the room list stays visible as a sidebar |
 | `/r/:roomId/m/:msgId` | room, opened at a specific message (window centered on it) | used by "jump to beginning" and shareable later |
 
-**The room list** (the sidebar, 2026-10-31 redesign) has the brand and a Jump to field (§32) at the top, then Rooms,
-Direct messages and Collections, then one folded **Hidden & archived** section, and at the foot the user (avatar and
+**The room list** (the sidebar, 2026-10-31 redesign) has the brand at the top, then a "Jump to…" row (§32) and
+Mentions & replies (§41), then Rooms, Direct messages and Collections, then one folded **Hidden & archived** section, and at the foot the user (avatar and
 name, linking to the profile) with a Settings button (a guest gets Log in and Sign up there instead):
 
 1. **Rooms:** active rooms that aren't hidden, sorted by name, those with unread messages first.
@@ -655,7 +655,7 @@ Other rules:
 ### 7.9 Loading line (2026-11-09)
 
 When the app is slow there is something to see: a thin (2 px) line in the accent, a short gradient moving left to
-right, over the top of the room list (under the Jump to box; on a narrow screen under the app bar) and over the top
+right, over the top of the room list (under the site's name; on a narrow screen under the app bar) and over the top
 of the room (under its header). It takes no room in the layout (`.loadbar`, a 0-height element whose `::before` is
 the line) and is hidden from screen readers (`aria-hidden`; the lists keep their `aria-busy`). With reduced motion
 it stands still as a faint line across the width.
@@ -2964,6 +2964,11 @@ shows, not to the composer behind it (where Enter would send it), and Escape mea
   `otherMember`, the visibility icon, the avatar, `navigate` and when each page was last open. It closes when the
   session changes (logging out, another account), and a held-down shortcut doesn't toggle it on every repeat. Its few styles are the forward dialog's (§21.3) plus
   a chosen option, in `selection.css`.
+- **In the sidebar** (2026-11-10, from the "Chirkle sidebar – Jump to redesign" canvas): the first row, over
+  Mentions & replies, set like the room rows (a search icon for the `#`, "Jump to…", the shortcut in a `kbd` on the
+  right, brighter on hover), not a search field under the site's name. It is kept across redraws, so it keeps focus
+  when the Mentions & replies count changes; a guest has it over the Open Air rooms. On a narrow screen it is hidden:
+  the app bar's search icon opens Jump to there (and the Android app's search pill, which this didn't change).
 
 ### 32.1 Tests
 
@@ -2972,6 +2977,7 @@ shows, not to the composer behind it (where Enter would send it), and Escape mea
   opening again starts empty. `app.test.ts`: Ctrl+K from the composer (by key place on a Cyrillic layout), ⌘P again
   closes, a repeat ignored, Ctrl+Shift+P and plain K ignored, Enter goes to the room, Ctrl+K Enter back to the room
   before (a newer room never opened notwithstanding), closed on logout, nothing after the app stops.
+  `views/rooms.test.ts`: the sidebar row comes first, opens Jump to and keeps focus while the inbox count changes.
 
 ---
 
