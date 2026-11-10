@@ -6,11 +6,14 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import chirkle.android.data.api.NewMessage
 import chirkle.android.data.lib.Pages
 import chirkle.android.data.lib.newId
@@ -93,6 +96,20 @@ class UiMentionsTest {
         runBlocking { b.api.edit(gone.id, "goes nowhere") }
         ui.until { compose.onAllNodes(hasText("goes @${a.user.handle}", substring = true)).fetchSemanticsNodes().isEmpty() }
         ui.waitFor("stays @${a.user.handle}")
+    }
+
+    @Test fun `swiping Mentions and replies to the right goes back to the rooms`() {
+        val a = newUser()
+        val b = newUser("ada-${uniq()}")
+        val room = runBlocking { b.api.createRoom("sw-${uniq()}") }
+        runBlocking { b.api.send(NewMessage(newId(), room.id, "swipe @${a.user.handle}")) }
+        ui.signedIn(a)
+        ui.waitFor("Mentions & replies")
+        compose.onNodeWithText("Mentions & replies").performClick()
+        ui.waitFor("swipe @${a.user.handle}")
+        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.1f, endX = width * 0.9f) }
+        ui.waitGone("swipe @${a.user.handle}")
+        ui.waitFor(hasContentDescription("Profile"))
     }
 
     @Test fun `your handle can be changed on the profile, a taken one says so`() {

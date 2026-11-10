@@ -55,6 +55,7 @@ import chirkle.android.ui.Chirkle
 import chirkle.android.ui.ChirkleIcons
 import chirkle.android.ui.Formats
 import chirkle.android.ui.LocalServices
+import chirkle.android.ui.swipeAway
 import kotlinx.coroutines.launch
 
 /** What a row says happened, after who did it ("mentioned you in #room"). */
@@ -134,7 +135,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
         }
     }
 
-    Scaffold(topBar = {
+    Scaffold(modifier = Modifier.swipeAway(enabled = true, toRight = true, onSwipe = onBack), topBar = {
         TopAppBar(
             navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back to rooms") } },
             title = { Text("Mentions & replies") },

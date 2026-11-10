@@ -1652,3 +1652,10 @@ scopes (`appScope` and each `Run`) are `endingScope`s now: an error after the sc
 that work is thrown away anyway. An error while the scope runs still ends the app, as before.
 
 Tests: `EndingScopeTest` (dropped after the cancel, not before), `UiAccountsTest`.
+
+## 64. Swipe back from Mentions & replies (2026-11-10)
+
+`InboxScreen` has the room's swipe back (§40, `Modifier.swipeAway(toRight = true)`): dragged to the right, it goes
+back to the rooms. Only sideways drags count, so the list scrolls as before.
+
+Tests: `UiMentionsTest` "swiping Mentions and replies to the right goes back to the rooms".
