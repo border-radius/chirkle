@@ -35,6 +35,8 @@ export interface TelegramStub {
   setCustomEmoji(id: string, emoji: string): void;
   /** Updates for getUpdates. */
   readonly updates: unknown[];
+  /** The message_id the next message the bot sends gets. */
+  nextMessageId(): number;
   /** Fail the next `times` calls of `method` with this status and body. */
   fail(method: string, status: number, body: Record<string, unknown>, times?: number): void;
   close(): Promise<void>;
@@ -153,6 +155,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
     addFile: (id, bytes, path = `files/${id}.bin`) => void files.set(id, { path, bytes }),
     setPhoto: (userId, fileId) => void photos.set(userId, fileId),
     setCustomEmoji: (id, emoji) => void customEmoji.set(id, emoji),
+    nextMessageId: () => nextId,
     fail: (method, status, body, times = 1) => {
       const list = failures.get(method) ?? [];
       for (let i = 0; i < times; i++) list.push({ status, body });
