@@ -63,7 +63,7 @@ private val MSG_OPTS = mapOf("expand" to "author,reply_to.author,forwarded_from"
  */
 private val LIVE_OPTS = mapOf("expand" to "author,forwarded_from", "fields" to MSG_FIELDS)
 
-/** Where a server sends each message once to everyone who can see its room (pb_hooks/lib/live.js, docs/PERF.md §7). */
+/** Where a server sends each message once to everyone who can see its room (server/live.go, docs/PERF.md §7). */
 private const val LIVE_TOPIC = "chat/messages"
 
 const val ROOM_FIELDS =

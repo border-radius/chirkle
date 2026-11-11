@@ -1,5 +1,5 @@
 name: Setup
-description: Node 22 with npm 11, the locked dependencies, and the pinned PocketBase binary (cached).
+description: Node 22 with npm 11, the locked dependencies, Go, and the Chirkle server built (server/, PocketBase with Go hooks).
 runs:
   using: composite
   steps:
@@ -13,10 +13,9 @@ runs:
     - run: npm ci
       shell: bash
 
-    - name: Cache PocketBase binary
-      uses: actions/cache@v4
+    - uses: actions/setup-go@v5
       with:
-        path: bin
-        key: pocketbase-${{ runner.os }}-${{ hashFiles('scripts/fetch-pocketbase.sh') }}
+        go-version-file: server/go.mod
+        cache-dependency-path: server/go.sum
     - run: npm run setup
       shell: bash

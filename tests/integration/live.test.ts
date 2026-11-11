@@ -1,4 +1,4 @@
-// Live messages (pb_hooks/lib/live.js, docs/PERF.md §7): each message saved or deleted goes once, on the chat/messages
+// Live messages (server/live.go, docs/PERF.md §7): each message saved or deleted goes once, on the chat/messages
 // topic, to everyone listening who can see its room: as a `messages/*` subscription would send it, author and
 // forward's source expanded, a forward showing its original, an anonymous room's author hidden from all but them.
 

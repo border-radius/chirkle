@@ -1,6 +1,6 @@
 // Room access (§23) as one table: every kind of room × every kind of viewer × every way in. The rule is written in four
 // places (the API rules of 1760000014_room_access.js, canSee in pb_hooks/lib/access.js, the unread SQL in
-// pb_hooks/lib/reads.js and the room list in lib/lists.js, and the hooks that call canSee, live messages among them); this checks they all agree with `sees` below, and lists every
+// server/unread.go and the room list in server/lists.go, and the hooks that call canSee, live messages among them); this checks they all agree with `sees` below, and lists every
 // disagreement at once.
 
 import type PocketBase from "pocketbase";
@@ -121,7 +121,7 @@ describe("room access matrix (§23.1)", () => {
       }),
     );
 
-    // Live messages (pb_hooks/lib/live.js): the member's message in each room, deleted for good by a superuser (archived
+    // Live messages (server/live.go): the member's message in each room, deleted for good by a superuser (archived
     // rooms take no edits), reaches those who see its room. The open room's goes last, and every viewer sees that one:
     // once it is in, every event before it on the same connection is too.
     const admin = await adminClient();

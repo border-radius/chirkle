@@ -1,9 +1,9 @@
 /// <reference path="../../types/pocketbase.d.ts" />
 // messages hooks (DESIGN.md §5.6, §17, §19, §20, §21, §28): text, attachments, replies, forwards, soft delete, edit stamps.
-// A forward (§21.3) has no text or files of its own: it shows those of the message in `forward_of` (showOriginal).
+// A forward (§21.3) has no text or files of its own: it shows those of the message in `forward_of` (server/enrich.go
+// showOriginal, in every answer and live event).
 
-const { accessOf, canSee, canWrite, visibleRoom } = require(`${__hooks}/lib/access.js`);
-const { inCheckedRoom, markChecked } = require(`${__hooks}/lib/enrich.js`);
+const { accessOf, canSee, canWrite } = require(`${__hooks}/lib/access.js`);
 const { fieldError, recordOf } = require(`${__hooks}/lib/records.js`);
 const { dmRefusal } = require(`${__hooks}/lib/dms.js`);
 const { isDm } = require(`${__hooks}/lib/rooms.js`);
@@ -387,7 +387,7 @@ function changesForwards(rec) {
 
 /**
  * After an edit or delete of a message: its forwards are saved again (nothing in them changes), so everyone who sees
- * one hears of it live, with the original as it is now (showOriginal). They can't hear of the original itself: it is
+ * one hears of it live, with the original as it is now (server/enrich.go showOriginal). They can't hear of the original itself: it is
  * in a room they may not see. Forwards in archived rooms are left alone: they can't be saved, and show it once loaded.
  * @param {core.App} app
  * @param {core.Record} rec
@@ -398,59 +398,6 @@ function touchForwards(app, rec) {
     if (!fwd || app.findRecordById("rooms", fwd.getString("room")).getBool("archived")) continue;
     app.save(fwd);
   }
-}
-
-/**
- * Every message the API answers with or sends live (lists, reads, expanded replies, realtime): a forward that isn't
- * deleted shows its original's text, attachments and edit stamp (§21.3), or nothing once that is deleted. Whoever
- * sees the forward may see those: the view rule grants it, as for the attachments' URLs (the original's).
- * Only in the answer: nothing is saved.
- * @param {core.RecordEnrichEvent} e
- */
-function showOriginal(e) {
-  const rec = e.record;
-  const id = rec ? rec.getString("forward_of") : "";
-  if (!rec || !id || rec.getBool("deleted") || inCheckedRoom(e)) return;
-  let original = null;
-  try {
-    original = e.app.findRecordById("messages", id);
-  } catch {
-    return; // being removed for good: PocketBase is about to clear forward_of
-  }
-  setOriginal(rec, original);
-}
-
-/**
- * The forward `rec` shows `original` (showOriginal).
- * @param {core.Record} rec
- * @param {core.Record} original
- */
-function setOriginal(rec, original) {
-  const gone = original.getBool("deleted");
-  rec.set("text", gone ? "" : original.getString("text"));
-  rec.set("files", gone ? [] : original.getStringSlice("files"));
-  rec.set("file_names", gone ? {} : original.get("file_names"));
-  rec.set("file_sources", gone ? {} : original.get("file_sources"));
-  rec.set("file_dims", gone ? {} : original.get("file_dims"));
-  rec.set("previews", gone ? [] : original.get("previews"));
-  rec.set("edited_at", gone ? "" : original.get("edited_at"));
-}
-
-/**
- * A message read only through a forward of it (the view rule grants that, §21.3) keeps to itself what would say who
- * is in its room: its reactions (who reacted) and the message it replies to. Only in the answer: nothing is saved.
- * Most messages have neither, and cost nothing here.
- * @param {core.RecordEnrichEvent} e
- */
-function keepToRoom(e) {
-  const rec = e.record;
-  const info = e.requestInfo;
-  if (!rec || !info || info.auth?.isSuperuser() || inCheckedRoom(e)) return;
-  const reactions = rec.getString("reactions");
-  if (!rec.getString("reply_to") && (reactions === "" || reactions === "[]" || reactions === "null")) return;
-  if (visibleRoom(e.app, rec.getString("room"), info.auth?.id ?? "")) return;
-  rec.set("reactions", []);
-  rec.set("reply_to", "");
 }
 
 /**
@@ -465,47 +412,7 @@ function beforeUserDelete(e) {
   }
 }
 
-/**
- * Enrich the messages of rooms `rooms` (which the caller can see) in `enrich`, a call of $apis.enrichRecords, as the
- * hooks would, with one query for every forward's original instead of one each (lib/enrich.js).
- * @param {core.RequestEvent} e
- * @param {string[]} rooms
- * @param {() => core.Record[]} enrich
- */
-function enrichInRooms(e, rooms, enrich) {
-  showOriginals(e.app, markChecked(e, rooms, enrich), new Set(rooms));
-}
-
-/**
- * showOriginal for every message in `rooms` among `records` and what they expand (an expanded reply, to any depth).
- * @param {core.App} app
- * @param {core.Record[]} records
- * @param {Set<string>} rooms
- */
-function showOriginals(app, records, rooms) {
-  /** @type {core.Record[]} */
-  const forwards = [];
-  const seen = new Set();
-  const visit = (/** @type {any} */ rec) => {
-    if (!rec || seen.has(rec)) return;
-    seen.add(rec);
-    for (const v of Object.values(rec.expand() ?? {})) for (const r of Array.isArray(v) ? v : [v]) visit(r);
-    if (rec.collection().name !== "messages" || !rooms.has(rec.getString("room"))) return;
-    if (rec.getString("forward_of") && !rec.getBool("deleted")) forwards.push(rec);
-  };
-  for (const rec of records) visit(rec);
-  if (!forwards.length) return;
-  const originals = new Map(
-    app.findRecordsByIds("messages", [...new Set(forwards.map((f) => f.getString("forward_of")))]).map((o) => [o?.id, o]),
-  );
-  for (const fwd of forwards) {
-    const original = originals.get(fwd.getString("forward_of"));
-    if (original) setOriginal(fwd, original);
-  }
-}
-
 module.exports = {
-  enrichInRooms,
   isService,
   setTextKey,
   setRequestFiles,
@@ -518,6 +425,4 @@ module.exports = {
   beforeMessageUpdateRequest,
   changesForwards,
   touchForwards,
-  showOriginal,
-  keepToRoom,
 };

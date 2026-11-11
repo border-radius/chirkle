@@ -1,5 +1,5 @@
 // Message search (§29): messages.text_key follows the text on every save, and a room's page with `q`
-// (pb_hooks/lib/lists.js) finds its messages by it, case-insensitively beyond ASCII, as the filter apps from before the
+// (server/lists.go) finds its messages by it, case-insensitively beyond ASCII, as the filter apps from before the
 // route send (shared/vectors/text.json's `legacy`) finds them through the list rules.
 
 import { readFileSync } from "node:fs";

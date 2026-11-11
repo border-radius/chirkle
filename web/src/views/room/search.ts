@@ -61,7 +61,7 @@ export function searchWords(q: string): string[] {
 
 /**
  * The newest messages of `room` with every word in `words`, before `before` when given (newest-first): a page of the
- * room with `q` (pb_hooks/lib/lists.js matches the words, escaping `%` and `\` as QA BUG-34 and BUG-112 found).
+ * room with `q` (server/lists.go matches the words, escaping `%` and `\` as QA BUG-34 and BUG-112 found).
  */
 export function searchQuery(room: string, words: readonly string[], before?: { created: string; id: string }): PageQuery {
   const q = words.join(" ");

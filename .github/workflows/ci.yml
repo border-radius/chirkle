@@ -16,6 +16,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: npm run typecheck
       - run: npm run lint
+      - name: Go vet and unit tests (server/)
+        run: go vet ./... && test -z "$(gofmt -l .)" && go test ./...
+        working-directory: server
       - run: npm run lint:sinks
       - run: npm run build
 
@@ -126,7 +129,7 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
-      # The app's API and UI tests run against a real PocketBase from bin/ (ANDROID.md §13).
+      # The app's API and UI tests run against a real server from bin/ (ANDROID.md §13).
       - uses: ./.github/actions/setup
       - uses: actions/setup-java@v4
         with:

@@ -1,4 +1,5 @@
-// Spawns a throwaway PocketBase process on a free port with its own temp data dir.
+// Spawns a throwaway Chirkle server (bin/chirkle-server: PocketBase with the Go paths, server/) on a free port with its
+// own temp data dir.
 // Shared by the Vitest integration globalSetup and the Playwright webServer.
 import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
@@ -10,7 +11,7 @@ import { promisify } from "node:util";
 import { SUPERUSER } from "./sql.ts";
 
 const root = resolve(import.meta.dirname, "../..");
-const bin = join(root, "bin/pocketbase");
+const bin = join(root, "bin/chirkle-server");
 
 export { SUPERUSER } from "./sql.ts";
 

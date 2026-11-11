@@ -527,7 +527,7 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 
 ### Codebase
 
-#### 47. Move the hot paths out of the JSVM (server) — high value, large
+#### 47. Move the hot paths out of the JSVM (server) — high value, large ✅ (2026-11-11)
 - Most production incidents and perf work since 2026-10-14 trace back to the JS hook runtime, not to SQLite or to
   PocketBase: the hooks pool overflowing on message pages (`--hooksPool=100`, PERF.md §6), `routerUse` holding runtimes
   across `e.next()` (BUG-250), ~0.15 ms of Go↔JS calls per enriched message (item 46's `keepToRoom` note), the 1 vCPU
@@ -540,6 +540,36 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   PERF §8's storm and fan-out cases no longer collapse).
 - Cost: a Go build in CI and the npm tarball (one binary per platform instead of a fetched PocketBase); hooks and Go
   code must agree on hook order (`lib/features.js`).
+- Done as suggested. `server/` (Go 1.27, PocketBase 0.40.4 from `go.sum`) is PocketBase's own `main` with its JS
+  plugin, so `pb_hooks/` and `pb_migrations/` load as before, plus, in Go: the messages enrich hook (`enrich.go`:
+  showOriginal, keepToRoom, hide), live messages (`live.go`), `GET /api/chat/rooms`, `rooms/{room}/messages` and
+  `notifiable` (`lists.go`), and `GET /api/chat/unread` and `unread/{room}` (`unread.go`, with the inbox counts).
+  `lib/enrich.js`, `lib/live.js` and `lib/lists.js` are gone, and so are the moved parts of `messages.js`,
+  `anonymous.js`, `reads.js` and `inbox.js`. POST /api/chat/reads and every feature hook stay JS.
+  - Same routes and answers: the integration suite (533 tests), Chromium e2e and the app's tests pass unchanged. The
+    unread-plan tests and the contract test read the Go source (`tests/support/go-source.ts`); `seesSQL` and the
+    inbox SQL are checked equal to `lib/access.js` and `lib/inbox.js` (both still use them), `liveFields` to the
+    contract. `go test` runs the shared text vectors (`searchKey`, a port of `lib/text.js`: x/text NFKC and full case
+    mapping) and the author-probe cases.
+  - A request's "checked rooms" mark (list routes leave their rooms' messages to one query) is a Go map keyed by
+    the request's info, which PocketBase keeps once per request: no secret query parameter any more.
+  - Live messages no longer wait on clients: each client has a queue of its own (512 events) sent in order by a
+    goroutine; one that falls that far behind is disconnected and loads what it missed on reconnecting, as after any
+    drop. PocketBase's channel is unbuffered, so the JS version waited for every listener's SSE writer in the save.
+  - Hook order: Go binds before the JS plugin loads, so on the same event Go runs first and its `e.Next()` runs the JS
+    hooks (live messages send after them all, as before). Routes: Go adds its own after the JS hooks' (priority
+    900), and skips a path they define, so an old release's hooks keep theirs; `CHIRKLE_LEGACY=1` leaves out the list
+    routes and `/api/chat/live` (Android `TestServer.legacyUrl`).
+  - Build: `npm run setup` (`scripts/build-server.mjs`) builds `bin/chirkle-server` (needs Go; no-op while newer
+    than `server/`), `typecheck` runs it first. `prepack` builds linux/darwin × amd64/arm64 into `bin/release/`
+    for the npm tarball (CGO off). Docker builds it in a `golang:1.27-alpine` stage; `/app/pocketbase` is a symlink
+    to it for old commands. CI sets up Go and runs `go vet`, `gofmt` and `go test` in the static job.
+    `scripts/fetch-pocketbase.sh` is gone.
+  - The cost, as expected: the npm tarball is 50 MB (131 MB unpacked: four ~32 MB binaries) where PocketBase used to be
+    fetched on the first run, and building from a checkout needs Go. If the size matters, the usual way out is one
+    optional npm package per platform (as esbuild does); not done. `chirkle-server --version` says both versions
+    ("0.40.4 (Chirkle 0.3.0)").
+  - Measured: PERF.md §9.
 
 #### 48. Migrations: unique names, and a baseline for new installs
 - Two migrations share a timestamp (`1760000045_mentions.js`, `1760000045_password_reset.js`); PocketBase orders them by

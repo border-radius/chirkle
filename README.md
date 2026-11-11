@@ -90,19 +90,20 @@ Open the page and sign up. The first run prints a link to create the admin (supe
 `HOST` and `PORT` choose the address (default `127.0.0.1:8090`; `HOST=0.0.0.0` to reach it from other machines),
 `CHIRKLE_DATA` the data directory (default `./pb_data`), and any other `pocketbase serve` flags can follow
 (`npx chirkle --http=0.0.0.0:80`). The settings of [Deploying](#deploying) (`TRUSTED_PROXY` behind a reverse proxy, …)
-apply as they are. PocketBase is kept in the package's `bin/` (or `~/.cache/chirkle/` when that isn't writable).
+apply as they are. The package ships the server built for Linux and macOS (x64, arm64): no Go or PocketBase download
+needed.
 
 ## Getting started (development)
 
 ```sh
 npm ci
-npm run setup      # downloads the pinned PocketBase (checksum-verified) into bin/
-npm run dev        # esbuild watch + PocketBase on http://127.0.0.1:8090
+npm run setup      # builds the server (server/: PocketBase with Go hooks) into bin/chirkle-server; needs Go 1.27+
+npm run dev        # esbuild watch + the server on http://127.0.0.1:8090
 ```
 
 Open http://127.0.0.1:8090 and sign up (top right). The dev database lives in `pb_data/` — delete it to start over.
 The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
-`bin/pocketbase superuser upsert you@example.com <password> --dir=pb_data`).
+`bin/chirkle-server superuser upsert you@example.com <password> --dir=pb_data`).
 
 ## Scripts
 
@@ -137,21 +138,24 @@ web/src/         frontend: api.ts (the only module that talks to PocketBase, thr
                  store, cache.ts (the room cache), sw.ts (the service worker), views/, lib/ (pure logic)
 web/styles/      app.css (bundles app/*.css, one file per part) and viewer.css
 web/public/      icons/: the logo (logo.svg) as icon.svg and the PNG app icons, served as they are
-scripts/         build, dev, fetch-pocketbase, pb-types (PocketBase's types for the hooks), html-sink check
+server/          the server binary: PocketBase with its JS hooks, plus the hot paths in Go (enrich, live, pages, unread)
+scripts/         build, dev, build-server, pb-types (PocketBase's types for the hooks), html-sink check
 tests/           unit/, integration/, e2e/, perf/ (scale measurements), support/ (PocketBase harness, Telegram stub, helpers)
 android/         the Android app (docs/ANDROID.md): core/data (API, realtime, database, sync), core/ui, feature/*, app
 ```
 
 ## Deploying
 
-Build once, then copy `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `pb_hooks/` to the server.
+Build once, then copy `bin/chirkle-server`, `pb_public/`, `pb_migrations/` and `pb_hooks/` to the server. It is PocketBase
+with the hot paths in Go (`server/`): the same commands and flags as the `pocketbase` binary. Go builds it for another
+platform with `GOOS`/`GOARCH` (`node scripts/build-server.mjs --all` builds them all into `bin/release/`).
 Migrations run automatically on start, and nothing is served until they are done, so they change only the database.
 What stored files need moving (the shared files of DESIGN.md §37) the media worker does afterwards, while the server
 runs.
 
 ```sh
 npm ci && npm run setup && npm run build
-rsync -a bin/pocketbase pb_public pb_migrations pb_hooks server:/opt/chirkle/
+rsync -a bin/chirkle-server pb_public pb_migrations pb_hooks server:/opt/chirkle/
 ```
 
 With a domain pointing at the server, PocketBase serves HTTPS itself (Let's Encrypt):
@@ -165,7 +169,7 @@ After=network-online.target
 [Service]
 User=chirkle
 WorkingDirectory=/opt/chirkle
-ExecStart=/opt/chirkle/pocketbase serve chat.example.com --hooksPool=100 --dir=/opt/chirkle/pb_data --publicDir=/opt/chirkle/pb_public --migrationsDir=/opt/chirkle/pb_migrations --hooksDir=/opt/chirkle/pb_hooks
+ExecStart=/opt/chirkle/chirkle-server serve chat.example.com --hooksPool=100 --dir=/opt/chirkle/pb_data --publicDir=/opt/chirkle/pb_public --migrationsDir=/opt/chirkle/pb_migrations --hooksDir=/opt/chirkle/pb_hooks
 Restart=on-failure
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 LimitNOFILE=65536
@@ -176,7 +180,7 @@ WantedBy=multi-user.target
 
 ```sh
 sudo systemctl enable --now chirkle
-sudo -u chirkle /opt/chirkle/pocketbase superuser upsert you@example.com <password> --dir=/opt/chirkle/pb_data
+sudo -u chirkle /opt/chirkle/chirkle-server superuser upsert you@example.com <password> --dir=/opt/chirkle/pb_data
 ```
 
 Behind an existing reverse proxy instead, use `serve --http=127.0.0.1:8090` and proxy to it (keep
@@ -221,7 +225,7 @@ Or build on the server: `git push dokku master` from a clone with `dokku@server:
 `dokku git:sync --build chirkle https://github.com/border-radius/chirkle.git master`. Then create a superuser:
 
 ```sh
-dokku run chirkle /app/pocketbase superuser upsert you@example.com <password> --dir=/pb_data
+dokku run chirkle /app/chirkle-server superuser upsert you@example.com <password> --dir=/pb_data
 ```
 
 Settings go in as environment variables (`dokku config:set chirkle KEY=value`, which restarts the app); the image already
@@ -262,7 +266,7 @@ it ([`CLAUDE.md`](CLAUDE.md), [`android/PARITY.md`](android/PARITY.md)).
 A native client for any server running Chirkle, with several accounts at once on one server or many (`android/`,
 design: [`docs/ANDROID.md`](docs/ANDROID.md), §17 for servers and accounts). It needs JDK 17+
 (21 recommended) and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `android/local.properties`); Gradle fetches the
-rest. Its tests start PocketBase from `bin/`, so run `npm run setup` first.
+rest. Its tests start the server from `bin/`, so run `npm run setup` first.
 
 ```sh
 cd android

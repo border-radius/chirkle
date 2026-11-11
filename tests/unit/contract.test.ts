@@ -9,6 +9,7 @@ import { isAudio, isImage, isVideo } from "../../web/src/lib/files.ts";
 import { LIMITS, MAX_SELECTED } from "../../web/src/lib/limits.ts";
 import { ITEM_FIELDS } from "../../web/src/views/collection/calls.ts";
 import { ACCEPT, MEDIA } from "../../web/src/views/collection/shared.ts";
+import { goConst } from "../support/go-source.ts";
 
 /** A constant of a hooks module, read from its source (paths from the repo root): the modules need PocketBase's runtime to load. */
 function hookConst(file: string, name: string): unknown {
@@ -40,8 +41,17 @@ describe("shared contract", () => {
     expect(hookConst("lib/users.js", "PASSWORD_MAX_BYTES")).toBe(contract.limits.passwordMaxBytes);
   });
 
-  it("live messages (pb_hooks/lib/live.js) carry the fields the apps ask for", () => {
-    expect(hookConst("lib/live.js", "FIELDS")).toBe(contract.fields.message);
+  it("live messages (server/live.go) carry the fields the apps ask for", () => {
+    expect(goConst("liveFields")).toBe(contract.fields.message);
+  });
+
+  it("the Go server and the hooks say alike who sees a room and which inbox rows count (server/access.go, unread.go)", () => {
+    const sees = /^const SEES_SQL =\s*"([^"]+)";$/m.exec(readFileSync("pb_hooks/lib/access.js", "utf8"))![1]!;
+    expect(goConst("seesSQL")).toBe(sees);
+    const inbox = readFileSync("pb_hooks/lib/inbox.js", "utf8");
+    const js = (name: string) => new RegExp(`^const ${name} = \`([^\`]+)\`;$`, "m").exec(inbox)![1]!.replace(`\${SEES_SQL}`, sees);
+    expect(goConst("inboxVisibleSQL")).toBe(js("VISIBLE_SQL"));
+    expect(goConst("inboxReadInRoomSQL")).toBe(js("READ_IN_ROOM_SQL"));
   });
 
   it("the web and the server's shared files (pb_hooks/lib/files.js: the media grid, the worker) show the same files inline", () => {

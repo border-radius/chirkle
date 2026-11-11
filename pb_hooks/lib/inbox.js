@@ -5,7 +5,7 @@
 // made, edited, deleted and reacted to, whichever way (the apps, a linked instance, the Telegram bridge); they go with a
 // deleted message, and a room you can't see any more keeps its rows out of the list. Each new or removed row is told
 // live to its person's apps (TOPIC). GET /api/chat/inbox lists them, newest first; POST /api/chat/inbox/seen notes how
-// far they have been looked at, and GET /api/chat/unread counts the rest (`inbox`) and the unread mentions and replies
+// far they have been looked at, and GET /api/chat/unread (server/unread.go) counts the rest (`inbox`) and the unread mentions and replies
 // of each room (`mentions`).
 
 const { SEES_SQL } = require(`${__hooks}/lib/access.js`);
@@ -14,8 +14,6 @@ const { reactionsOf } = require(`${__hooks}/lib/reactions.js`);
 const TOPIC = "chat/inbox";
 /** Most rows one page lists. */
 const PAGE = 30;
-/** The "unseen" count stops here (shown as "99+"). */
-const CAP = 100;
 /** How much of a message's text a row shows. */
 const SNIPPET = 200;
 /** Most of one person's emoji a reaction row names in `emoji` ("👍🎉❤️😂🔥 +3"); `emojis` has them all. */
@@ -210,46 +208,17 @@ function seenAt(app, user) {
   }
 }
 
-/** The rows a person is shown: their room still visible to them, the message not deleted. */
+/** The rows a person is shown: their room still visible to them, the message not deleted. server/unread.go counts by the same. */
 const VISIBLE_SQL = `FROM inbox i JOIN messages m ON m.id = i.message JOIN rooms r ON r.id = i.room
 WHERE i.user = {:me} AND m.deleted = FALSE AND ${SEES_SQL}`;
 
 /**
  * A mention or reply whose message you have read in its room: seen there, so not new in the inbox either (2026-11-10,
- * user: no reading it twice). A reaction is only seen in the inbox: it comes after the message it is on.
+ * user: no reading it twice). A reaction is only seen in the inbox: it comes after the message it is on. server/unread.go
+ * counts by the same.
  */
 const READ_IN_ROOM_SQL = `(i.kind != 'reaction' AND m.created <= COALESCE((SELECT rr.last_read_at FROM room_reads rr
   WHERE rr.user = {:me} AND rr.room = i.room), ''))`;
-
-/**
- * For GET /api/chat/unread: how many rows `user` hasn't seen (at most CAP): newer than when they last looked at the
- * inbox, and (a mention or reply) not read in its room already, and per room the mentions of them and
- * replies to them that are still unread there (newer than their read position, or signup).
- * @param {core.App} app
- * @param {core.Record} user
- */
-function counts(app, user) {
-  const unseen = new DynamicModel({ n: 0 });
-  app
-    .db()
-    .newQuery(`SELECT COUNT(*) AS n FROM (SELECT 1 ${VISIBLE_SQL} AND i.created > {:seen} AND NOT ${READ_IN_ROOM_SQL} LIMIT ${CAP})`)
-    .bind({ me: user.id, seen: seenAt(app, user.id) })
-    .one(unseen);
-  const rows = arrayOf(new DynamicModel({ room: "", n: 0 }));
-  app
-    .db()
-    .newQuery(
-      `SELECT i.room AS room, COUNT(DISTINCT i.message) AS n ${VISIBLE_SQL} AND i.kind != 'reaction'
-       AND m.created > MAX(COALESCE((SELECT rr.last_read_at FROM room_reads rr WHERE rr.user = {:me} AND rr.room = i.room), ''), {:since})
-       GROUP BY i.room`,
-    )
-    .bind({ me: user.id, since: user.getString("created") })
-    .all(rows);
-  /** @type {Record<string, number>} */
-  const mentions = {};
-  for (const row of rows) mentions[row.room] = row.n;
-  return { inbox: unseen.n, mentions };
-}
 
 /** @param {string} s */
 const snippet = (s) => {
@@ -398,4 +367,4 @@ function markSeen(e) {
   return e.json(200, { seen_at: row.getString("seen_at") });
 }
 
-module.exports = { TOPIC, before, messageCreated, messageChanged, tell, counts, list, markSeen };
+module.exports = { TOPIC, before, messageCreated, messageChanged, tell, list, markSeen };

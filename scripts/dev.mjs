@@ -80,7 +80,7 @@ const statsCtx = await esbuild.context({ ...STATS_OPTIONS, sourcemap: "inline", 
 await statsCtx.watch();
 
 const pb = spawn(
-  "bin/pocketbase",
+  "bin/chirkle-server",
   [
     "serve",
     "--dev",
@@ -107,7 +107,7 @@ const stop = async (code = 0) => {
 
 pb.on("exit", (code) => {
   if (!stopping) {
-    console.error(`pocketbase exited (${code}). Did you run \`npm run setup\`?`);
+    console.error(`the server exited (${code}). Did you run \`npm run setup\`?`);
     void stop(code ?? 1);
   }
 });

@@ -478,7 +478,7 @@ export function createRoomController(opts: {
     if (!room()) await roomP.catch(() => {});
     if (!kept?.items.length || g !== gen || phase !== "loading" || !room() || !scope.active) return;
     const shown = merge({ items: [], hasOlder: kept.hasOlder, hasNewer: false }, kept.items);
-    // Opening at the first unread message (§18.5): the count says which one, by the server's rule (reads.js), if they
+    // Opening at the first unread message (§18.5): the count says which one, by the server's rule (server/unread.go), if they
     // were all prefetched with that count; else the first page opens there. Before the counts are in (a reload), the
     // server says.
     const { unread } = store.get();

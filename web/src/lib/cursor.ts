@@ -1,5 +1,5 @@
 // Keyset pagination over a room's messages, ordered by (created, id) — DESIGN.md §6, §7.5.
-// Pure: which page to ask GET /api/chat/rooms/{room}/messages for (pb_hooks/lib/lists.js writes the filter).
+// Pure: which page to ask GET /api/chat/rooms/{room}/messages for (server/lists.go writes the filter).
 
 export const PAGE_SIZE = 50;
 

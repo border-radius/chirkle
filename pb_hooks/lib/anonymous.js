@@ -50,75 +50,6 @@ function forget(app, roomId) {
   app.store().remove(`anonymous.${roomId}`);
 }
 
-/**
- * Who an anonymous message shows as: a users record that is never saved, with the room's id and `name`. It takes no DMs,
- * so the clients offer none.
- * @param {core.App} app
- * @param {string} id
- * @param {string} name
- */
-function standIn(app, id, name) {
-  const user = new Record(app.findCollectionByNameOrId("users"));
-  user.set("id", id);
-  user.set("name", name);
-  user.set("no_dms", true);
-  return user;
-}
-
-/**
- * Put `user` in the message's expand under `field`, in place of what is there (or also when nothing is, `add`): a new
- * map, as the expanded record of the real author may be the one other messages of theirs show too.
- * @param {core.Record} rec
- * @param {string} field
- * @param {core.Record} user
- * @param {boolean} [add]
- */
-function setExpanded(rec, field, user, add = false) {
-  const expand = rec.expand() ?? {};
-  if (expand[field] == null && !add) return;
-  /** @type {Record<string, any>} */
-  const next = {};
-  for (const k of Object.keys(expand)) next[k] = expand[k];
-  next[field] = user;
-  rec.setExpand(next);
-}
-
-/**
- * messages enrich, once expanded, for one stamped `anonymous` or `forwarded_anonymous` or quoting one (lib/enrich.js
- * isAnonymous): to anyone but its author and superusers, the author is its room, and a forward is from the original's
- * room. Only in the answer.
- * @param {core.RecordEnrichEvent} e
- */
-function hide(e) {
-  const rec = e.record;
-  const auth = e.requestInfo?.auth;
-  if (!rec || auth?.isSuperuser()) return;
-  // The quoted message hid its author when it was fetched, before its own expand (reply_to.author) looked for them.
-  const quoted = rec.expand()?.reply_to;
-  if (quoted?.getBool?.("anonymous") && quoted.getString("author") === quoted.getString("room")) {
-    setExpanded(quoted, "author", standIn(e.app, quoted.getString("room"), roomName(e.app, quoted.getString("room"))), true);
-  }
-  const me = auth?.id ?? "";
-  const author = rec.getString("author");
-  if (rec.getBool("anonymous") && author && author !== me) {
-    const room = rec.getString("room");
-    rec.set("author", room);
-    setExpanded(rec, "author", standIn(e.app, room, roomName(e.app, room)));
-  }
-  const from = rec.getString("forwarded_from");
-  if (rec.getBool("forwarded_anonymous") && from && from !== me) {
-    let room = "";
-    try {
-      room = rec.getString("forward_of") ? e.app.findRecordById("messages", rec.getString("forward_of")).getString("room") : "";
-    } catch {
-      room = ""; // the original is being removed for good
-    }
-    const id = room || rec.id;
-    rec.set("forwarded_from", id);
-    setExpanded(rec, "forwarded_from", standIn(e.app, id, room ? sourceName(e.app, room) : "Anonymous"));
-  }
-}
-
 /** Fields whose value says who wrote a message: no one but a superuser filters or sorts on them. */
 const AUTHOR_FIELD = /(^|[^a-z0-9])(author|forwarded_from)(?![a-z0-9])/i;
 /** A back-relation from users to the messages they wrote: expanded, it would group them by author. */
@@ -190,4 +121,4 @@ function gridAuthor(e, row) {
   return { id: row.author, name: row.name };
 }
 
-module.exports = { hide, forget, roomName, sourceName, refuseProbes, refuseSubscriptionProbes, gridAuthor };
+module.exports = { forget, roomName, sourceName, refuseProbes, refuseSubscriptionProbes, gridAuthor };

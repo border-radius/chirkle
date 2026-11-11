@@ -316,7 +316,7 @@ PocketBase had just sent a request on: `EOF` from its S3 client, 400s on files. 
 The stress test (§6.1) found the realtime fan-out to be what was left. PocketBase sends a record event to each
 `messages/*` subscriber after checking its list rule, and runs the messages enrich hook (JS) for each one. So with
 100 listeners, every message, edit and reaction made 100 JS calls, and more than the pool has. Now
-`pb_hooks/lib/live.js` sends each message once, from the after-save hooks, on the `chat/messages` topic:
+`pb_hooks/lib/live.js` (`server/live.go` since §9) sends each message once, from the after-save hooks, on the `chat/messages` topic:
 
 - one hook call per message;
 - the message is expanded once (`author`, `forwarded_from`), a forward shows its original once (`showOriginal`),
@@ -382,4 +382,28 @@ falls further behind, never catching up:
   SSE writer, and holds its JS runtime the whole time. PocketBase's own broadcasts send from goroutines
   (`routine.FireAndForget`). This is inferred from the code and the numbers; a goroutine dump wasn't taken.
 
-Not changed yet.
+Changed on 2026-11-11: the pages and live messages are Go now, and neither case collapses any more (§9).
+
+## 9. 2026-11-11: the hot paths in Go (REFACTOR item 47)
+
+The server is built from `server/`: PocketBase with its JS plugin, plus the messages enrich hook, live messages, the
+list routes and the unread counts in Go (DESIGN.md §3). The JS hooks are what they were for everything else. Same
+machine and harness as §8 (`--cpu=7 --memlimit=700MiB`, clients on CPUs 0–5, `--files=off`), with the two cases that
+collapsed there:
+
+| Users, think, arrive, run | Steady p50 / p95, ms: page · send · live | Peak memory | §8 (JS) | Verdict |
+|---|---|---|---|---|
+| 500, 30 s, 5 s, 120 s | 42 / 216 · 28 / 181 · 59 / 1,374 (whole run) | 0.55 GB | ~75,000 ms, 6.0 GB | fine after the storm |
+| 1000, 60 s, 120 s, 240 s | 65 / 305 · 50 / 296 · 104 / 427 | 0.37 GB | 2,233 / 164,115 · 136,458 / 221,236 · 69,713 / 212,680, 6.4 GB | fine (23 actions/s, 2.5 msgs/s) |
+
+- **The storm** (500 room opens within 5 s) still queues: in the first 30 s a page took 2.5 s at the median and 14 s at
+  p95, and the server caught up within about 30 s. Before, it never did: each request beyond the pool built a fresh JS
+  runtime. A page now runs no JS at all (the route, its enrich hook and the realtime events it may cause are Go), so it
+  can't overflow the pool. What still runs JS per request: the records API's request hooks (`refuseProbes`), sign-ups and
+  logins, the realtime subscribe hook.
+- **The fan-out:** each message goes once to every listening client's own queue (`server/live.go`), and a goroutine per
+  client writes it out in order. The save no longer waits for 1000 SSE writers: all 600,000 events arrived, p99 0.66 s.
+  A client 512 events behind would be disconnected (its app reloads what it missed); none was.
+- CPU stayed at about 50% of the one core in both runs.
+
+`--hooksPool=100` is kept: the JS request hooks and routes still use the pool, and a smaller one hasn't been measured.

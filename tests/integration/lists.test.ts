@@ -1,4 +1,4 @@
-// GET /api/chat/rooms, GET /api/chat/rooms/{room}/messages and GET /api/chat/notifiable (pb_hooks/lib/lists.js,
+// GET /api/chat/rooms, GET /api/chat/rooms/{room}/messages and GET /api/chat/notifiable (server/lists.go,
 // docs/API.md): the same answers the records API gives for the filters the clients used to write. Search (`q`) is in
 // search.test.ts. Who sees what is checked by access.matrix.test.ts.
 
@@ -124,7 +124,7 @@ describe("the room list and message pages as routes", () => {
     expect(await route({ limit: "500" }, me.pb, r.id)).toHaveLength(200);
   });
 
-  // The route shows forwards' originals itself, all in one query (lib/messages.js enrichInRooms, docs/PERF.md).
+  // The route shows forwards' originals itself, all in one query (server/enrich.go enrichInRooms, docs/PERF.md).
   const fwd = (u: TestUser, messages: string[], to: string) =>
     u.pb.send<Items>("/api/chat/forward", { method: "POST", body: { messages, room: to } });
   const privateRoom = async (owner: TestUser, members: TestUser[] = []) => {

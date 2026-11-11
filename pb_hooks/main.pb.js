@@ -70,13 +70,7 @@ routerAdd("GET", "/api/{path...}", () => {
   throw new NotFoundError();
 });
 routerAdd("POST", "/api/previews/tick", (e) => require(`${__hooks}/lib/previews.js`).tick(e), $apis.requireSuperuserAuth());
-routerAdd("GET", "/api/chat/rooms", (e) => require(`${__hooks}/lib/lists.js`).rooms(e));
-routerAdd("GET", "/api/chat/rooms/{room}/messages", (e) => require(`${__hooks}/lib/lists.js`).messages(e));
-routerAdd("GET", "/api/chat/notifiable", (e) => require(`${__hooks}/lib/lists.js`).notifiable(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/dms", (e) => require(`${__hooks}/lib/dms.js`).openDm(e), $apis.requireAuth("users"));
-routerAdd("GET", "/api/chat/live", (e) => require(`${__hooks}/lib/live.js`).info(e));
-routerAdd("GET", "/api/chat/unread", (e) => require(`${__hooks}/lib/reads.js`).unread(e), $apis.requireAuth("users"));
-routerAdd("GET", "/api/chat/unread/{room}", (e) => require(`${__hooks}/lib/reads.js`).firstUnread(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reads", (e) => require(`${__hooks}/lib/reads.js`).markRead(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reactions", (e) => require(`${__hooks}/lib/reactions.js`).react(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/delete", (e) => require(`${__hooks}/lib/bulk.js`).deleteMessages(e), $apis.requireAuth("users"));
@@ -296,20 +290,9 @@ onRecordAfterCreateSuccess((e) => {
   e.next();
 }, "messages");
 
-// Live (lib/live.js): each message once to everyone listening who can see its room, once committed. A failure to send
-// is logged, never the save's: the apps load what they missed when they reconnect.
-onRecordAfterCreateSuccess((e) => {
-  e.next();
-  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "create");
-}, "messages");
-onRecordAfterUpdateSuccess((e) => {
-  e.next();
-  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "update");
-}, "messages");
-onRecordAfterDeleteSuccess((e) => {
-  e.next();
-  require(`${__hooks}/lib/live.js`).sendSafely(e.app, e.record, "delete");
-}, "messages");
+// Live messages (each message once to everyone listening who can see its room) are sent by the Go server
+// (server/live.go), as are the messages enrich hook (server/enrich.go), the list routes (server/lists.go) and the
+// unread counts (server/unread.go): docs/REFACTOR.md item 47.
 
 // The inbox (§41): each row added or removed, once committed, to its person's apps.
 onRecordAfterCreateSuccess((e) => {
@@ -366,19 +349,6 @@ onRecordUpdate((e) => {
   if (touch) messages.touchForwards(e.app, rec);
   if (edited) require(`${__hooks}/lib/previews.js`).queue(e.app, rec);
   if (fed && was) fed.messages.messageChanged(e.app, rec, was);
-}, "messages");
-
-onRecordEnrich((e) => {
-  const enrich = require(`${__hooks}/lib/enrich.js`);
-  // lib/messages.js only for the messages that need it: loading it costs more than the rest (lib/enrich.js).
-  if (enrich.needsWork(e)) {
-    const messages = require(`${__hooks}/lib/messages.js`);
-    messages.keepToRoom(e);
-    messages.showOriginal(e);
-  }
-  e.next();
-  // An anonymous room's message shows the room, not its author (§35): once expanded (in next()), by the real author.
-  if (enrich.isAnonymous(e)) require(`${__hooks}/lib/anonymous.js`).hide(e);
 }, "messages");
 
 onRecordUpdateRequest((e) => {

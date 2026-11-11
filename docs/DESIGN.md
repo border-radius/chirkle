@@ -61,20 +61,23 @@ These are left out on purpose. The design should not block them later.
 └──────────────────────────────┬───────────────────────────────┘
                 REST (JSON)    │    SSE (realtime)
 ┌──────────────────────────────▼───────────────────────────────┐
-│                     PocketBase (single binary)               │
+│     Chirkle server: PocketBase + Go hooks (single binary)    │
 │  /api/*         REST + auth + realtime (SSE)                 │
 │  /*             static files from pb_public/                 │
 │  pb_migrations/ schema as code (JS migrations)               │
-│  pb_hooks/      server-side validation, headers              │
+│  server/        Go: enrich, live, pages, unread (built in)   │
+│  pb_hooks/      server-side validation, headers (JS)         │
 │  pb_data/       SQLite DB + backups                          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 **Why PocketBase:** auth, a REST API, per-record access rules, realtime over SSE, an admin UI, backups and static file serving all come in one Go binary backed by SQLite. That is all an MVP chat needs. It removes the need for a separate API server, WebSocket server, or reverse proxy (PocketBase can also issue its own TLS certificates).
 
+**PocketBase as a Go framework (2026-11-11, REFACTOR item 47):** the binary is built from `server/`, which embeds PocketBase (`pocketbase.New()`) with its JS plugin, so `pb_hooks/` and `pb_migrations/` load as before, and adds the hot, stable paths in Go: the messages enrich hook (`server/enrich.go`), live messages (`server/live.go`), the room list and message pages (`server/lists.go`) and the unread counts (`server/unread.go`). Same flags, commands and routes as the stock `pocketbase` binary. The JS runtime (goja) had been behind most incidents: the hooks pool overflowing on message pages, runtimes held across requests (BUG-250), a Go↔JS call per enriched message, and the 1 vCPU collapse with many live listeners (PERF.md §6, §8, §9). The feature hooks (Telegram, linked instances, collections, the workers) stay in JS. A route the JS hooks define wins over the Go one of the same path (an old release's hooks, tests).
+
 **Why no framework:** the UI has three screens and one hot path, which is appending messages to a list. Updating the DOM directly with a few small helpers is less code, loads faster, and is easy to reason about.
 
-**Version assumption:** the design targets the PocketBase API from **v0.23 onward** (`@request.body` in rules, `$app` and `routerUse` in JS hooks, autodate fields). The exact release is pinned in `scripts/fetch-pocketbase.sh`, using the latest stable release when implementation starts.
+**Version assumption:** the design targets the PocketBase API from **v0.23 onward** (`@request.body` in rules, `$app` and `routerUse` in JS hooks, autodate fields). The exact release is pinned in `server/go.mod` (0.40.4).
 
 ## 4. Repository layout
 
@@ -90,9 +93,9 @@ chat/
 ├── package.json
 ├── tsconfig.json, tsconfig.server.json
 ├── scripts/
-│   ├── fetch-pocketbase.sh     # downloads the pinned PB release into ./bin
+│   ├── build-server.mjs        # go build of server/ → bin/chirkle-server (--all: every platform, for the npm package)
 │   ├── build.mjs               # esbuild production build → pb_public/, size budget (§7.7)
-│   ├── dev.mjs                 # esbuild watch + spawns `pocketbase serve`
+│   ├── dev.mjs                 # esbuild watch + spawns `chirkle-server serve`
 │   └── pb-types.sh             # PocketBase's generated types for typechecking hooks and migrations
 ├── pb_migrations/              # schema + API rules (committed; never edited once applied, only added to)
 │   ├── 1760000000_init.js
@@ -120,6 +123,14 @@ chat/
 │   ├── 1760000037_file_dims.js         # §17.5 (messages.file_dims, media.sized)
 │   ├── 1760000038_drop_push.js         # push_tokens and push_queue removed (REFACTOR round 4)
 │   └── 1760000039_anonymous_rooms.js   # §35 (rooms.anonymous, messages.anonymous and forwarded_anonymous)
+├── server/                     # the server binary: PocketBase + its JS plugin + the hot paths in Go (§3)
+│   ├── main.go                 # PocketBase's main, the Go hooks and routes (registered after the JS hooks' routes)
+│   ├── enrich.go               # the messages enrich hook: forwards' originals, keepToRoom, anonymous authors (§21.3, §35)
+│   ├── live.go                 # live messages on chat/messages, a queue per client (PERF.md §7, §9)
+│   ├── lists.go                # GET /api/chat/rooms, rooms/{room}/messages (pages, search), notifiable (§6)
+│   ├── unread.go               # GET /api/chat/unread, unread/{room} (§18.2, §41)
+│   ├── access.go, anonymous.go, text.go  # canSee and seesSQL, hide and refuseProbes, searchKey: as lib/access.js, anonymous.js, text.js
+│   └── *_test.go               # go test: the shared text vectors, probes
 ├── pb_hooks/                   # server-side JS hooks (committed)
 │   ├── main.pb.js              # registrations only; every hook on messages, rooms and users (features' parts in order, §5.6)
 │   ├── telegram.pb.js          # the Telegram bridge's routes, worker and tg_* hooks, only with TELEGRAM_BOT_TOKEN (§26)
@@ -135,8 +146,7 @@ chat/
 │       ├── text.js             # pure string cleaning: invisible characters, name keys, file names (§5.2, QA BUG-38)
 │       ├── http.js             # security + cache headers, /assets/ (§5.6, §8.2)
 │       ├── dms.js              # POST /api/chat/dms (§16.2)
-│       ├── lists.js            # GET /api/chat/rooms, rooms/{room}/messages (pages, search), notifiable (§6)
-│       ├── reads.js            # GET /api/chat/unread, POST /api/chat/reads (§18.2)
+│       ├── reads.js            # POST /api/chat/reads (§18.2; the counts are server/unread.go's)
 │       ├── reactions.js        # POST /api/chat/reactions (§20.2)
 │       ├── bulk.js             # POST /api/chat/delete, POST /api/chat/forward (§21)
 │       ├── account.js          # POST /api/chat/password (§22.2)
@@ -339,13 +349,13 @@ The frontend talks to PocketBase through `pb.ts`, a minimal client (about 2 KB g
 | Log in | `users.authWithPassword(email, password)` |
 | Restore session | `pb.authStore.isValid` → `users.authRefresh()` in the background |
 | Log out | `pb.authStore.clear()` + unsubscribe all |
-| List rooms | `GET /api/chat/rooms` with `expand` and `fields` (`pb_hooks/lib/lists.js`): the rooms you can see, by name |
+| List rooms | `GET /api/chat/rooms` with `expand` and `fields` (`server/lists.go`): the rooms you can see, by name |
 | List my hidden rooms | `hidden_rooms.getFullList({fields: "id,room"})` (fetched in parallel with rooms) |
 | Create room | `rooms.create({name, created_by: me})` |
 | Archive / unarchive room | `rooms.update(id, {archived: true \| false})` |
 | Hide room | `hidden_rooms.create({user: me, room})` |
 | Unhide room | `hidden_rooms.delete(hiddenRowId)` |
-| Latest page | `GET /api/chat/rooms/{r}/messages?kind=latest` with `expand` and `fields: MSG_FIELDS`. The server writes the filter (`lib/lists.js`), newest first |
+| Latest page | `GET /api/chat/rooms/{r}/messages?kind=latest` with `expand` and `fields: MSG_FIELDS`. The server writes the filter (`server/lists.go`), newest first |
 | Older page (scroll up) | `kind=older&created={c}&id={i}`, the oldest loaded message as the cursor: `room = {:r} && (created < {:c} \|\| (created = {:c} && id < {:i}))` |
 | Newer page (scroll down after jumping back) | `kind=newer&created={c}&id={i}`: `(created > {:c} \|\| (created = {:c} && id > {:i}))`, oldest first |
 | One message (open `/r/:id/m/:msgId`) | `messages.getOne(id, {expand: "author", fields: MSG_FIELDS})`, then an older and a newer page around it |
@@ -686,7 +696,7 @@ it stands still as a faint line across the width.
 | `vitest`, `happy-dom` | dev | unit, component and integration tests |
 | `@playwright/test` | dev | e2e tests |
 
-Nothing else. The PocketBase **binary** is not an npm package. `scripts/fetch-pocketbase.sh` downloads the pinned version for the current OS and architecture into `bin/` and checks its SHA-256.
+Nothing else. The server **binary** is not an npm dependency: `scripts/build-server.mjs` builds it from `server/` with Go (the version `server/go.mod` names) into `bin/chirkle-server`, PocketBase pinned by `go.sum`. The npm package ships it built for each platform it supports (`bin/release/<os>-<arch>/`, by `prepack`), so `npx chirkle` needs no Go.
 
 ### 8.2 `scripts/build.mjs`
 
@@ -709,8 +719,8 @@ await esbuild.build({
 
 | Script | Does |
 |---|---|
-| `setup` | `scripts/fetch-pocketbase.sh` |
-| `dev` | esbuild in watch mode (unminified, inline sourcemaps) writing to `pb_public/`, plus `bin/pocketbase serve --dev`. Reload the browser by hand (live reload is not part of the MVP). |
+| `setup` | `scripts/build-server.mjs` (needs Go) |
+| `dev` | esbuild in watch mode (unminified, inline sourcemaps) writing to `pb_public/`, plus `bin/chirkle-server serve --dev`. Reload the browser by hand (live reload is not part of the MVP). |
 | `build` | production build (§8.2) |
 | `typecheck` | `tsc --noEmit` (`strict`, `noUncheckedIndexedAccess`) |
 | `test` | unit tests |
@@ -810,7 +820,7 @@ Unit tests need no server (`npm run test:unit`). Component tests, which do, run 
 A Vitest `globalSetup` does the following:
 
 1. Creates a temp dir.
-2. Runs `bin/pocketbase superuser upsert` and `bin/pocketbase serve --http 127.0.0.1:<free port> --dir <tmp>/pb_data --migrationsDir pb_migrations --hooksDir pb_hooks`.
+2. Runs `bin/chirkle-server superuser upsert` and `bin/chirkle-server serve --http 127.0.0.1:<free port> --dir <tmp>/pb_data --migrationsDir pb_migrations --hooksDir pb_hooks`.
 3. Waits for `/api/health`.
 4. Provides the URL to the tests, and kills the process and removes the dir on teardown.
 
@@ -938,9 +948,9 @@ Playwright traces are uploaded when a test fails. The job runs on every push and
 
 ## 11. Deployment
 
-Deployment artifacts are `bin/pocketbase`, `pb_public/`, `pb_migrations/` and `pb_hooks/`.
+Deployment artifacts are `bin/chirkle-server`, `pb_public/`, `pb_migrations/` and `pb_hooks/`.
 
-- Run under systemd with `pocketbase serve chat.example.com`, which issues a Let's Encrypt certificate automatically. Alternatively, run it behind an existing reverse proxy.
+- Run under systemd with `chirkle-server serve chat.example.com`, which issues a Let's Encrypt certificate automatically. Alternatively, run it behind an existing reverse proxy.
 - Migrations run automatically on start.
 - Use PocketBase's built-in scheduled backups (Settings → Backups), stored locally or in S3-compatible storage.
 - Uploaded files (avatars, attachments; §15, §17) live in `pb_data/storage` (or S3-compatible storage set in PocketBase's settings) and are included in backups, so plan disk space for them.
@@ -1630,7 +1640,7 @@ back, set it in the future or write someone else's.
 
 No row means "read up to your signup" (`users.created`): history from before you joined never counts.
 
-### 18.2 Routes (`pb_hooks/lib/reads.js`)
+### 18.2 Routes (`server/unread.go`; POST in `pb_hooks/lib/reads.js`)
 
 - **`GET /api/chat/unread`** → `{ at, rooms: { "<roomId>": count }, ids }` for the rooms with anything unread, where `at`
   is the server time the counts were taken (answers older than the counts shown are dropped), and `ids` the other
@@ -2711,7 +2721,7 @@ the button. Guests can search the Open Air rooms they read.
   can make a 2,000-character text longer). Migration `1760000024_message_search.js` backfills it with raw SQL.
 - **Query** (`searchQuery` in `views/room/search.ts`): a page of the room (§6) with `q`, the words: `kind=latest`, then
   `kind=older` from the last result's `(created, id)` for the next page, as history pages are (§7.5). The server
-  (`lib/lists.js`) writes `room = {:room} && text_key ~ {:w0} && …`: up to 5 distinct words, folded as `text_key` is
+  (`server/lists.go`) writes `room = {:room} && text_key ~ {:w0} && …`: up to 5 distinct words, folded as `text_key` is
   (`searchKey`; the client folds them too, `foldKey`, to mark the matches), with `%` and `\` (the escape character)
   escaped (QA BUG-34, BUG-112; `_` already is). Until 2026-10-29 the clients wrote that filter; apps then still do with
   a server from before the route.
@@ -3409,7 +3419,7 @@ admin ui (db). in anonymous rooms all messages are sent by the room name, not us
 
 ### 35.2 What is answered
 
-`pb_hooks/lib/anonymous.js` `hide`, from the messages enrich hook once PocketBase has expanded the record (in
+`hide` (`server/anonymous.go`), from the messages enrich hook (`server/enrich.go`) once PocketBase has expanded the record (in
 `e.next()`; expansion follows `author` as stored). It covers every answer and live event: the records API, the list
 routes (`/api/chat/rooms/{room}/messages`, search, `notifiable`) and realtime. To anyone but the author and superusers:
 - `author` is the room's id, and `expand.author` is a users record that is never saved, `{ id: room id, name: room

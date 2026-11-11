@@ -1,11 +1,11 @@
 #!/bin/sh
 # Generate PocketBase's JSVM type definitions (for pb_hooks/ and pb_migrations/) into types/pocketbase.d.ts.
 # PocketBase writes types.d.ts into its data dir on startup, so run the migrations against a throwaway one.
-# No-op while the file is newer than the binary (i.e. until `npm run setup` installs another version).
+# No-op while the file is newer than the binary (i.e. until `npm run setup` builds it again).
 set -eu
 cd "$(dirname "$0")/.."
 
-PB="bin/pocketbase"
+PB="bin/chirkle-server"
 OUT="types/pocketbase.d.ts"
 
 if [ ! -x "$PB" ]; then

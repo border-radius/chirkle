@@ -60,7 +60,7 @@ The clients send filters in PocketBase's filter syntax. Apps from before 2026-10
 `collection` and `owner` (collections). Renaming a field, changing its type or tightening a rule breaks the apps
 already installed.
 
-**Pages and the room list** are routes (`pb_hooks/lib/lists.js`), so a client names the page, not the filter:
+**Pages and the room list** are routes (`server/lists.go`), so a client names the page, not the filter:
 `GET /api/chat/rooms` and `GET /api/chat/rooms/{room}/messages?kind=latest|first|older|newer|changed` (cursor
 `created`, `id`; for `changed` `since`, `from`, `to`; `files=1`; `q`, search's words, which the server folds and
 escapes; `limit` ≤ 200; `page`). The app's notification check is `GET /api/chat/notifiable?rooms=a,b&since=…&every=a`

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // `npm start` / `npx chirkle`: run the production server. In a source checkout it builds web/ → pb_public/ first;
-// the npm package ships pb_public/ built. PocketBase (pinned, checksum-verified) is downloaded on the first run.
+// the npm package ships pb_public/ built. The server (server/: PocketBase with the hot paths in Go) is built with Go in a
+// checkout (`npm run setup`), and ships built for each platform in the npm package (bin/release/).
 //
 //   chirkle                          serve on http://127.0.0.1:8090 (HOST, PORT), data in ./pb_data (CHIRKLE_DATA)
 //   chirkle chat.example.com         serve with HTTPS (Let's Encrypt) on :80/:443; any other `pocketbase serve` flags
@@ -8,8 +9,7 @@
 //                                    the other PocketBase commands, on the same data directory
 
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, constants, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,23 +38,21 @@ if (existsSync(join(ROOT, "web")) && existsSync(join(ROOT, "node_modules/esbuild
   fail("pb_public/ is not built: run `npm install` (with dev dependencies) first");
 }
 
-// ---- PocketBase: next to the package when it can write there (a checkout, a local install), else in the cache ----
-let binDir = join(ROOT, "bin");
-try {
-  mkdirSync(binDir, { recursive: true });
-  accessSync(binDir, constants.W_OK);
-} catch {
-  binDir = join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "chirkle");
+// ---- the server: built from server/ in a checkout, else the package's own for this platform ----
+let bin = join(ROOT, "bin/chirkle-server");
+if (existsSync(join(ROOT, "server/go.mod"))) {
+  run(process.execPath, [join(ROOT, "scripts/build-server.mjs")], { stdio: ["inherit", "ignore", "inherit"] });
+} else {
+  const os = { linux: "linux", darwin: "darwin" }[/** @type {string} */ (process.platform)];
+  const arch = { x64: "amd64", arm64: "arm64" }[/** @type {string} */ (process.arch)];
+  bin = join(ROOT, "bin/release", `${os}-${arch}`, "chirkle-server");
+  if (!os || !arch || !existsSync(bin)) fail(`no server built for ${process.platform}-${process.arch} in this package`);
 }
-run("sh", [join(ROOT, "scripts/fetch-pocketbase.sh")], {
-  env: { ...process.env, PB_BIN_DIR: binDir },
-  stdio: ["inherit", "ignore", "inherit"],
-});
 
 // ---- run it ----
 /** @param {string[]} argv */
 const exec = (argv) => {
-  const pb = spawn(join(binDir, "pocketbase"), argv, { stdio: "inherit" });
+  const pb = spawn(bin, argv, { stdio: "inherit" });
   for (const signal of /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"])) process.on(signal, () => pb.kill(signal));
   pb.on("error", (err) => fail(err.message));
   pb.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
@@ -83,7 +81,7 @@ function serve() {
       defaults["--http"] = `${process.env.HOST || "127.0.0.1"}:${process.env.PORT || "8090"}`;
     }
     defaults["--publicDir"] = join(ROOT, "pb_public");
-    // PocketBase enriches a page of messages in parallel, one JS hook call each (as in the Dockerfile).
+    // JS hook runtimes kept warm (as in the Dockerfile): the records API's hooks run in them.
     defaults["--hooksPool"] = "100";
   }
   const flags = Object.entries(defaults)

@@ -397,7 +397,7 @@ endpoint.
 | Layer | Tools | Covers |
 |---|---|---|
 | Unit | JUnit 5, Turbine, kotlinx-coroutines-test | linkify, cursors, unread math, reaction merge, folding, drafts, outbox (cases ported from `tests/unit`) |
-| Data integration | JVM tests, real PocketBase started by Gradle from `bin/pocketbase` | PbClient, SSE reconnect and gap-fill, paging both ways, the access rules as the app sees them |
+| Data integration | JVM tests, the real server started by Gradle from `bin/chirkle-server` | PbClient, SSE reconnect and gap-fill, paging both ways, the access rules as the app sees them |
 | UI | Compose UI tests on Robolectric | each screen's states: empty, loading, error, guest, archived, read-only |
 | End-to-end | Compose tests on a Gradle Managed Device, real PocketBase | the parity scenarios of `tests/e2e`: send, edit, reply, react, forward, attach, search, room access, guests |
 | Screenshots | Roborazzi | every screen in light, dark and at 200% font size |
@@ -1125,8 +1125,10 @@ names the page and the server writes the filter.
   asked of `page`; `ChirkleApi.notifiable` asks `GET /api/chat/notifiable`. Both fall back as the pages do; the old
   search filter is `legacy()`'s too (`shared/vectors/text.json` has both forms).
 - **Tested against an old server:** `LegacyServerTest` runs one session (the room list, every kind of page, the
-  changes, search, the notification check) against the test server and against `TestServer.legacyUrl`: these hooks
-  without the routes of `lib/lists.js`, or an old release's with `-Pchirkle.legacyHooks=<its pb_hooks>`. Both see
+  changes, search, the notification check) against the test server and against `TestServer.legacyUrl`: the server
+  with `CHIRKLE_LEGACY=1`, which leaves out the list routes and `/api/chat/live` (since 2026-11-11 they are Go,
+  `server/lists.go`; before, these hooks without the routes of `lib/lists.js`), or an old release's hooks with
+  `-Pchirkle.legacyHooks=<its pb_hooks>`. Both see
   the same; the old one answers one 404 and nothing more is asked of the routes. Run 2026-10-29 with the hooks of the
   commit before the routes ("Tech debt, part 4"): passed.
 
@@ -1548,7 +1550,7 @@ raised `#232428` (`surfaceContainer`), text `#ecece8`, `muted` `#b0b4ba`, `dim` 
 
 ## 56. Live messages on one topic (2026-11-09)
 
-The server sends each message once, on `chat/messages`, to everyone who can see its room (pb_hooks/lib/live.js,
+The server sends each message once, on `chat/messages`, to everyone who can see its room (server/live.go,
 PERF.md §7). It no longer runs its JS enrich hook once for each listener of `messages/*`, which with 100 people
 listening made each message and reaction take seconds. `ChirkleApi.subscribeMessages` and `subscribeAllMessages`
 listen to that topic: the room's subscription keeps the events of its room, and the activity reads the same events.

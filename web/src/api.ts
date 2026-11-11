@@ -271,7 +271,7 @@ export const MSG_FIELDS =
   "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions";
 const MSG_OPTS = { expand: "author,reply_to.author,forwarded_from", fields: MSG_FIELDS } as const;
 /**
- * Live messages (pb_hooks/lib/live.js, docs/PERF.md §7): the server sends each message once on this topic to everyone who
+ * Live messages (server/live.go, docs/PERF.md §7): the server sends each message once on this topic to everyone who
  * can see its room, expanded with `author` and `forwarded_from` but not the message a reply answers (the room fills the
  * quote in, views/room/controller.ts). A room's subscription and the activity of all rooms both listen to it.
  */
@@ -331,7 +331,7 @@ const toUser = (r: AuthRecord): User => ({
 /** What the profile calls return: never the email, even for yourself. */
 export const USER_FIELDS = "id,name,avatar,instance,handle";
 
-/** The query for GET /api/chat/rooms/{room}/messages (pb_hooks/lib/lists.js). */
+/** The query for GET /api/chat/rooms/{room}/messages (server/lists.go). */
 export function pageOptions(q: PageQuery, limit = PAGE_SIZE, page = 1) {
   return {
     kind: q.kind,

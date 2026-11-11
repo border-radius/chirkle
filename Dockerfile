@@ -1,4 +1,5 @@
-# Production image: the built frontend + the pinned PocketBase, and ffmpeg. Used by Dokku (README "Deploying").
+# Production image: the built frontend + the Chirkle server (server/: PocketBase with the hot paths in Go), and ffmpeg.
+# Used by Dokku (README "Deploying").
 
 # ---- frontend: web/ → pb_public/ ----
 FROM node:22-alpine AS web
@@ -11,12 +12,13 @@ COPY scripts scripts
 COPY web web
 RUN npm run build
 
-# ---- pocketbase: the pinned, checksum-verified binary ----
-FROM alpine:3.22 AS pocketbase
-RUN apk add --no-cache curl
+# ---- server: server/ → chirkle-server (pure Go, no CGO) ----
+FROM golang:1.27-alpine AS server
 WORKDIR /src
-COPY scripts/fetch-pocketbase.sh scripts/
-RUN sh scripts/fetch-pocketbase.sh
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server/*.go ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /chirkle-server .
 
 # ---- runtime ----
 FROM alpine:3.22
@@ -27,7 +29,9 @@ RUN apk add --no-cache ca-certificates tzdata ffmpeg curl \
   && adduser -D -H -u 32767 chirkle \
   && mkdir /pb_data && chown chirkle /pb_data
 WORKDIR /app
-COPY --from=pocketbase /src/bin/pocketbase ./pocketbase
+COPY --from=server /chirkle-server ./chirkle-server
+# The name it had before the server was built from server/ (`dokku run chirkle /app/pocketbase superuser …`).
+RUN ln -s chirkle-server /app/pocketbase
 COPY --from=web /src/pb_public ./pb_public
 COPY pb_migrations ./pb_migrations
 COPY pb_hooks ./pb_hooks
@@ -43,6 +47,6 @@ EXPOSE 8090
 # For plain Docker / Compose (Dokku runs its own check from app.json). busybox wget is in the base image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:8090/api/health || exit 1
-# --hooksPool: PocketBase enriches a page of records in parallel, one JS hook call each (onRecordEnrich on messages).
-# Beyond the pool (default 15) every call builds a fresh JS runtime: a 50-message page took ~70 ms instead of ~20 ms.
-CMD ["/app/pocketbase", "serve", "--http=0.0.0.0:8090", "--hooksPool=100", "--dir=/pb_data", "--publicDir=/app/pb_public", "--migrationsDir=/app/pb_migrations", "--hooksDir=/app/pb_hooks"]
+# --hooksPool: JS hook runtimes kept warm. Beyond the pool (default 15) every call builds a fresh one. The messages enrich
+# hook is Go's now (server/enrich.go), but the records API's request hooks and the other routes still run in these.
+CMD ["/app/chirkle-server", "serve", "--http=0.0.0.0:8090", "--hooksPool=100", "--dir=/pb_data", "--publicDir=/app/pb_public", "--migrationsDir=/app/pb_migrations", "--hooksDir=/app/pb_hooks"]

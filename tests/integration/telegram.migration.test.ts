@@ -32,7 +32,8 @@ describe("migration 1760000047_telegram_supergroup_ids.js", () => {
       await server.stop();
     }
 
-    // Rows 1 and 2 are from before the move (the link saved then), 3 from after; the first collision came later still.
+    // Rows 1 and 2 are from before the move (the link saved then), 3 from after; the first collision came later still (an
+    // hour ago).
     const data = new DatabaseSync(join(dataDir, "data.db"));
     try {
       data.prepare("UPDATE tg_messages SET created = '2026-11-01 10:00:00.000Z' WHERE tg_message_id IN (1, 2)").run();
@@ -41,12 +42,14 @@ describe("migration 1760000047_telegram_supergroup_ids.js", () => {
     } finally {
       data.close();
     }
+    const recent = new Date(Date.now() - 3_600_000).toISOString().replace("T", " ");
     const aux = new DatabaseSync(join(dataDir, "auxiliary.db"));
     try {
       const error = "GoError: chat_id: Value must be unique; part: Value must be unique; tg_message_id: Value must be unique.";
       aux
         .prepare("INSERT INTO _logs (id, level, message, data, created) VALUES (?, 4, 'telegram: send', ?, ?)")
-        .run("tgmiglog0000001", JSON.stringify({ message: "x", chat: moved, try: 1, error }), "2026-11-06 10:00:00.000Z");
+        // Recent: PocketBase drops logs older than its retention (5 days by default) when it starts.
+        .run("tgmiglog0000001", JSON.stringify({ message: "x", chat: moved, try: 1, error }), recent);
     } finally {
       aux.close();
     }

@@ -1,8 +1,8 @@
 // Unread counts (§18): GET /api/chat/unread, POST /api/chat/reads and the room_reads rules.
 
-import { readFileSync } from "node:fs";
 import type { RecordModel } from "pocketbase";
 import { describe, expect, inject, it } from "vitest";
+import { goConst } from "../support/go-source.ts";
 import {
   adminClient,
   client,
@@ -105,13 +105,8 @@ describe("GET /api/chat/unread (§18.2)", () => {
   });
 
   it("counts each room with a range scan on idx_messages_room_created", () => {
-    const hook = (name: string) => readFileSync(new URL(`../../pb_hooks/lib/${name}`, import.meta.url), "utf8");
-    const sees = /const SEES_SQL = "([^"]+)"/.exec(hook("access.js"))![1]!;
-    const sql = /const UNREAD_SQL = `([^`]+)`/
-      .exec(hook("reads.js"))![1]!
-      .replace(/\$\{SEES_SQL\}/, sees)
-      .replaceAll(/\{:(\w+)\}/g, ":$1")
-      .replace(/\$\{UNREAD_CAP\}/, "100");
+    // As the Go server runs it (server/unread.go).
+    const sql = goConst("unreadSQL").replaceAll(/\{:(\w+)\}/g, ":$1");
     const db = rawDb();
     try {
       const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all({ me: "x", since: "x" }) as { detail: string }[]).map((r) => r.detail);
@@ -123,15 +118,7 @@ describe("GET /api/chat/unread (§18.2)", () => {
   });
 
   it("lists the recent messages with range scans too, never a scan of every message (QA BUG-106)", () => {
-    const hook = (name: string) => readFileSync(new URL(`../../pb_hooks/lib/${name}`, import.meta.url), "utf8");
-    const sees = /const SEES_SQL = "([^"]+)"/.exec(hook("access.js"))![1]!;
-    const unreadSql = /const UNREAD_SQL = `([^`]+)`/.exec(hook("reads.js"))![1]!;
-    const sql = /const COUNTS_SQL = `([^`]+)`/
-      .exec(hook("reads.js"))![1]!
-      .replace(/\$\{UNREAD_SQL\}/, unreadSql)
-      .replaceAll(/\$\{SEES_SQL\}/g, sees)
-      .replaceAll(/\{:(\w+)\}/g, ":$1")
-      .replace(/\$\{UNREAD_CAP\}/, "100");
+    const sql = goConst("countsSQL").replaceAll(/\{:(\w+)\}/g, ":$1");
     const db = rawDb();
     try {
       const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all({ me: "x", since: "x", from: "x" }) as { detail: string }[]).map(

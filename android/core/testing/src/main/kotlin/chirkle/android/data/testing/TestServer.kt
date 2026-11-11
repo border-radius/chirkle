@@ -1,4 +1,4 @@
-// A throwaway PocketBase for the data integration tests (ANDROID.md §13): the repository's bin/pocketbase, migrations
+// A throwaway server for the data integration tests (ANDROID.md §13): the repository's bin/chirkle-server, migrations
 // and hooks, on a free port with a temp data dir, started once per test JVM, like tests/support/pocketbase.ts. And, when
 // a test asks for it, a server from before the list routes (legacyUrl).
 package chirkle.android.data.testing
@@ -33,29 +33,18 @@ object TestServer {
     val url: String by lazy { start(File(root, "pb_hooks")) }
 
     /**
-     * A server from before the list routes (docs/API.md, pb_hooks/lib/lists.js) and live messages (GET /api/chat/live,
-     * pb_hooks/lib/live.js), which the app falls back from: an old release's hooks when `chirkle.legacyHooks` names them
-     * (-Pchirkle.legacyHooks=…), else these hooks without those routes. The same migrations.
+     * A server from before the list routes (docs/API.md, server/lists.go) and live messages (GET /api/chat/live,
+     * server/live.go), which the app falls back from: an old release's hooks when `chirkle.legacyHooks` names them
+     * (-Pchirkle.legacyHooks=…; their routes win over the server's), else these hooks with the server's
+     * CHIRKLE_LEGACY=1, which leaves those routes out. The same migrations.
      */
     val legacyUrl: String by lazy {
-        start(System.getProperty("chirkle.legacyHooks")?.let(::File) ?: withoutListRoutes())
+        start(System.getProperty("chirkle.legacyHooks")?.let(::File) ?: File(root, "pb_hooks"), legacy = true)
     }
 
-    private fun withoutListRoutes(): File {
-        val dir = Files.createTempDirectory("chirkle-hooks-legacy").toFile()
-        File(root, "pb_hooks").copyRecursively(dir)
-        Runtime.getRuntime().addShutdownHook(Thread { dir.deleteRecursively() })
-        val main = File(dir, "main.pb.js")
-        val lines = main.readLines()
-        val kept = lines.filterNot { ("lib/lists.js" in it || "lib/live.js" in it) && it.startsWith("routerAdd(") }
-        check(kept.size < lines.size) { "No list routes in main.pb.js" }
-        main.writeText(kept.joinToString("\n"))
-        return dir
-    }
-
-    private fun start(hooks: File): String {
-        val bin = File(root, "bin/pocketbase")
-        check(bin.canExecute()) { "No PocketBase at $bin: run `npm run setup` in the repository first" }
+    private fun start(hooks: File, legacy: Boolean = false): String {
+        val bin = File(root, "bin/chirkle-server")
+        check(bin.canExecute()) { "No server at $bin: run `npm run setup` in the repository first" }
         val tmp = Files.createTempDirectory("chirkle-pb-android").toFile()
         val dirs = listOf(
             "--dir=${File(tmp, "pb_data")}",
@@ -78,6 +67,7 @@ object TestServer {
             // Linked instances (DESIGN.md §33) over http on 127.0.0.1; turned on below, so its routes answer. No peer
             // is ever paired.
             environment()["FEDERATION_ALLOW_PRIVATE"] = "1"
+            if (legacy) environment()["CHIRKLE_LEGACY"] = "1"
         }.start()
         Runtime.getRuntime().addShutdownHook(Thread {
             proc.destroy()
