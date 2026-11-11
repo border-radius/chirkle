@@ -338,6 +338,11 @@ class UiFeaturesTest {
         val name = "new-${uniq()}"
         compose.onNode(hasSetTextAction() and hasText("Display name")).performTextInput(name)
         compose.onNode(hasSetTextAction() and hasText("Email")).performTextInput("$name@test.local")
+        // Over PocketBase's 71 bytes (40 Cyrillic letters are 80): said before asking it, which wouldn't say why (QA BUG-267).
+        compose.onNode(hasSetTextAction() and hasText("Password")).performTextInput("ж".repeat(40))
+        compose.onAllNodes(hasText("Sign up"))[1].performScrollTo().performClick()
+        ui.waitFor("Use at most 71 characters")
+        compose.onNode(hasSetTextAction() and hasText("Password")).performTextClearance()
         compose.onNode(hasSetTextAction() and hasText("Password")).performTextInput(TestServer.PASSWORD)
         compose.onAllNodes(hasText("Sign up"))[1].performScrollTo().performClick()
         ui.waitFor("Rooms")

@@ -2,7 +2,7 @@
 // messages at once (§21) and reactions (§20). Each is shown at once and then made good, or undone, by the server's
 // answer; writes go one at a time per message, in the order they were made.
 
-import { type Api, ApiError } from "../../api.ts";
+import { type Api, ApiError, reasonOf } from "../../api.ts";
 import { newId } from "../../lib/id.ts";
 import { type MessageWindow, merge, quoteOf, remove, trim } from "../../lib/messages.ts";
 import { setReaction } from "../../lib/reactions.ts";
@@ -259,7 +259,7 @@ export function createWrites(ctx: WriteCtx) {
     return list;
   }
 
-  async function react(id: string, emoji: string, on: boolean): Promise<boolean> {
+  async function react(id: string, emoji: string, on: boolean): Promise<boolean | string> {
     const seq = ++reactSeq;
     const mine = reacting.get(id) ?? new Map();
     const latest = () => mine.get(emoji)?.seq === seq;
@@ -270,8 +270,9 @@ export function createWrites(ctx: WriteCtx) {
         // The whole message comes back: kept like any other copy (the newest wins).
         if (scope.active && find(id)) ctx.put(merge(ctx.win(), [saved]));
         return true;
-      } catch {
-        return false;
+      } catch (e) {
+        // Refused (a 4xx but 429): why, and no retry.
+        return e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 429 ? reasonOf(e) : false;
       }
     };
     const queue = inTurn(id, request);

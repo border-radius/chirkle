@@ -1668,3 +1668,25 @@ Mentions & replies. The server leaves it out of `inbox` in `GET /api/chat/unread
 while the inbox count isn't 0 makes `UnreadSync` fetch the counts again. A reaction is still only seen in the inbox.
 
 Tests: server `tests/integration/mentions.test.ts`; `UiMentionsTest`.
+
+## 66. QA pass 35 ports (2026-11-11)
+
+The app's side of QA pass 35's fixes (QA.md):
+
+- **Reaction limits (BUG-258) and failed reactions (BUG-260).** The server takes at most 20 different emoji on a
+  message (no limit per person), and refuses more with the reason on `emoji`. Mentions & replies has one row for all
+  of one person's reactions to a message; its `emoji` names them ("👍🎉 +3"), which `InboxScreen` shows as it is. `RoomWrites.react`
+  resolves to null when done, "" when it never reached the server, or the server's reason; `RoomViewModel` shows the
+  reason as a toast, or "Couldn't add your … reaction" without one. Before, the pending change was dropped before
+  asking whether it was still the latest, so a failed reaction always counted as done and the app said nothing.
+- **"@you" contrast (BUG-262).** `linked()` takes `mineColor`: your own mention is drawn in `onSurface` on its tint,
+  as the web's `.mention.me` is in `--text`; the accent on the tint of a message to you was under 4.5:1.
+- **Your mention by the server's list (BUG-265).** A message's "@handle" is highlighted as yours only when its
+  `mentions` hold you (`MessageRow`), not because the text has your current handle: a handle someone gave up and you
+  took doesn't make their older mentions yours.
+- **Password length (BUG-267).** PocketBase takes at most 71 bytes of password and, past 72, refuses without a reason.
+  Signup checks `Limits.PASSWORD_MAX_BYTES` (contract `passwordMaxBytes`) first; a password change and a reset get the
+  server's reason, which the screens already show on the field.
+
+Tests: `ServicesTest` "a refused reaction says why, and shows as it was"; `ContractTest`; `UiFeaturesTest` "signing up
+logs you in" (a too-long password first).

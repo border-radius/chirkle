@@ -9,6 +9,9 @@ test("on a phone: list → room → send → back to the list", async ({ page })
   const ada = await apiUser("Ada");
   const room = await apiRoom(ada);
   await login(page, ada);
+  // No key hints on a touch screen: not the sidebar's Jump to row's either (QA BUG-266).
+  await expect(page.getByRole("button", { name: "Jump to" }).first()).toBeVisible();
+  await expect(page.locator("kbd:visible")).toHaveCount(0);
 
   await page.getByRole("link", { name: room.name }).tap();
   await expect(page.locator("header.room-header h1")).toHaveText(`#${room.name}`);

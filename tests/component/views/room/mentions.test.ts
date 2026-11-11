@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { newId } from "../../../../web/src/lib/id.ts";
 import { signedUp } from "../../../support/api.ts";
-import { composer, key, me, mount, msgEl, msgEls, newRoom, useRoomView } from "./harness.ts";
+import { composer, key, me, mount, msgEl, msgEls, newRoom, store, useRoomView } from "./harness.ts";
 
 describe("room view", () => {
   useRoomView();
@@ -25,6 +25,20 @@ describe("room view", () => {
       expect(msgEl(toMe.id)!.classList.contains("to-me")).toBe(true);
       // Your own message mentioning someone else, and a plain one: not highlighted.
       expect([toThem, plain].map((m) => msgEl(m.id)!.classList.contains("to-me"))).toEqual([false, false]);
+    });
+
+    it("a handle you took since someone gave it up is theirs in older messages, not yours (QA BUG-265)", async () => {
+      const [other, third] = [await signedUp("Other"), await signedUp(`Third ${newId().slice(0, 5)}`)];
+      const room = await newRoom();
+      const old = third.user.handle!;
+      const toThird = await other.api.send({ id: newId(), room: room.id, text: `hey @${old}` });
+      expect(toThird.mentions).toEqual([third.user.id]);
+      await third.api.setHandle(`${old.slice(0, 20)}_x`);
+      store.set({ user: await me.api.setHandle(old) });
+      await mount(room);
+      const mark = msgEl(toThird.id)!.querySelector(".body .mention")!;
+      expect([mark.textContent, mark.className]).toEqual([`@${old}`, "mention"]);
+      expect(msgEl(toThird.id)!.classList.contains("to-me")).toBe(false);
     });
 
     it("offers the room's people as @ is typed; Enter puts in their handle", async () => {

@@ -31,7 +31,7 @@ const react = (u: TestUser, message: string, emoji: string, on = true) =>
 const reactionsOf = async (u: TestUser, id: string) => ((await u.pb.collection("messages").getOne(id)).reactions ?? []) as Reaction[];
 
 describe("reactions: route (§20.2)", () => {
-  it("adds and removes the caller's reactions, any number of different emoji per user", async () => {
+  it("adds and removes the caller's reactions, several different emoji per user", async () => {
     const a = await newUser();
     const b = await newUser();
     const room = await newRoom(a);
@@ -171,6 +171,52 @@ describe("reactions: route (§20.2)", () => {
     const gone = await post(a, room.id, "soon gone");
     await a.pb.collection("messages").update(gone.id, { deleted: true });
     expect(await status(react(b, gone.id, "👍"))).toBe(400);
+  });
+
+  it("takes at most 20 different emoji on a message, all of them from one person if they like (QA BUG-258)", async () => {
+    const [a, b] = [await newUser(), await newUser()];
+    const room = await newRoom(a);
+    const msg = await post(a, room.id, "hello");
+    const emoji = [
+      "👍",
+      "❤️",
+      "😂",
+      "🎉",
+      "😮",
+      "😢",
+      "🙏",
+      "🔥",
+      "👀",
+      "💯",
+      "👏",
+      "🤔",
+      "😍",
+      "😎",
+      "🙌",
+      "💪",
+      "✅",
+      "😅",
+      "🥳",
+      "🤝",
+      "😴",
+    ];
+    for (const e of emoji.slice(0, 20)) await react(b, msg.id, e);
+    const refused = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (err: { status: number; response: { data: Record<string, { message: string }> } }) => [
+          err.status,
+          err.response.data.emoji?.message,
+        ],
+      );
+    expect((await reactionsOf(a, msg.id)).length).toBe(20);
+    expect(await refused(react(a, msg.id, emoji[20]!))).toEqual([400, "A message can have at most 20 different reactions."]);
+    await react(a, msg.id, emoji[1]!); // one of the 20
+    expect((await reactionsOf(a, msg.id)).length).toBe(20);
+    // Taking one back makes room.
+    await react(b, msg.id, emoji[0]!, false);
+    await react(a, msg.id, emoji[20]!);
+    expect((await reactionsOf(a, msg.id)).length).toBe(20);
   });
 
   it("a soft delete wipes the reactions", async () => {

@@ -142,6 +142,7 @@ onRecordCreateRequest((e) => {
   features.federation(e.app)?.people.refuseLabelName(e);
   require(`${__hooks}/lib/site.js`).checkInvite(e);
   features.telegram()?.people.refuseStandInName(e);
+  require(`${__hooks}/lib/users.js`).checkPasswordLength(e.requestInfo().body.password);
   e.next();
 }, "users");
 
@@ -159,6 +160,10 @@ onRecordAuthWithPasswordRequest((e) => {
 }, "users");
 
 onRecordRequestPasswordResetRequest((e) => require(`${__hooks}/lib/users.js`).skipStandInReset(e), "users");
+onRecordConfirmPasswordResetRequest((e) => {
+  require(`${__hooks}/lib/users.js`).checkPasswordLength(e.requestInfo().body.password);
+  e.next();
+}, "users");
 
 onRecordEnrich((e) => {
   require(`${__hooks}/lib/site.js`).showPasswordReset(e);

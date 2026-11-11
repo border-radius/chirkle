@@ -21,7 +21,8 @@ import { addReactionButton, reactionFocus, reactionRow } from "./reactions.ts";
 
 export interface MsgError {
   text: string;
-  retry: () => void;
+  /** None for a refusal that would only be refused again (QA BUG-258). */
+  retry?: () => void;
 }
 
 /** What to render, read fresh on every render. */
@@ -314,7 +315,7 @@ export function createMessageList(opts: {
       case "cancel":
         return cancelDelete(id);
       case "retry":
-        return errors.get(id)?.retry();
+        return errors.get(id)?.retry?.();
     }
   }
   /** The message (its id) of an event in it, and the button with a `data-act` it is on, if any. */
@@ -565,7 +566,7 @@ export function createMessageList(opts: {
       parts.push(
         gone
           ? h("div", { class: "body placeholder" }, m.deleted ? "Message deleted" : "The original message was deleted")
-          : h("div", { class: "body" }, bodyText(m.text)),
+          : h("div", { class: "body" }, bodyText(m.text, me && m.mentions?.includes(me.id) ? (me.handle ?? "") : "")),
       );
       if (m.edited_at && !m.deleted)
         parts.push(h("span", { class: "edited", title: `Edited ${formatFull(parsePb(m.edited_at))}` }, "(edited)"));
@@ -597,7 +598,7 @@ export function createMessageList(opts: {
     } else if (editing !== m.id && (reactable || repliable || deletable || selectable)) {
       parts.push(toolbar([reactable, repliable, selectable && !emptyForward(m), selectable, editable, deletable]) as HTMLElement);
     }
-    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, [`${err.text} `, btn("Retry", "retry")]));
+    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, err.retry ? [`${err.text} `, btn("Retry", "retry")] : err.text));
 
     const li = h("li", { class: cls, dataset: { id: m.id } }, parts);
     if (touched === m.id) li.classList.add("touched");
@@ -617,10 +618,10 @@ export function createMessageList(opts: {
 
   /**
    * Message text with its links clickable (§7.6.3), which open in a new tab (the router leaves them alone), and its
-   * "@handle"s marked (§41), yours more.
+   * "@handle"s marked (§41), yours more: `mine`, your handle when the server says it mentions you. A handle given up
+   * and taken by you since is someone else's in older messages (QA BUG-265).
    */
-  function bodyText(text: string): (string | HTMLElement)[] {
-    const mine = opts.me()?.handle;
+  function bodyText(text: string, mine: string): (string | HTMLElement)[] {
     return linkify(text).flatMap((part) =>
       typeof part === "string"
         ? splitMentions(part).map((t) =>

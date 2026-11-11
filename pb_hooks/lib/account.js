@@ -22,6 +22,7 @@ function changePassword(e) {
   const user = e.app.findRecordById("users", e.auth.id);
   if (!user.validatePassword(oldPassword)) throw fieldError("oldPassword", "That isn't your current password.");
   if (password === oldPassword) throw fieldError("password", "That is your current password. Choose a new one.");
+  require(`${__hooks}/lib/users.js`).checkPasswordLength(password);
   user.setPassword(password); // the field's own rules (length) are checked by save()
   user.refreshTokenKey(); // every token issued so far stops working: other devices are signed out
   e.app.save(user);

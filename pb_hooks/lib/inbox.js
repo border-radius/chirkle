@@ -1,6 +1,7 @@
 /// <reference path="../../types/pocketbase.d.ts" />
 // The "Mentions & replies" inbox (DESIGN.md §41): a row (`inbox`) for each thing to tell someone of: a message that
-// mentions them, a reply to one of their messages, a reaction to one. The messages hooks keep the rows as messages are
+// mentions them, a reply to one of their messages, someone's reactions to one (one row however many emoji they add:
+// its `emoji` is "", the list shows the ones they have on the message now). The messages hooks keep the rows as messages are
 // made, edited, deleted and reacted to, whichever way (the apps, a linked instance, the Telegram bridge); they go with a
 // deleted message, and a room you can't see any more keeps its rows out of the list. Each new or removed row is told
 // live to its person's apps (TOPIC). GET /api/chat/inbox lists them, newest first; POST /api/chat/inbox/seen notes how
@@ -17,6 +18,8 @@ const PAGE = 30;
 const CAP = 100;
 /** How much of a message's text a row shows. */
 const SNIPPET = 200;
+/** Most of one person's emoji a reaction row names in `emoji` ("👍🎉❤️😂🔥 +3"); `emojis` has them all. */
+const EMOJI_SHOWN = 5;
 
 /**
  * Does `user` have an inbox? Not a stand-in (a Telegram sender's, §26.3, or another instance's person's, §33.4): they
@@ -121,7 +124,8 @@ const before = (rec) => {
 
 /**
  * messages update (saved, in its transaction): a deleted message takes its rows; changed mentions add and remove
- * theirs; a reaction added to someone's message tells them, and taken back, no longer does.
+ * theirs; someone's first reaction to a message tells its author (one row for all their reactions to it), and the
+ * last of them taken back, no longer does.
  * @param {core.App} app
  * @param {core.Record} rec
  * @param {ReturnType<typeof before>} was
@@ -143,20 +147,12 @@ function messageChanged(app, rec, was) {
       if (!was.mentions.includes(user) && user !== parent) add(app, { user, kind: "mention", message: rec, actor: author });
     }
   }
-  const reactions = reactionsOf(rec);
-  /** @param {{ emoji: string, users: string[] }[]} list @param {string} emoji @param {string} user */
-  const has = (list, emoji, user) => list.some((r) => r.emoji === emoji && r.users.includes(user));
-  for (const r of reactions) {
-    for (const u of r.users)
-      if (!has(was.reactions, r.emoji, u)) add(app, { user: author, kind: "reaction", message: rec, actor: u, emoji: r.emoji });
-  }
-  for (const r of was.reactions) {
-    for (const u of r.users) {
-      if (!has(reactions, r.emoji, u)) {
-        remove(app, rec.id, "kind = 'reaction' && actor = {:a} && emoji = {:e}", { a: u, e: r.emoji });
-      }
-    }
-  }
+  /** @param {{ emoji: string, users: string[] }[]} list */
+  const people = (list) => new Set(list.flatMap((r) => r.users));
+  const nowBy = people(reactionsOf(rec));
+  const wasBy = people(was.reactions);
+  for (const u of nowBy) if (!wasBy.has(u)) add(app, { user: author, kind: "reaction", message: rec, actor: u });
+  for (const u of wasBy) if (!nowBy.has(u)) remove(app, rec.id, "kind = 'reaction' && actor = {:a}", { a: u });
 }
 
 /**
@@ -281,7 +277,8 @@ function shown(app, msg) {
 
 /**
  * GET /api/chat/inbox?before=&limit= → { items, more, seen_at }: the caller's rows, newest first, PAGE at a time
- * (`before`: the last item's `cursor`). Each item: { id, cursor, kind, emoji, created, read (a mention or reply read in
+ * (`before`: the last item's `cursor`). Each item: { id, cursor, kind, emoji (a reaction row's: the actor's emoji on
+ * the message now, at most EMOJI_SHOWN then " +n"; "" otherwise), emojis (all of them, in the message's order), created, read (a mention or reply read in
  * its room: not new, whatever seen_at says), room, message: { id, text, files,
  * created }, quote (a reply's: the caller's message it answers, { id, text, files }), actor: { id, name, avatar,
  * instance } }. In an anonymous room (§35) a mention or reply shows the room, not who wrote it.
@@ -313,6 +310,15 @@ function list(e) {
   const items = page.flatMap((row) => {
     const msg = messages.get(row.message);
     if (!msg) return [];
+    const emojis =
+      row.kind === "reaction"
+        ? reactionsOf(msg)
+            .filter((/** @type {{ emoji: string, users: string[] }} */ r) => r.users.includes(row.actor))
+            .map((/** @type {{ emoji: string }} */ r) => r.emoji)
+        : [];
+    if (row.kind === "reaction" && !emojis.length) return []; // taken back meanwhile: its row goes in the same save
+    const extra = emojis.length - EMOJI_SHOWN;
+    const emoji = row.kind === "reaction" ? `${emojis.slice(0, EMOJI_SHOWN).join("")}${extra > 0 ? ` +${extra}` : ""}` : row.emoji;
     const u = actors.get(row.actor);
     const hidden = row.kind !== "reaction" && msg.getBool("anonymous") && !e.hasSuperuserAuth();
     const actor = hidden
@@ -333,7 +339,8 @@ function list(e) {
         id: row.id,
         cursor: `${row.created}|${row.id}`,
         kind: row.kind,
-        emoji: row.emoji,
+        emoji,
+        emojis,
         created: row.created,
         read: !!row.read,
         room: row.room,

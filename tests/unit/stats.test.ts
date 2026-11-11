@@ -18,6 +18,8 @@ describe("stats figures (§40)", () => {
     const samples = [s(T - 30 * MIN, 9), s(T - 20 * MIN, 4), s(T - 10 * MIN, 7), s(T - 5 * MIN, 7)];
     expect(peak(samples, T - 25 * MIN)).toEqual({ online: 7, at: T - 10 * MIN });
     expect(peak(samples, T)).toBeNull();
+    // A peak of nobody: no time (QA BUG-263).
+    expect(peak([s(T - 10 * MIN, 0), s(T - 5 * MIN, 0)], T - 20 * MIN)).toEqual({ online: 0, at: 0 });
   });
 
   it("runs: a gap longer than two intervals breaks the line", () => {

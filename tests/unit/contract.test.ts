@@ -37,6 +37,7 @@ describe("shared contract", () => {
   it("the hooks' limits are the contract's", () => {
     expect(hookConst("lib/bulk.js", "MAX_MESSAGES")).toBe(contract.limits.maxSelected);
     expect(hookConst("lib/access.js", "MAX_MEMBERS")).toBe(contract.limits.roomMembers);
+    expect(hookConst("lib/users.js", "PASSWORD_MAX_BYTES")).toBe(contract.limits.passwordMaxBytes);
   });
 
   it("live messages (pb_hooks/lib/live.js) carry the fields the apps ask for", () => {

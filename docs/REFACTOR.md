@@ -516,3 +516,138 @@ and so do the Chromium e2e suite and the app's tests.
   The same check as one SQL query only got it to ~13 ms: the cost is the hook's call into Go, not the record. Checking
   each room once per request needs request-scoped state the JSVM hooks don't have; a cross-request cache would have to
   be invalidated on every membership change of a privacy check. Left as it is.
+
+## Round 5 (2026-11-11), architecture and product audit
+
+A review of the whole codebase (server hooks, web, Android, tests, tooling, docs) and of the product, after §35–§41. The
+foundations hold: one contract (`docs/API.md`, `shared/`), shared vectors run by all three implementations, a real-server
+test harness on every layer, the access matrix, size and speed checks in CI. What follows is where the next costs and
+risks are, ordered by value ÷ effort within each part. None of it is started; each item should land on its own with
+`npm run check`, the Chromium e2e suite and the app's tests green.
+
+### Codebase
+
+#### 47. Move the hot paths out of the JSVM (server) — high value, large
+- Most production incidents and perf work since 2026-10-14 trace back to the JS hook runtime, not to SQLite or to
+  PocketBase: the hooks pool overflowing on message pages (`--hooksPool=100`, PERF.md §6), `routerUse` holding runtimes
+  across `e.next()` (BUG-250), ~0.15 ms of Go↔JS calls per enriched message (item 46's `keepToRoom` note), the 1 vCPU
+  collapse at ~1000 live listeners (PERF.md §8: `live.js` sends inline), goja regexes taking minutes on bad input
+  (link previews), no request-scoped state.
+- Suggestion: build PocketBase as a Go framework (a `server/` Go module embedding `pocketbase.New()`, cross-built in
+  the release like the old bridge binaries were) and move only the hot, stable paths to Go: `lib/enrich.js`,
+  `lib/live.js` fan-out, `lib/lists.js` pages, the unread counts. The feature hooks (Telegram, federation, collections)
+  stay in JS. Same routes, same contract: the integration suite and `scripts/stress.ts` are the acceptance test (target:
+  PERF §8's storm and fan-out cases no longer collapse).
+- Cost: a Go build in CI and the npm tarball (one binary per platform instead of a fetched PocketBase); hooks and Go
+  code must agree on hook order (`lib/features.js`).
+
+#### 48. Migrations: unique names, and a baseline for new installs
+- Two migrations share a timestamp (`1760000045_mentions.js`, `1760000045_password_reset.js`); PocketBase orders them by
+  file name, which works only because they don't touch the same collection. Add a unit test that every
+  `pb_migrations/*.js` has a distinct numeric prefix (cheap, catches merges of two branches).
+- 48 migrations run on every fresh install and every test server start. Once 1.0 is cut, add a squashed baseline for
+  new databases (PocketBase's collections snapshot), keeping the chain for upgrades; `schema.snapshot.json` already pins
+  the result.
+
+#### 49. Retention for tables that only grow
+- `inbox` rows (one per mention, reply and reaction) are never pruned, nor `room_reads` of deleted rooms' users, nor the
+  soft-deleted messages' rows. Stats and federation queues already prune (`stats-prune`, `federation/worker.js`).
+- Measured in QA pass 35 (local, one person, 5 rooms): `GET /api/chat/unread` takes ~7 ms with no inbox rows,
+  ~40 ms with 5,000 rows all read, and ~100 ms with 5,000 unread. `counts()` (`lib/inbox.js`) scans every row of the
+  person's for the per-room mentions, read or not (index `(user, created)`, the bound is per room); the apps call it
+  after every read and inbox event.
+- Suggestion: a daily prune (the `lib/worker.js` loop): inbox rows past the newest 500 per person or older than 180
+  days; and an index `(user, room, created)` with `counts()` driven per room from `room_reads`, so read rows are skipped; an optional `site.retention_days` for messages (a product decision, DESIGN.md §2 says history is never pruned
+  today).
+
+#### 50. Say what kind of account a user is
+- Telegram senders and linked instances' people are told apart by their e-mail domain (`@telegram.invalid`,
+  `@federation.invalid`) in `lib/inbox.js`, `lib/users.js`, `telegram/people.js` and `federation/people.js`.
+- Suggestion: a `users.kind` select (`person`, `telegram`, `peer`), set by the bridges, backfilled by a migration from
+  the same patterns; hooks and rules test the field. The e-mails stay as they are (PocketBase needs one).
+
+#### 51. Operational visibility
+- Today there is `/api/health` and the moderators' `/stats` page. Workers stalling (the fed_queue rows left by a raw
+  SQL delete, security audit 2026-10-29), the hooks pool filling and queues backing up are found by users.
+- Suggestion: a superuser-only `GET /api/chat/metrics` (queue depths of `tg_queue`, `fed_queue`, `link_queue`, media
+  backlog, `storage_cleanup`; each worker's last run and lock; realtime clients; DB size), shown on `/stats` for
+  superusers, and in Prometheus text form for those who scrape it.
+
+#### 52. A size budget for what a visit loads, not for each file (web)
+- `app.js`'s budget has been raised about 40 times (DESIGN.md §7.7 lists them). Its consequences shape the code more
+  than any other rule: lazy chunks may not share modules, so they get "kits" through `web/src/lazy.ts`; `room.ts` could
+  not be split (item 44) because a module boundary cost 0.10 KB; fixes are weighed in tenths of a kilobyte.
+- Suggestion: keep `profile-web` (time to load, switch, scroll: what people feel) as the hard check, and replace the
+  per-file caps by one budget for the critical path (html + app.js + app.css + what the first room needs), allowing
+  shared chunks loaded with `<link rel="modulepreload">` (HTTP/2 makes a fourth request nearly free, and they are
+  immutable-cached). Then drop the kit indirection where it only served the rule.
+
+#### 53. Split `views/room.ts` again (web), after 52
+- 1,155 lines (892 at round 4): the collections' badges, parking/resuming, the viewer and grid wiring and the composer
+  wiring all live in one closure. Each is a module with a narrow host, as `writes.ts` was (item 41).
+
+#### 54. One schema for the `/api/chat/*` answers
+- `shared/contract.json` covers fields and limits, `docs/API.md` describes routes in prose. The routes' JSON shapes are
+  written three times (hooks, `web/src/lib/types.ts`, Android's `Models.kt`) and checked only by the tests each side
+  happens to have.
+- Suggestion: JSON Schemas in `shared/schema/` for each route's answer; the integration tests validate every answer
+  they get against them (one helper in `tests/integration/helpers.ts`), and `ContractTest.kt` decodes the schemas'
+  examples with the app's models. Generated types are optional; validation alone catches the drift.
+
+#### 55. Parity by construction (Android)
+- QA pass 20 found six app bugs that were unported web fixes; PARITY.md tracks specs, not fixes.
+- Suggestion: every row of a QA table states where the fix went (`web`, `app`, `server`, or `n/a` with a reason), and a
+  unit test fails on a row without it. Extend `shared/vectors/` to the unread counts and the inbox, as `room.json` did
+  for the room controller.
+
+#### 56. Strings in one place (web and Android)
+- Every user-facing string is inline (web views; Android composables: `strings.xml` has 3 lines). That blocks
+  translations (see P8) and makes copy changes a code search.
+- Suggestion: a `strings.ts` for the web (lazy chunks get theirs through their kit) and `strings.xml` resources for the
+  app, moved screen by screen; no i18n framework until a second language exists.
+
+#### 57. A doctor for the dev environment
+- Many "flakes" in the QA notes were the environment: no fonts (FONTCONFIG_FILE), a full `/tmp`, stale PocketBase
+  children holding a port, missing ffmpeg/versitygw silently skipping tests.
+- Suggestion: `npm run doctor` (`scripts/doctor.mjs`): checks `bin/pocketbase`'s version, ffmpeg, versitygw, the
+  Playwright browsers and their libraries (launch one page with an `<input>`), free space in `TMPDIR`, ports in use by
+  stray `pocketbase serve`; prints what is missing and how to fix it. `playwright.config.ts`'s global setup runs it.
+
+#### 58. Quarantine known flakes and measure them
+- Known flakes (`attachments.spec.ts:184` Ctrl-click tab, `cache.spec.ts:135` at 4 workers) are remembered, not
+  recorded. Tag them `@flaky`, run them in a nightly job with `--repeat-each=20`, and record the failure rate; a fix
+  removes the tag.
+
+#### 59. Docs that can be read
+- `DESIGN.md` is 3,839 lines, `QA.md` 2,801, `ANDROID.md` 1,670. Suggestion: `docs/design/NN-topic.md` per section
+  with `DESIGN.md` as the index; QA passes older than a month move to `docs/history/QA-<month>.md` (bug numbers stay
+  greppable). Long "raised for …" lists (§7.7) become one line plus the history file.
+
+### Product
+
+- **P1. Delete my account, export my data.** Users can't delete themselves (`users.deleteRule` is null), and
+  `beforeUserDelete` refuses even a superuser once the account wrote a message. Nobody can download what they wrote.
+  A profile action that exports (messages, files list, collections as JSON) and deletes: the account's personal data
+  goes (name → "Deleted account", avatar, e-mail, sessions, collections), its messages stay under that name, or are
+  deleted too (the person's choice). Expected by users and by GDPR.
+- **P2. Notifications that reach a closed app.** The web notifies only while a tab is open (§34); Android polls every
+  15 minutes or more (WorkManager). For a chat this is the largest gap. Without Google: UnifiedPush on Android (ntfy or
+  any distributor, F-Droid-friendly) and standard Web Push (VAPID) on the web, both opt-in, the server sending only
+  "something new in room X" (no message text through third parties).
+- **P3. Report a message.** Moderators exist (§36) but nobody can flag anything to them. A "Report" action, a queue on
+  the moderators' side (in Mentions & replies or `/stats`), resolved by delete or ban.
+- **P4. Mute and notification levels per room.** Today: notify for DMs, replies and mentions, or "every message" per
+  room (§34.5). Add "nothing" (mute, also hides the unread badge's prominence) and a mute-until time.
+- **P5. Typing indicator and presence in DMs.** A non-goal at the MVP (§2) and listed in §14. Cheap now: a custom
+  realtime topic (as `chat/messages`, PERF §7), DMs and small rooms only, no stored state.
+- **P6. Pinned messages.** One or a few per room, shown under the header; room owners and moderators pin.
+- **P7. Two-factor sign-in.** PocketBase has OTP and MFA built in; turn it on per account from the profile, with
+  recovery codes. Moderators and superusers first.
+- **P8. Translations.** After item 56: Russian first (the Telegram and cyrillic users), via Weblate for the app's
+  F-Droid listing.
+- **P9. Room invite links.** A private room's owner shares a link that adds whoever opens it (expiring, revocable),
+  instead of adding each member by name.
+- **P10. Storage quotas.** DESIGN.md §13 "Still open" #2: per-user stored bytes, now easy with the refcounted `files`
+  table (§37): a sum per owner, checked on upload, shown on the profile.
+- **P11. First-run setup.** A fresh server asks its first visitor (with a one-time code printed in the log) for the
+  site name, signups mode and SMTP, instead of sending them to PocketBase's admin UI.

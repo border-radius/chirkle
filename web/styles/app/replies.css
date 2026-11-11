@@ -118,9 +118,11 @@
   font-weight: 600;
 }
 
+/* In the text's colour: the accent on the tint, in a message tinted as yours too, was under 4.5:1 (QA BUG-262). */
 .mention.me {
   border-radius: 4px;
   background: var(--tint);
+  color: var(--text);
 }
 
 .room-section[data-section="inbox"] a::before {

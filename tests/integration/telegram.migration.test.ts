@@ -51,7 +51,8 @@ describe("migration 1760000047_telegram_supergroup_ids.js", () => {
       aux.close();
     }
 
-    migrate(dataDir, "down", "1");
+    // Back to before 1760000047 (1760000048 came after it), then up again.
+    migrate(dataDir, "down", "2");
     migrate(dataDir, "up");
     const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
     try {

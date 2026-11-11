@@ -666,8 +666,11 @@ class RoomController(
     /** A message's reactions as they should show: the server's, with my changes on their way applied. */
     fun reactions(m: Message): List<Reaction> = writer.reactions(m)
 
-    /** Add ([on]) or remove my [emoji], shown at once. Null when not possible. Resolves false if it failed. */
-    fun react(id: String, emoji: String, on: Boolean): Deferred<Boolean>? = writer.react(id, emoji, on)
+    /**
+     * Add ([on]) or remove my [emoji], shown at once. Null when not possible. Resolves null once it is in, else why not
+     * ("" when the server wasn't reached).
+     */
+    fun react(id: String, emoji: String, on: Boolean): Deferred<String?>? = writer.react(id, emoji, on)
 
     /** Hide the "new messages below" pill: the list is at the bottom now. */
     fun dismissPill() {

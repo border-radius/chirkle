@@ -65,7 +65,8 @@ export function personHours(samples: readonly Sample[], from: number, minutes: n
 export function peak(samples: readonly Sample[], from: number): { online: number; at: number } | null {
   let best: { online: number; at: number } | null = null;
   for (const s of samples) if (s[0] >= from && (!best || s[1] > best.online)) best = { online: s[1], at: s[0] };
-  return best;
+  // Nobody at any time: no time to name (it said "0 at 02:45 AM", QA BUG-263).
+  return best && !best.online ? { online: 0, at: 0 } : best;
 }
 
 /**

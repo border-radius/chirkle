@@ -44,6 +44,12 @@ describe("forgot password (§39)", () => {
     const token = resetToken(mail);
     expect(token).not.toBe("");
 
+    // Too long for PocketBase: refused with the reason, and the link still works (QA BUG-267).
+    const long = await confirm(token, "z".repeat(100)).then(
+      () => null,
+      (e: { response: { data: { password?: { message: string } } } }) => e.response.data.password?.message,
+    );
+    expect(long).toMatch(/^Use at most 71 characters/);
     await confirm(token, "brand-new-pass");
     expect(await status(u.pb.collection("users").authRefresh())).toBe(401);
     expect(await status(client().collection("users").authWithPassword(u.email, u.password))).toBe(400);

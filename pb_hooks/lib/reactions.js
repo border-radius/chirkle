@@ -11,6 +11,12 @@ const { isService } = require(`${__hooks}/lib/messages.js`);
  */
 
 /**
+ * Most different emoji on one message (QA BUG-258). One person may add as many of them as they like: their reactions
+ * to a message are one row in its author's Mentions & replies (lib/inbox.js), however many there are.
+ */
+const MAX_EMOJI = 20;
+
+/**
  * @param {string} field
  * @param {string} message
  */
@@ -55,6 +61,20 @@ function setReaction(list, emoji, user, on) {
 }
 
 /**
+ * Why `user`'s new `emoji` reaction can't be added to `list` (a message's), "" when it can: at most MAX_EMOJI
+ * different emoji (QA BUG-258). Taking one back is always fine.
+ * @param {Reaction[]} list
+ * @param {string} emoji
+ * @param {string} user
+ */
+function overLimit(list, emoji, user) {
+  if (list.some((r) => r.emoji === emoji && r.users.includes(user))) return "";
+  if (!list.some((r) => r.emoji === emoji) && list.length >= MAX_EMOJI)
+    return `A message can have at most ${MAX_EMOJI} different reactions.`;
+  return "";
+}
+
+/**
  * POST /api/chat/reactions { message, emoji, on } → the message, as GET /api/collections/messages/records/:id
  * answers it (the same ?expand and ?fields apply): the caller's `emoji` reaction on
  * `message` is there (`on: true`) or not (`on: false`). Idempotent, so a retry or a double click can't flip it back.
@@ -90,18 +110,23 @@ function react(e) {
   // Read and write in one transaction: two people reacting at once both count. (Errors are thrown after it, so
   // they keep their status.)
   let problem = "";
+  let limit = "";
   e.app.runInTransaction((tx) => {
     const rec = tx.findRecordById("messages", id);
     msg = rec;
     if (rec.getBool("deleted")) problem = "That message was deleted.";
     else if (tx.findRecordById("rooms", rec.getString("room")).getBool("archived")) problem = "This room is archived and read-only.";
     if (problem) return;
-    const next = setReaction(reactionsOf(rec), /** @type {string} */ (emoji), me.id, on);
+    const list = reactionsOf(rec);
+    const next = setReaction(list, /** @type {string} */ (emoji), me.id, on);
     if (!next) return;
+    if (on) limit = overLimit(list, /** @type {string} */ (emoji), me.id);
+    if (limit) return;
     rec.set("reactions", next);
     tx.save(rec);
   });
   if (problem) throw badRequest("message", problem);
+  if (limit) throw badRequest("emoji", limit);
   // The whole message, not just its reactions: a copy the client patched with a newer `updated` would hide
   // changes it hasn't heard of yet (an edit while its realtime connection was down).
   msg.set("reactions", reactionsOf(msg));
@@ -109,4 +134,4 @@ function react(e) {
   return e.json(200, msg);
 }
 
-module.exports = { react, reactionsOf, setReaction };
+module.exports = { overLimit, react, reactionsOf, setReaction };

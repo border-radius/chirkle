@@ -164,8 +164,12 @@ fun MessageRow(
                             val edited = m.editedAt.isNotEmpty()
                             // "(edited)" follows the text on its line, as on the web.
                             val mark = Chirkle.colors.tint
-                            val text = remember(m.text, accent, edited, muted, actions.myHandle, mark) {
-                                val t = linked(m.text, accent, actions.myHandle, mark) { openLink(context, it) }
+                            val ink = MaterialTheme.colorScheme.onSurface
+                            // Your handle only where the server says the message mentions you: one given up and taken by
+                            // you since is someone else's in older messages (QA BUG-265).
+                            val mine = if (me != null && me in m.mentions) actions.myHandle else ""
+                            val text = remember(m.text, accent, edited, muted, mine, mark, ink) {
+                                val t = linked(m.text, accent, mine, mark, ink) { openLink(context, it) }
                                 if (!edited) t else androidx.compose.ui.text.buildAnnotatedString {
                                     append(t)
                                     append(" ")

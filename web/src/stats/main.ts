@@ -384,9 +384,13 @@ function render(s: Stats) {
         tile(
           "Peak today",
           recorded(peakToday ? num.format(peakToday.online) : "–"),
-          peakToday ? `at ${time.format(peakToday.at)}` : undefined,
+          peakToday?.at ? `at ${time.format(peakToday.at)}` : undefined,
         ),
-        tile("Peak, 7 days", recorded(peakWeek ? num.format(peakWeek.online) : "–"), peakWeek ? dayTime.format(peakWeek.at) : undefined),
+        tile(
+          "Peak, 7 days",
+          recorded(peakWeek ? num.format(peakWeek.online) : "–"),
+          peakWeek?.at ? dayTime.format(peakWeek.at) : undefined,
+        ),
       ]),
     ]),
     section(

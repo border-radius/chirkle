@@ -118,6 +118,20 @@ describe("login view (§7.1)", () => {
     await vi.waitFor(() => expect(onLogin).toHaveBeenCalled());
   });
 
+  it("a password over PocketBase's 71 bytes says why before asking the server, which wouldn't (QA BUG-267)", async () => {
+    const api = newApi();
+    const ctl = instrument(api);
+    mount(api);
+    tab(root, "Sign up").click();
+    fill(root, { name: `Long ${uniq()}`, email: `${uniq()}@test.local`, password: "ж".repeat(40) });
+    submit(root);
+    expect([...root.querySelectorAll(".field-error")].map((e) => e.textContent).join("")).toMatch(/^Use at most 71 characters/);
+    expect(ctl.calls("signUp")).toBe(0);
+    fill(root, { password: "x".repeat(71) });
+    submit(root);
+    await vi.waitFor(() => expect(onLogin).toHaveBeenCalled());
+  });
+
   it("QA BUG-40: says the email or password is wrong on a refused login, and keeps the input", async () => {
     mount();
     const email = `${uniq()}@test.local`;

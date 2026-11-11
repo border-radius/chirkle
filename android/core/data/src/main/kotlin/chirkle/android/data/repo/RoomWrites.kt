@@ -3,7 +3,9 @@
 // by the server's answer. Requests run in [writes], so they reach the server even if the screen goes meanwhile.
 package chirkle.android.data.repo
 
+import chirkle.android.data.api.ApiError
 import chirkle.android.data.api.ChirkleApi
+import chirkle.android.data.api.reasonOf
 import chirkle.android.data.lib.MessageWindow
 import chirkle.android.data.lib.merge
 import chirkle.android.data.lib.newId
@@ -169,7 +171,11 @@ internal class RoomWrites(
         return list
     }
 
-    fun react(id: String, emoji: String, on: Boolean): Deferred<Boolean>? {
+    /**
+     * Resolves null once it is in; else (the reaction then shows as it was) the server's reason for a refusal (at most
+     * so many reactions, QA BUG-258), or "" when it didn't get there (worth a retry).
+     */
+    fun react(id: String, emoji: String, on: Boolean): Deferred<String?>? {
         val m = host.find(id) ?: return null
         if (!host.reactable(m)) return null
         val seq = ++reactSeq
@@ -177,21 +183,24 @@ internal class RoomWrites(
         mine[emoji] = on to seq
         val latest = { mine[emoji]?.second == seq }
         host.publish(host.inPlace())
-        val done = CompletableDeferred<Boolean>()
+        val done = CompletableDeferred<String?>()
         writes.launch {
-            val ok = inTurn(id) {
-                if (!latest()) return@inTurn true // changed again before it went out: the later change says what to send
-                val saved = runCatching { api.react(id, emoji, on) }.getOrNull()
-                if (saved != null) host.scope.launch { if (host.find(id) != null) host.win = host.win.merge(listOf(saved)) }
-                saved != null
+            val failure = inTurn(id) {
+                if (!latest()) return@inTurn null // changed again before it went out: the later change says what to send
+                val result = runCatching { api.react(id, emoji, on) }
+                result.getOrNull()?.let { saved -> host.scope.launch { if (host.find(id) != null) host.win = host.win.merge(listOf(saved)) } }
+                result.exceptionOrNull()?.let { e -> if (e is ApiError && e.status in 400..499 && e.status != 429) reasonOf(e) else "" }
             }
             host.scope.launch {
-                if (latest()) {
+                // Changed again meanwhile: the later change shows, and says whether it worked. Asked before the change is
+                // dropped below, after which it never is the latest (it always said "worked": QA BUG-260).
+                val last = latest()
+                if (last) {
                     mine.remove(emoji)
                     if (mine.isEmpty() && reacting[id] === mine) reacting.remove(id)
                     host.publish(host.inPlace())
                 }
-                done.complete(ok || !latest())
+                done.complete(if (last) failure else null)
             }
         }
         return done

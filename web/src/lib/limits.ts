@@ -10,6 +10,11 @@ export const LIMITS = {
   roomName: 48,
   /** users password min (PocketBase's auth default) */
   passwordMin: 8,
+  /**
+   * users password max, in UTF-8 bytes: bcrypt's 72, PocketBase's 71. PocketBase refuses a longer one on signup without
+   * saying why (QA BUG-267); the hooks say it for a change or a reset (PASSWORD_MAX_BYTES, lib/users.js).
+   */
+  passwordMaxBytes: 71,
   /** users.avatar maxSize (§15.1) */
   avatarBytes: 2 * 1024 * 1024,
   /** users.avatar mimeTypes (§15.1) */

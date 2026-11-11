@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect } from "@playwright/test";
 import { apiRoom, apiSend, apiUser, composer, message, openRoom, send, test } from "./fixtures.ts";
 
@@ -46,6 +47,12 @@ test("mentions (§41): @ suggests people, the mention is highlighted for them, t
   await item.locator("a").click();
   await expect(message(b, "thanks")).toHaveClass(/to-me/);
   await expect(message(b, "thanks").locator(".mention.me")).toHaveText(`@${bob.handle}`);
+  // Readable in both themes, on a message tinted as yours (QA BUG-262: 4.14:1 light, 4.33:1 dark).
+  for (const colorScheme of ["light", "dark"] as const) {
+    await b.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    const { violations } = await new AxeBuilder({ page: b }).include(".to-me").withRules(["color-contrast"]).analyze();
+    expect(violations.flatMap((v) => v.nodes.map((n) => `${colorScheme}: ${n.target.join(" ")}`))).toEqual([]);
+  }
   if (SHOTS) await b.screenshot({ path: `${SHOTS}/room.png` });
   await send(b, "you're welcome");
 });

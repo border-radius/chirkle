@@ -10,6 +10,8 @@ object Limits {
     const val USER_NAME = 32
     const val ROOM_NAME = 48
     const val PASSWORD_MIN = 8
+    /** In UTF-8 bytes: bcrypt's 72, PocketBase's 71, which refuses a longer one on signup without saying why (QA BUG-267). */
+    const val PASSWORD_MAX_BYTES = 71
     const val AVATAR_BYTES = 2L * 1024 * 1024
     val AVATAR_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
     const val ATTACHMENTS = 10

@@ -609,7 +609,7 @@ while its first page loads.
 | "Mentions & replies" page (§41.4), loaded when it is opened | ≤ 2 KB script (`views/inbox.ts`), ≤ 1 KB stylesheet (`web/styles/inbox.css`) |
 | The composer's "@" suggestions (§41.3), loaded when an "@" is typed | ≤ 2 KB script (`ui/mention-suggest.ts`; styled by `emoji.css`) |
 | Settings (`/me`, `views/profile.ts`), loaded when it is opened (since 2026-11-10) | ≤ 3.5 KB script |
-| Log in and sign up (`views/login.ts`), loaded for those pages, at once for someone not signed in (since 2026-11-10) | ≤ 2.30 KB script (2 KB until forgot password's modes (§39) joined it) |
+| Log in and sign up (`views/login.ts`), loaded for those pages, at once for someone not signed in (since 2026-11-10) | ≤ 2.35 KB script (2.30 KB until the signup password's length check, QA BUG-267; 2 KB until forgot password's modes (§39) joined it) |
 | The forward dialog (§21.3, `views/room/forward.ts`), loaded when Forward is first chosen (since 2026-11-10) | ≤ 1.5 KB script |
 | The people search (§16.5, `ui/user-search.ts`): New message, and loaded with the room access dialog (since 2026-11-10) | ≤ 1.5 KB script |
 | Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
@@ -1808,8 +1808,9 @@ neither.
 
 ## 20. Reactions and emoji
 
-Anyone who can read a message can react to it with emoji, as many different ones as they like, and the composer has
-an emoji button. Decisions: §13 (2026-10-11, reactions and emoji).
+Anyone who can read a message can react to it with emoji, as many as they like up to 20 different ones on a message
+(QA BUG-258: before, one person could put all ~1,800 on one message). However many one person adds, they are one row
+in the author's Mentions & replies (§41.4, 2026-11-11), and the composer has an emoji button. Decisions: §13 (2026-10-11, reactions and emoji).
 
 ### 20.1 Data model
 
@@ -1838,8 +1839,10 @@ the reconnect refetch.
 
 1. `emoji` not in the set, or `on` not a boolean: 400.
 2. A message the caller can't see (the messages view rule, via `canAccessRecord`) is a 404, like one that doesn't exist.
-3. In one transaction: read the message, refuse it if it is deleted or in an archived room (400), change the list,
-   save. Because the read and the write share one transaction, two people reacting at the same moment both count.
+3. In one transaction: read the message, refuse it if it is deleted or in an archived room (400), or if the
+   reaction would be its 21st different emoji ("A message can have at most 20 different reactions."; 400 on
+   `emoji`, which the web shows under
+   the message without Retry and the app as a toast), change the list, save. Because the read and the write share one transaction, two people reacting at the same moment both count.
 4. Nothing to change (already there, or not there to remove): no save, the same answer.
 
 Saving the message bumps `updated`. The change therefore reaches every client as a messages `update` event, wins over
@@ -3809,8 +3812,12 @@ after a 120 ms pause and shows a list over the composer like the ":name" emoji (
 
 ### 41.4 The inbox (`inbox`, `inbox_reads`, `pb_hooks/lib/inbox.js`)
 
-A row per thing told to you: `mention`, `reply` (to your message) or `reaction` (to your message, with its emoji);
-`actor`, `message`, `room`. Written in the messages hooks: a mention added or removed by an edit, a reaction taken
+A row per thing told to you: `mention`, `reply` (to your message) or `reaction` (someone's reactions to your
+message: one row for all of theirs, made by their first and gone with their last, 2026-11-11; migration
+`1760000048` merged the rows of one per emoji from before); `actor`, `message`, `room`. A reaction row's `emoji` is
+"" in the table; the list answers with the actor's emoji on the message now: `emojis` (all of them) and `emoji`
+(the first five, then " +n": "👍🎉❤️😂🔥 +3", which the apps show as they are). Another emoji from the same
+person changes no row: it is neither told live nor new again. Written in the messages hooks: a mention added or removed by an edit, a reaction taken
 back and a deleted message take theirs away; your own doings, stand-ins and the reply's author mentioned too get none.
 No API rules: `GET /api/chat/inbox?before=<cursor>&limit=` lists yours, newest first, leaving out rooms you can't see
 now; in an anonymous room the room is the actor of a mention or reply. `POST /api/chat/inbox/seen { at }` moves
@@ -3822,7 +3829,7 @@ read in their room: no reading one twice; a reaction is only seen here) and `men
 messages that mention or reply to you). The sidebar's first row, right under Jump to, is **Mentions & replies**
 (`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
 `chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
-in #room", "replied to you" (with your message quoted) or "reacted 👍 to your message", newest first, "Show older",
+in #room", "replied to you" (with your message quoted) or "reacted 👍🎉 to your message", newest first, "Show older",
 what is new tinted (each item's `read`: a mention or reply read in its room isn't new; a read sent while the inbox
 count isn't 0 fetches the counts again); each opens its message in its room. Opening it sees everything listed.
 

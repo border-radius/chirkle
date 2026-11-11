@@ -20,9 +20,17 @@ import androidx.compose.ui.text.withStyle
 
 /**
  * [text] with its http(s) links as links in [color]; [open] is called with a link's address. Its "@handle"s (DESIGN.md
- * §41) in [color] and bold, yours ([mine], your handle) on [mineBackground] too, as the web's .mention and .mention.me.
+ * §41) in [color] and bold, yours ([mine], your handle) in [mineColor] on [mineBackground], as the web's .mention and
+ * .mention.me (the accent on the tint was under 4.5:1: QA BUG-262).
  */
-fun linked(text: String, color: Color, mine: String = "", mineBackground: Color = Color.Unspecified, open: (String) -> Unit): AnnotatedString =
+fun linked(
+    text: String,
+    color: Color,
+    mine: String = "",
+    mineBackground: Color = Color.Unspecified,
+    mineColor: Color = color,
+    open: (String) -> Unit,
+): AnnotatedString =
     buildAnnotatedString {
         val style = TextLinkStyles(SpanStyle(color = color, textDecoration = TextDecoration.Underline))
         for (part in linkify(text)) {
@@ -31,7 +39,7 @@ fun linked(text: String, color: Color, mine: String = "", mineBackground: Color 
                     when (piece) {
                         is TextPart.Mention -> {
                             val me = mine.isNotEmpty() && piece.handle == mine
-                            withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold, background = if (me) mineBackground else Color.Unspecified)) {
+                            withStyle(SpanStyle(color = if (me) mineColor else color, fontWeight = FontWeight.SemiBold, background = if (me) mineBackground else Color.Unspecified)) {
                                 append(piece.text)
                             }
                         }

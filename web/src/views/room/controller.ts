@@ -113,9 +113,10 @@ export interface RoomController {
   reactions(m: Message): readonly Reaction[];
   /**
    * Add (`on`) or remove my `emoji` reaction, shown at once. null: not possible (not in the window, not reactable).
-   * Resolves false if it failed (the reaction then shows as it was).
+   * Resolves true once it is in; else (the reaction then shows as it was) the server's reason for a refusal (at most so
+   * many reactions, QA BUG-258), or false (not reached: worth a retry).
    */
-  react(id: string, emoji: string, on: boolean): Promise<boolean> | null;
+  react(id: string, emoji: string, on: boolean): Promise<boolean | string> | null;
 }
 
 export function createRoomController(opts: {

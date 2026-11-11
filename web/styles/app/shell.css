@@ -245,13 +245,13 @@ div.brand .brand-title::after {
   flex: 1;
 }
 
+/* Quieter until hovered by colour, not opacity: --muted at 0.75 failed 4.5:1 (QA BUG-259). */
 .jump-button kbd {
-  opacity: 0.75;
-  transition: opacity 0.15s;
+  transition: color 0.15s;
 }
 
 .jump-row:hover kbd {
-  opacity: 1;
+  color: var(--text);
 }
 
 .jump-button:active:not(:disabled) {

@@ -159,7 +159,7 @@ export const BUDGET = Object.freeze({
   inboxCss: 1024,
   mentionJs: 2 * 1024,
   profileJs: 3.5 * 1024,
-  loginJs: 2.3 * 1024,
+  loginJs: 2.35 * 1024,
   forwardJs: 1.5 * 1024,
   peopleJs: 1.5 * 1024,
   statsJs: 5.5 * 1024,

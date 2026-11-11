@@ -158,7 +158,7 @@ export function createRoomHeader(opts: {
       const on = notifyAll(room.id);
       out.push({
         label: "Notify of every message",
-        hint: on ? "On — you hear about everything here" : "Off — only replies to you",
+        hint: on ? "On — you hear about everything here" : "Off — only mentions and replies to you",
         run: () => void setNotifyAll(room.id, !on),
         icon: "i-bell",
         checked: on,

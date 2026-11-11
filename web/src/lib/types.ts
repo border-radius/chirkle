@@ -212,8 +212,10 @@ export interface InboxItem {
   /** Where the next page starts (`before`). */
   cursor: string;
   kind: "mention" | "reply" | "reaction";
-  /** A reaction's emoji, "" otherwise. */
+  /** A reaction row's: the actor's emoji on the message, the first five then " +n" (§41.4); "" otherwise. */
   emoji: string;
+  /** A reaction row's emoji, all of them. Missing from servers before 2026-11-11. */
+  emojis?: string[];
   created: string;
   /** A mention or reply already read in its room: not new here. Missing from servers before. */
   read?: boolean;

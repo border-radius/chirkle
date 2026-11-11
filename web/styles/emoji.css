@@ -119,7 +119,17 @@
   background: var(--hover);
 }
 
-/* The composer's "@" suggestions (§41): a person's handle after their name. */
+/* The composer's "@" suggestions (§41): a person's handle after their name, each on one line, cut with "…" when
+   long (a long name wrapped to three lines and pushed the handle out of the list: QA BUG-261). */
+.emoji-suggest .who,
 .emoji-suggest .handle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emoji-suggest .handle {
+  flex: 0 1 auto;
   color: var(--dim);
 }

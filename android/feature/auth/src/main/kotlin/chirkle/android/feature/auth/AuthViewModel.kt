@@ -66,6 +66,10 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
             fieldErrors = mapOf("password" to "Must be at least ${Limits.PASSWORD_MIN} characters.")
             return
         }
+        if (mode == AuthMode.SignUp && password.toByteArray(Charsets.UTF_8).size > Limits.PASSWORD_MAX_BYTES) {
+            fieldErrors = mapOf("password" to "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation).")
+            return
+        }
         busy = true
         viewModelScope.launch {
             try {

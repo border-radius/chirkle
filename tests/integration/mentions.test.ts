@@ -21,6 +21,7 @@ interface InboxItem {
   cursor: string;
   kind: "mention" | "reply" | "reaction";
   emoji: string;
+  emojis: string[];
   created: string;
   read: boolean;
   room: string;
@@ -158,12 +159,13 @@ describe("inbox (§41)", () => {
     const mention = await post(b, room.id, `hey @${await handleOf(a)}`);
     const reply = await post(b, room.id, `answer @${await handleOf(a)}`, { reply_to: mine.id });
     await react(b, mine.id, "👍");
+    await react(b, mine.id, "🎉"); // the same person's second: the same row
     await react(a, mine.id, "🎉"); // your own: nothing
     await post(a, room.id, `talking to myself @${await handleOf(a)}`);
 
     let got = await inbox(a);
     expect(got.items.map((i) => [i.kind, i.message.id, i.emoji])).toEqual([
-      ["reaction", mine.id, "👍"],
+      ["reaction", mine.id, "👍🎉"],
       ["reply", reply.id, ""],
       ["mention", mention.id, ""],
     ]);
@@ -182,14 +184,31 @@ describe("inbox (§41)", () => {
     await a.pb.send("/api/chat/reads", { method: "POST", body: { room: room.id } });
     expect((await counts(a)).mentions[room.id]).toBeUndefined();
 
-    // Taken back: gone.
+    expect(got.items[0]!.emojis).toEqual(["👍", "🎉"]);
+
+    // Taken back: one of them, still there with the other; both, gone.
     await react(b, mine.id, "👍", false);
+    expect((await inbox(a)).items.map((i) => [i.kind, i.emoji])).toContainEqual(["reaction", "🎉"]);
+    await react(b, mine.id, "🎉", false);
     await b.pb.collection("messages").update(reply.id, { deleted: true });
     await b.pb.collection("messages").update(mention.id, { text: "hey nobody" });
     got = await inbox(a);
     expect(got.items).toEqual([]);
     // b has nothing: their own doings aren't told to them.
     expect((await inbox(b)).items).toEqual([]);
+  });
+
+  it("one person's reactions to a message are one row, however many: the first five named, then how many more", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const room = await newRoom(a);
+    const mine = await post(a, room.id, "react to this");
+    const emoji = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏"];
+    for (const e of emoji) await react(b, mine.id, e);
+    const got = await inbox(a);
+    expect(got.items).toHaveLength(1);
+    expect(got.items[0]).toMatchObject({ kind: "reaction", emoji: "👍❤️😂🎉😮 +2", emojis: emoji });
+    expect((await counts(a)).inbox).toBe(1);
   });
 
   it("a mention or reply read in its room is seen in the inbox too; a reaction isn't", async () => {

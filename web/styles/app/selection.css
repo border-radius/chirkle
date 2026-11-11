@@ -207,9 +207,11 @@ dialog.switcher[open] {
   font-size: 0.75rem;
 }
 
+/* Touch screens: no key hints, the sidebar's Jump to row's "Ctrl K" too (QA BUG-266). */
 @media (hover: none) {
   .jump-keys,
-  .jump-field kbd {
+  .jump-field kbd,
+  .jump-button kbd {
     display: none;
   }
 }

@@ -119,6 +119,39 @@ describe("POST /api/chat/password (§22.2)", () => {
   });
 });
 
+describe("passwords over PocketBase's 71 bytes are refused with the reason (QA BUG-267)", () => {
+  /** The rejected call's message on `password`. */
+  async function why(p: Promise<unknown>): Promise<string | undefined> {
+    try {
+      await p;
+    } catch (e) {
+      if (!(e instanceof ClientResponseError)) throw e;
+      return (e.response.data?.password as { message: string } | undefined)?.message;
+    }
+    throw new Error("expected a rejection");
+  }
+  const TOO_LONG = "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation).";
+  const create = (password: string) =>
+    client()
+      .collection("users")
+      .create({ email: `${uniq()}@test.local`, password, passwordConfirm: password, name: `Long ${uniq()}` });
+
+  it("on signup: 71 ASCII characters are fine; 72 bytes (36 Cyrillic letters) say why", async () => {
+    await create("x".repeat(71));
+    expect(await why(create("ж".repeat(36)))).toBe(TOO_LONG);
+    // Past 72 bytes PocketBase refuses it while reading the request, before any hook: the apps check it first
+    // (LIMITS.passwordMaxBytes, Limits.PASSWORD_MAX_BYTES).
+    expect(await why(create("x".repeat(100)))).toBeUndefined();
+  });
+
+  it("on a password change", async () => {
+    const a = await newUser();
+    const change = a.pb.send("/api/chat/password", { method: "POST", body: { oldPassword: a.password, password: "y".repeat(100) } });
+    expect(await why(change)).toBe(TOO_LONG);
+    await client().collection("users").authWithPassword(a.email, a.password);
+  });
+});
+
 describe("account deletion (BUG-08)", () => {
   it("is not offered through the API, for users with or without content", async () => {
     const empty = await newUser();

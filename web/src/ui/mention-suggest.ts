@@ -104,7 +104,7 @@ export function createMentionSuggest(opts: {
             },
             signal,
           },
-          [opts.avatar(u), h("span", {}, u.name), h("span", { class: "handle" }, `@${u.handle}`)],
+          [opts.avatar(u), h("span", { class: "who" }, u.name), h("span", { class: "handle" }, `@${u.handle}`)],
         ),
       ),
     );

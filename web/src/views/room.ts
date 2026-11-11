@@ -887,10 +887,11 @@ export function createRoomView({
     messages.focusIn(id, reactionFocus(emoji), true);
     const saving = now(() => ctl.react(id, emoji, on));
     if (!saving) return render({ anchor: true });
-    if ((await saving) || !scope.active) return;
+    const done = await saving;
+    if (done === true || !scope.active) return;
     messages.setError(id, {
-      text: on ? `Couldn't add your ${emoji} reaction.` : `Couldn't remove your ${emoji} reaction.`,
-      retry: () => void react(id, emoji, on),
+      text: done || (on ? `Couldn't add your ${emoji} reaction.` : `Couldn't remove your ${emoji} reaction.`),
+      ...(done ? {} : { retry: () => void react(id, emoji, on) }),
     });
     render({ anchor: true });
   }

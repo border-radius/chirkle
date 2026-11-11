@@ -33,6 +33,7 @@ class ContractTest {
         assertEquals(l.num("userName"), Limits.USER_NAME)
         assertEquals(l.num("roomName"), Limits.ROOM_NAME)
         assertEquals(l.num("passwordMin"), Limits.PASSWORD_MIN)
+        assertEquals(l.num("passwordMaxBytes"), Limits.PASSWORD_MAX_BYTES)
         assertEquals(l.num("avatarBytes").toLong(), Limits.AVATAR_BYTES)
         assertEquals(l.strings("avatarTypes").toSet(), Limits.AVATAR_TYPES)
         assertEquals(l.num("attachments"), Limits.ATTACHMENTS)

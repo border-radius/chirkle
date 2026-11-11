@@ -111,6 +111,8 @@ describe("room view", () => {
         expect(button(headerMenu(), "Notify of every message")!.getAttribute("aria-checked")).toBe("true");
         button(headerMenu(), "Notify of every message")!.click();
         expect(button(headerMenu(), "Notify of every message")!.getAttribute("aria-checked")).toBe("false");
+        // Off, mentions alert too (§41), not only replies (QA BUG-264).
+        expect(headerMenu().textContent).toContain("Off — only mentions and replies to you");
         expect(saved().rooms).toEqual(["other"]);
         // Nothing left chosen: nothing stored.
         localStorage.setItem("chat.notify", JSON.stringify({ rooms: [room.id] }));

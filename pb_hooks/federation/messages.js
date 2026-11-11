@@ -5,7 +5,7 @@
 // A message with files is saved once its files are fetched (the worker, §33.8); a forward goes as a snapshot of what it
 // shows. Service messages, reads, previews and push stay on each instance.
 
-const { reactionsOf, setReaction } = require(`${__hooks}/lib/reactions.js`);
+const { overLimit, reactionsOf, setReaction } = require(`${__hooks}/lib/reactions.js`);
 /** @typedef {{ emoji: string, users: string[] }} Reaction */
 const { isReactionEmoji } = require(`${__hooks}/lib/emoji.js`);
 const { accessOf, canSee } = require(`${__hooks}/lib/access.js`);
@@ -429,8 +429,10 @@ function applyReact(app, sender, ev) {
   if (!user) throw refusal(403, "Only your own people react from there.");
   const rec = target(app, sender, ev, false);
   if (!rec || rec.getBool("deleted") || !rec.getString("author")) return;
-  const next = setReaction(reactionsOf(rec), ev.emoji, user, ev.on);
-  if (!next) return;
+  const list = reactionsOf(rec);
+  const next = setReaction(list, ev.emoji, user, ev.on);
+  // Over the limits (QA BUG-258): dropped. A mirror running these hooks refuses it first (lib/reactions.js).
+  if (!next || (ev.on && overLimit(list, ev.emoji, user))) return;
   rec.set("reactions", next);
   saveFor(app, rec, sender);
 }

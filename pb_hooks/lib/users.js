@@ -5,11 +5,36 @@
 // of ASCII letters (QA BUG-55). `name_key` is hidden from clients, hence a route rather than a filter.
 
 const { assertImagesFit } = require(`${__hooks}/lib/images.js`);
-const { cleanName, originalNames, recordOf, setNameKey } = require(`${__hooks}/lib/records.js`);
+const { cleanName, fieldError, originalNames, recordOf, setNameKey } = require(`${__hooks}/lib/records.js`);
 const { nameKey } = require(`${__hooks}/lib/text.js`);
 
 /** Most people one search returns. */
 const LIMIT = 20;
+
+/** Most bytes of a password: bcrypt reads 72, PocketBase takes 71. */
+const PASSWORD_MAX_BYTES = 71;
+
+/**
+ * Signup, password change, password reset: a password over PocketBase's limit is refused with the reason. Past 72 bytes
+ * PocketBase answered 400 with none ("Failed to create record.", "Invalid value."), which a password manager's long
+ * password ran into (QA BUG-267).
+ * @param {unknown} password
+ */
+function checkPasswordLength(password) {
+  if (typeof password !== "string") return;
+  let bytes = 0;
+  for (const c of password) {
+    const n = /** @type {number} */ (c.codePointAt(0));
+    bytes += n < 0x80 ? 1 : n < 0x800 ? 2 : n < 0x10000 ? 3 : 4;
+  }
+  if (bytes > PASSWORD_MAX_BYTES) {
+    throw fieldError(
+      "password",
+      "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation).",
+      "validation_max_text_constraint",
+    );
+  }
+}
 
 /** @param {core.RequestEvent} e */
 function searchUsers(e) {
@@ -95,4 +120,4 @@ function skipStandInReset(e) {
   return e.next();
 }
 
-module.exports = { beforeUserSave, findLoginByEmail, searchUsers, skipStandInReset };
+module.exports = { beforeUserSave, checkPasswordLength, findLoginByEmail, searchUsers, skipStandInReset };

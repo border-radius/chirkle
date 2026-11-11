@@ -518,7 +518,10 @@ class RoomViewModel(
     fun react(m: Message, emoji: String) {
         val mine = controller.reactions(m).any { it.emoji == emoji && me in it.users }
         val done = controller.react(m.id, emoji, !mine) ?: return
-        viewModelScope.launch { if (!done.await()) toast = if (mine) "Couldn't remove your $emoji reaction." else "Couldn't add your $emoji reaction." }
+        viewModelScope.launch {
+            val failure = done.await() ?: return@launch
+            toast = failure.ifEmpty { if (mine) "Couldn't remove your $emoji reaction." else "Couldn't add your $emoji reaction." }
+        }
         services.recentEmoji.remember(emoji)
     }
 

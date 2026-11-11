@@ -96,7 +96,7 @@ class ServicesTest {
         assertTrue(c.edit(mine.id, "edited")!!.await())
         assertEquals("edited", c.find(mine.id)!!.text)
         val theirs = c.state.value.items.first { it.text == "from b" }
-        assertTrue(c.react(theirs.id, "👍", true)!!.await())
+        assertNull(c.react(theirs.id, "👍", true)!!.await())
         eventually(what = "reaction") { c.find(theirs.id)!!.reactions.singleOrNull()?.users == listOf(a.user.id) }
         assertNull("not mine to delete", c.remove(theirs.id)?.let { if (c.deletable(theirs)) it else null })
         assertTrue(c.remove(mine.id)!!.await())
@@ -104,6 +104,20 @@ class ServicesTest {
         c.close()
         // Kept for next time: the room opens from it at once.
         eventually(what = "kept") { s.cache.peek(a.user.id, room.id)?.items?.size == 2 }
+    }
+
+    @Test fun `a refused reaction says why, and shows as it was (QA BUG-258, BUG-260)`() = runBlocking {
+        val a = newUser()
+        val room = a.api.createRoom("r-${uniq()}")
+        val m = a.api.send(NewMessage(newId(), room.id, "hi"))
+        for (e in listOf("👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀", "💯", "👏", "🤔", "😍", "😎", "🙌", "💪", "✅", "😅", "🥳", "🤝", "😴")) a.api.react(m.id, e, true)
+        val c = services(a).openRoom(room.id)
+        eventually(what = "ready") { c.state.value.phase == Phase.Ready && c.find(m.id) != null }
+        // Before BUG-260 any failure resolved as done: the app never said so.
+        assertEquals("A message can have at most 20 different reactions.", c.react(m.id, "🔥", true)!!.await())
+        assertEquals(20, c.reactions(c.find(m.id)!!).size)
+        assertNull(c.react(m.id, "👍", false)!!.await())
+        c.close()
     }
 
     @Test fun `a reply is sent with its quote`() = runBlocking {

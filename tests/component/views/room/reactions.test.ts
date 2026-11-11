@@ -151,6 +151,40 @@ describe("room view", () => {
       expect(chips(m.id)).toEqual(["🔥1 (mine)"]);
     });
 
+    it("a reaction the server refuses says why, without Retry (QA BUG-258: at most 20 different)", async () => {
+      const room = await newRoom();
+      const m = await me.api.send({ id: newId(), room: room.id, text: "hi" });
+      for (const e of [
+        "👍",
+        "❤️",
+        "😂",
+        "🎉",
+        "😮",
+        "😢",
+        "🙏",
+        "👀",
+        "💯",
+        "👏",
+        "🤔",
+        "😍",
+        "😎",
+        "🙌",
+        "💪",
+        "✅",
+        "😅",
+        "🥳",
+        "🤝",
+        "😴",
+      ])
+        await me.api.react(m.id, e, true);
+      await mount(room);
+      await open(button(msgEl(m.id), "Add reaction")!);
+      pick("🔥");
+      await vi.waitFor(() => expect(msgEl(m.id)!.textContent).toContain("A message can have at most 20 different reactions."));
+      expect(chips(m.id)).not.toContain("🔥1 (mine)");
+      expect(button(msgEl(m.id), "Retry")).toBeFalsy();
+    });
+
     it("changed again before the server answered: what shows and what is saved is the last choice", async () => {
       const room = await newRoom();
       const m = await me.api.send({ id: newId(), room: room.id, text: "hi" });

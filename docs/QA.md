@@ -2799,3 +2799,89 @@ delete, edit or reaction of an old message would have hit the new group's messag
 - `1760000047_telegram_supergroup_ids.js` drops the moved rows where the logs show the collisions: a chat's rows from
   before its link was last saved or its first such failure, whichever is earlier.
 - Tests: `telegram.test.ts` "a supergroup's ids, which start over…", `telegram.migration.test.ts`.
+
+# QA pass 35 — the whole app, after an architecture audit
+
+2026-11-11, user: "audit app as a software architect … after that test app heavily. list all bugs. fix them". The
+audit is docs/REFACTOR.md round 5. The baseline was green (`npm run check`: 814 unit and component, 522 integration;
+every budget met). Then: the full e2e suite in Chromium, Firefox and WebKit; the server driven over its API on a probe
+server (handles, mentions and the inbox with bad dates and cursors; page routes with bad kinds, cursors and limits;
+reactions with odd emoji and in bulk; forwards, deletes, bans by and of moderators; anonymous and private rooms; DMs to
+yourself, nobody and someone who takes none; names and room names with bidi, zero-width, control and combining
+characters; passwords at and over PocketBase's length; 5,000 inbox rows for the counts' speed); the web in headless
+Chromium at 1100 px and 390 px, light and dark, by script (mentions typed, Jump to, room search, inbox paging, the
+settings, stats, collections, guest pages, the reset link) with axe on every page and open dialog; the app's 204 unit
+and Robolectric tests.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-258 | Medium | Server, Web, Android | One person could put every emoji (~1,800) on a message: the message drew rows of them and its author got a Mentions & replies row for each | Fixed |
+| BUG-259 | Medium | Web | The sidebar's "Ctrl K" key badge failed 4.5:1 contrast in the light theme (two e2e specs' axe scans failed) | Fixed |
+| BUG-260 | Medium | Android | A reaction that failed went back to how it was without a word: the app always took it for done | Fixed |
+| BUG-261 | Low | Web | In the "@" list a long name wrapped to three lines and the handle was cut off at the list's edge | Fixed |
+| BUG-262 | Medium | Web, Android | "@you" in a message to you was under 4.5:1 (4.14 light, 4.33 dark): the accent on the tint, on a message tinted as yours | Fixed |
+| BUG-263 | Low | Web | The statistics' "Peak today" with nobody online said "0 at 02:45 AM" | Fixed |
+| BUG-264 | Low | Web | The room menu's "Notify of every message", off, said "only replies to you": mentions notify too since §41 | Fixed |
+| BUG-265 | Low | Web, Android | "@handle" was marked as you by the text alone: a handle you took after someone gave it up showed their older mentions as yours | Fixed |
+| BUG-266 | Low | Web | On a phone the sidebar's Jump to row showed a "Ctrl K" key badge (touch screens show no key hints) | Fixed |
+| BUG-267 | Low | Server, Web, Android | A password over 72 bytes (a password manager's, or 37 Cyrillic letters) was refused without a reason: "Failed to create record." on signup, "Invalid value." on a change | Fixed |
+
+**BUG-258:** `POST /api/chat/reactions` took any number of the picker's emoji from anyone (DESIGN.md §20 said "as many
+different ones as they like"). Now at most 20 different emoji on a message (`overLimit`, lib/reactions.js), refused with the reason on `emoji`; taking one back always works. A linked instance's
+`react` events are held to the same (federation/messages.js `applyReact`). The web shows the reason under the message
+without Retry (`writes.react` resolves it, `MsgError.retry` is optional now); the app as a toast. Tests: `reactions.test.ts`
+(integration) "takes at most 20 different emoji…", `reactions.test.ts` (component) "a reaction the server refuses
+says why", `ServicesTest` "a refused reaction says why".
+Changed the same day (user): a first fix also took at most 10 from one person; instead, all of one person's reactions
+to a message are one row in Mentions & replies (lib/inbox.js, migration `1760000048_inbox_reactions_merged.js`), so
+there is no per-person limit. Tests: `mentions.test.ts` "one person's reactions to a message are one row…",
+`inbox.migration.test.ts`.
+
+**BUG-259:** `.jump-button kbd` (the user's Jump to button of 2026-11-10) was `--muted` at `opacity: 0.75`, under
+4.5:1 on the sidebar. It is quieter by colour now (`--muted`, `--text` on hover). `a11y.spec.ts` and `forward.spec.ts`
+(light) pass again.
+
+**BUG-260:** `RoomWrites.react` dropped the pending change and then asked whether it was still the latest, which it
+never was any more, so the deferred always said "done" and `RoomViewModel` never showed "Couldn't add your … reaction".
+It asks first now. Test: `ServicesTest` (with BUG-258).
+
+**BUG-261:** the name and the handle are one line each, cut with "…" (`.emoji-suggest .who/.handle`, emoji.css). The
+app's rows already did.
+
+**BUG-262:** `.mention.me` is in the text's colour on the tint (web), and the app's `linked()` takes `mineColor`
+(`onSurface`). Test: `mentions.spec.ts` runs axe's colour check on the message in both themes.
+
+**BUG-263:** `peak()` (stats/data.ts) gives no time for a peak of 0. Test: `stats.test.ts`.
+
+**BUG-264:** "Off — only mentions and replies to you". Test: `header.test.ts`.
+
+**BUG-265:** a message's "@handle" is yours (`.mention.me`, the app's highlight) only when the server listed you in its
+`mentions`, as the message's "to you" tint already was. Test: `mentions.test.ts` (component) "a handle you took since…".
+
+**BUG-266:** the touch-screen rule that hides key hints (selection.css) covers `.jump-button kbd`. Test:
+`mobile.spec.ts` (no visible `kbd` on the phone's room list).
+
+**BUG-267:** PocketBase stores bcrypt hashes and takes at most 71 bytes; past 72 it fails while reading the request,
+before any hook, with no field error. The hooks now refuse 72 bytes and more with "Use at most 71 characters (fewer if
+some aren't plain Latin letters, digits or punctuation)." on signup (at 72), on `POST /api/chat/password` and on the
+reset link's confirm (`checkPasswordLength`, lib/users.js); the web's and the app's signup forms check it first, since
+the server can't say it past 72 (`passwordMaxBytes` in shared/contract.json, `LIMITS`, `Limits`). `loginJs` budget 2.30
+→ 2.35 KB (2.33). Tests: `accounts.test.ts`, `password_reset.test.ts`, `login.test.ts`, `contract.test.ts`,
+`ContractTest`, `UiFeaturesTest` "signing up logs you in".
+
+## Checked and fine
+
+- Inbox: mentions added and edited out, replies, rows going with a moderator's delete, anonymous rooms showing the room
+  as the actor, `inbox/seen` with junk dates, paging past 30 without duplicates; `mentionable` in an anonymous room is
+  empty; private rooms' non-members aren't mentioned.
+- Moderators: can't ban themselves or another moderator; a ban ends the sessions; unban lets them in again.
+- Names: bidi and zero-width characters are dropped, control characters become spaces, full-width "ＡＮＮ" and "a\nb"
+  collide with "ANN" and "a b".
+- Page routes refuse unknown kinds and missing cursors; limits are clamped.
+- Not bugs: the Firefox and WebKit video specs (no ffmpeg on PATH locally / no media codecs in the local WebKit); a
+  WebKit run of `collections.spec.ts:329` that came back as a guest after "WebKit encountered an internal error" and a
+  12 s stall (the local WPE build under load).
+- Measured, not fixed: `GET /api/chat/unread` grows with the inbox (7 ms empty, ~40 ms with 5,000 rows read, ~100 ms
+  unread): REFACTOR.md item 49.
+- Left as they are: "admin", "support" and "moderator" can be handles (only all/everyone/here/room/channel are
+  reserved, DESIGN.md §41.1); a name made only of combining marks is accepted (it shows as floating accents).

@@ -218,6 +218,10 @@ export function createLoginView(deps: {
       render({ fields: { name: `Must be no more than ${LIMITS.userName} characters.` } });
       return;
     }
+    if (mode === "signup" && new TextEncoder().encode(values.password).length > LIMITS.passwordMaxBytes) {
+      render({ fields: { password: "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation)." } });
+      return;
+    }
     busy = true;
     button.disabled = true;
     try {

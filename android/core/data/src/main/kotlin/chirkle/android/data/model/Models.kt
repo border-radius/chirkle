@@ -189,7 +189,7 @@ data class InboxItem(
     val cursor: String = "",
     /** "mention", "reply" or "reaction". */
     val kind: String = "",
-    /** A reaction's emoji, "" otherwise. */
+    /** A reaction row's: the actor's emoji on the message, the first five then " +n" (DESIGN.md §41.4); "" otherwise. */
     val emoji: String = "",
     val created: String = "",
     /** A mention or reply already read in its room: not new here. False from older servers. */
