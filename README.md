@@ -205,8 +205,20 @@ dokku nginx:set chirkle client-max-body-size 210m
 dokku letsencrypt:enable chirkle   # with the dokku-letsencrypt plugin
 ```
 
-Then deploy (`git push dokku master` from a clone with `dokku@server:chirkle` as the `dokku` remote) and create a
-superuser:
+Then deploy. The light way is to run the image GitHub builds: after CI passes on `master`,
+`.github/workflows/image.yml` pushes `ghcr.io/border-radius/chirkle:<commit>` (and `:latest`), so the server only pulls
+and restarts, however many apps run it:
+
+```sh
+dokku git:from-image chirkle ghcr.io/border-radius/chirkle:<commit>   # each deploy needs a new tag: use the commit
+```
+
+To follow `master`, run that from cron with the commit `git ls-remote https://github.com/border-radius/chirkle.git
+refs/heads/master` names; until its image exists (CI and the build take a few minutes, and a commit that fails CI
+gets none) `docker pull` of it fails, and the app keeps running what it has.
+
+Or build on the server: `git push dokku master` from a clone with `dokku@server:chirkle` as the `dokku` remote, or
+`dokku git:sync --build chirkle https://github.com/border-radius/chirkle.git master`. Then create a superuser:
 
 ```sh
 dokku run chirkle /app/pocketbase superuser upsert you@example.com <password> --dir=/pb_data
