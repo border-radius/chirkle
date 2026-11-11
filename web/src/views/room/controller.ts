@@ -28,6 +28,8 @@ import { createWrites, revokeLocal, stray, takeStrays } from "./writes.ts";
 export const HIGHLIGHT_MS = 3000;
 /** How long the line over the first unread message shows; styles/app/messages.css fades it out before then. */
 export const UNREAD_LINE_MS = 5000;
+/** How many replies "Back to reply" remembers (§19.5); the oldest go first. */
+const BACK_MAX = 50;
 
 /** "loading" until the first page is in; "failed" offers Retry; "not-found": no such room (or not yours). */
 export type Phase = "loading" | "ready" | "failed" | "not-found";
@@ -42,6 +44,11 @@ export interface RoomState {
   /** The first message that was unread when the room was opened (§18.5): a line over it, for UNREAD_LINE_MS. */
   unreadId: string | null;
   pill: Pill;
+  /**
+   * The reply to go back to after following quotes (§19.5): the last of the replies whose quote was followed, each
+   * step back taking the one before. null: none, and the pill offers "Jump to latest" as before.
+   */
+  back: string | null;
   /** Showing the room as it was last time (cache.ts) until its first page is in: there may be newer messages. */
   stale: boolean;
   /**
@@ -78,8 +85,13 @@ export interface RoomController {
   loadEdge(side: "top" | "bottom"): Promise<void>;
   /** Reset the window to the latest page or the first page. */
   jump(kind: "latest" | "first"): Promise<void>;
-  /** Highlight and centre message `id` (a reply's quote, §19), loading the history around it when needed. */
-  goTo(id: string): Promise<void>;
+  /**
+   * Highlight and centre message `id` (a reply's quote, §19), loading the history around it when needed. `from`: the
+   * reply whose quote was clicked, remembered to come back to (§19.5) once the original is shown.
+   */
+  goTo(id: string, from?: string): Promise<void>;
+  /** Back to the reply whose quote was followed last (`state().back`), and forget it (§19.5). */
+  goBack(): Promise<void>;
   /** The user is at the bottom now: hide a "new messages below" pill. */
   dismissPill(): void;
   find(id: string): Message | undefined;
@@ -156,6 +168,8 @@ export function createRoomController(opts: {
   let targetTimer: ReturnType<typeof setTimeout> | undefined;
   let unreadId: string | null = null;
   let pill: Pill = null;
+  /** Replies whose quotes were followed, the last on top (§19.5). */
+  const back: string[] = [];
   /** The window is the one kept from last time (cache.ts), until the first page replaces it. */
   let stale = false;
   /**
@@ -316,6 +330,7 @@ export function createRoomController(opts: {
     const g = ++gen;
     loading.top = loading.bottom = false;
     pill = null;
+    back.length = 0;
     emit();
     const page = await api.page(kind === "latest" ? latest(roomId) : first(roomId), signal).catch(() => null);
     if (!page || !applyLoaded(kind, page, g)) return;
@@ -323,9 +338,15 @@ export function createRoomController(opts: {
     emit({ render: {}, notice: "", scroll: kind === "latest" ? "bottom" : "top" });
   }
 
-  async function goTo(id: string) {
+  async function goTo(id: string, from?: string) {
+    const remember = () => {
+      if (!from || back.at(-1) === from) return;
+      back.push(from);
+      if (back.length > BACK_MAX) back.shift();
+    };
     const m = find(id);
     if (m && !m.status) {
+      remember();
       setTarget(id);
       return emit({ render: {}, scroll: "target", notice: "" });
     }
@@ -341,6 +362,7 @@ export function createRoomController(opts: {
     gen++; // pages requested for the old window are stale now
     loading.top = loading.bottom = false;
     setWin(around.win);
+    remember();
     setTarget(around.target);
     pill = null;
     emit({ render: {}, scroll: "target", notice: "" });
@@ -641,7 +663,7 @@ export function createRoomController(opts: {
   // ---------------------------------------------------------------- lifecycle
 
   return {
-    state: () => ({ win, phase, targetId, unreadId, pill, stale, unsure: stale && asking }),
+    state: () => ({ win, phase, targetId, unreadId, pill, back: back.at(-1) ?? null, stale, unsure: stale && asking }),
     park() {
       parked = true;
     },
@@ -685,7 +707,13 @@ export function createRoomController(opts: {
     retry,
     loadEdge: (side) => track(loadEdge(side)),
     jump: (kind) => track(jump(kind)),
-    goTo: (id) => track(goTo(id)),
+    goTo: (id, from) => track(goTo(id, from)),
+    goBack() {
+      const id = back.pop();
+      if (!id) return Promise.resolve();
+      emit();
+      return track(goTo(id));
+    },
     dismissPill() {
       if (pill !== "below") return;
       pill = null;

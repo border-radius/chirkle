@@ -185,6 +185,31 @@ class ServicesTest {
         c.close()
     }
 
+    @Test fun `after following quotes, goes back to each reply in turn, then forgets them (DESIGN §19_5)`() = runBlocking {
+        val a = newUser()
+        val room = a.api.createRoom("r-${uniq()}")
+        val sent = (1..130).map { a.api.send(NewMessage(newId(), room.id, "m$it")) }
+        val r1 = a.api.send(NewMessage(newId(), room.id, "re: old", replyTo = sent[9].id))
+        val r2 = a.api.send(NewMessage(newId(), room.id, "re: re", replyTo = r1.id))
+        val s = services(a)
+        val c = s.openRoom(room.id)
+        eventually(what = "ready") { c.find(r2.id) != null }
+        assertNull(c.state.value.back)
+        c.goTo(r1.id, from = r2.id)
+        eventually(what = "at r1") { c.state.value.targetId == r1.id && c.state.value.back == r2.id }
+        c.goTo(sent[9].id, from = r1.id)
+        eventually(what = "far back") { c.state.value.targetId == sent[9].id && c.state.value.back == r1.id && c.state.value.hasNewer }
+        c.goBack()
+        eventually(what = "back at r1") { c.state.value.targetId == r1.id && c.state.value.back == r2.id }
+        c.goBack()
+        eventually(what = "back at r2") { c.state.value.targetId == r2.id && c.state.value.back == null }
+        c.goTo(r1.id, from = r2.id)
+        eventually(what = "at r1 again") { c.state.value.back == r2.id }
+        c.jump(PageKind.First)
+        eventually(what = "forgotten") { c.state.value.back == null && c.state.value.items.firstOrNull()?.id == sent[0].id }
+        c.close()
+    }
+
     @Test fun `counts unread messages live, and reading the room clears them on the server`() = runBlocking {
         val a = newUser()
         val b = newUser()

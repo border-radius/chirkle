@@ -251,7 +251,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     val actions = RowActions(
         onLongPress = { m -> if (vm.selecting) vm.toggleSelect(m) else if (m.status == null && !m.isService) sheetFor = m },
         onTap = { m -> if (vm.selecting) vm.toggleSelect(m) },
-        onQuote = { id -> c.goTo(id) },
+        onQuote = { id, from -> c.goTo(id, from) },
         onReact = { m, e -> vm.react(m, e) },
         onRetry = { c.retrySend(it.id) },
         onDiscard = { c.discard(it.id) },
@@ -390,17 +390,21 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                             Text(state.notice, modifier = Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite })
                         }
                     }
-                    if (state.pill != null || !atBottom || state.hasNewer) {
-                        val label = if (state.pill != null) "New messages · Jump to latest" else "Jump to latest"
+                    // After following quotes it steps back through the replies, one per tap (DESIGN.md §19.5).
+                    val back = state.back != null
+                    if (back || state.pill != null || !atBottom || state.hasNewer) {
+                        val label = if (back) "Back to reply" else if (state.pill != null) "New messages · Jump to latest" else "Jump to latest"
                         SmallFloatingActionButton(
                             onClick = {
+                                if (back) return@SmallFloatingActionButton c.goBack()
                                 if (state.hasNewer) c.jump(PageKind.Latest) else scope.launch { list.animateScrollToItem(0) }
                                 c.dismissPill()
                             },
                             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = label },
                         ) {
                             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (state.pill != null) Text("New", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
+                                if (back) Text("Back", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
+                                else if (state.pill != null) Text("New", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
                                 Icon(ChirkleIcons.Down, contentDescription = null)
                             }
                         }

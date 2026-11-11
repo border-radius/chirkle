@@ -10,6 +10,7 @@ import {
   button,
   composer,
   gateRealtime,
+  headerMenu,
   ids,
   key,
   me,
@@ -97,6 +98,39 @@ describe("room view", () => {
       await vi.waitFor(() => expect(msgEl(all[10]!.id)?.classList.contains("target")).toBe(true));
       expect(msgEl(all[299]!.id)).toBeNull();
       expect(sentinel("bottom")).not.toBeNull();
+    });
+
+    it("after following quotes, the pill goes back to each reply in turn, then offers Jump to latest (§19.5)", async () => {
+      const room = await newRoom();
+      const all = await seedMessages(room.id, me.user.id, 300);
+      const r1 = await me.api.send({ id: newId(), room: room.id, text: "re: old", replyTo: all[10]!.id });
+      const r2 = await me.api.send({ id: newId(), room: room.id, text: "re: re", replyTo: r1.id });
+      await mount(room);
+      const target = (id: string) => msgEl(id)?.classList.contains("target") === true;
+      quoteOf(r2.id)!.click();
+      expect(target(r1.id)).toBe(true);
+      expect(pill().hidden).toBe(false);
+      expect(pill().textContent).toBe("Back to reply");
+      quoteOf(r1.id)!.click();
+      await vi.waitFor(() => expect(target(all[10]!.id)).toBe(true));
+      expect(pill().textContent).toBe("Back to reply");
+      pill().click();
+      await vi.waitFor(() => expect(target(r1.id)).toBe(true));
+      expect(pill().textContent).toBe("Back to reply");
+      pill().click();
+      await vi.waitFor(() => expect(target(r2.id)).toBe(true));
+      expect(pill().textContent).not.toBe("Back to reply");
+    });
+
+    it("Jump to beginning forgets the replies to go back to (§19.5)", async () => {
+      const room = await newRoom();
+      const parent = await me.api.send({ id: newId(), room: room.id, text: "parent" });
+      const reply = await me.api.send({ id: newId(), room: room.id, text: "re", replyTo: parent.id });
+      await mount(room);
+      quoteOf(reply.id)!.click();
+      expect(pill().textContent).toBe("Back to reply");
+      button(headerMenu(), "Jump to beginning")!.click();
+      await vi.waitFor(() => expect(pill().textContent).not.toBe("Back to reply"));
     });
 
     it("a live reply to a message beyond the window doesn't quote it as deleted while its quote loads (QA BUG-180)", async () => {

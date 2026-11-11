@@ -1806,6 +1806,21 @@ neither.
   far back in history, and Bob's click on the quote loads that history and highlights it; axe finds no serious
   violations in the reply bar or the quotes.
 
+### 19.5 Back to the reply (2026-11-11)
+
+Following a quote took you away from where you were reading, with no way back but scrolling. Now the controller
+remembers the reply whose quote was clicked (`ctl.goTo(id, from)`), once the original is shown, on a stack: following
+the quote of the message gone to, and so on, adds each reply in turn. While the stack holds one, the pill over the
+bottom of the list (§7.5, §22.7) reads **"Back to reply"** (in the quiet style, before "New messages") and is shown
+even at the bottom; each click (`ctl.goBack`) goes to the last reply, highlighted as a quote's original is, and drops
+it. Once the stack is empty, the pill is "Jump to latest" (or "New messages") again. A reply deleted meanwhile says
+"That message isn't available any more." and is dropped. Jump to latest or Jump to beginning forget the stack; so does
+leaving the room. Search results, media and links to messages go to a message without adding to it. At most 50 are
+kept (the oldest go first); the same reply twice in a row is kept once.
+
+Tests: `replies.test.ts` (component): a chain of two quotes, one far back in history, walked back step by step to
+"Jump to latest"; Jump to beginning forgets it. Android: `ServicesTest` (ANDROID.md §67).
+
 ## 20. Reactions and emoji
 
 Anyone who can read a message can react to it with emoji, as many as they like up to 20 different ones on a message
@@ -2122,7 +2137,8 @@ it meanwhile. Errors stay until something else is said.
 The pill over the bottom of the list (§7.5) also shows, as a quieter "↓ Jump to latest", whenever the newest messages
 aren't on screen with nothing new below: scrolled up by more than 80 px, or the window is back in history (after a
 quote or Jump to beginning). Clicking it scrolls to the bottom, or loads the latest page when the window doesn't have
-it. "↓ New messages" and "New messages · Jump to latest" take precedence as before.
+it. "↓ New messages" and "New messages · Jump to latest" take precedence as before; "Back to reply" (§19.5) over
+all of them.
 
 ### 22.8 Tests
 

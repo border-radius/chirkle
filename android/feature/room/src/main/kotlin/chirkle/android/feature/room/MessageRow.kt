@@ -69,7 +69,8 @@ import coil3.compose.AsyncImage
 class RowActions(
     val onLongPress: (Message) -> Unit,
     val onTap: (Message) -> Unit,
-    val onQuote: (String) -> Unit,
+    /** The quote of reply `from` was tapped: show the message it answers (`id`). */
+    val onQuote: (id: String, from: String) -> Unit,
     val onReact: (Message, String) -> Unit,
     val onRetry: (Message) -> Unit,
     val onDiscard: (Message) -> Unit,
@@ -143,7 +144,7 @@ fun MessageRow(
                             .padding(vertical = 2.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable(onClickLabel = "Show the original message") { actions.onQuote(q.id) }
+                            .clickable(onClickLabel = "Show the original message") { actions.onQuote(q.id, m.id) }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                             .semantics(mergeDescendants = true) { contentDescription = "Quoting ${name.ifEmpty { "a message" }}: ${q.line()}" },
                     ) {

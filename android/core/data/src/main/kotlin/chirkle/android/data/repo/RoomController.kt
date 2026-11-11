@@ -54,6 +54,9 @@ const val HIGHLIGHT_MS = 3000L
 /** How long the line over the first unread message shows (§18.5). */
 const val UNREAD_LINE_MS = 5000L
 
+/** How many replies "Back to reply" remembers (DESIGN.md §19.5); the oldest go first. */
+private const val BACK_MAX = 50
+
 /** Loading until the first page is in; Failed offers Retry; NotFound: no such room (or not yours). */
 enum class Phase { Loading, Ready, Failed, NotFound }
 
@@ -71,6 +74,11 @@ data class RoomState(
     /** The first message that was unread when the room was opened: a line over it, for [UNREAD_LINE_MS]. */
     val unreadId: String? = null,
     val pill: Pill? = null,
+    /**
+     * The reply to go back to after following quotes (DESIGN.md §19.5): the last whose quote was followed, each step
+     * back taking the one before. null: none, and the button offers "Jump to latest" as before.
+     */
+    val back: String? = null,
     /** Showing the room as it was last time until its first page is in. */
     val stale: Boolean = false,
     /** The kept window shows before the server said where the unread messages start: nothing counts as read yet. */
@@ -140,6 +148,8 @@ class RoomController(
     private var targetJob: Job? = null
     private var unreadId: String? = null
     private var pill: Pill? = null
+    /** Replies whose quotes were followed, the last on top (DESIGN.md §19.5). */
+    private val back = ArrayDeque<String>()
     private var notice = ""
     private var stale = false
     private var retarget = false
@@ -225,6 +235,7 @@ class RoomController(
             targetId = targetId,
             unreadId = unreadId,
             pill = pill,
+            back = back.lastOrNull(),
             stale = stale,
             unsure = stale && asking,
             notice = notice,
@@ -323,6 +334,7 @@ class RoomController(
         val g = ++gen
         loading.clear()
         pill = null
+        back.clear()
         publish()
         val page = runCatching { api.page(if (kind == PageKind.First) Pages.first(roomId) else Pages.latest(roomId)) }.getOrNull() ?: return
         if (!applyLoaded(kind, page, g)) return
@@ -331,14 +343,35 @@ class RoomController(
         publish(if (kind == PageKind.First) Scroll.Top else Scroll.Bottom)
     }
 
-    /** Highlight and show message [id] (a reply's quote, a search result), loading the history around it when needed. */
-    fun goTo(id: String) {
-        scope.launch { tracked { goToNow(id) } }
+    /**
+     * Highlight and show message [id] (a reply's quote, a search result), loading the history around it when needed.
+     * [from]: the reply whose quote was tapped, remembered to come back to (DESIGN.md §19.5) once the original shows.
+     */
+    fun goTo(id: String, from: String? = null) {
+        scope.launch { tracked { goToNow(id, from) } }
     }
 
-    private suspend fun goToNow(id: String) {
+    /** Back to the reply whose quote was followed last ([RoomState.back]), and forget it (DESIGN.md §19.5). */
+    fun goBack() {
+        scope.launch {
+            tracked {
+                val id = back.removeLastOrNull() ?: return@tracked
+                publish()
+                goToNow(id)
+            }
+        }
+    }
+
+    private suspend fun goToNow(id: String, from: String? = null) {
+        val remember = {
+            if (from != null && back.lastOrNull() != from) {
+                back.addLast(from)
+                if (back.size > BACK_MAX) back.removeFirst()
+            }
+        }
         val m = find(id)
         if (m != null && m.status == null) {
+            remember()
             setTarget(id)
             notice = ""
             return publish(Scroll.Target)
@@ -359,6 +392,7 @@ class RoomController(
         gen++
         loading.clear()
         win = around.win
+        remember()
         setTarget(around.target)
         pill = null
         notice = ""

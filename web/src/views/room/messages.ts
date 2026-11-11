@@ -104,8 +104,8 @@ export function createMessageList(opts: {
   onPickReaction: (id: string, opener: HTMLElement) => void;
   /** The name of someone not in the window (who reacted), if known yet. */
   nameOf: (userId: string) => string | undefined;
-  /** A reply's quote was clicked: show the message it answers. */
-  onOpenQuote: (id: string) => void;
+  /** The quote in reply `from` was clicked: show the message it answers (`id`). */
+  onOpenQuote: (id: string, from: string) => void;
   onSaveEdit: (id: string, text: string) => void;
   /** Escape in the edit box (after it has closed). */
   onCancelEdit: () => void;
@@ -304,7 +304,7 @@ export function createMessageList(opts: {
       case "delete":
         return askDelete(id);
       case "quote":
-        return opts.onOpenQuote(b.dataset.quote!);
+        return opts.onOpenQuote(b.dataset.quote!, id);
       case "send":
         return opts.onRetrySend(id);
       case "discard":

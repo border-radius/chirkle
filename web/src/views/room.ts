@@ -298,7 +298,7 @@ export function createRoomView({
     onReact: (id, emoji, on) => void react(id, emoji, on),
     onPickReaction: (id, opener) => pickReaction(id, opener),
     nameOf,
-    onOpenQuote: (id) => void now(() => ctl.goTo(id)),
+    onOpenQuote: (id, from) => void now(() => ctl.goTo(id, from)),
     onRetryLoad: () => now(() => ctl.retry()),
     onSaveEdit: (id, text) => void saveEdit(id, text),
     onCancelEdit: () => composer.focus(),
@@ -593,15 +593,23 @@ export function createRoomView({
   }
 
   /**
-   * The button over the bottom of the list: "New messages" when some arrived out of sight (§7.5), else "Jump to
-   * latest" whenever the newest messages aren't on screen: scrolled up, or the window is back in history (§22.7).
+   * The button over the bottom of the list: "Back to reply" after following quotes, one step back per click (§19.5);
+   * else "New messages" when some arrived out of sight (§7.5), else "Jump to latest" whenever the newest messages
+   * aren't on screen: scrolled up, or the window is back in history (§22.7).
    */
   function renderPill() {
     const s = ctl.state();
     const away = s.phase === "ready" && (s.win.hasNewer || !isNearBottom(list));
-    pill.hidden = s.pill === null && !away;
-    pill.classList.toggle("jump", s.pill === null);
-    pill.textContent = s.pill === "history" ? "New messages · Jump to latest" : s.pill === "below" ? "New messages" : "Jump to latest";
+    const back = s.phase === "ready" && s.back !== null;
+    pill.hidden = s.pill === null && !away && !back;
+    pill.classList.toggle("jump", back || s.pill === null);
+    pill.textContent = back
+      ? "Back to reply"
+      : s.pill === "history"
+        ? "New messages · Jump to latest"
+        : s.pill === "below"
+          ? "New messages"
+          : "Jump to latest";
   }
 
   /**
@@ -990,6 +998,7 @@ export function createRoomView({
         "click",
         () => {
           const s = ctl.state();
+          if (s.back !== null) return void now(() => ctl.goBack());
           if (s.pill === "history" || s.win.hasNewer) return void now(() => ctl.jump("latest"));
           scrollToBottom();
           ctl.dismissPill();
