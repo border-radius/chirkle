@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -23,6 +24,9 @@ import (
 
 // version is Chirkle's (package.json), set by scripts/build-server.mjs with -ldflags "-X main.version=…".
 var version = "dev"
+
+// started: when this process started (GET /api/chat/metrics uptime).
+var started = time.Now()
 
 func main() {
 	// PocketBase's own version, from the module it was built with (a dependency build has none set).
@@ -121,6 +125,9 @@ func register(app core.App, legacy bool) {
 				add(http.MethodGet, "/api/chat/live", liveInfoRoute, false)
 			}
 			add(http.MethodGet, "/api/chat/unread", unreadRoute, true)
+			if !e.Router.HasRoute(http.MethodGet, "/api/chat/metrics") {
+				e.Router.GET("/api/chat/metrics", metricsRoute(live)).Bind(apis.RequireSuperuserAuth())
+			}
 			add(http.MethodGet, "/api/chat/unread/{room}", firstUnreadRoute, true)
 			return e.Next()
 		},

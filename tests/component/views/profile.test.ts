@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../web/src/api.ts";
-import { PROFILE_KIT } from "../../../web/src/lazy.ts";
 import { LIMITS } from "../../../web/src/lib/limits.ts";
 import type { View } from "../../../web/src/router.ts";
 import { type AppState, createStore, initialState, type Store } from "../../../web/src/store.ts";
@@ -50,7 +49,7 @@ describe("profile view (§15.5)", () => {
   function mount() {
     const ctx = viewContext(me.api, store, vi.fn());
     logOut = vi.fn<() => void>();
-    view = createProfileView({ ...ctx, logOut, kit: PROFILE_KIT });
+    view = createProfileView({ ...ctx, logOut });
     view.mount(root, {});
   }
 

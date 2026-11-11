@@ -3,11 +3,10 @@
 // keeps focus inside, Escape closes it, and focus goes back to the thumbnail it was opened from. It adds a history entry (same URL), so Back closes it rather than leaving
 // the room.
 //
-// A lazy chunk: the room view import()s it on the first click on a thumbnail, and it links its own stylesheet. It
-// imports types only. Any module it shared with app.js would become a chunk that app.js loads on every page, so
-// build.mjs refuses that: what it needs from app.js (the DOM helper, names, dates, signed URLs) comes in its options.
+// A lazy chunk: the room view import()s it on the first click on a thumbnail, and it links its own stylesheet. What
+// belongs to the room (names, dates, signed URLs) comes in its options.
 
-import type { h } from "../../dom.ts";
+import { h } from "../../dom.ts";
 import type { Message } from "../../lib/types.ts";
 
 /** The stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
@@ -35,7 +34,6 @@ export interface ViewerOptions {
   page: (older: boolean, edge: Message) => Promise<{ messages: Message[]; done: boolean }>;
   /** A message's images and videos. */
   media: (m: Message) => ViewerImage[];
-  h: typeof h;
   /** What to call a file (`attachmentName`). */
   name: (m: Message, file: string) => string;
   /** When a message was sent, for the caption. */
@@ -80,7 +78,7 @@ let leaving: Promise<unknown> | null = null;
 let current: ((back?: boolean) => void) | null = null;
 
 /** Loaded once; a failed load is tried again next time, and the viewer opens anyway (unstyled but usable). */
-function loadStylesheet(h: ViewerOptions["h"]): Promise<void> {
+function loadStylesheet(): Promise<void> {
   stylesheet ??= new Promise((resolve) => {
     const failed = () => {
       link.remove();
@@ -94,7 +92,7 @@ function loadStylesheet(h: ViewerOptions["h"]): Promise<void> {
 }
 
 export async function openViewer(o: ViewerOptions): Promise<void> {
-  const { h, images } = o;
+  const { images } = o;
   current?.();
   if (o.signal.aborted || !images[o.start]) return;
   const scope = new AbortController();
@@ -364,7 +362,7 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
   );
 
   show(index);
-  await Promise.all([loadStylesheet(h), leaving]);
+  await Promise.all([loadStylesheet(), leaving]);
   if (closed) return;
   if (!onEntry()) history.pushState({ viewer: ENTRY }, "");
   // Back (or Android's back gesture) left the viewer's entry: the URL is the room's either way, so the router sees nothing.

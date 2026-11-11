@@ -1,60 +1,8 @@
-// What the lazy chunks get of app.js. A lazy module imports types only: a value imported from a module app.js has too
-// would be split into a chunk of its own that app.js imports eagerly (the build refuses it, DESIGN.md §17.7). So
-// app.js hands each one what it uses, as a "kit". The pages among them are views made on first visit (`lazyView`).
+// A page from a lazy chunk (`lazyView`). Until 2026-11-12 this also held the "kits", what each lazy chunk got of app.js
+// as arguments while lazy chunks could share no code with it (REFACTOR item 52): they import what they use now.
 
-import { ApiError, errorMessage, SIGNUP_LOGIN_FAILED } from "./api.ts";
-import { clear, h, uniqueId } from "./dom.ts";
-import { byLine } from "./header.ts";
-import { prepareImage } from "./lib/image.ts";
-import { LIMITS, textLength } from "./lib/limits.ts";
-import { otherMember, roomTitle } from "./lib/rooms.ts";
-import { DEFAULT_SITE } from "./lib/types.ts";
+import { h } from "./dom.ts";
 import type { View } from "./router.ts";
-import { createScope } from "./scope.ts";
-import { savedTheme, setTheme, THEME_KEY, THEMES } from "./theme.ts";
-import { avatar } from "./ui/avatar.ts";
-import type { SearchKit } from "./ui/user-search.ts";
-import type { LoginKit } from "./views/login.ts";
-import type { ProfileKit } from "./views/profile.ts";
-import type { ForwardKit } from "./views/room/forward.ts";
-
-/** People search (ui/user-search.ts): the sidebar's New message, room access. */
-export const SEARCH_KIT: SearchKit = { h, uniqueId, avatar, SEARCH_DEBOUNCE_MS: 200 };
-
-/** The forward dialog (views/room/forward.ts). */
-export const FORWARD_KIT: ForwardKit = { ...SEARCH_KIT, otherMember, roomTitle };
-
-/** The login and signup page (views/login.ts). */
-export const LOGIN_KIT: LoginKit = {
-  h,
-  clear,
-  uniqueId,
-  byLine,
-  ApiError,
-  errorMessage,
-  SIGNUP_LOGIN_FAILED,
-  LIMITS,
-  textLength,
-  DEFAULT_SITE,
-};
-
-/** The profile page (views/profile.ts). */
-export const PROFILE_KIT: ProfileKit = {
-  h,
-  clear,
-  uniqueId,
-  avatar,
-  ApiError,
-  errorMessage,
-  prepareImage,
-  LIMITS,
-  textLength,
-  createScope,
-  savedTheme,
-  setTheme,
-  THEME_KEY,
-  THEMES,
-};
 
 /**
  * A page from a lazy chunk: "Loading…" until `load` gives its view, which is then mounted in its place (if it is still

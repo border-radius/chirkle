@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryOutputs, injectAssets, latinFont, staticImports, viewerDefine } from "../../../scripts/lib/build-utils.mjs";
+import { eagerChunks, entryOutputs, injectAssets, latinFont, staticImports, viewerDefine } from "../../../scripts/lib/build-utils.mjs";
 
 const template = `<!doctype html><head><!--CSS--></head><body><div id="app"></div><!--JS--></body>`;
 
@@ -27,6 +27,19 @@ describe("injectAssets", () => {
   it("throws when a placeholder is missing", () => {
     expect(() => injectAssets("<head><!--CSS--></head>", { js: "a.js", css: "a.css" })).toThrow(/<!--JS-->/);
     expect(() => injectAssets("<body><!--JS--></body>", { js: "a.js", css: "a.css" })).toThrow(/<!--CSS-->/);
+  });
+});
+
+describe("injectAssets with chunks", () => {
+  it("modulepreloads the chunks the script imports, right after it", () => {
+    const html = injectAssets("<head><!--CSS--><!--JS--></head>", {
+      js: "assets/app.js",
+      css: "assets/app.css",
+      chunks: ["assets/chunk-A.js", "assets/chunk-B.js"],
+    });
+    expect(html).toContain(
+      '<script type="module" src="/assets/app.js"></script>\n<link rel="modulepreload" href="/assets/chunk-A.js">\n<link rel="modulepreload" href="/assets/chunk-B.js">',
+    );
   });
 });
 
@@ -78,6 +91,32 @@ describe("staticImports", () => {
   it("lists the chunks an output loads up front, not the lazy ones", () => {
     expect(staticImports(metafile, "pb_public", "assets/app-AB12.js")).toEqual(["pb_public/assets/chunk-XY.js"]);
     expect(staticImports(metafile, "pb_public/", "assets/main-GH78.js")).toEqual([]);
+  });
+});
+
+describe("eagerChunks", () => {
+  it("lists every chunk an output loads up front, through the chunks it imports, never a lazy one", () => {
+    const metafile = {
+      outputs: {
+        "pb_public/assets/app-AB12.js": {
+          imports: [
+            { path: "pb_public/assets/chunk-B.js", kind: "import-statement" },
+            { path: "pb_public/assets/viewer-EF56.js", kind: "dynamic-import" },
+            { path: "pb_public/assets/chunk-A.js", kind: "import-statement" },
+          ],
+        },
+        "pb_public/assets/chunk-A.js": { imports: [{ path: "pb_public/assets/chunk-C.js", kind: "import-statement" }] },
+        "pb_public/assets/chunk-B.js": { imports: [{ path: "pb_public/assets/chunk-A.js", kind: "import-statement" }] },
+        "pb_public/assets/chunk-C.js": { imports: [] },
+        "pb_public/assets/viewer-EF56.js": { imports: [{ path: "pb_public/assets/chunk-D.js", kind: "import-statement" }] },
+      },
+    };
+    expect(eagerChunks(metafile, "pb_public", "assets/app-AB12.js")).toEqual([
+      "assets/chunk-A.js",
+      "assets/chunk-B.js",
+      "assets/chunk-C.js",
+    ]);
+    expect(eagerChunks(metafile, "pb_public/", "assets/viewer-EF56.js")).toEqual(["assets/chunk-D.js"]);
   });
 });
 

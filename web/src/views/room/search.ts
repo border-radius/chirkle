@@ -2,10 +2,9 @@
 // typed, newest first, a page at a time. Picking one goes to it in the room, as a reply's quote does (§19). Matched
 // on `text_key`, the text case folded on the server like names are (§22.1): "привет" finds "Привет".
 //
-// A lazy chunk, like the viewer (§17.7): the room view import()s it when search is first opened. It imports types
-// only; what it needs from app.js comes in its options.
+// A lazy chunk, like the viewer (§17.7): the room view import()s it when search is first opened.
 
-import type { h } from "../../dom.ts";
+import { h } from "../../dom.ts";
 import type { PageQuery } from "../../lib/cursor.ts";
 import type { Message, User } from "../../lib/types.ts";
 
@@ -16,7 +15,6 @@ export interface SearchOptions {
   /** A page of results (`api.page`): PAGE_SIZE of them, or fewer when there are no more. */
   page: (q: PageQuery, signal: AbortSignal) => Promise<Message[]>;
   pageSize: number;
-  h: typeof h;
   /** When a message was sent, short. */
   when: (m: Message) => string;
   /** The author's face, next to a result. */
@@ -82,7 +80,6 @@ export function highlight(text: string, words: readonly string[]): string[] {
 }
 
 export function createSearch(o: SearchOptions): Search {
-  const { h } = o;
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => scope.abort(), { signal });

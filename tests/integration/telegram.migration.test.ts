@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import PocketBase from "pocketbase";
 import { describe, expect, it } from "vitest";
-import { migrate, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
+import { migrate, migrateDownPast, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 
 describe("migration 1760000047_telegram_supergroup_ids.js", () => {
   it("drops a migrated group's mappings from before the move, where the logs show the collisions; leaves the rest", async () => {
@@ -55,7 +55,7 @@ describe("migration 1760000047_telegram_supergroup_ids.js", () => {
     }
 
     // Back to before 1760000047 (1760000048 came after it), then up again.
-    migrate(dataDir, "down", "2");
+    migrateDownPast(dataDir, "1760000047_telegram_supergroup_ids.js");
     migrate(dataDir, "up");
     const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
     try {

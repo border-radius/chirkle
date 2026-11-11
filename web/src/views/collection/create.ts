@@ -1,5 +1,6 @@
 // A new collection (§31): the sidebar's "+".
 
+import { h } from "../../dom.ts";
 import { calls } from "./calls.ts";
 import { type Base, icon, loadStylesheet, reason } from "./shared.ts";
 
@@ -11,11 +12,10 @@ export interface CreateOptions extends Base {
 
 /** The sidebar's "+" (§31): a name, and whether anyone may see it. */
 export async function openCreate(o: CreateOptions): Promise<void> {
-  const { h } = o;
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(), { signal });
-  const title = h("h2", { id: "coll-create-title" }, [icon(h), " New collection"]);
+  const title = h("h2", { id: "coll-create-title" }, [icon(), " New collection"]);
   const input = h("input", { required: true, autocomplete: "off", "aria-label": "Name", placeholder: "Name" });
   // A switch, as Settings' choices are.
   const pub = h("input", { type: "checkbox", role: "switch", class: "switch" });
@@ -66,7 +66,7 @@ export async function openCreate(o: CreateOptions): Promise<void> {
     if (refocus) o.opener.focus();
   }
   dialog.addEventListener("close", () => close(), { signal });
-  await loadStylesheet(h);
+  await loadStylesheet();
   if (signal.aborted) return;
   document.body.append(dialog);
   dialog.showModal();

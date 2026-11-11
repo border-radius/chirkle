@@ -3,7 +3,7 @@
 // Google, Mozilla or Apple, and nothing arrives once every tab is closed.
 //
 // A lazy chunk: app.ts import()s it for someone who turned notifications on (NOTIFY_KEY), the profile page for its
-// settings. It imports types only; what it needs from app.js comes in its options.
+// settings.
 //
 // - One tab alerts: the one holding the "chat.notify" Web Lock (the others wait for it, and one takes over when it
 //   closes). It asks the other tabs over a BroadcastChannel whether one of them is in front.
@@ -12,7 +12,7 @@
 //   replaces the last. Clicking one opens its message (sw.ts). Reading the room, anywhere, closes it.
 
 import type { Api, MessageActivity } from "./api.ts";
-import type { h } from "./dom.ts";
+import { h } from "./dom.ts";
 import type { Message, Room, User } from "./lib/types.ts";
 import type { AppState, Store } from "./store.ts";
 
@@ -296,7 +296,6 @@ export function startNotify({ api, store, title, navigate }: NotifyOptions): () 
 // ---------------------------------------------------------------- the profile page's settings
 
 export interface SettingsOptions {
-  h: typeof h;
   id: string;
   /** The choices changed: app.ts starts following them if it isn't yet. */
   onChange: () => void;
@@ -307,7 +306,7 @@ const BLOCKED = "Your browser blocks notifications from this site. Allow them in
 const UNSUPPORTED = "This browser can't show notifications here: choose the sound.";
 
 /** The Notifications fieldset of the profile page (§34). */
-export function notifySettings({ h, id, onChange, signal }: SettingsOptions): HTMLElement {
+export function notifySettings({ id, onChange, signal }: SettingsOptions): HTMLElement {
   const box = (key: Exclude<keyof NotifyPrefs, "rooms">, label: string) => {
     const input = h("input", { type: "checkbox", name: key });
     return { input, el: h("label", { class: "notify-choice" }, [input, label]) };

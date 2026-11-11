@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageActivity } from "../../web/src/api.ts";
 import { NOTIFY_KEY as APP_KEY } from "../../web/src/app.ts";
-import { h } from "../../web/src/dom.ts";
 import { newId } from "../../web/src/lib/id.ts";
 import { roomTitle } from "../../web/src/lib/rooms.ts";
 import type { Room } from "../../web/src/lib/types.ts";
@@ -294,7 +293,7 @@ describe("notifications: the profile page's settings (§34)", () => {
   });
 
   const mount = (onChange = vi.fn()) => {
-    const el = notifySettings({ h, id: "p", onChange, signal: ac.signal });
+    const el = notifySettings({ id: "p", onChange, signal: ac.signal });
     document.body.append(el);
     const box = (name: string) => el.querySelector<HTMLInputElement>(`input[name=${name}]`)!;
     return { el, box, onChange };

@@ -2,30 +2,15 @@
 // and asks for an invite code to sign up while the site is invite-only (§24). Forgot password (§39): "Forgot
 // password?" asks for the email to send a link to, and the link's page (/reset-password/:token) sets the new one.
 //
-// A lazy chunk: app.ts loads it for /login and /signup (at once for someone not signed in). It imports types only, and
-// gets what it uses of app.js in `kit` (lazy.ts LOGIN_KIT).
+// A lazy chunk: app.ts loads it for /login and /signup (at once for someone not signed in).
 
-import type { Api, ApiError, errorMessage, SIGNUP_LOGIN_FAILED } from "../api.ts";
-import type { clear, h, uniqueId } from "../dom.ts";
-import type { byLine } from "../header.ts";
-import type { LIMITS, textLength } from "../lib/limits.ts";
-import type { Site, User } from "../lib/types.ts";
+import { type Api, ApiError, errorMessage, SIGNUP_LOGIN_FAILED } from "../api.ts";
+import { clear, h, uniqueId } from "../dom.ts";
+import { byLine } from "../header.ts";
+import { LIMITS, textLength } from "../lib/limits.ts";
+import { DEFAULT_SITE, type User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import type { AppState, Store } from "../store.ts";
-
-export interface LoginKit {
-  h: typeof h;
-  clear: typeof clear;
-  uniqueId: typeof uniqueId;
-  byLine: typeof byLine;
-  ApiError: typeof ApiError;
-  errorMessage: typeof errorMessage;
-  SIGNUP_LOGIN_FAILED: typeof SIGNUP_LOGIN_FAILED;
-  LIMITS: typeof LIMITS;
-  textLength: typeof textLength;
-  /** The site without a site record. */
-  DEFAULT_SITE: Site;
-}
 
 type Mode = "login" | "signup" | "forgot" | "reset";
 type Field = "name" | "email" | "password" | "invite_code";
@@ -38,7 +23,7 @@ interface FieldSpec {
   extra?: Record<string, string | number>;
 }
 
-const fieldSpecs = (LIMITS: LoginKit["LIMITS"]): Record<Mode, FieldSpec[]> => ({
+const fieldSpecs = (): Record<Mode, FieldSpec[]> => ({
   login: [
     { name: "email", label: "Email", type: "email", autocomplete: "email" },
     { name: "password", label: "Password", type: "password", autocomplete: "current-password" },
@@ -61,7 +46,7 @@ const INVITE: FieldSpec = { name: "invite_code", label: "Invite code", type: "te
 const TITLES: Record<Mode, string> = { login: "Log in", signup: "Sign up", forgot: "Reset password", reset: "Set a new password" };
 const TABS: Mode[] = ["login", "signup"];
 const BUTTONS: Partial<Record<Mode, string>> = { forgot: "Send link", reset: "Set password" };
-const hints = (LIMITS: LoginKit["LIMITS"]): Partial<Record<Mode, string>> => ({
+const hints = (): Partial<Record<Mode, string>> => ({
   forgot: "Enter your account's email, and we'll send you a link to set a new password.",
   reset: `At least ${LIMITS.passwordMin} characters. Every device logged in to this account is logged out.`,
 });
@@ -77,16 +62,9 @@ function tokenEmail(token: string): string {
 }
 
 /** `store`: where the site's branding and signup policy are (§24); the defaults without one. */
-export function createLoginView(deps: {
-  kit: LoginKit;
-  api: Api;
-  onLogin: (user: User) => void;
-  mode?: Mode;
-  store?: Store<AppState>;
-}): View {
-  const { h, clear, uniqueId, byLine, ApiError, errorMessage, SIGNUP_LOGIN_FAILED, LIMITS, textLength, DEFAULT_SITE } = deps.kit;
-  const FIELDS = fieldSpecs(LIMITS);
-  const HINTS = hints(LIMITS);
+export function createLoginView(deps: { api: Api; onLogin: (user: User) => void; mode?: Mode; store?: Store<AppState> }): View {
+  const FIELDS = fieldSpecs();
+  const HINTS = hints();
   let ac: AbortController | null = null;
   let mode: Mode = deps.mode ?? "login";
   let busy = false;

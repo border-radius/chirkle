@@ -2,8 +2,9 @@
 
 A small, fast, real-time group chat. One [PocketBase](https://pocketbase.io) binary is the whole backend
 (auth, data, realtime, static files); the frontend is vanilla TypeScript bundled by esbuild — no framework,
-~47 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 49.75 KB of JS,
-11.3 KB of CSS; rarer screens such as the image viewer, search, room access, collections, the emoji picker and Mentions & replies load on first use).
+~50 KB of JS and ~11 KB of CSS gzipped (`npm run build` fails over its budget: 62.5 KB for everything a visit loads
+first, 16 KB for any rarer screen, such as the image viewer, search, room access, collections, the emoji picker and
+Mentions & replies, which load on first use).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">

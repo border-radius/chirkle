@@ -1,20 +1,14 @@
 // "New message" user search (§16.5): type a name, pick a person. Debounced, cancels stale requests.
 // Keyboard: ↓ from the input moves into the results, ↑/↓ between them, Escape closes.
 //
-// A lazy chunk (the sidebar's New message and the room access dialog load it): it imports types only, and gets what it
-// uses of app.js in `kit` (lazy.ts SEARCH_KIT).
+// A lazy chunk: the sidebar's New message loads it, and the room access dialog and the forward dialog import it.
 
-import type { h, uniqueId } from "../dom.ts";
+import { h, uniqueId } from "../dom.ts";
 import type { User } from "../lib/types.ts";
-import type { AvatarUrl, avatar } from "./avatar.ts";
+import { type AvatarUrl, avatar } from "./avatar.ts";
 
-export interface SearchKit {
-  h: typeof h;
-  uniqueId: typeof uniqueId;
-  avatar: typeof avatar;
-  /** How long typing pauses before people are searched. */
-  SEARCH_DEBOUNCE_MS: number;
-}
+/** How long typing pauses before people are searched. */
+export const SEARCH_DEBOUNCE_MS = 200;
 
 /** A search that failed for a reason to show as it is ("There's nobody called ann on b.example."). */
 export class SearchError extends Error {}
@@ -27,7 +21,6 @@ export interface UserSearch {
 }
 
 export function createUserSearch(opts: {
-  kit: SearchKit;
   search: (query: string, signal: AbortSignal) => Promise<User[]>;
   avatarUrl: AvatarUrl;
   onPick: (user: User) => void;
@@ -37,7 +30,6 @@ export function createUserSearch(opts: {
   signal: AbortSignal;
 }): UserSearch {
   const { signal } = opts;
-  const { h, uniqueId, avatar, SEARCH_DEBOUNCE_MS } = opts.kit;
   const id = uniqueId("user-search");
   const input = h("input", {
     id,

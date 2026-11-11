@@ -579,7 +579,7 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   new databases (PocketBase's collections snapshot), keeping the chain for upgrades; `schema.snapshot.json` already pins
   the result.
 
-#### 49. Retention for tables that only grow
+#### 49. Retention for tables that only grow ✅ (2026-11-12)
 - `inbox` rows (one per mention, reply and reaction) are never pruned, nor `room_reads` of deleted rooms' users, nor the
   soft-deleted messages' rows. Stats and federation queues already prune (`stats-prune`, `federation/worker.js`).
 - Measured in QA pass 35 (local, one person, 5 rooms): `GET /api/chat/unread` takes ~7 ms with no inbox rows,
@@ -589,6 +589,21 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 - Suggestion: a daily prune (the `lib/worker.js` loop): inbox rows past the newest 500 per person or older than 180
   days; and an index `(user, room, created)` with `counts()` driven per room from `room_reads`, so read rows are skipped; an optional `site.retention_days` for messages (a product decision, DESIGN.md §2 says history is never pruned
   today).
+- Done (DESIGN.md §42.1), except messages' retention (the owner's call; not built):
+  - `pb_hooks/lib/retention.js`, cron `retention` daily at 03:41 (a cron job, not the worker loop: one statement per
+    step, once a day). The inbox keeps a person's newest 500 rows, none older than 180 days. Orphans that skipped the
+    hooks go too: inbox rows of a deleted (or soft-deleted) message, or of a gone room, person or actor; `room_reads`,
+    `inbox_reads`, `hidden_rooms` of a gone person or room; `media` rows and `link_queue` jobs of a soft-deleted or gone
+    message. `POST /api/retention/tick` (superusers) runs it and answers each step's count.
+  - The counts are Go now (item 47): `server/unread.go inboxMentionsSQL` is driven by the rooms the caller has inbox
+    rows in (a materialized CTE with each one's read position), each a range scan of the new index
+    `idx_inbox_user_room_created` (migration `1760000049`) from that position on. `SELECT DISTINCT` made SQLite walk
+    `idx_inbox_one` in message order, so it counts `COUNT(DISTINCT)` over the capped rows; capped at 100 a room (the
+    apps only test > 0). A plan test pins the index (`reads.test.ts`).
+  - Measured (5,000 inbox rows, 5 rooms): the per-room count 13 ms → 1.5 ms; `GET /api/chat/unread` ~16–22 ms →
+    ~8–11 ms (~3 ms with none). The Go move had already taken QA pass 35's 40–100 ms down to the former.
+  - `tests/integration/retention.test.ts` runs a server of its own (the prune goes through every table). Two migration
+    tests reverted "the last N" migrations; they name theirs now (`migrateDownPast`), so a new one can't shift them.
 
 #### 50. Say what kind of account a user is
 - Telegram senders and linked instances' people are told apart by their e-mail domain (`@telegram.invalid`,
@@ -596,14 +611,21 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 - Suggestion: a `users.kind` select (`person`, `telegram`, `peer`), set by the bridges, backfilled by a migration from
   the same patterns; hooks and rules test the field. The e-mails stay as they are (PocketBase needs one).
 
-#### 51. Operational visibility
+#### 51. Operational visibility ✅ (2026-11-12)
 - Today there is `/api/health` and the moderators' `/stats` page. Workers stalling (the fed_queue rows left by a raw
   SQL delete, security audit 2026-10-29), the hooks pool filling and queues backing up are found by users.
 - Suggestion: a superuser-only `GET /api/chat/metrics` (queue depths of `tg_queue`, `fed_queue`, `link_queue`, media
   backlog, `storage_cleanup`; each worker's last run and lock; realtime clients; DB size), shown on `/stats` for
   superusers, and in Prometheus text form for those who scrape it.
+- Done as suggested (DESIGN.md §42.2), in Go (`server/metrics.go`): it reads live messages' own counters (senders,
+  events queued, clients dropped for falling behind, new in `live.go`) and the process's memory, which the JS hooks
+  can't. Queues: rows, failing and the oldest's age. Workers: `lib/worker.js` notes each pass's time and a failed one's
+  error in the app store (`<lock>.last`, `<lock>.error`); the metrics read those and the lock's last renew; the
+  daily prune is noted the same way. JSON, or Prometheus text with `?format=prometheus` / a text `Accept`. The
+  `/stats` page has a "Server" card for superusers (tiles, a queues table, a workers table).
+  - Not covered: the JS hooks pool's use (the jsvm plugin has no counter for it). Alerting is left to whoever scrapes.
 
-#### 52. A size budget for what a visit loads, not for each file (web)
+#### 52. A size budget for what a visit loads, not for each file (web) ✅ (2026-11-12)
 - `app.js`'s budget has been raised about 40 times (DESIGN.md §7.7 lists them). Its consequences shape the code more
   than any other rule: lazy chunks may not share modules, so they get "kits" through `web/src/lazy.ts`; `room.ts` could
   not be split (item 44) because a module boundary cost 0.10 KB; fixes are weighed in tenths of a kilobyte.
@@ -611,8 +633,23 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   per-file caps by one budget for the critical path (html + app.js + app.css + what the first room needs), allowing
   shared chunks loaded with `<link rel="modulepreload">` (HTTP/2 makes a fourth request nearly free, and they are
   immutable-cached). Then drop the kit indirection where it only served the rule.
+- Done (DESIGN.md §7.7). `scripts/lib/build-utils.mjs` has three budgets instead of 24: the critical path (index.html,
+  app.js, the chunks app.js imports, app.css) ≤ 62.5 KB, the sum of the per-file budgets it replaced; any lazy feature's
+  first use (its chunk, the chunks it imports beyond the critical path, its stylesheet; `FEATURES`) ≤ 16 KB; the stats
+  page ≤ 10 KB. The build lists every file and feature. `app.js`'s shared chunks are `<link rel="modulepreload">` in
+  index.html (`eagerChunks`, `injectAssets`), which the server's Link header and the service worker already read.
+  - The kits are gone: `web/src/lazy.ts` keeps only `lazyView`; login, settings, forward, the people search and the
+    access dialog import what they use, and so do the viewer, search, media grid, Jump to, inbox, "@" and emoji
+    suggestions, the emoji picker, notifications and collections, which took `h` in their options. The access dialog
+    imports the people search instead of the room view loading both and handing one to the other.
+  - Cost: 58.78 KB → 61.44 KB on the critical path (app.js 46.95 KB became 37.3 KB plus six chunks, 12.4 KB; the
+    split's gzip and export overhead), and the access and forward dialogs ~1 KB more each (the people search comes
+    with them). `profile-web` (`--cpu=4`, 3 runs each): cold load to messages 1398 → 1361 ms (medians), warm loads,
+    switches and scrolling within noise: no measurable change.
+  - Done on the way: the stats page's "Server" card (item 51) took `statsJs` over its old 5.5 KB; the page is 9.31 of
+    10 KB now.
 
-#### 53. Split `views/room.ts` again (web), after 52
+#### 53. Split `views/room.ts` again (web), after 52 (unblocked: modules may share code now)
 - 1,155 lines (892 at round 4): the collections' badges, parking/resuming, the viewer and grid wiring and the composer
   wiring all live in one closure. Each is a module with a narrow host, as `writes.ts` was (item 41).
 

@@ -1,6 +1,7 @@
 // A collection's page (/c/:id, §31): its items as a grid like the media grid's, newest first under month headings, what
 // is new since you last looked highlighted.
 
+import { h } from "../../dom.ts";
 import type { CollectionItem, Message } from "../../lib/types.ts";
 import type { ViewerImage } from "../room/viewer.ts";
 import { calls, type Meta } from "./calls.ts";
@@ -28,10 +29,10 @@ export interface PageOptions extends Base {
 }
 
 export async function mountCollection(root: HTMLElement, o: PageOptions): Promise<void> {
-  const { h, api, signal, id } = o;
+  const { api, signal, id } = o;
   const call = calls(api);
   const [, meta] = await Promise.all([
-    loadStylesheet(h),
+    loadStylesheet(),
     call.get(id, signal).catch(() => null),
     (async () => {
       // Your subscription's `seen_at` decides what is new: wait for the store to have it (just after a reload).
@@ -45,7 +46,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   function gone() {
     root.replaceChildren(
       h("section", { class: "collection not-found" }, [
-        h("h1", {}, [icon(h), " This collection doesn't exist."]),
+        h("h1", {}, [icon(), " This collection doesn't exist."]),
         h("p", {}, ["It may be private, or deleted. ", h("a", { href: "/" }, "Back to rooms")]),
       ]),
     );
@@ -222,7 +223,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
 
   function renderHead() {
     if (signal.aborted) return;
-    heading.replaceChildren(icon(h), " ", info.name);
+    heading.replaceChildren(icon(), " ", info.name);
     metaLine.textContent = [mine ? "Yours" : ownerName && `By ${ownerName}`, info.public ? "Public" : "Private", count(info.items)]
       .filter(Boolean)
       .join(" · ");
@@ -357,7 +358,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
           on: { click: () => openSave({ ...o, from: { item: it.id }, opener: save }) },
           signal,
         },
-        icon(h),
+        icon(),
       );
       cell.append(save);
     }
@@ -494,7 +495,6 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
           return { messages: got.map(asMessage).reverse(), done: !older || p.done };
         },
         media: (m) => [{ message: m, file: m.files![0]!, video: p.items.find((x) => x.id === m.id)?.video ?? false }],
-        h,
         name: (m, f) => m.file_names?.[f] ?? f,
         when: (m) => `Added ${o.when(m.created)}`,
         fileUrl: (m, f) => api.itemUrl({ id: m.id, file: f }),

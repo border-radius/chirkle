@@ -1347,7 +1347,8 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_inbox_one ON inbox (user, message, kind, actor, emoji)",
         "CREATE INDEX idx_inbox_user_created ON inbox (user, created)",
-        "CREATE INDEX idx_inbox_message ON inbox (message)"
+        "CREATE INDEX idx_inbox_message ON inbox (message)",
+        "CREATE INDEX idx_inbox_user_room_created ON inbox (user, room, created)"
       ]
     },
     {

@@ -74,8 +74,32 @@ WHERE i.user = {:me} AND m.deleted = FALSE AND ` + seesSQL
 const inboxReadInRoomSQL = `(i.kind != 'reaction' AND m.created <= COALESCE((SELECT rr.last_read_at FROM room_reads rr
   WHERE rr.user = {:me} AND rr.room = i.room), ''))`
 
-// inboxCap: the inbox's "unseen" count stops here (shown as "99+").
+// inboxCap: the inbox's "unseen" count stops here (shown as "99+"), and so does each room's count of mentions.
 const inboxCap = 100
+
+// inboxMentionsSQL: per room, the mentions of the caller and replies to them that are unread there (newer than their
+// read position, or signup), at most inboxCap each; rooms with none come back as 0. Driven by the rooms the caller has
+// inbox rows in (materialized with their read positions), each one a range scan of idx_inbox_user_room_created from
+// the read position on (REFACTOR item 49): a row is made with or after its message, so `i.created > pos` drops no row
+// `m.created > pos` keeps, and read rows are never visited. Until 2026-11-12 one GROUP BY went through every row of
+// the caller's, read or not: 13 ms against 1.5 ms for 5,000 rows in 5 rooms. COUNT(DISTINCT) over the capped rows, not
+// SELECT DISTINCT: that made SQLite walk idx_inbox_one in message order instead.
+var inboxMentionsSQL = `
+WITH p AS MATERIALIZED (
+  SELECT r.id AS room,
+    MAX(COALESCE((SELECT rr.last_read_at FROM room_reads rr WHERE rr.user = {:me} AND rr.room = r.id), ''), {:since}) AS pos
+  FROM rooms r
+  WHERE r.id IN (SELECT DISTINCT room FROM inbox WHERE user = {:me}) AND ` + seesSQL + `
+)
+SELECT p.room AS room, (
+  SELECT COUNT(DISTINCT message) FROM (
+    SELECT i.message FROM inbox i JOIN messages m ON m.id = i.message
+    WHERE i.user = {:me} AND i.room = p.room AND i.created > p.pos AND i.kind != 'reaction'
+      AND m.created > p.pos AND m.deleted = FALSE
+    LIMIT ` + strconv.Itoa(inboxCap) + `
+  )
+) AS n
+FROM p`
 
 // unreadRoute: GET /api/chat/unread → { at, rooms: { "<roomId>": count }, ids, inbox, mentions } for every room with
 // unread messages (at most unreadCap each). `at` is when the counts were taken. `ids` are the recent messages the counts
@@ -133,17 +157,15 @@ func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
 		Room string `db:"room"`
 		N    int    `db:"n"`
 	}
-	err = app.DB().NewQuery(
-		`SELECT i.room AS room, COUNT(DISTINCT i.message) AS n ` + inboxVisibleSQL + ` AND i.kind != 'reaction'
-       AND m.created > MAX(COALESCE((SELECT rr.last_read_at FROM room_reads rr WHERE rr.user = {:me} AND rr.room = i.room), ''), {:since})
-       GROUP BY i.room`,
-	).Bind(dbx.Params{"me": user.Id, "since": user.GetString("created")}).All(&rows)
+	err = app.DB().NewQuery(inboxMentionsSQL).Bind(dbx.Params{"me": user.Id, "since": user.GetString("created")}).All(&rows)
 	if err != nil {
 		return 0, nil, err
 	}
 	mentions := map[string]int{}
 	for _, r := range rows {
-		mentions[r.Room] = r.N
+		if r.N > 0 {
+			mentions[r.Room] = r.N
+		}
 	}
 	return unseen, mentions, nil
 }

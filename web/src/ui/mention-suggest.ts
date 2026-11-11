@@ -4,10 +4,10 @@
 // (until another "@" is typed).
 //
 // A lazy chunk: the composer (in app.js) only spots an "@" being typed and has the room view load this; from then on it
-// follows the textarea itself. It imports types only, and links the emoji picker's stylesheet for the list's looks.
+// follows the textarea itself. It links the emoji picker's stylesheet for the list's looks.
 
 import type { Api } from "../api.ts";
-import type { h as H } from "../dom.ts";
+import { h } from "../dom.ts";
 import type { User } from "../lib/types.ts";
 
 /** The emoji picker's stylesheet, which styles .emoji-suggest (scripts/lib/build-utils.mjs). */
@@ -29,7 +29,6 @@ export interface MentionSuggest {
 }
 
 export function createMentionSuggest(opts: {
-  h: typeof H;
   api: Api;
   textarea: HTMLTextAreaElement;
   /** The room whose people to offer. */
@@ -38,7 +37,7 @@ export function createMentionSuggest(opts: {
   avatar: (u: User) => HTMLElement;
   signal: AbortSignal;
 }): MentionSuggest {
-  const { h, api, textarea, signal } = opts;
+  const { api, textarea, signal } = opts;
   if (!document.querySelector(`link[href="${EMOJI_CSS}"]`)) document.head.append(h("link", { rel: "stylesheet", href: EMOJI_CSS }));
   const id = `${textarea.id}-people`;
   const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": "People", hidden: true });

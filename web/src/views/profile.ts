@@ -1,36 +1,18 @@
 // Profile (§15.5, §22.2): change or remove your avatar, change your display name (unique, §22.1), pick this
 // device's theme (§7.8) and notifications (§34, a lazy chunk), change your password, log out.
 //
-// A lazy chunk: app.ts loads it for /me. It imports types only, and gets what it uses of app.js in `kit` (lazy.ts
-// PROFILE_KIT).
+// A lazy chunk: app.ts loads it for /me.
 
-import type { ApiError, errorMessage } from "../api.ts";
+import { ApiError, errorMessage } from "../api.ts";
 import type { Ctx } from "../context.ts";
-import type { clear, h, uniqueId } from "../dom.ts";
-import type { prepareImage } from "../lib/image.ts";
-import type { LIMITS, textLength } from "../lib/limits.ts";
+import { clear, h, uniqueId } from "../dom.ts";
+import { prepareImage } from "../lib/image.ts";
+import { LIMITS, textLength } from "../lib/limits.ts";
 import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
-import type { createScope } from "../scope.ts";
-import type { savedTheme, setTheme, THEME_KEY, THEMES, Theme } from "../theme.ts";
-import type { avatar } from "../ui/avatar.ts";
-
-export interface ProfileKit {
-  h: typeof h;
-  clear: typeof clear;
-  uniqueId: typeof uniqueId;
-  avatar: typeof avatar;
-  ApiError: typeof ApiError;
-  errorMessage: typeof errorMessage;
-  prepareImage: typeof prepareImage;
-  LIMITS: typeof LIMITS;
-  textLength: typeof textLength;
-  createScope: typeof createScope;
-  savedTheme: typeof savedTheme;
-  setTheme: typeof setTheme;
-  THEME_KEY: typeof THEME_KEY;
-  THEMES: typeof THEMES;
-}
+import { createScope } from "../scope.ts";
+import { savedTheme, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
+import { avatar } from "../ui/avatar.ts";
 
 /** Longest edge of an uploaded avatar (§15.3). */
 const AVATAR_EDGE = 512;
@@ -38,9 +20,9 @@ const AVATAR_EDGE = 512;
 const NOT_AN_IMAGE = "Choose a JPEG, PNG, WebP or GIF image.";
 
 /** Why `file` can't be an avatar (after preparation), or "". */
-export function avatarProblem(file: File, LIMITS: ProfileKit["LIMITS"]): string {
-  if (!(LIMITS.avatarTypes as readonly string[]).includes(file.type)) return NOT_AN_IMAGE;
-  if (file.size > LIMITS.avatarBytes) return `That image is too large (max ${LIMITS.avatarBytes / 1024 / 1024} MB).`;
+export function avatarProblem(file: File, limits = LIMITS): string {
+  if (!(limits.avatarTypes as readonly string[]).includes(file.type)) return NOT_AN_IMAGE;
+  if (file.size > limits.avatarBytes) return `That image is too large (max ${limits.avatarBytes / 1024 / 1024} MB).`;
   return "";
 }
 
@@ -49,24 +31,16 @@ export function passwordProblem(
   current: string,
   next: string,
   confirm: string,
-  LIMITS: ProfileKit["LIMITS"],
+  limits = LIMITS,
 ): Partial<Record<"current" | "next" | "confirm", string>> {
   if (!current) return { current: "Enter your current password." };
-  if (next.length < LIMITS.passwordMin) return { next: `Must be at least ${LIMITS.passwordMin} characters.` };
+  if (next.length < limits.passwordMin) return { next: `Must be at least ${limits.passwordMin} characters.` };
   if (next === current) return { next: "That is your current password. Choose a new one." };
   if (confirm !== next) return { confirm: "The passwords don't match." };
   return {};
 }
 
-export function createProfileView({
-  kit,
-  api,
-  store,
-  logOut,
-  notify,
-}: Pick<Ctx, "api" | "store" | "logOut" | "notify"> & { kit: ProfileKit }): View {
-  const { h, clear, uniqueId, avatar, ApiError, errorMessage, prepareImage, LIMITS, textLength, createScope } = kit;
-  const { savedTheme, setTheme, THEME_KEY, THEMES } = kit;
+export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api" | "store" | "logOut" | "notify">): View {
   const fieldMessage = (e: unknown, field: string) => (e instanceof ApiError && e.fields[field]) || errorMessage(e);
   const vid = uniqueId("profile");
   const scope = createScope();
@@ -388,7 +362,7 @@ export function createProfileView({
       renderPicture();
       showTheme();
       void import("../notify.ts").then(
-        (m) => scope.active && notifyBox.replaceWith(m.notifySettings({ h, id: vid, onChange: notify, signal })),
+        (m) => scope.active && notifyBox.replaceWith(m.notifySettings({ id: vid, onChange: notify, signal })),
         () => {},
       );
       themeChoices.addEventListener(

@@ -1,11 +1,27 @@
 // The usage statistics page (DESIGN.md §40), /stats: a page of its own (stats.html), not the app's. It asks
 // GET /api/chat/stats with the session this browser has: the app's (a moderator), else the admin UI's (a superuser,
 // signed in at /_/ on this server). Anyone else is told there is no such page. Counts only; refreshed every 30 s
-// while the tab is visible.
+// while the tab is visible. A superuser also sees the server's state (GET /api/chat/metrics, REFACTOR item 51).
 
 import { type Child, clear, h } from "../dom.ts";
 import { applyTheme, savedTheme } from "../theme.ts";
-import { DAY_MS, formatHours, lastDays, midnight, niceMax, peak, percent, personHours, runs, type Sample, type Stats } from "./data.ts";
+import {
+  ago,
+  DAY_MS,
+  formatBytes,
+  formatHours,
+  formatSpan,
+  lastDays,
+  type Metrics,
+  midnight,
+  niceMax,
+  peak,
+  percent,
+  personHours,
+  runs,
+  type Sample,
+  type Stats,
+} from "./data.ts";
 
 const REFRESH_MS = 30_000;
 /** The app's session (web/src/pb.ts), and PocketBase's admin UI's (0.40: "__pb_superusers__" + its base path). */
@@ -22,6 +38,7 @@ const shortDay = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "sh
 
 let range: "day" | "week" = "day";
 let last: Stats | null = null;
+let metrics: Metrics | null = null;
 let refocus = false;
 
 function tokens(): string[] {
@@ -50,6 +67,19 @@ async function load(): Promise<Stats | "denied" | null> {
   return "denied";
 }
 
+/** The server's metrics, for a superuser's session; null for anyone else, or when they couldn't be had. */
+async function loadMetrics(): Promise<Metrics | null> {
+  for (const token of tokens()) {
+    try {
+      const res = await fetch("/api/chat/metrics", { headers: { Authorization: token, Accept: "application/json" } });
+      if (res.ok) return (await res.json()) as Metrics;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 // ---- pieces ----
 
 function tile(label: string, value: string, note?: string, big = false): HTMLElement {
@@ -72,32 +102,98 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
 
 /** A table of the chart's numbers, folded away: the values without hovering. */
 function table(caption: string, head: string[], rows: (string | number)[][]): HTMLElement {
-  return h("details", { class: "chart-table" }, [
-    h("summary", {}, "Show as a table"),
-    h("table", {}, [
-      h("caption", {}, caption),
+  return h("details", { class: "chart-table" }, [h("summary", {}, "Show as a table"), grid(caption, head, rows)]);
+}
+
+function grid(caption: string, head: string[], rows: (string | number)[][]): HTMLElement {
+  return h("table", {}, [
+    h("caption", {}, caption),
+    h(
+      "thead",
+      {},
       h(
-        "thead",
+        "tr",
         {},
+        head.map((c) => h("th", { scope: "col" }, c)),
+      ),
+    ),
+    h(
+      "tbody",
+      {},
+      rows.map((r) =>
         h(
           "tr",
           {},
-          head.map((c) => h("th", { scope: "col" }, c)),
+          r.map((c, i) => (i ? h("td", {}, typeof c === "number" ? num.format(c) : c) : h("th", { scope: "row" }, String(c)))),
         ),
       ),
-      h(
-        "tbody",
-        {},
-        rows.map((r) =>
-          h(
-            "tr",
-            {},
-            r.map((c, i) => (i ? h("td", {}, typeof c === "number" ? num.format(c) : c) : h("th", { scope: "row" }, String(c)))),
-          ),
-        ),
-      ),
-    ]),
+    ),
   ]);
+}
+
+/** The queues' and workers' names as people read them. */
+const LABELS: Record<string, string> = {
+  telegram: "Telegram",
+  federation: "Linked instances",
+  link_previews: "Link previews",
+  media_thumbs: "Thumbnails to make",
+  media_sizes: "Video shapes to read",
+  media_moves: "Files to move",
+  storage_cleanup: "Storage to clean up",
+  previews: "Link previews",
+  media: "Media",
+  retention: "Daily prune",
+};
+const named = (k: string) => LABELS[k] ?? k;
+
+/** The server's state, for a superuser (GET /api/chat/metrics). */
+function serverSection(m: Metrics): HTMLElement {
+  const now = Date.parse(m.at) || Date.now();
+  const db = (m.db["data.db"] ?? 0) + (m.db["data.db-wal"] ?? 0);
+  const logs = (m.db["auxiliary.db"] ?? 0) + (m.db["auxiliary.db-wal"] ?? 0);
+  const queues = Object.entries(m.queues).sort(([a], [b]) => named(a).localeCompare(named(b)));
+  const workers = Object.entries(m.workers).sort(([a], [b]) => named(a).localeCompare(named(b)));
+  return section(
+    "Server",
+    [
+      h("div", { class: "tiles" }, [
+        tile("Up for", formatSpan(m.uptime_seconds), `Chirkle ${m.version}, PocketBase ${m.pocketbase}`),
+        tile("Connections", num.format(m.realtime.clients), "realtime, incl. guests"),
+        tile(
+          "Live events waiting",
+          num.format(m.realtime.queued),
+          `${num.format(m.realtime.dropped)} slow clients dropped since the start`,
+        ),
+        tile("Database", formatBytes(db), `logs ${formatBytes(logs)}`),
+        tile("Memory", formatBytes(m.process.heap_bytes), `${formatBytes(m.process.sys_bytes)} from the system`),
+      ]),
+      h("h3", {}, "Queues"),
+      h(
+        "div",
+        { class: "chart-table" },
+        grid(
+          "Rows waiting for a worker",
+          ["Queue", "Rows", "Failed once or more", "Oldest"],
+          queues.map(([k, q]) => [named(k), q.rows, q.failing, q.rows ? formatSpan(q.oldest_seconds) : "–"]),
+        ),
+      ),
+      h("h3", {}, "Workers"),
+      h(
+        "div",
+        { class: "chart-table" },
+        grid(
+          "When each worker last did its work",
+          ["Worker", "Last pass", "Last error"],
+          workers.map(([k, w]) => [
+            named(k),
+            `${ago(w.last_pass, now)}${w.running ? " (running)" : ""}`,
+            w.last_error ? `${w.last_error} (${ago(w.last_error_at, now)})` : "–",
+          ]),
+        ),
+      ),
+    ],
+    "Only superusers see this. Also at /api/chat/metrics, in Prometheus's format with ?format=prometheus.",
+  );
 }
 
 // The charts are drawn at their box's own width (set by render), so their text stays its size on a phone.
@@ -429,6 +525,7 @@ function render(s: Stats) {
         tile("Banned", num.format(s.accounts.banned)),
       ]),
     ]),
+    metrics ? serverSection(metrics) : null,
   ];
   // Keep the open tables open across a refresh.
   const open = [...root.querySelectorAll("details")].map((d) => d.open);
@@ -459,8 +556,9 @@ function denied() {
 let timer = 0;
 async function refresh() {
   clearTimeout(timer);
-  const got = await load();
+  const [got, m] = await Promise.all([load(), loadMetrics()]);
   if (got === "denied") return denied();
+  metrics = m;
   if (got) render(got);
   else updated.textContent = last ? `Couldn't refresh: showing ${new Date(last.at).toLocaleTimeString()}` : "Couldn't load. Retrying…";
   if (!document.hidden) timer = window.setTimeout(refresh, REFRESH_MS);

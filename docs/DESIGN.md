@@ -44,7 +44,7 @@ These are left out on purpose. The design should not block them later.
 - Message search (now designed in §29)
 - OAuth providers (email and password only)
 - Email verification (not required to sign up or post, so no SMTP needed; SMTP is optional, for forgot password: §39)
-- Message retention limits (history is never pruned)
+- Message retention limits (history is never pruned; other tables are, §42.1)
 - Native mobile apps (Android: now designed in [`ANDROID.md`](ANDROID.md)), offline support (a service worker for an installable app and an offline shell: now §27)
 - End-to-end encryption
 
@@ -129,6 +129,7 @@ chat/
 │   ├── live.go                 # live messages on chat/messages, a queue per client (PERF.md §7, §9)
 │   ├── lists.go                # GET /api/chat/rooms, rooms/{room}/messages (pages, search), notifiable (§6)
 │   ├── unread.go               # GET /api/chat/unread, unread/{room} (§18.2, §41)
+│   ├── metrics.go              # GET /api/chat/metrics, superusers: queues, workers, realtime, DB, memory (§42.2)
 │   ├── access.go, anonymous.go, text.go  # canSee and seesSQL, hide and refuseProbes, searchKey: as lib/access.js, anonymous.js, text.js
 │   └── *_test.go               # go test: the shared text vectors, probes
 ├── pb_hooks/                   # server-side JS hooks (committed)
@@ -153,6 +154,7 @@ chat/
 │       ├── site.js             # invite-only signups (§24), GET /manifest.webmanifest (§27), App Links (ANDROID.md §9.4)
 │       ├── features.js         # the optional features' parts of the core hooks: federation, Telegram (§5.6)
 │       ├── worker.js           # the cron workers' loop and lock: previews, media, Telegram, federation (§28.1)
+│       ├── retention.js        # the daily prune: old inbox rows, rows left behind by raw deletes (§42.1)
 │       ├── previews.js         # link previews: the queue, the worker, fetching with curl (§28)
 │       ├── outbound.js         # where the server may go: public hosts and addresses (previews, federation; §28, §33.6)
 │       ├── pages.js            # reading a fetched page: title, icon link, charset (§28)
@@ -609,26 +611,16 @@ while its first page loads.
 
 ### 7.7 Performance budget (enforced in CI, §9.4)
 
-| Asset | Budget (gzipped) |
+Since 2026-11-12 (REFACTOR item 52) the budget is on what a visit loads, not on each file. `npm run build` prints
+every figure and fails over one; how fast it feels is checked by `scripts/profile-web.ts` in CI (PERF.md §4).
+
+| What | Budget (gzipped) |
 |---|---|
-| `app.js` (including the PocketBase client) | **≤ 49.75 KB** (25 KB for the MVP; raised for §15–§17, §19, §22, §23, §24, video attachments, the QA pass 8 and 9 fixes, bigger attachments, audio attachments, §27, the room cache and its prefetching, opening at the first unread message, the QA pass 11 fixes, service messages, the room cache without waiting for the network, the QA pass 12 fixes, prefetching rooms not yet kept, the QA pass 13 fixes, thumbnail caching, the QA pass 14 fixes, Ctrl+Up/Down to pick the reply, link previews, the room access dialog fix, who can post, message search, message permalinks, the media grid, the QA pass 16 fixes, video posters in the room, the QA pass 17 fixes, media collections, Jump to, Appearance, the room in the tab title, the QA pass 19 fixes, live collection badges, the security audit fixes, the room kept as the page goes, the prefetch herd fix, the QA pass 23 fixes, live replies quoted by the room, the 2026-10-31 redesign, taps on touch screens that also have a mouse, the new version line (§27.4), taps on WebKit and Android touch screens, see §13) |
-| `app.css` | **≤ 11.30 KB** (11.25 KB until forgot password (§39) met mentions (§41) in one build, 11.15 KB until "chirps on Chirkle" (§24.3), 11.05 KB until QA pass 31, 10.60 KB until the 2026-11-01 polish pass, 5 KB until §21, 5.5 KB until §23, 6 KB until audio attachments, 6.05 KB until §18.5, 6.10 KB until §28, 6.15 KB until the room access dialog fix, 6.20 KB until §29, 6.35 KB until message permalinks, 6.40 KB until §31, 6.85 KB until Jump to and Appearance, 7.10 KB until the QA pass 23 fixes, 7.15 KB until the 2026-10-31 redesign and Inter's `@font-face` rules, see §13) |
-| `index.html` | ≤ 1.5 KB |
-| Image viewer (§17.7), loaded on first use | ≤ 4 KB script, ≤ 1.5 KB stylesheet |
-| Message search (§29), loaded on first use | ≤ 2 KB script (its styles are in `app.css`) |
-| Room access dialog (§23.2, §33.10), loaded on first use | ≤ 3.10 KB script (3.05 KB until the moderators QA pass, §36.6), ≤ 1.5 KB stylesheet (`web/styles/access.css`, linked before the dialog shows; in `app.css` until the 2026-11-01 polish pass); moved out of `app.js` for linked instances |
-| Media grid (§30), loaded on first use | ≤ 3 KB script, ≤ 1 KB stylesheet |
-| Media collections (§31), loaded on first use | ≤ 6.75 KB script, ≤ 2.05 KB stylesheet |
-| Notifications (§34), loaded once turned on, or with the profile page | ≤ 3 KB script (its styles are in `app.css`) |
-| "Mentions & replies" page (§41.4), loaded when it is opened | ≤ 2 KB script (`views/inbox.ts`), ≤ 1 KB stylesheet (`web/styles/inbox.css`) |
-| The composer's "@" suggestions (§41.3), loaded when an "@" is typed | ≤ 2 KB script (`ui/mention-suggest.ts`; styled by `emoji.css`) |
-| Settings (`/me`, `views/profile.ts`), loaded when it is opened (since 2026-11-10) | ≤ 3.5 KB script |
-| Log in and sign up (`views/login.ts`), loaded for those pages, at once for someone not signed in (since 2026-11-10) | ≤ 2.35 KB script (2.30 KB until the signup password's length check, QA BUG-267; 2 KB until forgot password's modes (§39) joined it) |
-| The forward dialog (§21.3, `views/room/forward.ts`), loaded when Forward is first chosen (since 2026-11-10) | ≤ 1.5 KB script |
-| The people search (§16.5, `ui/user-search.ts`): New message, and loaded with the room access dialog (since 2026-11-10) | ≤ 1.5 KB script |
-| Emoji picker (§20.4), its emoji and their names, and the composer's ":name" suggestions (§20.6), loaded when first used | ≤ 13 KB script (4.25 KB until §20.6: the names are about 7.4 KB), ≤ 1 KB stylesheet (`web/styles/emoji.css`, linked before the picker or the suggestions show; in `app.css` until §20.6); moved out of `app.js` on 2026-11-02 (−3.6 KB) |
+| **The critical path**: `index.html`, `app.js`, the chunks `app.js` imports (code it shares with lazy features, modulepreloaded beside it) and `app.css` | **≤ 62.5 KB** (61.44 KB at the change: `app.js` 37.3 KB, six chunks 12.4 KB, `app.css` 11.3 KB, `index.html` 0.6 KB). The sum of the per-file budgets it replaced (`app.js` 49.75, `app.css` 11.30, `index.html` 1.5 KB) |
+| **Any lazy feature's first use**: its chunk, the chunks it imports that the critical path hasn't loaded, and the stylesheet it links | **≤ 16 KB** each (the largest, the emoji picker with its names, 13.6 KB). The features: `FEATURES` in `scripts/lib/build-utils.mjs` (viewer, search, access, media grid, collections, notifications, emoji, inbox, "@" suggestions, settings, login, forward, people search, Jump to) |
+| **The statistics page** (§40): `stats.html`, its script and stylesheet | ≤ 10 KB |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
-| Requests on first load | 3 (html, js, css) + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
+| Requests on first load | html, js, its chunks (modulepreloaded with it, so in parallel; six at the change) and css + API, then Inter's latin file (a second only for other scripts), off the critical path (text shows in the system font until it arrives); the manifest, its icons and `sw.js` (§27) come after, off the critical path |
 
 Other rules:
 
@@ -636,13 +628,14 @@ Other rules:
 - An inline app shell in `index.html` paints before the JS runs.
 - The latest-messages fetch and the SSE subscribe start in parallel.
 - `Intl.DateTimeFormat` instances are created once and cached.
-- A feature most visits never use can be a lazy chunk (`import()`, esbuild code splitting) with its own budget, like
-  the image viewer (§17.7). A lazy module must not import a module `app.js` uses: esbuild would move it into a shared
-  chunk that `app.js` loads on every visit (a fourth request). The build fails if `app.js` imports any chunk; such a
-  module imports types only and gets what it needs from `app.js` as arguments: its "kit" (`web/src/lazy.ts`, which
-  also has `lazyView`, a page made once its chunk is in). Two lazy chunks importing the same module would share a
-  third chunk too, so one that another needs is loaded beside it and handed over (the room access dialog and the
-  people search).
+- A feature most visits never use can be a lazy chunk (`import()`, esbuild code splitting), like the image viewer
+  (§17.7). It imports what it uses like any module: what it shares with `app.js` goes into chunks `app.js` imports,
+  named in `index.html` as `<link rel="modulepreload">` (and so in the server's `Link` header, PERF.md §5, and kept by
+  the service worker, §27), and counted in the critical path. Until 2026-11-12 the build refused such chunks: lazy
+  modules imported types only and got what they used of `app.js` as arguments (the "kits" of `web/src/lazy.ts`, and
+  `h` in their options), and each file had a budget of its own, `app.js`'s raised about 40 times (§13). Measured at
+  the change (`profile-web`, 3 runs each, `--cpu=4`): cold load to messages 1398 ms before, 1361 ms after (medians);
+  warm loads, switches and scrolling within noise.
 
 ### 7.8 Styling
 
@@ -711,8 +704,8 @@ await esbuild.build({
 // (plus code splitting for lazy chunks, and web/styles/viewer.css built first: its hashed name is defined
 //  into the app's build as VIEWER_CSS, §17.7 — see scripts/lib/build-utils.mjs)
 // then: read metafile → rewrite web/index.html with hashed names → pb_public/index.html
-// then: exit 1 if app.js imports a shared chunk (§7.7)
-// then: print gzipped sizes; exit 1 if over budget (§7.7)
+// then: the chunks app.js imports → <link rel="modulepreload"> in index.html (§7.7)
+// then: print gzipped sizes (the critical path, each lazy feature's first use, the stats page); exit 1 if over budget (§7.7)
 ```
 
 ### 8.3 npm scripts
@@ -1142,6 +1135,12 @@ Deployment artifacts are `bin/chirkle-server`, `pb_public/`, `pb_migrations/` an
 | Which rooms | Admins of both instances choose each room: one offers, the other accepts (§33.5). Any room, public, private or Open Air. Users can't share rooms; they open DMs, where both admins allowed it. |
 | Members of a shared private room | Kept on the home. Its creator manages them and may add people from instances the room is shared with by address. Each mirror's superusers add and remove their own instance's people, sent to the home as a request it checks (§33.5). Users on a mirror can't change members. |
 | Design | Each shared room has a home that decides its state, and mirrors that follow it (§33.1); not Matrix. Servers sign requests with a secret per pair (HMAC), since the JSVM has no public-key signing (§33.6). |
+
+### Decided (2026-11-12, size budget)
+
+| Topic | Decision |
+|---|---|
+| Size budget | One budget for the critical path (html, `app.js` and the chunks it imports, `app.css`), one any lazy feature's first use stays under, one for the statistics page (§7.7, REFACTOR item 52), instead of 24 per-file budgets. Lazy chunks may share code with `app.js` (modulepreloaded chunks); the kits are gone. |
 
 ### Still open
 
@@ -3752,7 +3751,7 @@ in it changed.
 ### 40.1 The page (`/stats`)
 
 A page of its own, not one of the app's: `web/stats.html`, `web/src/stats/main.ts` and `web/styles/stats.css`, built
-apart from app.js (`STATS_OPTIONS` in `scripts/lib/build-utils.mjs`; budgets `statsJs`, `statsCss`), so the app's
+apart from app.js (`STATS_OPTIONS` in `scripts/lib/build-utils.mjs`; its own budget, §7.7), so the app's
 bundle doesn't carry it. `GET /stats` (`lib/http.js statsPage`) serves the built `stats.html` to anyone, with the app's
 headers but not its preloads; 404 before a build. The service worker leaves it alone (it would keep it as the app's
 offline shell).
@@ -3770,6 +3769,9 @@ every 30 s while the tab is visible.
 - **Messages**: today, 7 and 30 days with the people who posted, the DMs' share, files sent, reactions on the 30 days'
   messages; a column per day for 30 days. Days are the viewer's (`tz`).
 - **Accounts**: total, new in 7 days, moderators, banned.
+- **Server**, for a superuser only (2026-11-12, §42.2): uptime and versions, realtime connections, live events waiting
+  and slow clients dropped, the database's size, memory; each queue's rows, failed ones and oldest; when each worker
+  last passed and its last error.
 
 Counts are of this server's own accounts: not a linked server's people (§33), nor the Telegram bridge's stand-ins
 (§26). The charts are drawn at their box's width (text stays 11 px on a phone), with a tooltip on hover or focus (← →
@@ -3856,7 +3858,9 @@ now; in an anonymous room the room is the actor of a mention or reply. `POST /ap
 
 `GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100, leaving out mentions and replies already
 read in their room: no reading one twice; a reaction is only seen here) and `mentions` (per room, the unread
-messages that mention or reply to you). The sidebar's first row, right under Jump to, is **Mentions & replies**
+messages that mention or reply to you, at most 100 a room since 2026-11-12: the apps only show whether there are any).
+Each room's count is a range scan of `(user, room, created)` from the read position on (§42.1). A person's inbox keeps
+their newest 500 rows, none older than 180 days (the daily prune, §42.1). The sidebar's first row, right under Jump to, is **Mentions & replies**
 (`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
 `chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
 in #room", "replied to you" (with your message quoted) or "reacted 👍🎉 to your message", newest first, "Show older",
@@ -3874,3 +3878,50 @@ on a multi-relation matched nothing), on the channel renamed "Mentions and repli
 Server `tests/integration/mentions.test.ts`, `lists.test.ts` (notifiable); web `tests/unit/vectors.test.ts`,
 `tests/component/views/room/mentions.test.ts`, `views/inbox.test.ts`, `views/rooms.test.ts`, `unread.test.ts`,
 `notify.test.ts`, `tests/e2e/mentions.spec.ts`; app `VectorsTest`, `ContractTest`, `UiMentionsTest`.
+
+## 42. Retention and server metrics (2026-11-12)
+
+REFACTOR items 49 and 51: tables that only grew, and what an operator used to learn from users.
+
+### 42.1 Retention (`pb_hooks/lib/retention.js`)
+
+A daily prune (cron `retention`, 03:41; `POST /api/retention/tick` for superusers runs it now and answers what each step
+deleted), as statistics (§40.2) and the federation queues (§33.8) already had:
+
+- **`inbox`** (§41.4): a person's newest 500 rows, none older than 180 days. The page pages back no further than that;
+  the counts stop at 100.
+- **Rows left behind by deletes that skipped the hooks** (raw SQL, an old migration, a crash between two saves;
+  PocketBase's cascades only run for deletes it makes itself): inbox rows of a deleted or soft-deleted message, or of a
+  room, person or actor that is gone; `room_reads`, `inbox_reads` and `hidden_rooms` of a person or room that is gone;
+  `media` rows (§30) and `link_queue` jobs (§28) of a soft-deleted or gone message (a forward's media rows go with its
+  original, as `lib/media.js drop()` does).
+- **Messages are never pruned** (§2). A retention period for them (`site.retention_days`) would be the owner's choice;
+  not built.
+
+The inbox counts (`GET /api/chat/unread`, `server/unread.go`) start each room at the read position on an index
+`(user, room, created)` (migration `1760000049`): an inbox row is made with or after its message, so read rows are never
+visited. Measured with 5,000 inbox rows in 5 rooms: the per-room count went from 13 ms to 1.5 ms; `GET /api/chat/unread`
+takes ~8–11 ms against ~3 ms with none (it was ~16–22 ms).
+
+### 42.2 Metrics (`server/metrics.go`)
+
+`GET /api/chat/metrics`, superusers only (a user's session gets 403, none 401), `Cache-Control: no-store`. JSON by
+default; Prometheus's text format (`text/plain; version=0.0.4`) with `?format=prometheus`, or when `Accept` asks for
+text and not JSON, as scrapers do. A scraper signs in with a superuser token (PocketBase's
+`POST /api/collections/_superusers/impersonate/{id}` makes one with a long `duration`).
+
+- `queues`: per queue its `rows`, `failing` (tried at least once) and `oldest_seconds`: `telegram` (`tg_queue`),
+  `federation` (`fed_queue`), `link_previews` (`link_queue`), `media_thumbs`, `media_sizes`, `media_moves` (`files`
+  the media worker hasn't done), `storage_cleanup`.
+- `workers`: per worker (`previews`, `media`, `telegram`, `federation`, and the daily `retention`) its `last_pass`,
+  `last_error` and `last_error_at` (since the start; `lib/worker.js` notes them in the app store after each pass), and
+  `running` (a run holds its lock, renewed in the last 2 minutes).
+- `realtime`: `clients` (SSE connections), and live messages' `senders` (clients with a sender running), `queued`
+  (events waiting) and `dropped` (clients disconnected for falling 512 events behind, since the start; PERF.md §9).
+- `db`: the sizes of `data.db`, `auxiliary.db` and their WAL files; `process`: goroutines, heap, memory from the
+  system, GC runs; `version`, `pocketbase`, `uptime_seconds`.
+- Not reported: the JS hooks pool (the jsvm plugin keeps no count of busy runtimes).
+
+The statistics page shows them to a superuser (§40.1). Tests: `tests/integration/retention.test.ts` (the prune's
+steps, what it keeps, superusers only; the metrics' fields, a queue's counts, the Prometheus form, who may ask),
+`tests/integration/reads.test.ts` (the per-room plan), `tests/unit/stats.test.ts` (the page's figures).

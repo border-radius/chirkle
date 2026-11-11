@@ -7,10 +7,9 @@
 //
 // A lazy chunk, like search (§29): the room view import()s it when the picker is first opened, or when ":name" is
 // typed in the composer (the suggestions, ui/emoji-suggest.ts, are in it too), with the emoji list (lib/emoji.ts) and
-// their names (lib/emoji-names.ts). It links its stylesheet (web/styles/emoji.css) before showing anything. It imports
-// types only from app.js; `h` comes in its options.
+// their names (lib/emoji-names.ts). It links its stylesheet (web/styles/emoji.css) before showing anything.
 
-import type { h } from "../dom.ts";
+import { h } from "../dom.ts";
 import { CATEGORIES, type EmojiCategory, recentEmoji, rememberEmoji } from "../lib/emoji.ts";
 import { findEmoji, namedEmoji } from "../lib/emoji-names.ts";
 
@@ -21,14 +20,14 @@ declare const EMOJI_CSS: string;
 
 let sheet: Promise<void> | null = null;
 /** The picker's and the suggestions' stylesheet, linked once, like the media grid's: a failed load is tried again next time. */
-export function loadStylesheet(make: typeof h): Promise<void> {
+export function loadStylesheet(): Promise<void> {
   sheet ??= new Promise((resolve) => {
     const failed = () => {
       link.remove();
       sheet = null;
       resolve();
     };
-    const link = make("link", { rel: "stylesheet", href: EMOJI_CSS, on: { load: () => resolve(), error: failed } });
+    const link = h("link", { rel: "stylesheet", href: EMOJI_CSS, on: { load: () => resolve(), error: failed } });
     document.head.append(link);
   });
   return sheet;
@@ -102,8 +101,8 @@ export function step(
 
 const KEYS: Record<string, "left" | "right" | "up" | "down"> = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
 
-export function createEmojiPicker(opts: { h: typeof h; signal: AbortSignal }): EmojiPicker {
-  const { h, signal } = opts;
+export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
+  const { signal } = opts;
   const el = h("div", { class: "emoji-picker", role: "dialog", hidden: true });
   const search = h("input", {
     type: "search",

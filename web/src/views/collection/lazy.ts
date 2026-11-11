@@ -5,8 +5,7 @@
 // calls.ts (through Api.request), so app.js doesn't carry them.
 //
 // A lazy chunk, like the media grid (§30.2): views/collection.ts import()s it, and it links its own stylesheet
-// (styles/collections.css). It imports types only; what it needs from app.js comes in its options. The viewer
-// (§17.7) is another chunk, which it import()s itself.
+// (styles/collections.css). The viewer (§17.7) is another chunk, which it import()s itself.
 
 export { type CreateOptions, openCreate } from "./create.ts";
 export { mountCollection, type PageOptions } from "./page.ts";

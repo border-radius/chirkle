@@ -6,7 +6,7 @@
 // has the room view load this; from then on it follows the textarea itself. Its keys are caught on the form, in the
 // capture phase, so the composer's own Enter (send) doesn't see the ones it uses.
 
-import type { h } from "../dom.ts";
+import { h } from "../dom.ts";
 import { rememberEmoji } from "../lib/emoji.ts";
 import { emojiNamed, findEmoji, type NamedEmoji } from "../lib/emoji-names.ts";
 
@@ -32,8 +32,8 @@ export interface EmojiSuggest {
   readonly isOpen: boolean;
 }
 
-export function createEmojiSuggest(opts: { h: typeof h; textarea: HTMLTextAreaElement; signal: AbortSignal }): EmojiSuggest {
-  const { h, textarea, signal } = opts;
+export function createEmojiSuggest(opts: { textarea: HTMLTextAreaElement; signal: AbortSignal }): EmojiSuggest {
+  const { textarea, signal } = opts;
   const id = `${textarea.id}-emoji`;
   const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": "Emoji", hidden: true });
   document.body.append(el);

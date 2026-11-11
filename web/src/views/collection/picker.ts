@@ -1,5 +1,6 @@
 // The picker the composer opens (§31): items of your collections and those you follow, to attach.
 
+import { h } from "../../dom.ts";
 import type { CollectionItem } from "../../lib/types.ts";
 import { type Base, icon, lists, loadStylesheet, pager, picture } from "./shared.ts";
 
@@ -12,13 +13,12 @@ export interface PickOptions extends Base {
 }
 
 export async function openPicker(o: PickOptions): Promise<void> {
-  const { h } = o;
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(), { signal });
   const { mine, subs } = lists(o);
   const all = [...mine, ...subs];
-  const title = h("h2", { id: "coll-pick-title" }, [icon(h), " Attach from collections"]);
+  const title = h("h2", { id: "coll-pick-title" }, [icon(), " Attach from collections"]);
   /** The collection shown: a row of chips, as the app's. */
   let chosen = all[0]?.id ?? "";
   const chips = all.map((c) =>
@@ -140,7 +140,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
   }
   dialog.addEventListener("close", () => close(), { signal });
 
-  await loadStylesheet(h);
+  await loadStylesheet();
   if (signal.aborted) return;
   document.body.append(dialog);
   dialog.showModal();

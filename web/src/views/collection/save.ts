@@ -1,5 +1,6 @@
 // The save menu (§31): which of your collections have a file; tick to add, untick to take out, or make a new one.
 
+import { h } from "../../dom.ts";
 import type { Collection } from "../../lib/types.ts";
 import type { From } from "./calls.ts";
 import { calls } from "./calls.ts";
@@ -16,12 +17,11 @@ let saving: (() => void) | null = null;
 
 export async function openSave(o: SaveOptions): Promise<void> {
   saving?.();
-  const { h } = o;
   const call = calls(o.api);
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(), { signal });
-  const title = h("h2", { id: "coll-save-title" }, [icon(h), " Save to collection"]);
+  const title = h("h2", { id: "coll-save-title" }, [icon(), " Save to collection"]);
   const list = h("ul", { class: "coll-choices" });
   const status = h("p", { class: "coll-status", role: "status" }, "Loading…");
   const input = h("input", { placeholder: "New collection", "aria-label": "New collection name", autocomplete: "off" });
@@ -115,7 +115,7 @@ export async function openSave(o: SaveOptions): Promise<void> {
   dialog.addEventListener("close", () => close(), { signal });
   signal.addEventListener("abort", o.watch(render), { once: true });
 
-  await loadStylesheet(h);
+  await loadStylesheet();
   if (signal.aborted) return;
   document.body.append(dialog);
   dialog.showModal();

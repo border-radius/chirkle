@@ -407,3 +407,14 @@ collapsed there:
 - CPU stayed at about 50% of the one core in both runs.
 
 `--hooksPool=100` is kept: the JS request hooks and routes still use the pool, and a smaller one hasn't been measured.
+
+## 10. 2026-11-12: one size budget, the inbox counts (REFACTOR items 49, 52)
+
+- **Shared chunks** (DESIGN.md §7.7). Letting lazy chunks share code with `app.js` split it: 46.95 KB became 37.3 KB
+  plus six modulepreloaded chunks (12.4 KB); the critical path went 58.78 → 61.44 KB gzipped. `scripts/profile-web.ts
+  --cpu=4`, 3 runs each, medians, before → after: cold room list 1053 → 986 ms, cold messages 1398 → 1361 ms, warm 464 →
+  506 ms, first-visit switch 249 → 256 ms, kept switch 108 → 109 ms, scroll p95 102 → 112 ms. Within run-to-run
+  noise (warm ran 452–600 ms on the same build): the extra requests go in parallel and the bytes cost nothing visible.
+- **Inbox counts** (DESIGN.md §42.1). With 5,000 inbox rows in 5 rooms the per-room mentions query took 13 ms (a
+  GROUP BY over every row of the person's); driven by room from the read position on an index
+  `(user, room, created)`, 1.5 ms. `GET /api/chat/unread`: ~16–22 ms → ~8–11 ms; ~3 ms with an empty inbox.

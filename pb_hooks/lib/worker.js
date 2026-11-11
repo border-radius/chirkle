@@ -9,6 +9,9 @@
 // A worker whose work is queued by this server's own saves can say so (`wakes`): with nothing to do, its run then
 // looks for work only when a save wakes it (`wake`, after the save is committed) and every IDLE_MS, not every
 // second (docs/PERF.md). The pass every IDLE_MS finds what was queued some other way (a migration, raw SQL).
+//
+// Each pass notes when it ran (`<name>.last`, epoch ms) and a failed one its error (`<name>.error`, "<ms> <error>"),
+// in the app store: GET /api/chat/metrics (server/metrics.go) reports them, with the lock's last renew.
 
 /** How long one run goes on: the next one starts on the next minute. */
 const RUN_MS = 57_000;
@@ -68,6 +71,18 @@ function unlock(app, name, me) {
  * @property {boolean} [wakes] its work is queued by saves that call `wake`: idle, it passes only when woken
  */
 
+/**
+ * Note a pass of worker `name`: when, and its error if it failed (REFACTOR item 51).
+ * @param {core.App} app
+ * @param {string} name
+ * @param {unknown} [err]
+ */
+function noted(app, name, err) {
+  const now = Date.now();
+  app.store().set(`${name}.last`, String(now));
+  if (err !== undefined) app.store().set(`${name}.error`, `${now} ${String(err).slice(0, 300)}`);
+}
+
 /** The app store's key of worker `name`'s wake-up. @param {string} name */
 const wakeKey = (name) => `${name}.wake`;
 
@@ -122,8 +137,10 @@ function run(app, w) {
       busy = false;
       try {
         busy = !!w.pass(renew);
+        noted(app, w.name);
       } catch (err) {
         if (isLost(err)) return app.logger().warn(`${w.label}: worker took too long, another run took over`);
+        noted(app, w.name, err);
         app.logger().error(`${w.label}: worker`, "error", String(err));
       }
       if (!busy) sleep(1000);
@@ -150,10 +167,14 @@ function once(app, w) {
     w.pass(() => {
       if (!beat(app, w.name, me)) throw new Error(LOST);
     });
+    noted(app, w.name);
+  } catch (err) {
+    if (!isLost(err)) noted(app, w.name, err);
+    throw err;
   } finally {
     unlock(app, w.name, me);
   }
   return true;
 }
 
-module.exports = { run, once, wake, isLost, lock, beat, unlock };
+module.exports = { run, once, wake, isLost, lock, beat, unlock, noted };

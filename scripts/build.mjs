@@ -1,4 +1,4 @@
-// Production build: web/ → pb_public/ (hashed assets + index.html), then enforce the size budget.
+// Production build: web/ → pb_public/ (hashed assets + index.html), then enforce the size budget (DESIGN.md §7.7).
 
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
@@ -10,26 +10,20 @@ import {
   checkBudget,
   EMOJI,
   ENTRIES,
+  eagerChunks,
   entryOutputs,
-  FORWARD,
+  FEATURES,
   formatSizes,
   INBOX,
   injectAssets,
-  LOGIN,
   latinFont,
   MEDIA,
-  MENTION,
-  NOTIFY,
   OUTDIR,
   outputOf,
-  PEOPLE,
-  PROFILE,
-  SEARCH,
   STATIC_DIR,
   STATS,
   STATS_OPTIONS,
   SW_OPTIONS,
-  staticImports,
   VIEWER,
   viewerDefine,
 } from "./lib/build-utils.mjs";
@@ -75,15 +69,12 @@ const result = await esbuild.build({
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
-const eager = staticImports(result.metafile, OUTDIR, assets.js);
-if (eager.length) {
-  console.error(`${assets.js} imports shared chunks (${eager.join(", ")}): lazy modules must not import its modules (DESIGN.md §17.7)`);
-  process.exit(1);
-}
+// The chunks of code app.js shares with lazy features: loaded with it, side by side (modulepreload).
+const chunks = eagerChunks(result.metafile, OUTDIR, assets.js);
 await esbuild.build({ ...SW_OPTIONS, minify: true, legalComments: "none", logLevel: "warning" });
 await cp(STATIC_DIR, OUTDIR, { recursive: true });
 
-const html = injectAssets(await readFile("web/index.html", "utf8"), { ...assets, font: latinFont(result.metafile, OUTDIR) });
+const html = injectAssets(await readFile("web/index.html", "utf8"), { ...assets, chunks, font: latinFont(result.metafile, OUTDIR) });
 await writeFile(`${OUTDIR}/index.html`, html);
 
 // The statistics page (§40), built on its own.
@@ -94,32 +85,35 @@ await writeFile(
   injectAssets(await readFile(STATS.html, "utf8"), { ...statsAssets, font: latinFont(stats.metafile, OUTDIR) }),
 );
 
-const gz = async (/** @type {string} */ path) => gzipSync(await readFile(path), { level: 9 }).length;
+const gz = async (/** @type {string} */ path) => gzipSync(await readFile(`${OUTDIR}/${path}`), { level: 9 }).length;
+/** @type {Record<string, string>} */
+const cssOf = {
+  [VIEWER.css]: viewerCssPath,
+  [MEDIA.css]: mediaCssPath,
+  [COLLECTIONS.css]: collCssPath,
+  [ACCESS.css]: accessCssPath,
+  [EMOJI.css]: emojiCssPath,
+  [INBOX.css]: inboxCssPath,
+};
+
+/** @type {Record<string, number>} */
+const files = { "index.html": gzipSync(html, { level: 9 }).length };
+for (const f of [assets.js, ...chunks, assets.css]) files[f] = await gz(f);
+const critical = new Set([assets.js, ...chunks]);
+/** @type {Record<string, number>} */
+const features = {};
+for (const [name, feature] of Object.entries(FEATURES)) {
+  const js = outputOf(result.metafile, OUTDIR, feature.js);
+  let n = 0;
+  for (const f of [js, ...eagerChunks(result.metafile, OUTDIR, js)]) if (!critical.has(f)) n += await gz(f);
+  if (feature.css) n += await gz(cssOf[feature.css] ?? "");
+  features[name] = n;
+}
 const sizes = {
-  js: await gz(`${OUTDIR}/${assets.js}`),
-  css: await gz(`${OUTDIR}/${assets.css}`),
-  html: gzipSync(html, { level: 9 }).length,
-  viewerJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, VIEWER.js)}`),
-  viewerCss: await gz(`${OUTDIR}/${viewerCssPath}`),
-  searchJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, SEARCH.js)}`),
-  accessJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, ACCESS.js)}`),
-  accessCss: await gz(`${OUTDIR}/${accessCssPath}`),
-  mediaJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, MEDIA.js)}`),
-  mediaCss: await gz(`${OUTDIR}/${mediaCssPath}`),
-  collJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, COLLECTIONS.js)}`),
-  collCss: await gz(`${OUTDIR}/${collCssPath}`),
-  notifyJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, NOTIFY.js)}`),
-  emojiJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, EMOJI.js)}`),
-  emojiCss: await gz(`${OUTDIR}/${emojiCssPath}`),
-  inboxJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, INBOX.js)}`),
-  inboxCss: await gz(`${OUTDIR}/${inboxCssPath}`),
-  mentionJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, MENTION.js)}`),
-  profileJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, PROFILE.js)}`),
-  loginJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, LOGIN.js)}`),
-  forwardJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, FORWARD.js)}`),
-  peopleJs: await gz(`${OUTDIR}/${outputOf(result.metafile, OUTDIR, PEOPLE.js)}`),
-  statsJs: await gz(`${OUTDIR}/${statsAssets.js}`),
-  statsCss: await gz(`${OUTDIR}/${statsAssets.css}`),
+  critical: Object.values(files).reduce((a, n) => a + n, 0),
+  files,
+  features,
+  stats: gzipSync(await readFile(`${OUTDIR}/stats.html`), { level: 9 }).length + (await gz(statsAssets.js)) + (await gz(statsAssets.css)),
 };
 
 console.log(`built ${OUTDIR}/ (gzipped):\n${formatSizes(sizes)}`);

@@ -2,15 +2,13 @@
 // of a name to narrow it, ↑/↓ to choose, Enter to go there; Escape (or the shortcut again) closes it. With nothing
 // typed, the most recent first, so Ctrl+K Enter goes back to the room you were in before.
 //
-// A lazy chunk, like search (§29): app.ts import()s it on the first shortcut. It imports types only; what it needs from
-// app.js comes in its options.
+// A lazy chunk, like search (§29): app.ts import()s it on the first shortcut.
 
-import type { h } from "../dom.ts";
+import { h } from "../dom.ts";
 import type { Collection, Room, User } from "../lib/types.ts";
 import type { AppState } from "../store.ts";
 
 export interface SwitcherOptions {
-  h: typeof h;
   state: () => AppState;
   sections: (s: AppState) => { rooms: Room[]; dms: Room[]; hidden: Room[]; archived: Room[] };
   unread: (s: AppState, r: Room) => number;
@@ -138,7 +136,6 @@ export function matches(all: Target[], query: string): Target[] {
 }
 
 export function createSwitcher(o: SwitcherOptions): Switcher {
-  const { h } = o;
   const id = `switcher-${Math.random().toString(36).slice(2)}`;
   const input = h("input", {
     role: "combobox",

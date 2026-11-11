@@ -28,7 +28,6 @@ describe("inbox page (§41)", () => {
   const mount = () =>
     mountInbox(root, {
       api: me.api,
-      h,
       store,
       signal: ac.signal,
       avatar: (u) => h("span", { class: "avatar" }, u.name[0]),

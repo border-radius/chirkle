@@ -17,6 +17,7 @@ package main
 import (
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
@@ -40,6 +41,25 @@ type live struct {
 	app    core.App
 	mu     sync.Mutex
 	queues map[subscriptions.Client]chan subscriptions.Message
+	// dropped: clients disconnected for being too far behind, since the start (GET /api/chat/metrics).
+	dropped atomic.Int64
+}
+
+// liveStats: the senders running now, the events waiting in their queues, and the clients dropped since the start.
+type liveStats struct {
+	Senders int   `json:"senders"`
+	Queued  int   `json:"queued"`
+	Dropped int64 `json:"dropped"`
+}
+
+func (l *live) stats() liveStats {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	st := liveStats{Senders: len(l.queues), Dropped: l.dropped.Load()}
+	for _, q := range l.queues {
+		st.Queued += len(q)
+	}
+	return st
 }
 
 func newLive(app core.App) *live {
@@ -168,6 +188,7 @@ func (l *live) enqueue(c subscriptions.Client, m subscriptions.Message) {
 		l.mu.Unlock()
 	default:
 		l.mu.Unlock()
+		l.dropped.Add(1)
 		l.app.Logger().Warn("live: a client is too far behind, disconnected", "client", c.Id())
 		c.Discard()
 	}

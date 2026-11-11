@@ -1,7 +1,18 @@
 // The statistics page's figures (§40, web/src/stats/data.ts). TZ is UTC here (vitest.config.ts).
 
 import { describe, expect, it } from "vitest";
-import { lastDays, midnight, niceMax, peak, personHours, runs, type Sample } from "../../web/src/stats/data.ts";
+import {
+  ago,
+  formatBytes,
+  formatSpan,
+  lastDays,
+  midnight,
+  niceMax,
+  peak,
+  personHours,
+  runs,
+  type Sample,
+} from "../../web/src/stats/data.ts";
 
 const T = Date.parse("2026-11-09T15:00:00Z");
 const MIN = 60_000;
@@ -44,5 +55,26 @@ describe("stats figures (§40)", () => {
 
   it("an axis top is a tidy number at least the most", () => {
     expect([0, 3, 7, 11, 23, 180, 501].map((v) => niceMax(v))).toEqual([5, 5, 10, 20, 50, 200, 1000]);
+  });
+});
+
+describe("the server section's figures (REFACTOR item 51)", () => {
+  it("formats bytes", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(1023)).toBe("1,023 B");
+    expect(formatBytes(1536)).toBe("1.5 KB");
+    expect(formatBytes(30 * 1024 * 1024)).toBe("30 MB");
+    expect(formatBytes(2.25 * 1024 ** 3)).toBe("2.3 GB");
+  });
+
+  it("formats spans and how long ago", () => {
+    expect(formatSpan(42)).toBe("42 s");
+    expect(formatSpan(12 * 60)).toBe("12 min");
+    expect(formatSpan(5 * 3600)).toBe("5 h");
+    expect(formatSpan(3 * 86_400)).toBe("3 d");
+    const now = Date.parse("2026-11-12T10:00:00Z");
+    expect(ago("2026-11-12T09:48:00Z", now)).toBe("12 min ago");
+    expect(ago("", now)).toBe("not since the start");
+    expect(ago("2026-11-12T10:00:05Z", now)).toBe("0 s ago");
   });
 });

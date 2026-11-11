@@ -3,7 +3,6 @@
 // keeps when each room and collection was last opened, for its "most recent first" (QA BUG-134).
 
 import type { Api } from "./api.ts";
-import { h } from "./dom.ts";
 import { otherMember, visibilityOf } from "./lib/rooms.ts";
 import { toPb } from "./lib/time.ts";
 import { type AppState, roomSections, type Store, unreadCount } from "./store.ts";
@@ -49,7 +48,6 @@ export function startJumpTo(o: { api: Api; store: Store<AppState>; root: HTMLEle
     switcher ??= import("./views/switcher.ts").then(
       (m) => {
         const s = m.createSwitcher({
-          h,
           state: store.get,
           sections: roomSections,
           unread: unreadCount,

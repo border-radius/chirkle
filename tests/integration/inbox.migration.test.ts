@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import PocketBase from "pocketbase";
 import { describe, expect, it } from "vitest";
-import { migrate, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
+import { migrate, migrateDownPast, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 
 describe("migration 1760000048_inbox_reactions_merged.js", () => {
   it("merges each person's reaction rows on a message into their newest; leaves mentions, replies and others' rows", async () => {
@@ -43,7 +43,7 @@ describe("migration 1760000048_inbox_reactions_merged.js", () => {
       data.close();
     }
 
-    migrate(dataDir, "down", "1");
+    migrateDownPast(dataDir, "1760000048_inbox_reactions_merged.js");
     migrate(dataDir, "up");
     const db = new DatabaseSync(join(dataDir, "data.db"), { readOnly: true });
     try {

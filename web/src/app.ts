@@ -12,7 +12,7 @@ import { createDrafts } from "./drafts.ts";
 import { startFavicon } from "./favicon.ts";
 import { createHeader } from "./header.ts";
 import { startJumpTo } from "./jump.ts";
-import { LOGIN_KIT, lazyView, PROFILE_KIT } from "./lazy.ts";
+import { lazyView } from "./lazy.ts";
 import { roomTitle } from "./lib/rooms.ts";
 import { formatTime, parsePb } from "./lib/time.ts";
 import type { User } from "./lib/types.ts";
@@ -315,7 +315,6 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
               !signal.aborted &&
               m.mountInbox(el, {
                 api,
-                h,
                 store,
                 signal,
                 avatar: (u) => avatar(u, 32, api.avatarUrl),
@@ -353,7 +352,6 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       () =>
         loadLogin().then((m) =>
           m.createLoginView({
-            kit: LOGIN_KIT,
             api,
             store,
             mode,
@@ -368,10 +366,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
     );
   /** Settings (a lazy chunk). */
   const profilePage = () =>
-    lazyView(
-      () => import("./views/profile.ts").then((m) => m.createProfileView({ ...ctx, kit: PROFILE_KIT })),
-      "Couldn't open Settings. Check your connection.",
-    );
+    lazyView(() => import("./views/profile.ts").then((m) => m.createProfileView(ctx)), "Couldn't open Settings. Check your connection.");
   const router = createRouter({
     onNavigate,
     root: main,

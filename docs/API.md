@@ -54,6 +54,12 @@ counted as neither). `GET /api/chat/stats?tz=<minutes east of UTC>` answers mode
 with counts only; the web's `/stats` page uses it, the app doesn't. `stats_samples` and `stats_activity` have no
 API rules.
 
+Since 2026-11-12 (DESIGN.md §42): `GET /api/chat/metrics` (superusers only; JSON, or Prometheus text with
+`?format=prometheus`) reports queues, workers, realtime, the database's size and memory; the `/stats` page shows it to
+a superuser, the app doesn't use it. `POST /api/retention/tick` (superusers, tests) runs the daily prune now. The
+prune keeps a person's newest 500 `inbox` rows, none older than 180 days, so `GET /api/chat/inbox` pages back no
+further. `GET /api/chat/unread`'s `mentions` stops at 100 a room (the apps only test it for > 0).
+
 The clients send filters in PocketBase's filter syntax. Apps from before 2026-10-29 name the fields `room`, `created`,
 `id`, `updated`, `files`, `forward_of`, `text_key`, `author`, `deleted`, `room.kind`, `reply_to.author` and
 `collection`; apps from then on (with a current server) only `id` (users), `room` (`room_reads`, the live room),

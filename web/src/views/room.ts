@@ -9,23 +9,10 @@
 import { errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, holdKeys, typeInto, uniqueId } from "../dom.ts";
-import { FORWARD_KIT, SEARCH_KIT } from "../lazy.ts";
 import { newer, older, PAGE_SIZE, withFiles } from "../lib/cursor.ts";
 import { attachmentName, isMedia, isVideo } from "../lib/files.ts";
-import { LIMITS } from "../lib/limits.ts";
 import { emptyForward, lastSaved } from "../lib/messages.ts";
-import {
-  canManage,
-  canPost,
-  dmClosed,
-  isAddress,
-  isDm,
-  otherMember,
-  postingOf,
-  roomTitle,
-  VISIBILITY,
-  visibilityOf,
-} from "../lib/rooms.ts";
+import { canManage, canPost, dmClosed, isDm, otherMember, roomTitle } from "../lib/rooms.ts";
 import { isNearBottom } from "../lib/scroll.ts";
 import { formatFull, formatTime, parsePb } from "../lib/time.ts";
 import type { Badge, Message } from "../lib/types.ts";
@@ -216,10 +203,9 @@ export function createRoomView({
   let accessDialog: AccessDialog | null = null;
   async function openAccess() {
     try {
-      // With the people search (another lazy chunk) it adds members with.
-      const [{ createAccessDialog }, search] = await Promise.all([import("./room/access.ts"), import("../ui/user-search.ts")]);
+      const { createAccessDialog } = await import("./room/access.ts");
       if (!scope.active) return;
-      accessDialog ??= newAccessDialog(createAccessDialog, search);
+      accessDialog ??= newAccessDialog(createAccessDialog);
       let r = room();
       // A moderator's in someone else's room (§36): its creator by name, who isn't expanded unless a member.
       const u = me();
@@ -234,22 +220,8 @@ export function createRoomView({
       if (scope.active) notice.say("Couldn't open room access. Check your connection.");
     }
   }
-  const newAccessDialog = (
-    create: typeof import("./room/access.ts").createAccessDialog,
-    { createUserSearch, SearchError }: typeof import("../ui/user-search.ts"),
-  ) => {
+  const newAccessDialog = (create: typeof import("./room/access.ts").createAccessDialog) => {
     const dialog = create({
-      kit: {
-        ...SEARCH_KIT,
-        createUserSearch,
-        SearchError,
-        reasonOf,
-        isAddress,
-        postingOf,
-        visibilityOf,
-        VISIBILITY,
-        maxMembers: LIMITS.roomMembers,
-      },
       searchUsers: (q, sig) => api.searchUsers(q, sig),
       remoteUser: (address, room) => api.remoteUser(address, room),
       avatarUrl: api.avatarUrl,
@@ -347,7 +319,6 @@ export function createRoomView({
   let forwardDialog: ForwardDialog | null = null;
   const newForwardDialog = (create: typeof import("./room/forward.ts").createForwardDialog) =>
     create({
-      kit: FORWARD_KIT,
       rooms: () => {
         const s = roomSections(store.get());
         // Only where you may post (§23.6), and not into a DM that takes no messages (§16.7).
@@ -711,7 +682,6 @@ export function createRoomView({
           return { messages: back ? messages.reverse() : messages, done: messages.length < PAGE_SIZE };
         },
         media,
-        h,
         name: attachmentName,
         when: (x) => formatFull(parsePb(x.created)),
         fileUrl: api.fileUrl,
@@ -811,7 +781,6 @@ export function createRoomView({
           room: roomId,
           label: room()?.kind === "dm" ? "" : room()?.name,
           api,
-          h,
           name: attachmentName,
           open: viewImage,
           follow: (fn) => (gridding = fn),
@@ -842,7 +811,6 @@ export function createRoomView({
         label: r ? roomTitle(r, me()) : "this room",
         page: (q, sig) => api.page(q, sig),
         pageSize: PAGE_SIZE,
-        h,
         when: (m) => formatTime(parsePb(m.created)),
         avatar: (u) => avatar(u, 24, api.avatarUrl),
         onPick: (id) => void now(() => ctl.goTo(id)),
@@ -926,10 +894,10 @@ export function createRoomView({
   async function openPicker(opener: HTMLElement, req: PickerRequest) {
     try {
       const { createEmojiPicker, loadStylesheet } = await import("../ui/emoji-picker.ts");
-      await loadStylesheet(h);
+      await loadStylesheet();
       if (!scope.active || !opener.isConnected) return;
       if (!picker) {
-        picker = createEmojiPicker({ h, signal });
+        picker = createEmojiPicker({ signal });
         shell.append(picker.el);
       }
       picker.open(opener, req);
@@ -943,9 +911,9 @@ export function createRoomView({
   function suggestEmoji(textarea: HTMLTextAreaElement) {
     suggest ??= import("../ui/emoji-picker.ts").then(
       async ({ createEmojiSuggest, loadStylesheet }) => {
-        await loadStylesheet(h);
+        await loadStylesheet();
         if (!scope.active) return;
-        suggest = createEmojiSuggest({ h, textarea, signal });
+        suggest = createEmojiSuggest({ textarea, signal });
         suggest.update(true);
       },
       () => {
@@ -962,7 +930,7 @@ export function createRoomView({
     void import("../ui/mention-suggest.ts").then(
       ({ createMentionSuggest }) =>
         scope.active &&
-        createMentionSuggest({ h, api, textarea, room: () => roomId, avatar: (u) => avatar(u, 24, api.avatarUrl), signal }).update(),
+        createMentionSuggest({ api, textarea, room: () => roomId, avatar: (u) => avatar(u, 24, api.avatarUrl), signal }).update(),
       () => {
         people = false;
       },

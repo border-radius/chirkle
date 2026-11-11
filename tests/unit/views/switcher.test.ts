@@ -34,7 +34,6 @@ function state(): AppState {
 }
 
 const opts = (s: AppState, navigate = vi.fn(), opened: Record<string, string> = {}): SwitcherOptions => ({
-  h,
   state: () => s,
   sections: roomSections,
   unread: unreadCount,

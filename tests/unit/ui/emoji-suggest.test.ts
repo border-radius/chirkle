@@ -35,7 +35,7 @@ describe("emoji suggestions in the composer (§20.6)", () => {
     textarea.addEventListener("keydown", (e) => e.key === "Enter" && sent());
     textarea.addEventListener("input", () => inputs++);
     document.body.append(h("form", {}, [h("div", { class: "composer-row" }, [textarea])]));
-    suggest = createEmojiSuggest({ h, textarea, signal: ac.signal });
+    suggest = createEmojiSuggest({ textarea, signal: ac.signal });
     textarea.focus();
   });
   afterEach(() => {

@@ -134,6 +134,17 @@ describe("GET /api/chat/unread (§18.2)", () => {
       db.close();
     }
   });
+
+  it("counts each room's mentions from its read position on, not every inbox row (REFACTOR item 49)", () => {
+    const sql = goConst("inboxMentionsSQL").replaceAll(/\{:(\w+)\}/g, ":$1");
+    const db = rawDb();
+    try {
+      const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all({ me: "x", since: "x" }) as { detail: string }[]).map((r) => r.detail);
+      expect(plan.join("\n")).toMatch(/SEARCH i USING INDEX idx_inbox_user_room_created \(user=\? AND room=\? AND created>\?\)/);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("rate limits (§18.2)", () => {

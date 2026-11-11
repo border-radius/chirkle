@@ -45,7 +45,7 @@ describe("emoji picker (§20.4)", () => {
     // A touch screen: focus goes to the emoji, not the search box (which would bring up the keyboard).
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     ac = new AbortController();
-    picker = createEmojiPicker({ h, signal: ac.signal });
+    picker = createEmojiPicker({ signal: ac.signal });
     opener = h("button", { type: "button" }, "☺");
     elsewhere = h("button", { type: "button" }, "elsewhere");
     document.body.append(opener, elsewhere, picker.el);

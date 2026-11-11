@@ -8,28 +8,15 @@
 // A modal <dialog>: it keeps focus inside, Escape closes it, and focus goes back to where it was.
 //
 // A lazy chunk, like search (§29): the room view import()s it when the dialog is first opened, and it links its own
-// stylesheet (web/styles/access.css) before showing. It imports types only; what it needs from app.js comes in its
-// options (`kit`).
+// stylesheet (web/styles/access.css) before showing. Members are added with the people search (ui/user-search.ts).
 
-import type { reasonOf } from "../../api.ts";
-import type { isAddress, postingOf, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
+import { reasonOf } from "../../api.ts";
+import { h, uniqueId } from "../../dom.ts";
+import { LIMITS } from "../../lib/limits.ts";
+import { isAddress, postingOf, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
 import type { Posting, Room, User, Visibility } from "../../lib/types.ts";
-import type { AvatarUrl } from "../../ui/avatar.ts";
-import type { createUserSearch, SearchError, SearchKit, UserSearch } from "../../ui/user-search.ts";
-
-/** What the dialog uses of app.js. */
-export interface AccessKit extends SearchKit {
-  /** The people search, another lazy chunk the room view loads with this one. */
-  createUserSearch: typeof createUserSearch;
-  SearchError: typeof SearchError;
-  reasonOf: typeof reasonOf;
-  isAddress: typeof isAddress;
-  postingOf: typeof postingOf;
-  visibilityOf: typeof visibilityOf;
-  VISIBILITY: typeof VISIBILITY;
-  /** Most members (and writers) a room has (LIMITS.roomMembers). */
-  maxMembers: number;
-}
+import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
+import { createUserSearch, SearchError, type UserSearch } from "../../ui/user-search.ts";
 
 export interface AccessDialog {
   readonly el: HTMLDialogElement;
@@ -89,7 +76,6 @@ interface People {
 }
 
 export function createAccessDialog(opts: {
-  kit: AccessKit;
   searchUsers: (query: string, signal: AbortSignal) => Promise<User[]>;
   /** Someone on a linked instance by address, to add to this shared room (§33.5). */
   remoteUser?: (address: string, room: string) => Promise<User>;
@@ -99,8 +85,7 @@ export function createAccessDialog(opts: {
   signal: AbortSignal;
 }): AccessDialog {
   const { signal } = opts;
-  const { h, uniqueId, avatar, createUserSearch, SearchError, reasonOf, isAddress, postingOf, visibilityOf, VISIBILITY } = opts.kit;
-  const { maxMembers } = opts.kit;
+  const maxMembers = LIMITS.roomMembers;
   const id = uniqueId("access");
   const title = h("h2", { id: `${id}-title` });
   const sub = h("p", { class: "dialog-sub" });
@@ -306,7 +291,6 @@ export function createAccessDialog(opts: {
       const ac = new AbortController();
       signal.addEventListener("abort", () => ac.abort(), { once: true });
       const ui = createUserSearch({
-        kit: opts.kit,
         search: async (q, sig) => {
           if (!isAddress(q) || !room || !sharedHosts().length || !opts.remoteUser) {
             return (await opts.searchUsers(q, sig)).filter((u) => listed(u) && p.pickable(u));

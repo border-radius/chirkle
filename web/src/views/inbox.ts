@@ -3,10 +3,10 @@
 // a mention or reply you have read in its room), and opening the page sees it. New ones come in at the top while it is open.
 //
 // A lazy chunk with its own stylesheet (styles/inbox.css), like the media grid (§30.2): app.ts import()s it for the
-// route. It imports types only; what it needs from app.js comes in its options.
+// route.
 
 import type { Api } from "../api.ts";
-import type { h as H } from "../dom.ts";
+import { h } from "../dom.ts";
 import type { InboxItem, User } from "../lib/types.ts";
 import type { AppState, Store } from "../store.ts";
 
@@ -15,7 +15,6 @@ declare const INBOX_CSS: string;
 
 export interface InboxOptions {
   api: Api;
-  h: typeof H;
   store: Store<AppState>;
   /** A user's avatar at 32 px. */
   avatar: (u: User) => HTMLElement;
@@ -33,7 +32,7 @@ interface Page {
 }
 
 let sheet: Promise<void> | null = null;
-function loadStylesheet(h: typeof H): Promise<void> {
+function loadStylesheet(): Promise<void> {
   sheet ??= new Promise((resolve) => {
     const failed = () => {
       link.remove();
@@ -58,8 +57,8 @@ const words = (m: { text: string; files: number }) =>
   m.text || (m.files ? (m.files === 1 ? "Attachment" : `${m.files} attachments`) : "Message deleted");
 
 export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<void> {
-  const { api, h, store, signal } = o;
-  await loadStylesheet(h);
+  const { api, store, signal } = o;
+  await loadStylesheet();
   if (signal.aborted) return;
 
   const list = h("ul", { class: "inbox-list" });

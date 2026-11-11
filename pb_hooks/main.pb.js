@@ -89,6 +89,7 @@ routerAdd("POST", "/api/chat/subs/seen", (e) => require(`${__hooks}/lib/collecti
 routerAdd("POST", "/api/keepalive/tick", (e) => require(`${__hooks}/lib/keepalive.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("GET", "/api/chat/stats", (e) => require(`${__hooks}/lib/stats.js`).get(e));
 routerAdd("POST", "/api/stats/tick", (e) => require(`${__hooks}/lib/stats.js`).tick(e), $apis.requireSuperuserAuth());
+routerAdd("POST", "/api/retention/tick", (e) => require(`${__hooks}/lib/retention.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/media/tick", (e) => require(`${__hooks}/lib/media.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("GET", "/api/chat/users", (e) => require(`${__hooks}/lib/users.js`).searchUsers(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/mentionable", (e) => require(`${__hooks}/lib/handles.js`).mentionable(e), $apis.requireAuth("users"));
@@ -375,6 +376,9 @@ if ($os.getenv("STATS_CRON").trim().toLowerCase() !== "off") {
   cronAdd("stats", "*/5 * * * *", () => require(`${__hooks}/lib/stats.js`).run($app));
   cronAdd("stats-prune", "23 3 * * *", () => require(`${__hooks}/lib/stats.js`).prune($app));
 }
+
+// Retention (REFACTOR item 49): old inbox rows and rows left behind by raw deletes, daily (lib/retention.js).
+cronAdd("retention", "41 3 * * *", () => require(`${__hooks}/lib/retention.js`).prune($app));
 
 // The media grid's thumbnails and video posters (§30.1): made by a worker, a minute's run at a time. MEDIA_CRON=off
 // leaves them to POST /api/media/tick (tests).

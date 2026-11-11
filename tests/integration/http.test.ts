@@ -12,7 +12,8 @@ describe("security and cache headers (§5.6)", () => {
     await writeFile(
       join(pub, "index.html"),
       '<!doctype html><title>Chirkle</title><link rel="preload" href="/assets/inter-TEST1234.woff2" as="font" type="font/woff2" crossorigin>' +
-        '<link rel="stylesheet" href="/assets/app-TEST1234.css"><script type="module" src="/assets/app-TEST1234.js"></script>',
+        '<link rel="stylesheet" href="/assets/app-TEST1234.css"><script type="module" src="/assets/app-TEST1234.js"></script>' +
+        '\n<link rel="modulepreload" href="/assets/chunk-TEST1234.js">',
     );
     await writeFile(join(pub, "assets/app-TEST1234.js"), "console.log(1)");
     await writeFile(join(pub, "assets/inter-TEST1234.woff2"), "wOF2");
@@ -91,12 +92,12 @@ describe("security and cache headers (§5.6)", () => {
     expect(res.headers.get("cache-control")).toBe("no-cache");
   });
 
-  it("a page says what it loads first (Link, for 103 Early Hints, PERF.md §5); assets and the API don't", async () => {
+  it("a page says what it loads first (Link, for 103 Early Hints, PERF.md §5), the chunks app.js imports too; assets and the API don't", async () => {
     for (const path of ["/", "/r/abc"]) {
       const link = (await fetch(url(path))).headers.get("link");
       expect(link, path).toBe(
         '</assets/inter-TEST1234.woff2>; rel=preload; as=font; type="font/woff2"; crossorigin, ' +
-          "</assets/app-TEST1234.css>; rel=preload; as=style, </assets/app-TEST1234.js>; rel=modulepreload",
+          "</assets/app-TEST1234.css>; rel=preload; as=style, </assets/app-TEST1234.js>; rel=modulepreload, </assets/chunk-TEST1234.js>; rel=modulepreload",
       );
     }
     for (const path of ["/assets/app-TEST1234.js", "/assets/nope.js", "/api/health", "/sw.js"]) {

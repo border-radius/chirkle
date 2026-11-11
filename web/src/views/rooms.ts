@@ -8,7 +8,6 @@ import { ApiError, errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, holdKeys, reconcile, typeInto, uniqueId } from "../dom.ts";
 import { brand, jumpButton } from "../header.ts";
-import { SEARCH_KIT } from "../lazy.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
 import { canManage, isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
 import type { Collection, Room, User, Visibility } from "../lib/types.ts";
@@ -184,7 +183,6 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
 
   function showSearch({ createUserSearch, SearchError }: typeof import("../ui/user-search.ts"), early = "") {
     search = createUserSearch({
-      kit: SEARCH_KIT,
       // Not those who take no direct messages (§16.7). "ann@b.example" is someone on a linked instance (§33.5).
       search: async (q, signal) => {
         if (!isAddress(q)) return (await api.searchUsers(q, signal)).filter((u) => !u.no_dms);

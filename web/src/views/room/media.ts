@@ -8,11 +8,10 @@
 // the video itself, which every browser would start fetching.
 //
 // A lazy chunk, like search (§29): the room view import()s it when the grid is first opened, and it links its own
-// stylesheet (styles/media.css), so neither app.js nor app.css grows. It imports types only: what it needs from app.js
-// comes in its options.
+// stylesheet (styles/media.css), so neither app.js nor app.css grows.
 
 import type { Api } from "../../api.ts";
-import type { h } from "../../dom.ts";
+import { h } from "../../dom.ts";
 import type { MediaItem, Message, User } from "../../lib/types.ts";
 import type { ViewerImage } from "./viewer.ts";
 
@@ -21,7 +20,6 @@ export interface MediaOptions {
   /** The room's name, in the title ("Media in #design"); none for a DM. */
   label?: string | undefined;
   api: Pick<Api, "media" | "fileUrl" | "posterUrl">;
-  h: typeof h;
   /** What to call a file (`attachmentName`). */
   name: (m: Message, file: string) => string;
   /**
@@ -40,7 +38,7 @@ declare const MEDIA_CSS: string;
 
 let stylesheet: Promise<void> | null = null;
 /** Loaded once, like the viewer's: a failed load is tried again next time, and the grid opens anyway. */
-function loadStylesheet(h: MediaOptions["h"]): Promise<void> {
+function loadStylesheet(): Promise<void> {
   stylesheet ??= new Promise((resolve) => {
     const failed = () => {
       link.remove();
@@ -64,7 +62,7 @@ let current = false;
 export function openMedia(o: MediaOptions): void {
   if (current) return;
   current = true;
-  const { h, api } = o;
+  const { api } = o;
   /** Gets focus back on close (the Media button). */
   const opener = document.activeElement as HTMLElement | null;
   const scope = new AbortController();
@@ -233,7 +231,7 @@ export function openMedia(o: MediaOptions): void {
   dialog.addEventListener("close", () => close(true), { signal });
 
   void (async () => {
-    await Promise.all([loadStylesheet(h), leaving]);
+    await Promise.all([loadStylesheet(), leaving]);
     if (closed) return;
     if (!onEntry()) history.pushState({ media: ENTRY }, "");
     // Back left its entry (and not for the viewer's, which is pushed on top of it).

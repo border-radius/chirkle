@@ -3,7 +3,7 @@
 
 import type { Api } from "../../api.ts";
 import type { CollectionsService } from "../../collections.ts";
-import type { h as H } from "../../dom.ts";
+import { h } from "../../dom.ts";
 import type { CollectionItem, Collections, Message, User } from "../../lib/types.ts";
 import { calls } from "./calls.ts";
 
@@ -12,7 +12,6 @@ declare const COLLECTIONS_CSS: string;
 
 export interface Base {
   api: Api;
-  h: typeof H;
   service: CollectionsService;
   me: () => User | null;
   /** Yours and those you follow, as the store has them: null until they are loaded. */
@@ -25,7 +24,7 @@ export interface Base {
 }
 
 let stylesheet: Promise<void> | null = null;
-export function loadStylesheet(h: typeof H): Promise<void> {
+export function loadStylesheet(): Promise<void> {
   stylesheet ??= new Promise((resolve) => {
     const failed = () => {
       link.remove();
@@ -66,7 +65,7 @@ export function reason(e: unknown): string {
   return Object.values(err?.fields ?? {})[0] || err?.message || "Something went wrong.";
 }
 
-export const icon = (h: typeof H) => h("span", { class: "ci", "aria-hidden": "true" });
+export const icon = () => h("span", { class: "ci", "aria-hidden": "true" });
 export const monthOf = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
 export const dateOf = (created: string) => new Date(created.replace(" ", "T"));
 
@@ -90,7 +89,7 @@ export function asMessage(it: CollectionItem): Message {
 /** A square tile's picture: the grid thumbnail, a video's poster, or nothing (a plain tile with the play badge). */
 export function picture(b: Base, it: CollectionItem, signal: AbortSignal): HTMLImageElement | null {
   if (it.video && !it.poster) return null;
-  const img = b.h("img", {
+  const img = h("img", {
     src: it.video ? b.api.itemPosterUrl(it) : b.api.itemUrl(it, "240x240"),
     alt: "",
     loading: "lazy",

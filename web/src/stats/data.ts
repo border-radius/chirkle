@@ -109,3 +109,42 @@ export function formatHours(h: number): string {
 export function percent(part: number, whole: number): string {
   return whole > 0 ? `${Math.round((part / whole) * 100)}%` : "–";
 }
+
+/** What GET /api/chat/metrics answers a superuser (REFACTOR item 51, server/metrics.go). */
+export interface Metrics {
+  at: string;
+  version: string;
+  pocketbase: string;
+  uptime_seconds: number;
+  queues: Record<string, { rows: number; failing: number; oldest_seconds: number }>;
+  /** last_pass, last_error_at: RFC 3339, "" for not since the start. */
+  workers: Record<string, { last_pass: string; last_error: string; last_error_at: string; running: boolean }>;
+  realtime: { clients: number; senders: number; queued: number; dropped: number };
+  db: Record<string, number>;
+  process: { goroutines: number; heap_bytes: number; sys_bytes: number; gc_runs: number };
+}
+
+/** "12 KB", "3.4 MB", "1.2 GB". */
+export function formatBytes(n: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${i && n < 10 ? (Math.round(n * 10) / 10).toLocaleString() : Math.round(n).toLocaleString()} ${units[i]}`;
+}
+
+/** A span of seconds, short: "40 s", "12 min", "5 h", "3 d". */
+export function formatSpan(s: number): string {
+  if (s < 60) return `${Math.round(s)} s`;
+  if (s < 3600) return `${Math.round(s / 60)} min`;
+  if (s < 86_400) return `${Math.round(s / 3600)} h`;
+  return `${Math.round(s / 86_400)} d`;
+}
+
+/** How long before `now` (epoch ms) an RFC 3339 time was, "12 min ago"; `never` when there is none. */
+export function ago(at: string, now: number, never = "not since the start"): string {
+  const t = Date.parse(at);
+  return at && !Number.isNaN(t) ? `${formatSpan(Math.max(0, (now - t) / 1000))} ago` : never;
+}
