@@ -224,11 +224,6 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
       go(shown[at]);
     }
   });
-  // A click on the backdrop (outside the dialog's box) closes it.
-  el.addEventListener("click", (e) => {
-    const r = el.getBoundingClientRect();
-    if (e.target === el && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) el.close();
-  });
 
   return {
     el,

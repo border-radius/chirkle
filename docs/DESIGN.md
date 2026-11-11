@@ -428,6 +428,10 @@ h("div", {class: "msg", dataset: {id}}, [h("b", {}, name), text]) // returns HTM
 
 - Children that are strings become **text nodes**. There is no `innerHTML` anywhere in the codebase, and a lint check enforces this (§9.5). This is the main defense against XSS.
 - No reactivity system. Views update the DOM directly in response to store events.
+- Modal dialogs: a click on the backdrop (pressed and released outside the dialog's box) closes any open `<dialog>`,
+  as Escape does — through a cancelable `cancel` event, so a dialog that holds off Escape (busy saving or forwarding,
+  the access dialog's people search open) holds off the click too. One document listener, `closeDialogsOnBackdrop()`,
+  installed by `main.ts`, since the dialogs live in lazy chunks (2026-11-11).
 
 ### 7.4 State (`store.ts`)
 

@@ -95,3 +95,31 @@ export function typeInto(input: HTMLInputElement | null | undefined, text: strin
   input.value += text;
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+/**
+ * A click on an open modal dialog's backdrop (outside its box) closes it, as Escape does: through a cancelable
+ * "cancel" event, so a dialog that refuses Escape (busy saving, or closing its people search first) does the same
+ * here. Both the press and the release must be outside, so a drag that selects text inside and ends outside doesn't
+ * close it. One listener for every dialog, installed once by app.ts: the dialogs are in lazy chunks.
+ */
+export function closeDialogsOnBackdrop(): void {
+  const outside = (e: MouseEvent): HTMLDialogElement | null => {
+    const d = e.target;
+    if (!(d instanceof HTMLDialogElement) || !d.open) return null;
+    const r = d.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom ? d : null;
+  };
+  let pressed: HTMLDialogElement | null = null;
+  document.addEventListener("pointerdown", (e) => (pressed = outside(e)), true);
+  document.addEventListener(
+    "click",
+    (e) => {
+      const d = outside(e);
+      const was = pressed;
+      pressed = null;
+      if (!d || d !== was) return;
+      if (d.dispatchEvent(new Event("cancel", { cancelable: true }))) d.close();
+    },
+    true,
+  );
+}
