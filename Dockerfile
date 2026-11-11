@@ -31,6 +31,8 @@ COPY --from=pocketbase /src/bin/pocketbase ./pocketbase
 COPY --from=web /src/pb_public ./pb_public
 COPY pb_migrations ./pb_migrations
 COPY pb_hooks ./pb_hooks
+# Dokku reads the health check from the image's WORKDIR when it deploys a prebuilt image (`git:from-image`).
+COPY app.json ./
 USER chirkle
 # Rate limits are per client IP, and Dokku's proxy is always in front: trust the address it adds to X-Forwarded-For.
 # Use -e TRUSTED_PROXY=off when clients reach the container directly (README "Deploying").
