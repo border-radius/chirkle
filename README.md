@@ -205,23 +205,20 @@ dokku nginx:set chirkle client-max-body-size 210m
 dokku letsencrypt:enable chirkle   # with the dokku-letsencrypt plugin
 ```
 
-Then deploy. The light way is to let GitHub build the image: `.github/workflows/deploy.yml` builds it after CI passes
-on `master`, pushes it to `ghcr.io/border-radius/chirkle`, and runs `dokku git:from-image`, so the server only pulls
-and restarts. Set it up once:
+Then deploy. The light way is to run the image GitHub builds: after CI passes on `master`,
+`.github/workflows/image.yml` pushes `ghcr.io/border-radius/chirkle:<commit>` (and `:latest`), so the server only pulls
+and restarts, however many apps run it:
 
 ```sh
-ssh-keygen -t ed25519 -N '' -f deploy_key -C github-deploy
-dokku ssh-keys:add github deploy_key.pub     # on the server
+dokku git:from-image chirkle ghcr.io/border-radius/chirkle:<commit>   # each deploy needs a new tag: use the commit
 ```
 
-and in the repository's *Settings → Secrets and variables → Actions*, add the secret `DOKKU_SSH_KEY` (the contents of
-`deploy_key`) and the variable `DOKKU_HOST` (the server; `DOKKU_APP` if the app isn't `chirkle`, `DOKKU_PORT` if ssh
-isn't on 22). The package must be public for the server to pull it without logging in (*Package settings → Change
-visibility*), or log the server in once: `dokku registry:login ghcr.io <github-user> <token with read:packages>`.
-*Actions → Deploy → Run workflow* deploys by hand.
+To follow `master`, run that from cron with the commit `git ls-remote https://github.com/border-radius/chirkle.git
+refs/heads/master` names; until its image exists (CI and the build take a few minutes, and a commit that fails CI
+gets none) `docker pull` of it fails, and the app keeps running what it has.
 
-Or build on the server: `git push dokku master` from a clone with `dokku@server:chirkle` as the `dokku` remote. Then
-create a superuser:
+Or build on the server: `git push dokku master` from a clone with `dokku@server:chirkle` as the `dokku` remote, or
+`dokku git:sync --build chirkle https://github.com/border-radius/chirkle.git master`. Then create a superuser:
 
 ```sh
 dokku run chirkle /app/pocketbase superuser upsert you@example.com <password> --dir=/pb_data

@@ -1,0 +1,59 @@
+name: Image
+
+# Builds the production image on GitHub's runners and pushes it to GitHub Container Registry as
+# ghcr.io/border-radius/chirkle:<commit> (and :latest), after CI passes on master, or by hand. A server then runs it
+# with `dokku git:from-image`: it only pulls layers and restarts, it builds nothing (README "Dokku"). An image for a
+# commit exists only if that commit passed CI.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Lowercase the image name
+        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Layers are cached in GitHub's cache: a change to web/ alone skips npm ci and the PocketBase download.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ vars.DEPLOY_PLATFORM || 'linux/amd64' }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.SHA }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
