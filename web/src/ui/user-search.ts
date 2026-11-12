@@ -1,5 +1,6 @@
 // "New message" user search (§16.5): type a name, pick a person. Debounced, cancels stale requests.
-// Keyboard: ↓ from the input moves into the results, ↑/↓ between them, Escape closes.
+// Keyboard: ↓ from the input moves into the results, ↑/↓ between them, Enter in the input picks the first (searching
+// at once if the debounce hasn't run yet; QA BUG-272), Escape closes.
 //
 // A lazy chunk: the sidebar's New message loads it, and the room access dialog and the forward dialog import it.
 
@@ -27,6 +28,8 @@ export function createUserSearch(opts: {
   /** When given, each result is a toggle, pressed for someone already picked. */
   isPicked?: (user: User) => boolean;
   onClose: () => void;
+  /** The field's name for assistive tech: what the search is for (QA BUG-273). */
+  label?: string;
   signal: AbortSignal;
 }): UserSearch {
   const { signal } = opts;
@@ -44,6 +47,8 @@ export function createUserSearch(opts: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inflight: AbortController | null = null;
   let shown: [User, HTMLButtonElement][] = [];
+  /** The query the results are for. */
+  let shownFor = "";
 
   const buttons = () => [...results.querySelectorAll<HTMLButtonElement>("button")];
 
@@ -76,6 +81,7 @@ export function createUserSearch(opts: {
     if (!query) {
       status.textContent = "Type a name.";
       shown = [];
+      shownFor = "";
       results.replaceChildren();
       return;
     }
@@ -84,7 +90,10 @@ export function createUserSearch(opts: {
     status.textContent = "Searching…";
     try {
       const users = await opts.search(query, ac.signal);
-      if (inflight === ac && !signal.aborted) show(users);
+      if (inflight === ac && !signal.aborted) {
+        show(users);
+        shownFor = query;
+      }
     } catch (e) {
       if (inflight !== ac || signal.aborted) return;
       status.textContent = e instanceof SearchError ? e.message : "Couldn't search. Check your connection.";
@@ -98,6 +107,23 @@ export function createUserSearch(opts: {
     () => {
       clearTimeout(timer);
       timer = setTimeout(() => void run(input.value.trim()), SEARCH_DEBOUNCE_MS);
+    },
+    { signal },
+  );
+  // Enter picks the first person found, as Jump to opens its first match (QA BUG-272).
+  input.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      const pickFirst = () => {
+        if (!signal.aborted && input.value.trim() === q && shownFor === q) buttons()[0]?.click();
+      };
+      if (shownFor === q) return pickFirst();
+      clearTimeout(timer);
+      void run(q).then(pickFirst);
     },
     { signal },
   );
@@ -125,7 +151,7 @@ export function createUserSearch(opts: {
       },
       signal,
     },
-    [h("label", { for: id, class: "visually-hidden" }, "Find someone to message"), input, status, results],
+    [h("label", { for: id, class: "visually-hidden" }, opts.label ?? "Find someone to message"), input, status, results],
   );
   signal.addEventListener(
     "abort",

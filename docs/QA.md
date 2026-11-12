@@ -3010,3 +3010,81 @@ avatar). **Expected:** the quote is cut with "…" at the column's edge, like th
 over the gutter and, on a phone, under the window's edge. **Cause:** `replies.css`: a group's first message lets its
 quote reach left to the avatar (`margin-left: -32px`, `max-width: calc(100% + 32px)`); a later message took back the
 margin but kept the width. **Fix:** `max-width: 100%` there too. Test: `replies.spec.ts` "QA BUG-271" (fails without).
+
+# QA pass 38 — heavy testing, 2026-11-12
+
+Web, server and Android after QA pass 37. Suites first: unit + component 827/827, Go, integration 537/537, e2e 89/90
+(one test race, below), Android unit and Robolectric all green. Then by hand: the web driven by script in Chromium
+(two people and two tabs, desktop and phone sizes, light and dark: a private room made and shared, messages of every
+shape, reactions, edits, deletes, search, media, attachments and the viewer, forwarding, collections, DMs, the
+profile's checks, signup's checks, a guest in an Open Air room, missing rooms, messages and collections, `/stats` as a
+moderator and as a superuser; live edits, deletes, reactions, archiving and a room going private seen by the other
+side); every custom route fed bad and hostile parameters (no 500s, nothing slower than a few ms, no e-mail through
+`fields`, `_` and `%` searched literally); and the app on Robolectric with screenshots of the room list, a room, the
+message sheet, the room menu and access screen, search, the emoji suggestions and Mentions & replies. Numbering
+continues from BUG-271.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-272 | Low | Web, Android | Enter (Done on Android) in a people search picked nobody: New message, Add people, and the web's forward dialog; on the web a name typed and Enter pressed while the search was loading was lost | Fixed |
+| BUG-273 | Low | Web | The people search in Room access was named "Find someone to message" for screen readers | Fixed |
+| BUG-274 | Low | Android | The room menu offered "Members" in public and Open Air rooms, opening an empty screen | Fixed |
+| BUG-275 | Low | Web | `/stats` asked a moderator's session for the server metrics every 30 s and was refused (a 403 and a console error each time) | Fixed |
+
+## BUG-272 — Enter in a people search did nothing (Low)
+
+**Steps:** New message, type "bob" (one Bob found), press Enter. The same in Room access → Add people, and in Forward
+("gen" for #general). **Expected:** as in Jump to, Enter takes the first match. **Actual:** nothing; only ↓ then
+Enter, or a click, picked someone. The app's New message and Add people likewise (its forward sheet did pick on Done).
+Typed fast right after New message, the name and Enter came before the search's lazy chunk: the name was kept
+(BUG-252) but the Enter was lost. **Fix:** `ui/user-search.ts`: Enter in the field picks the first person found for
+what is typed, searching at once if the debounce hasn't run; `views/room/forward.ts`: Enter forwards to the first
+target, with something typed; `dom.ts holdKeys/typeInto`: an Enter after typed text is held too and replayed into the
+field after the text (also the room search's). App: `UserSearchDialog` picks on Done from the current query's
+results (ANDROID.md §69). Tests: `tests/unit/ui/user-search.test.ts`, `dom.test.ts` "holdKeys / typeInto";
+`UiFeaturesTest` "Done in the people search…".
+
+## BUG-273 — The member search's name (Low)
+
+Room access's people search reused New message's label, so a screen reader announced "Find someone to message" when
+adding a member. **Fix:** `createUserSearch` takes a `label`: "Find someone to add as a member", "Find someone who can
+post". Tests: `user-search.test.ts`; `room_access.spec.ts` finds the fields by those names.
+
+## BUG-274 — An empty Members screen (Low, Android)
+
+**Steps:** in the app, open someone else's public room, ⋮ → Members. **Expected:** as on the web, no such item outside
+private rooms. **Actual:** a screen titled "Members of #room" with nothing on it. **Fix:** `RoomMenu` offers it to
+others only in a private room, as "Members (n)"; and no "Hide room" for an archived room, as on the web (ANDROID.md
+§69). Test: `UiFeaturesTest` "a public room's menu has no Members…".
+
+## BUG-275 — `/stats` and the metrics (Low)
+
+**Steps:** sign in as a moderator, open `/stats`. **Actual:** `GET /api/chat/metrics` with the moderator's token on
+every refresh (30 s), refused with 403, each logged as a console error. **Fix:** `stats/main.ts` asks for the metrics
+only with a stored superuser session (`record.collectionName` `_superusers`). Checked in Chromium: a moderator's page
+makes no metrics request; a superuser's still shows the Server card.
+
+## Test fixed
+
+- `replies.spec.ts` "QA BUG-271" failed once in the full run with `right` 0 and `edge` NaN: it measured the reply's
+  row while it was still sending, and the row drawn while sending is replaced by the saved one, so it measured a
+  detached element. It now waits for the row to be sent and its quote to show. Passed 2/2 after.
+
+## Checked and fine
+
+- Realtime across people and tabs: an edit of the original updates its replies' quotes, a delete shows "Message
+  deleted" in them, three reactions at once all land and show, one tab reading a room clears the other's badge,
+  archiving and unarchiving swap the composer live, a room made private leaves a non-member's list and view at once.
+- Custom routes with bad input: unknown page kinds and cursors, negative and huge limits and pages, `fields` naming
+  e-mails (empty for others), 500-room `notifiable`, reads with bad or future dates (clamped), reactions with
+  non-offered emoji, forwards and deletes of others' or private messages, DMs with yourself or nobody, metrics and
+  stats for non-moderators.
+- Signup: blank, malformed, short and over-long values each say why; a mixed-case e-mail signs up.
+- Very long names (room, person, a word of 60 letters) on a 360px phone: cut with "…", no sideways scroll.
+- Room names stay unique across private rooms (DESIGN.md: accepted).
+
+## Noted, not changed
+
+- `server/reads.go` commits read marks in batches of up to 256; if one save failed, every mark in that batch would
+  get an error. Only a superuser deleting a room or an account while its mark waits (milliseconds) can make one fail,
+  so it is left as it is.

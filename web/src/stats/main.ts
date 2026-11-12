@@ -41,11 +41,14 @@ let last: Stats | null = null;
 let metrics: Metrics | null = null;
 let refocus = false;
 
-function tokens(): string[] {
+/** The stored sessions' tokens; `superusers`: only superusers' (QA BUG-275: a moderator was refused the metrics every 30 s). */
+function tokens(superusers = false): string[] {
   const out: string[] = [];
   for (const key of SESSIONS) {
     try {
-      const token = JSON.parse(localStorage.getItem(key) || "{}")?.token;
+      const session = JSON.parse(localStorage.getItem(key) || "{}");
+      const token = session?.token;
+      if (superusers && session?.record?.collectionName !== "_superusers") continue;
       if (typeof token === "string" && token) out.push(token);
     } catch {}
   }
@@ -69,7 +72,7 @@ async function load(): Promise<Stats | "denied" | null> {
 
 /** The server's metrics, for a superuser's session; null for anyone else, or when they couldn't be had. */
 async function loadMetrics(): Promise<Metrics | null> {
-  for (const token of tokens()) {
+  for (const token of tokens(true)) {
     try {
       const res = await fetch("/api/chat/metrics", { headers: { Authorization: token, Accept: "application/json" } });
       if (res.ok) return (await res.json()) as Metrics;

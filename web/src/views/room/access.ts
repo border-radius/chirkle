@@ -305,6 +305,7 @@ export function createAccessDialog(opts: {
         avatarUrl: opts.avatarUrl,
         onPick: (u) => toggle(p, u),
         isPicked: (u) => has(p, u),
+        label: p === members ? "Find someone to add as a member" : "Find someone who can post",
         onClose: () => {
           toggleSearch(null);
           p.addBtn.focus();

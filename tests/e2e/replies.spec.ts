@@ -62,6 +62,10 @@ test("QA BUG-271: a long quote stays within its message, also when the reply con
   await send(a, "continuing"); // Ada's own message right after hers: no name, no avatar
   const reply = message(a, "continuing");
   await expect(reply).not.toHaveClass(/group-start/);
+  // Measured once it is sent: the row drawn while sending is replaced by the saved one, and measuring a row as it went
+  // read a detached element (right 0, edge NaN; a flake of the 2026-11-12 full run).
+  await expect(reply).not.toHaveClass(/pending/);
+  await expect(reply.locator(".reply-quote")).toBeVisible();
   const [right, edge] = await reply.evaluate((li) => {
     const box = li.getBoundingClientRect();
     return [li.querySelector(".reply-quote")!.getBoundingClientRect().right, box.right - parseFloat(getComputedStyle(li).paddingRight)];

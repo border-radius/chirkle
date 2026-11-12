@@ -1715,3 +1715,17 @@ Tests: `ServicesTest` "after following quotes, goes back to each reply in turn, 
   BUG-271 (a reply's quote 32px past the column) was web-only: the app's quote is inside the text column.
 
 Tests: `JumpTest` "QA BUG-268".
+
+## 69. QA pass 38 (2026-11-12)
+
+- **Done in the people search (BUG-272).** New message, and Add people on the room access screen, pick the first
+  person found when the keyboard's Done is pressed (`UserSearchDialog`), as the forward sheet and Jump to already did,
+  and as Enter now does on the web. Only the current query's results count: Done while the search is still on its way
+  picks nobody.
+- **The room menu's Members (BUG-274).** Someone other than its creator (or a moderator) got "Members" in any room's
+  menu, and in a public or Open Air room it opened an empty screen ("Members of #room" and nothing else). It is now
+  offered only in a private room, with the count, "Members (3)", as on the web; "Hide room" is no longer offered for an
+  archived room (it is under Hidden & archived already), also as on the web.
+
+Tests: `UiFeaturesTest` "Done in the people search opens a DM with the first person found (QA BUG-272)", "a public
+room's menu has no Members for anyone but its creator, a private one's counts them (QA BUG-274)".

@@ -498,10 +498,15 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
     DropdownMenu(open, onDismissRequest = close) {
         // A guest gets only Jump to beginning (DESIGN.md §23.3).
         if (signedIn) {
-            if (!room.isDm) DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
+            // Its access for its creator (or a moderator); its members for the others, only in a private room: a public or
+            // Open Air room has none, and its screen was empty (QA BUG-274; the web's menu, header.ts).
+            if (!room.isDm && (manage || room.visibility == chirkle.android.data.model.Visibility.Private)) {
+                DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members (${room.members.size})") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
+            }
             if (room.isDm) DropdownMenuItem(text = { Text("Close conversation") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
             else if (hidden) DropdownMenuItem(text = { Text("Unhide room") }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
-            else DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
+            // Hiding an archived room is pointless: it is listed under Hidden & archived already (the web's menu).
+            else if (!room.archived) DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
         }
         // Every message of this room notifies, on this device (§24); DMs all do already.
         if (signedIn && !room.isDm && (!room.archived || room.id in every)) {

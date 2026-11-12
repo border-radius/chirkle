@@ -51,6 +51,8 @@ fun UserSearchDialog(
     val services = LocalServices.current
     var query by remember { mutableStateOf("") }
     var found by remember { mutableStateOf<List<User>?>(null) }
+    // The query [found] answers: Done picks only from the current query's results.
+    var foundFor by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Type a name.") }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -67,6 +69,7 @@ fun UserSearchDialog(
         found = runCatching { if (remote && isAddress(q)) listOf(services.api.remoteUser(q, room)) else services.api.searchUsers(q) }
             .onFailure { if (remote && isAddress(q)) refused = reasonOf(it) }
             .getOrNull()?.filter { it.id !in exclude }
+        foundFor = q
         status = when {
             refused.isNotEmpty() -> refused
             found == null -> "Couldn't search. Check your connection."
@@ -79,7 +82,18 @@ fun UserSearchDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(query, { query = it }, placeholder = { Text("Find someone…") }, singleLine = true, modifier = Modifier.fillMaxWidth().focusRequester(focus))
+                OutlinedTextField(
+                    query,
+                    { query = it },
+                    placeholder = { Text("Find someone…") },
+                    singleLine = true,
+                    // Done picks the first found, as the forward sheet and Jump to do (QA BUG-272).
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                        if (foundFor == query.trim()) found.orEmpty().firstOrNull { !it.noDms || confirm != null }?.let(onPick)
+                    }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
                 if (status.isNotEmpty()) Text(status, color = Chirkle.colors.muted, style = MaterialTheme.typography.bodyMedium)
                 LazyColumn(Modifier.heightIn(max = 320.dp)) {
                     items(found.orEmpty(), key = { it.id }) { u ->

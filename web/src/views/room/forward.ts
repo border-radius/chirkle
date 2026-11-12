@@ -126,6 +126,17 @@ export function createForwardDialog(opts: {
     if (el.open) el.close();
   }
 
+  // Enter forwards to the first match, as Jump to opens its first (QA BUG-272; the app's sheet does it on Done).
+  input.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      e.preventDefault();
+      if (input.value.trim()) list.querySelector<HTMLButtonElement>("button")?.click();
+    },
+    { signal },
+  );
+
   // Escape while forwarding: stay open until it is done.
   el.addEventListener("cancel", (e) => busy && e.preventDefault(), { signal });
   input.addEventListener(

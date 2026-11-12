@@ -11,6 +11,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -265,6 +266,38 @@ class UiFeaturesTest {
         type("hi bo")
         send()
         ui.until { b.api.listRooms().any { it.isDm && a.user.id in it.members } }
+    }
+
+    @Test fun `Done in the people search opens a DM with the first person found (QA BUG-272)`() {
+        val a = newUser()
+        val b = newUser("dn-${uniq()}")
+        ui.signedIn(a)
+        ui.waitFor("Rooms")
+        ui.reveal(hasContentDescription("New direct message"))
+        compose.onNodeWithContentDescription("New direct message").performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(hasSetTextAction()).performTextInput(b.user.name)
+        // The result row, not the field holding the same text.
+        ui.waitFor(hasText(b.user.name) and hasClickAction() and !hasSetTextAction(), merged = true)
+        compose.onNode(hasSetTextAction()).performImeAction()
+        ui.waitFor("Beginning of your conversation with ${b.user.name}")
+    }
+
+    @Test fun `a public room's menu has no Members for anyone but its creator, a private one's counts them (QA BUG-274)`() {
+        val a = newUser()
+        val b = newUser()
+        val public = runBlocking { b.api.createRoom("pm-${uniq()}") }
+        val private = runBlocking { b.api.createRoom("pv-${uniq()}", Visibility.Private).also { b.api.setAccess(it.id, Visibility.Private, listOf(b.user.id, a.user.id)) } }
+        ui.signedIn(a)
+        openRoom(public.name)
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        ui.waitFor("Jump to beginning")
+        assertTrue(compose.onAllNodes(hasText("Members", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("Room access", substring = true)).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Jump to beginning").performClick()
+        compose.onNodeWithContentDescription("Back to rooms").performClick()
+        openRoom(private.name)
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        ui.waitFor("Members (2)")
     }
 
     @Test fun `hiding a room moves it under Hidden (hide spec)`() {

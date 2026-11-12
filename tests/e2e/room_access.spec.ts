@@ -51,11 +51,11 @@ test("a private room: only the people its creator adds see it; someone taken out
   await expect(dialog.getByRole("radio", { name: /Private/ })).toBeChecked();
   await expect(dialog.locator(".member")).toHaveText([new RegExp(`${ada.name}.*creator`, "i")]);
   await dialog.getByRole("button", { name: "Add people" }).click();
-  await dialog.getByLabel("Find someone to message").fill(`Bob ${tag}`);
+  await dialog.getByLabel("Find someone to add as a member").fill(`Bob ${tag}`);
   await dialog.locator("button.person", { hasText: bob.name }).click();
   await expect(dialog.locator(".member")).toHaveCount(2);
   // Escape in the people search closes the search, not the dialog (and keeps what was chosen).
-  await dialog.getByLabel("Find someone to message").press("Escape");
+  await dialog.getByLabel("Find someone to add as a member").press("Escape");
   await expect(dialog.locator(".user-search")).toHaveCount(0);
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Add people" })).toBeFocused();
@@ -242,7 +242,7 @@ test("only the people its creator chooses post; the others read and react, and g
   // Chosen, he gets it back.
   await headerAction(a, "Room access…");
   await dialog.locator(".writers").getByRole("button", { name: "Add people" }).click();
-  await dialog.getByLabel("Find someone to message").fill(`Bob ${tag}`);
+  await dialog.getByLabel("Find someone who can post").fill(`Bob ${tag}`);
   await dialog.locator("button.person", { hasText: bob.name }).click();
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(composer(b)).toBeVisible();

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { clear, h, reconcile } from "../../web/src/dom.ts";
+import { clear, h, holdKeys, reconcile, typeInto } from "../../web/src/dom.ts";
 
 describe("h()", () => {
   it("creates an element with class, attributes and dataset", () => {
@@ -132,5 +132,24 @@ describe("reconcile()", () => {
     const ul = h("ul", {}, [li("a")]);
     reconcile(ul, []);
     expect(ul.childNodes).toHaveLength(0);
+  });
+});
+
+describe("holdKeys / typeInto (QA BUG-252, BUG-272)", () => {
+  const key = (k: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+
+  it("an Enter pressed after a name while the field loads reaches the field after the name; a lone Enter does not", () => {
+    const ac = new AbortController();
+    const held = holdKeys(ac.signal);
+    for (const k of ["Enter", "b", "o", "Shift", "b", "Enter"]) key(k);
+    const text = held.take();
+    expect(text).toBe("bob\n");
+    const input = document.createElement("input");
+    const seen: string[] = [];
+    input.addEventListener("input", () => seen.push(`input:${input.value}`));
+    input.addEventListener("keydown", (e) => seen.push(`key:${e.key}`));
+    typeInto(input, text);
+    expect(seen).toEqual(["input:bob", "key:Enter"]);
+    ac.abort();
   });
 });
