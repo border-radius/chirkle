@@ -15,14 +15,12 @@ package main
 // reconnects, as after any drop. Apps ask GET /api/chat/live first; a server from before has no such route (404).
 
 import (
-	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/picker"
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
 )
 
@@ -134,11 +132,11 @@ func (l *live) send(record *core.Record, action string) error {
 			rec.SetExpand(base.Expand())
 			hide(l.app, rec, userID, false)
 		}
-		picked, err := picker.Pick(rec, liveFields)
+		picked, err := pick(rec, liveFields)
 		if err != nil {
 			return nil, err
 		}
-		p, err := json.Marshal(map[string]any{"action": action, "record": picked})
+		p, err := marshal(map[string]any{"action": action, "record": picked})
 		if err != nil {
 			return nil, err
 		}

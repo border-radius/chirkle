@@ -87,7 +87,17 @@ function postService(app, roomId, text) {
 }
 
 /**
- * messages create: trim + non-empty text, room must be active (§5.6).
+ * Set on a message by prepareCreate, a custom key (neither stored nor sent): the create request checked it, its
+ * mentions included, before the save's transaction, which doesn't do it again.
+ */
+const CHECKED = "@checked";
+
+/** Was this message checked by its create request already (prepareCreate)? @param {core.Record} rec */
+const checked = (rec) => rec.get(CHECKED) === true;
+
+/**
+ * messages create: trim + non-empty text, room must be active (§5.6). A create request's message was checked before
+ * the transaction (prepareCreate); every other create (service messages, forwards, the bridges) is checked here.
  * @param {core.RecordEvent} e
  */
 function beforeMessageCreate(e) {
@@ -98,18 +108,27 @@ function beforeMessageCreate(e) {
     rec.set("file_names", {});
     rec.set("file_dims", {});
   }
+  rec.set("reactions", []); // only POST /api/chat/reactions adds them (§20.2)
+  rec.set("previews", []); // only the previews worker sets them (§28)
+  if (!checked(rec)) checkCreate(e.app, rec, fileNames(rec).length > 0);
+}
+
+/**
+ * What a new message must be: text that isn't blank unless it has files (`hasFiles`) or is a forward, in a room that
+ * is active and that its author can see and post in; a reply or forward of a message that is still there.
+ * @param {core.App} app
+ * @param {core.Record} rec
+ * @param {boolean} hasFiles
+ */
+function checkCreate(app, rec, hasFiles) {
   if (isService(rec)) {
     // Made only by postService (no request can leave out the author): text alone, in any room that isn't archived.
     assertText(rec);
-    rec.set("reactions", []);
-    rec.set("previews", []);
-    activeRoom(e.app, rec.getString("room"));
+    activeRoom(app, rec.getString("room"));
     return;
   }
-  assertText(rec, fileNames(rec).length > 0 || isForward(rec));
-  rec.set("reactions", []); // only POST /api/chat/reactions adds them (§20.2)
-  rec.set("previews", []); // only the previews worker sets them (§28)
-  const room = activeRoom(e.app, rec.getString("room"));
+  assertText(rec, hasFiles || isForward(rec));
+  const room = activeRoom(app, rec.getString("room"));
   // Defense in depth for the members-only create rule (§16.3, §23.1): DMs and private rooms.
   if (room && !canSee(accessOf(room), rec.getString("author"))) {
     throw fieldError("room", isDm(room) ? "You are not a member of this conversation." : "You are not a member of this room.");
@@ -117,13 +136,13 @@ function beforeMessageCreate(e) {
   // ... and for who may post in it (§23.6): forwards and the Telegram bridge come through here too.
   if (room && !canWrite(room, rec.getString("author"))) throw fieldError("room", "Only some people can post in this room.");
   if (room && isDm(room)) {
-    const refused = dmRefusal(e.app, rec.getString("author"), room.getStringSlice("members"));
+    const refused = dmRefusal(app, rec.getString("author"), room.getStringSlice("members"));
     if (refused) throw fieldError("room", refused);
   }
   // Posted in an anonymous room (§35): its author is kept to themselves for good. DMs never are.
   rec.set("anonymous", !!room && !isDm(room) && room.getBool("anonymous"));
-  assertReplyTarget(e.app, rec);
-  rec.set("forwarded_anonymous", assertForwardTarget(e.app, rec));
+  assertReplyTarget(app, rec);
+  rec.set("forwarded_anonymous", assertForwardTarget(app, rec));
 }
 
 /**
@@ -239,12 +258,16 @@ function beforeMessageCreateRequest(e) {
 }
 
 /**
- * messages create through the API, in the request's transaction: the attachments are this request's uploads
- * (`files`) and the collection items it names (`items`, §31), each a `files` row (§37), in that order. Names in
- * the body are never taken: whatever it says of `files`, `file_names`, `file_dims` or `file_sources` is replaced.
+ * messages create through the API, before its transaction (docs/PERF.md §12): what beforeMessageCreate and the
+ * mentions would check and read inside it, and the uploads, each stored with its `files` row (§37) on its own. The
+ * write connection is then held only for the inserts, not for the reads, the JS or the uploads' round trips to S3.
+ * The attachments are this request's uploads (`files`) and the collection items it names (`items`, §31), in that
+ * order; names in the body are never taken (setRequestFiles replaces them). The create rule was checked before this,
+ * outside any transaction too. If the save then fails, `uploaded` are to be dropped (lib/files.js discard).
  * @param {core.RecordRequestEvent} e
+ * @returns {{ rows: core.Record[], uploaded: core.Record[], sources: Record<string, string> }}
  */
-function setRequestFiles(e) {
+function prepareCreate(e) {
   const rec = recordOf(e);
   /** @type {filesystem.File[]} */
   const uploads = [];
@@ -260,7 +283,23 @@ function setRequestFiles(e) {
   if (uploads.length + items.length > files.MAX_FILES) throw fieldError("files", `At most ${files.MAX_FILES} files.`);
   // The create rule would refuse it anyway: store nothing first.
   if (uploads.length && !e.auth) throw new ForbiddenError("Only signed-in users can post.");
-  files.setMessageFiles(e.app, rec, [...files.fromUploads(e.app, uploads), ...items], sources);
+  checkCreate(e.app, rec, uploads.length + items.length > 0);
+  const fed = require(`${__hooks}/lib/features.js`).federation(e.app);
+  require(`${__hooks}/lib/handles.js`).setMentions(e.app, rec, !!fed && fed.messages.isFromPeer(e.app, rec));
+  rec.set(CHECKED, true);
+  const uploaded = files.fromUploads(e.app, uploads);
+  return { rows: [...uploaded, ...items], uploaded, sources };
+}
+
+/**
+ * messages create through the API: its attachments (prepareCreate's rows) set on it, linked by its save, in the
+ * save's transaction (main.pb.js). Whatever the body said of `files`, `file_names`, `file_dims` or `file_sources`
+ * is replaced.
+ * @param {core.RecordRequestEvent} e
+ * @param {{ rows: core.Record[], sources: Record<string, string> }} prepared
+ */
+function setRequestFiles(e, prepared) {
+  require(`${__hooks}/lib/files.js`).setMessageFiles(e.app, recordOf(e), prepared.rows, prepared.sources, true);
 }
 
 /**
@@ -413,6 +452,8 @@ function beforeUserDelete(e) {
 }
 
 module.exports = {
+  checked,
+  prepareCreate,
   isService,
   setTextKey,
   setRequestFiles,

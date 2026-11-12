@@ -546,6 +546,8 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   `notifiable` (`lists.go`), and `GET /api/chat/unread` and `unread/{room}` (`unread.go`, with the inbox counts).
   `lib/enrich.js`, `lib/live.js` and `lib/lists.js` are gone, and so are the moved parts of `messages.js`,
   `anonymous.js`, `reads.js` and `inbox.js`. POST /api/chat/reads and every feature hook stay JS.
+  - 2026-11-12: POST /api/chat/reads moved to Go too (`reads.go`, group-committed, PERF.md §12); `lib/reads.js` is
+    gone.
   - Same routes and answers: the integration suite (533 tests), Chromium e2e and the app's tests pass unchanged. The
     unread-plan tests and the contract test read the Go source (`tests/support/go-source.ts`); `seesSQL` and the
     inbox SQL are checked equal to `lib/access.js` and `lib/inbox.js` (both still use them), `liveFields` to the

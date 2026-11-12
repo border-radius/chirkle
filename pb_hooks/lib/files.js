@@ -91,26 +91,61 @@ function byNames(app, names) {
 function fromUploads(app, uploads, field = "files") {
   const { assertImagesFit } = require(`${__hooks}/lib/images.js`);
   const collection = app.findCollectionByNameOrId("files");
-  return uploads.map((upload) => {
-    const original = clipFileName(tidy(unescapeUploadName(upload.originalName)));
-    upload.originalName = original || upload.name;
-    const row = new Record(collection);
-    row.set("file", upload);
-    const name = upload.name;
-    row.set("name", (original || name).slice(0, 200));
-    row.set("video", isVideo(name));
-    row.set("refs", 0);
-    if (upload.size > MAX_SIZE) {
-      throw fieldError(field, `Files can be at most ${MAX_SIZE / 1024 / 1024} MB.`, "validation_file_size_limit");
+  /** @type {core.Record[]} */
+  const saved = [];
+  try {
+    for (const upload of uploads) saved.push(fromUpload(app, collection, upload, field, assertImagesFit));
+  } catch (err) {
+    // Outside a transaction (a message's create request, lib/messages.js prepareCreate): the ones already stored go.
+    discard(app, saved);
+    throw err;
+  }
+  return saved;
+}
+
+/**
+ * fromUploads' one row.
+ * @param {core.App} app
+ * @param {core.Collection} collection
+ * @param {filesystem.File} upload
+ * @param {string} field
+ * @param {(row: core.Record, key: string, field: string) => Record<string, unknown>} assertImagesFit
+ */
+function fromUpload(app, collection, upload, field, assertImagesFit) {
+  const original = clipFileName(tidy(unescapeUploadName(upload.originalName)));
+  upload.originalName = original || upload.name;
+  const row = new Record(collection);
+  row.set("file", upload);
+  const name = upload.name;
+  row.set("name", (original || name).slice(0, 200));
+  row.set("video", isVideo(name));
+  row.set("refs", 0);
+  if (upload.size > MAX_SIZE) {
+    throw fieldError(field, `Files can be at most ${MAX_SIZE / 1024 / 1024} MB.`, "validation_file_size_limit");
+  }
+  const dims = assertImagesFit(row, "file", field);
+  if (dims[name]) row.set("dims", dims[name]);
+  // The worker makes thumbnails of images and a video's poster; its shape it reads once the poster is there.
+  row.set("ready", !isMedia(name));
+  row.set("sized", !isVideo(name) && (!isImage(name) || !!dims[name]));
+  app.save(row);
+  return row;
+}
+
+/**
+ * Drop new `files` rows nothing came to name (a message's create that failed after its uploads were stored), with
+ * what is stored. Best effort: a row left behind is named by nothing, as rows of failed uploads were before.
+ * @param {core.App} app
+ * @param {core.Record[]} rows
+ */
+function discard(app, rows) {
+  for (const row of rows) {
+    try {
+      app.delete(row);
+    } catch (err) {
+      app.logger().warn("files: an unused upload wasn't deleted", "id", row.id, "error", String(err));
     }
-    const dims = assertImagesFit(row, "file", field);
-    if (dims[name]) row.set("dims", dims[name]);
-    // The worker makes thumbnails of images and a video's poster; its shape it reads once the poster is there.
-    row.set("ready", !isMedia(name));
-    row.set("sized", !isVideo(name) && (!isImage(name) || !!dims[name]));
-    app.save(row);
-    return row;
-  });
+  }
 }
 
 /**
@@ -120,11 +155,14 @@ function fromUploads(app, uploads, field = "files") {
  */
 function link(app, ids) {
   if (!ids.length) return;
-  app
+  const res = app
     .db()
     .newQuery("UPDATE files SET refs = refs + 1 WHERE id IN (SELECT value FROM json_each({:ids}))")
     .bind({ ids: JSON.stringify(ids) })
     .execute();
+  // Looked up before the transaction (a create request's collection items, lib/messages.js prepareCreate): one may
+  // have gone since.
+  if (Number(res.rowsAffected()) !== ids.length) throw fieldError("items", "A collection item is no longer available.");
 }
 
 /**
@@ -190,8 +228,10 @@ function namedBy(app, collection, id) {
  * @param {core.Record} rec
  * @param {core.Record[]} rows
  * @param {Record<string, string>} [sources] stored name → collection id
+ * @param {boolean} [later] link them in the message's save (linkPending), not now: a create request sets them
+ *   before the save's transaction (lib/messages.js setRequestFiles)
  */
-function setMessageFiles(app, rec, rows, sources = {}) {
+function setMessageFiles(app, rec, rows, sources = {}, later = false) {
   /** @type {core.Record[]} */
   const list = [];
   const seen = new Set();
@@ -222,10 +262,24 @@ function setMessageFiles(app, rec, rows, sources = {}) {
   rec.set("file_names", names);
   rec.set("file_dims", dims);
   rec.set("file_sources", from);
-  link(
-    app,
-    list.map((r) => r.id),
-  );
+  const ids = list.map((r) => r.id);
+  if (later) rec.set(PENDING, ids);
+  else link(app, ids);
+}
+
+/** A custom key (neither stored nor sent): the `files` rows a message's save is to link (setMessageFiles `later`). */
+const PENDING = "@link";
+
+/**
+ * Link what setMessageFiles left to the save of `rec` (main.pb.js, in the save's transaction).
+ * @param {core.App} app
+ * @param {core.Record} rec
+ */
+function linkPending(app, rec) {
+  const ids = rec.get(PENDING);
+  if (!Array.isArray(ids) || !ids.length) return;
+  rec.set(PENDING, null);
+  link(app, /** @type {string[]} */ (ids));
 }
 
 /** @param {string} s */
@@ -342,6 +396,8 @@ function serve(e, collection) {
 }
 
 module.exports = {
+  discard,
+  linkPending,
   MAX_FILES,
   isImage,
   isVideo,

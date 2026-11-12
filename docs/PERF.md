@@ -418,3 +418,154 @@ collapsed there:
 - **Inbox counts** (DESIGN.md §42.1). With 5,000 inbox rows in 5 rooms the per-room mentions query took 13 ms (a
   GROUP BY over every row of the person's); driven by room from the read position on an index
   `(user, room, created)`, 1.5 ms. `GET /api/chat/unread`: ~16–22 ms → ~8–11 ms; ~3 ms with an empty inbox.
+
+## 11. 2026-11-12: a $5 VPS, measured again
+
+§8's question again, on today's server: the hot paths in Go (§9), shared chunks, and the inbox counts (§10). The harness
+is the same as §8 and §9: `--cpu=7 --memlimit=700MiB`, clients on CPUs 0–5, `--files=off`, 10 rooms × 150 messages,
+photos in about 1 send in 10. As in §8, "steady" means after the first 30 s, and memory is the peak RSS of the server
+and its children. "Busy" users act every 5 s; "calm" ones act every 60 s.
+
+| Users, think, arrive, run | Steady p50 / p95, ms: page · send · live | Actions/s | CPU | Peak memory | Verdict |
+|---|---|---|---|---|---|
+| 100, 5 s, 5 s, 120 s | 44 / 149 · 18 / 108 · 30 / 209 | 25 | 43% | 0.23 GB | fine |
+| 200, 5 s, 5 s, 120 s | 97 / 321 · 95 / 495 · 153 / 820 | 48 | 75% | 0.30 GB | fine |
+| 300, 5 s, 5 s, 120 s | 303 / 911 · 3,505 / 13,409 · 3,727 / 13,219 | 50 | 91% | 0.50 GB | overloaded |
+| 400, 5 s, 10 s, 120 s | 409 / 1,570 · 10,352 / 37,734 · 11,102 / 37,317 | 44 | 82% | 0.72 GB | overloaded |
+| 1000, 60 s, 120 s, 240 s | 64 / 257 · 57 / 263 · 114 / 407 | 23 | 50% | 0.37 GB | fine (as §9) |
+| 1500, 60 s, 120 s, 240 s | 252 / 772 · 395 / 2,612 · 528 / 2,812 | 34 | 73% | 0.57 GB | slow sends, usable |
+| 2000, 60 s, 120 s, 240 s | 2,784 / 16,612 · 132,583 / 270,712 · 131,314 / 277,120 | 35 | 86% | 1.17 GB | collapsed |
+| 1000, 30 s, 5 s, 120 s (storm) | 519 / 3,110 · 5,250 / 20,303 · 5,980 / 24,646 | 45 | 88% | 0.79 GB | behind for the whole run |
+
+- **One core holds about 1,000 people at a normal pace, or 200 chatting nonstop:** roughly 45–50 actions a second
+  of this mix (a quarter room opens, a fifth sends, the rest reactions, read marks, older pages and room lists).
+  Past that, the CPU is full. At 1,500 calm users sends take 0.4 s at the median and 2.6 s at p95; at 2,000 they fall
+  minutes behind, a few fail, and memory goes past 1 GB. 3,000 wasn't measured: signing up 3,000 users took the
+  harness 18 minutes, past the run's timeout.
+- **Writes show the overload first, but aren't its cause.** Every write (send, reaction, read mark) takes SQLite's one
+  write connection, so once the CPU is full they queue behind each other: at 400 busy users ~170 requests waited for
+  it (goroutine dump) while pages took 0.4 s. Each write needs ~3 ms of CPU but held the connection ~55 ms, because
+  on one core it shares the CPU with every page in flight. A CPU profile of that run (`CHIRKLE_PPROF`,
+  server/pprof.go; 30 s, 23.7 s of samples): message pages and their enrich hook ~8 s, GC ~3 s, SQLite ~2.5 s, all JS
+  (the writes' hooks, the reactions and reads routes, the records API's request hooks) ~3.8 s, inside write
+  transactions ~1.5 s. Letting only 2 pages run at once (an experiment, not kept) moved the queue to the pages: sends
+  2.4 s, pages 6 s, CPU 92%. So moving the writes to Go would save at most the JS share (~16%); the pages cost more.
+- **The storm:** 1,000 users who arrive within 5 s (§9 measured 500) don't catch up within the 2-minute run (sends
+  5 s at the median). Spread over 2 minutes, the same 1,000 users are fine.
+- Compared with §8 (JS only): calm users went from about 500 to 1,000–1,500, busy ones from 100 to 200, and memory
+  stays under 1 GB up to 1,500.
+- A first series on 2026-11-12 put 200 busy users at 6 s sends: its timed-out 3,000-user run had left its server
+  running on the pinned CPU. `scripts/stress.ts` now stops its server when it is killed.
+
+## 12. 2026-11-12: shorter writes
+
+§11 found the writes queueing on SQLite's one write connection, each holding it ~55 ms for ~3 ms of CPU. Two changes
+shorten what holds it:
+
+- **Read marks group-committed** (`server/reads.go`, DESIGN.md §18.2). `POST /api/chat/reads` is Go. A mark that
+  doesn't move the position is answered from a read; the others queue, and one goroutine saves whatever has queued in
+  one transaction, answering each request after the commit (so an answer still means the row is stored, and the
+  realtime events are PocketBase's own).
+- **A message's create checks before its transaction** (`pb_hooks/main.pb.js`, `lib/messages.js` prepareCreate). The
+  create request used to run all of it inside one transaction: the JS checks (room, access, reply, forward), the
+  mentions lookup, the uploads with their round trips to S3, the save, and the answer's enrich hook. Now the request
+  hook does the checks, finds the mentions and stores the uploads (each `files` row saved on its own) first; the save
+  opens the transaction itself, around the links of its files, the insert and what it queues (inbox, bridges, previews,
+  media). A create refused after its uploads were stored drops them (`files.discard`). The create rule was already
+  checked outside any transaction, so nothing that was atomic before isn't now.
+
+Same harness as §11, 300 busy users (5 s think, arriving in 5 s, 120 s), steady p50 / p95 in ms:
+
+| Build | Actions/s | CPU | Send | React | Mark read + unread | Page |
+|---|---|---|---|---|---|---|
+| §11 | 50 | 91% | 3,505 / 13,409 | 3,130 / 13,130 | 1,844 / 13,095 | 303 / 911 |
+| read marks grouped | 57 | 85% | 1,638 / 6,945 | 1,724 / 7,541 | 2,588 / 7,607 | 337 / 913 |
+| and checks before the transaction | 62 | 88% | 766 / 3,689 | 663 / 3,206 | 1,067 / 5,692 | 742 / 2,239 |
+
+- 25% more done per second on the same core, and writes 4–5× faster at the median, 3–4× at p95. Pages got slower:
+  writes no longer wait while pages run, so the queue they used to make is shared. Sends with a photo: 2.4 s at the
+  median, from 3.7 s.
+- 400 busy users stay overloaded (51 actions/s, CPU 89%; sends 5.8 s at the median): one core is full, and the next
+  step is making pages cheaper (§11's profile: pages and their enrich hook ~35% of the CPU).
+- 200 busy users were fine before (§11) and are not rerun.
+
+## 13. 2026-11-12: one serialization per answer, less GC
+
+The profile of §12's build at 400 busy users (30 s, 27.6 s of samples) put PocketBase's `?fields=` picker first: ~6.6 s,
+a quarter of the core. To pick fields it serializes the records, parses that back and serializes the picked result;
+the page route had also serialized each page once more for its ETag. GC was ~2 s, the expands (`?expand=`, their
+queries) ~2.7 s, all JS ~3.9 s.
+
+- **Pages serialized once** (`server/lists.go` tagged): the picked answer is made once, hashed for the ETag and
+  written. Found on the way: `encoding/json/v2` doesn't sort map keys unless told to, so a picked page's ETag would
+  have changed every time; serialized deterministically, and `lists.test.ts` asks a page as the apps do five times
+  for 304s.
+- **`?fields=` without the round trip** (`server/pick.go`): the fields are taken from each record's public export
+  directly, for the room list, pages, notifiable and live events. Field lists it doesn't handle (modifiers, `*`, a
+  path into a JSON value) go to PocketBase's picker; `pick_test.go` checks both give the same answer for the
+  contract's fields and those cases.
+- **GOGC 200** (`server/gc.go`), unless the environment sets GOGC: the heap grows twice as far between collections.
+  Unless GOMEMLIMIT is set, the server holds itself to 70% of the machine's memory (cgroup limit or RAM), so a 1 GB box
+  collects harder rather than swapping. Measured with the page fix at 300 busy users, GOGC 100 → 200: sends p50
+  180 → 87 ms, pages 211 → 101 ms, CPU 91% → 84%, peak memory 0.38 → 0.56 GB.
+
+Same harness as §11 (`GOMEMLIMIT=700MiB` from `--memlimit`), steady p50 / p95 in ms:
+
+| Users, think, arrive, run | §12 build: page · send | Now: page · send · live | Actions/s | CPU | Peak memory |
+|---|---|---|---|---|---|
+| 300, 5 s, 5 s, 120 s | 742 / 2,239 · 766 / 3,689 | 24 / 107 · 36 / 184 · 53 / 316 | 73 (62) | 68% | 0.47 GB |
+| 400, 5 s, 10 s, 120 s | 1,353 / 6,579 · 5,773 / 17,758 | 287 / 960 · 595 / 1,613 · 821 / 2,424 | 85 (51) | 87% | 0.65 GB |
+| 1000, 30 s, 5 s, 120 s (storm) | §11: 519 / 3,110 · 5,250 / 20,303 | 63 / 182 · 90 / 255 · 143 / 759 | 55 | 63% | 0.68 GB |
+| 2000, 60 s, 120 s, 240 s | §11: 2,784 / 16,612 · 132,583 / 270,712 | 255 / 3,185 · 1,769 / 8,421 · 2,367 / 10,104 | 46 | 69% | 0.79 GB |
+
+- 300 busy users are now comfortable (sends 36 ms at the median, a third of the core idle), and 400 are usable (sends
+  0.6 s). Since §11 the same core does about 70% more (50 → 85 actions/s).
+- The storm (1,000 users arriving within 5 s) is caught up within the first 30 s now: steady sends 90 ms.
+- 2,000 calm users no longer collapse, but sends take 1.8 s at the median (row above, one harness process).
+- **The harness, then, at 2,000+** (`scripts/stress.ts --workers`, users seeded in SQL and signed in by
+  impersonation: seeding 2,000 took 16 s instead of 15 minutes). Its one Node process had run at 90% of a core for
+  2,000 clients; spread over 6, the same run measured sends 1,024 / 4,540, pages 241 / 1,466, read marks 1,991 /
+  11,675 (p50 / p95, ms), 46 actions/s, all 2.4 million live events delivered (p50 1.4 s), peak 0.77 GB. So the
+  harness was part of the slowness, not all of it: 2,000 calm users are near what one core does. The server's 69% is
+  averaged over the 120 s the users take to arrive; a goroutine dump taken 60 s in, while half had arrived, showed no
+  request waiting, and was read too soon as "the server is idle".
+- **3,000 calm users collapse** (users arriving over 180 s, 300 s run): sends 70 s at the median, 600 failed
+  requests, 92% of live events delivered, and 2.1 GB of memory, far past the 700 MiB GOMEMLIMIT: JS runtimes made for
+  one call each (§14). 4,000 weren't measured: the test machine ran short of memory.
+
+## 14. 2026-11-12: memory under overload (admission)
+
+Why 3,000 calm users took 2.1 GB: heap profiles 60 and 120 s after the last arrival put 1.1 GB of a 1.4 GB heap under
+the JS hooks pool (`vmsPool.run`). With all `--hooksPool` (100) runtimes busy, PocketBase builds a runtime for that one
+call with every hook file loaded: megabytes, and CPU the backlog needed. Once the core fell behind, hundreds of requests
+were in flight, each beyond the 100th with its own runtime. What every connected client costs is small by comparison:
+at 2,000 clients ~240 MB of heap, of it ~90 MB their two 512-event queues (`realtime.go`, `live.go`), ~45 KB each; the
+0.75 GB resident is the GC using what GOMEMLIMIT allows (`gc.go`), not need.
+
+**Admission** (`server/admission.go`): at most 80% of `--hooksPool` API requests run at once; the rest wait in Go, a
+goroutine of a few KB each, stop waiting when their client leaves, and run in arrival order. Not counted:
+- the routes in Go (`register` unbinds the middleware from them): no JS runs in their request. Counted at first, a
+  read mark waiting for its group commit, or a page, held a slot; the slots filled with requests waiting for the one
+  write connection, and 2,000 users' sends went from about 1.5 to 17 s;
+- the realtime stream, file and poster downloads, health checks, metrics;
+- uploads (multipart) and bodies over 64 KB: their hooks run once the body has arrived, and a slow sender must not hold
+  a slot. A counted request's body (≤ 64 KB) is read before it waits, for the same reason. It is read through
+  PocketBase's body limit, and handed on as a body that can be read again; handed on as a plain reader, the hooks read
+  it and the form found nothing, which every JSON login in the integration tests caught.
+- `CHIRKLE_ADMISSION=off` turns it off. `GET /api/chat/metrics` reports `admission` (slots, running, waiting, waits),
+  resident memory, and the read connection pool.
+
+| Calm users (§13 harness) | Send p50 / p95 | Page p50 / p95 | Live delivered | Failed requests | Peak memory |
+|---|---|---|---|---|---|
+| 3,000, without | 81.7 / 280.4 s | 9.9 / 82.8 s | 96.4% | ~1,100 | 1.94 GB |
+| 3,000, with | 83.3 / 135.5 s | 25.6 / 119.3 s | 100% | 0 | 0.80 GB |
+| 2,000, without (A) | 4.3 / 27.1 s | 0.36 / 4.4 s | 100% | 0 | 0.79 GB |
+| 2,000, with (B, right after A) | 1.8 / 8.1 s | 0.19 / 2.7 s | 100% | 0 | 0.78 GB |
+
+- 3,000 calm users are still more than one core does, but the server now stays within its memory and loses nothing:
+  no failed request, every live event delivered.
+- At 2,000 there's no cost to see: runs on the same build swing from 1.4 to 4.3 s at the median without admission and
+  1.8 to 9.7 s with it, near the core's limit (§13 measured 1.0 to 1.8 s). The capacity in the README stands.
+- When measuring: a goroutine dump (`?debug=1`) cuts deep stacks, so requests in JS don't show their admission frame;
+  count `admission.running` in the metrics instead. And check `pgrep -a chirkle-server` first: a test server left
+  running by a hung test run answered a sampler for a whole run here.

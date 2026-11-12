@@ -73,7 +73,7 @@ These are left out on purpose. The design should not block them later.
 
 **Why PocketBase:** auth, a REST API, per-record access rules, realtime over SSE, an admin UI, backups and static file serving all come in one Go binary backed by SQLite. That is all an MVP chat needs. It removes the need for a separate API server, WebSocket server, or reverse proxy (PocketBase can also issue its own TLS certificates).
 
-**PocketBase as a Go framework (2026-11-11, REFACTOR item 47):** the binary is built from `server/`, which embeds PocketBase (`pocketbase.New()`) with its JS plugin, so `pb_hooks/` and `pb_migrations/` load as before, and adds the hot, stable paths in Go: the messages enrich hook (`server/enrich.go`), live messages (`server/live.go`), the room list and message pages (`server/lists.go`) and the unread counts (`server/unread.go`). Same flags, commands and routes as the stock `pocketbase` binary. The JS runtime (goja) had been behind most incidents: the hooks pool overflowing on message pages, runtimes held across requests (BUG-250), a Go↔JS call per enriched message, and the 1 vCPU collapse with many live listeners (PERF.md §6, §8, §9). The feature hooks (Telegram, linked instances, collections, the workers) stay in JS. A route the JS hooks define wins over the Go one of the same path (an old release's hooks, tests).
+**PocketBase as a Go framework (2026-11-11, REFACTOR item 47):** the binary is built from `server/`, which embeds PocketBase (`pocketbase.New()`) with its JS plugin, so `pb_hooks/` and `pb_migrations/` load as before, and adds the hot, stable paths in Go: the messages enrich hook (`server/enrich.go`), live messages (`server/live.go`), the room list and message pages (`server/lists.go`), the unread counts (`server/unread.go`) and read positions (`server/reads.go`, 2026-11-12). Same flags, commands and routes as the stock `pocketbase` binary. The JS runtime (goja) had been behind most incidents: the hooks pool overflowing on message pages, runtimes held across requests (BUG-250), a Go↔JS call per enriched message, and the 1 vCPU collapse with many live listeners (PERF.md §6, §8, §9). The feature hooks (Telegram, linked instances, collections, the workers) stay in JS. A route the JS hooks define wins over the Go one of the same path (an old release's hooks, tests).
 
 **Why no framework:** the UI has three screens and one hot path, which is appending messages to a list. Updating the DOM directly with a few small helpers is less code, loads faster, and is easy to reason about.
 
@@ -129,7 +129,12 @@ chat/
 │   ├── live.go                 # live messages on chat/messages, a queue per client (PERF.md §7, §9)
 │   ├── lists.go                # GET /api/chat/rooms, rooms/{room}/messages (pages, search), notifiable (§6)
 │   ├── unread.go               # GET /api/chat/unread, unread/{room} (§18.2, §41)
+│   ├── reads.go                # POST /api/chat/reads, group-committed (§18.2)
 │   ├── metrics.go              # GET /api/chat/metrics, superusers: queues, workers, realtime, DB, memory (§42.2)
+│   ├── pprof.go                # CHIRKLE_PPROF=host:port: Go's profiler on a listener of its own, for load tests
+│   ├── pick.go                 # ?fields= picked straight from the records, one serialization (PERF.md §13)
+│   ├── admission.go            # at most 80% of --hooksPool API requests with JS hooks at once, the rest wait (PERF.md §14)
+│   ├── gc.go                   # GOGC 200 and a memory limit of 70% of the machine's, unless the environment sets them
 │   ├── access.go, anonymous.go, text.go  # canSee and seesSQL, hide and refuseProbes, searchKey: as lib/access.js, anonymous.js, text.js
 │   └── *_test.go               # go test: the shared text vectors, probes
 ├── pb_hooks/                   # server-side JS hooks (committed)
@@ -147,7 +152,6 @@ chat/
 │       ├── text.js             # pure string cleaning: invisible characters, name keys, file names (§5.2, QA BUG-38)
 │       ├── http.js             # security + cache headers, /assets/ (§5.6, §8.2)
 │       ├── dms.js              # POST /api/chat/dms (§16.2)
-│       ├── reads.js            # POST /api/chat/reads (§18.2; the counts are server/unread.go's)
 │       ├── reactions.js        # POST /api/chat/reactions (§20.2)
 │       ├── bulk.js             # POST /api/chat/delete, POST /api/chat/forward (§21)
 │       ├── account.js          # POST /api/chat/password (§22.2)
@@ -1639,7 +1643,7 @@ back, set it in the future or write someone else's.
 
 No row means "read up to your signup" (`users.created`): history from before you joined never counts.
 
-### 18.2 Routes (`server/unread.go`; POST in `pb_hooks/lib/reads.js`)
+### 18.2 Routes (`server/unread.go`, `server/reads.go`)
 
 - **`GET /api/chat/unread`** → `{ at, rooms: { "<roomId>": count }, ids }` for the rooms with anything unread, where `at`
   is the server time the counts were taken (answers older than the counts shown are dropped), and `ids` the other
@@ -1654,8 +1658,10 @@ No row means "read up to your signup" (`users.created`): history from before you
   client asks at most every 250 ms, and only when something changed.
 - **`POST /api/chat/reads`** `{ room, at? }`: you have read `room` up to `at` (a message's `created`; default now).
   The position only moves forward and never past now; `at` must be a date (`""` is a 400, not "now"). A room you can't see (someone else's DM, no such room) is a
-  404. Two tabs racing to create the row end up with one (the unique index, then an update). Rate limit: 120 per
-  60 s per IP; the client sends at most about one per second per open room.
+  404. A mark that doesn't move the position is answered without writing; the others are group-committed: one
+  goroutine saves whatever has queued in one transaction (one row per user and room, the latest position) and answers
+  each request once that has committed, so the answer still means the row is stored (PERF.md §12). Rate limit: 120
+  per 60 s per IP; the client sends at most about one per second per open room.
 - **`GET /api/chat/unread/{room}`** → `{ id, created }` of the oldest message in `room` that is unread by the same
   rule (not yours, not deleted, newer than `max(last_read_at, your signup)`), or `{ id: "", created: "" }`. 404 for a
   room you can't see. §18.5 opens the room there.
@@ -3604,8 +3610,11 @@ remove token from url".
 - **`refs`** counts the messages and items that name a file. Each save that adds or drops a name changes it in the same
   transaction (`link`, `unlink`). A file nothing names is deleted, and PocketBase deletes what is stored once that is
   committed (in the background, with S3).
-- **Uploads** to `messages` are still sent as `files`. The create hook makes the rows (`fromUploads`), with the checks
-  the field made (size, an image's decodable size, the original name cleaned), and names them. Items attached from
+- **Uploads** to `messages` are still sent as `files`. The create request hook makes the rows (`fromUploads`), with the
+  checks the field made (size, an image's decodable size, the original name cleaned), and the save names them
+  (`linkPending`, in its transaction). Since 2026-11-12 the rows are stored before the save's transaction, so the
+  write connection isn't held for the round trips to S3 (PERF.md §12); a create refused after that drops them
+  (`discard`). Items attached from
   collections (`items`, §31.2) add their rows' names: nothing is copied. Edits can't change `files` (`files+`, `files-`,
   uploads: "Attachments can't be changed.").
 - **Saving to a collection** gives the item the message's stored name (`origin` = the row's id), and **Upload** makes a
@@ -3920,9 +3929,14 @@ text and not JSON, as scrapers do. A scraper signs in with a superuser token (Po
   `running` (a run holds its lock, renewed in the last 2 minutes).
 - `realtime`: `clients` (SSE connections), and live messages' `senders` (clients with a sender running), `queued`
   (events waiting) and `dropped` (clients disconnected for falling 512 events behind, since the start; PERF.md §9).
-- `db`: the sizes of `data.db`, `auxiliary.db` and their WAL files; `process`: goroutines, heap, memory from the
-  system, GC runs; `version`, `pocketbase`, `uptime_seconds`.
-- Not reported: the JS hooks pool (the jsvm plugin keeps no count of busy runtimes).
+- `admission`: API requests that run JS hooks, `slots` (80% of `--hooksPool`), `running`, `waiting` for a slot,
+  and `waits` (requests that found every slot taken, since the start; `server/admission.go`, PERF.md §14).
+- `db`: the sizes of `data.db`, `auxiliary.db` and their WAL files; `db_conns`: the read pool's `open` and `in_use`
+  connections, and how often (`waits`) and how long (`waited_seconds`) a query waited for one; `process`: goroutines,
+  heap, memory from the system, resident memory (`rss_bytes`, Linux), GC runs; `version`, `pocketbase`,
+  `uptime_seconds`.
+- Not reported: the JS hooks pool itself (the jsvm plugin keeps no count of busy runtimes); `admission.running` is the
+  most requests that hold one.
 
 The statistics page shows them to a superuser (§40.1). Tests: `tests/integration/retention.test.ts` (the prune's
 steps, what it keeps, superusers only; the metrics' fields, a queue's counts, the Prometheus form, who may ask),

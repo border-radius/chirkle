@@ -4,7 +4,12 @@
 
 import type { RecordModel } from "pocketbase";
 import { beforeAll, describe, expect, it } from "vitest";
+import contract from "../../shared/contract.json" with { type: "json" };
 import { client, newRoom, newUser, openDm, pngFile, post, status, type TestUser, uniq } from "./helpers.ts";
+
+/** What the apps ask a page for (web/src/api.ts MSG_OPTS). */
+const APP_FIELDS = contract.fields.message;
+const APP_EXPAND = "author,reply_to.author,forwarded_from";
 
 type Items = RecordModel[];
 
@@ -74,6 +79,18 @@ describe("the room list and message pages as routes", () => {
     expect(again.status).toBe(304);
     expect(await again.text()).toBe("");
     expect((await get(tag, me.pb.authStore.token, "&fields=id")).status).toBe(200); // other fields: another answer
+    // As the apps ask (fields and expand, server/pick.go): the same tag each time, and the records API's answer.
+    const appQuery = `&expand=${encodeURIComponent(APP_EXPAND)}&fields=${encodeURIComponent(APP_FIELDS)}`;
+    const picked = await get("", me.pb.authStore.token, appQuery);
+    const pickedTag = picked.headers.get("etag")!;
+    expect(await picked.json()).toEqual(
+      (
+        await me.pb
+          .collection("messages")
+          .getList(1, 3, { filter: `room = "${own.id}"`, sort: "-created,-id", expand: APP_EXPAND, fields: APP_FIELDS, skipTotal: true })
+      ).items,
+    );
+    for (let i = 0; i < 5; i++) expect((await get(pickedTag, me.pb.authStore.token, appQuery)).status).toBe(304);
 
     await me.pb.collection("messages").update(m.id, { text: "first, edited" });
     const changed = await get(tag);

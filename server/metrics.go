@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -76,13 +77,25 @@ type metrics struct {
 		Clients int `json:"clients"`
 		liveStats
 	} `json:"realtime"`
-	DB      map[string]int64 `json:"db"`
-	Process struct {
+	// Admission: API requests running and waiting for a slot (admission.go).
+	Admission admissionStats   `json:"admission"`
+	DB        map[string]int64 `json:"db"`
+	Process   struct {
 		Goroutines int    `json:"goroutines"`
 		HeapBytes  uint64 `json:"heap_bytes"`
 		SysBytes   uint64 `json:"sys_bytes"`
 		GCRuns     uint32 `json:"gc_runs"`
+		// RSSBytes: what the process holds (Linux), Go's heap and what isn't: SQLite's page caches (modernc's C
+		// heap) above all, one per open connection.
+		RSSBytes uint64 `json:"rss_bytes"`
 	} `json:"process"`
+	// DBConns: the read pool's connections (PocketBase allows 120) and how often a query waited for one.
+	DBConns struct {
+		Open      int     `json:"open"`
+		InUse     int     `json:"in_use"`
+		Waits     int64   `json:"waits"`
+		WaitedSec float64 `json:"waited_seconds"`
+	} `json:"db_conns"`
 }
 
 // storeMs: an app store value noted as "<ms>" or "<ms> <text>", as a time and the text.
@@ -99,7 +112,7 @@ func storeMs(app core.App, key string) (time.Time, string, bool) {
 	return time.UnixMilli(ms), rest, true
 }
 
-func collectMetrics(app core.App, l *live) (*metrics, error) {
+func collectMetrics(app core.App, l *live, a *admission) (*metrics, error) {
 	now := time.Now()
 	m := &metrics{
 		At:            now.UTC().Format(time.RFC3339),
@@ -156,6 +169,7 @@ func collectMetrics(app core.App, l *live) (*metrics, error) {
 	}
 	m.Realtime.Clients = app.SubscriptionsBroker().TotalClients()
 	m.Realtime.liveStats = l.stats()
+	m.Admission = a.stats()
 	for _, f := range []string{"data.db", "data.db-wal", "auxiliary.db", "auxiliary.db-wal"} {
 		if st, err := os.Stat(filepath.Join(app.DataDir(), f)); err == nil {
 			m.DB[f] = st.Size()
@@ -169,6 +183,12 @@ func collectMetrics(app core.App, l *live) (*metrics, error) {
 	m.Process.HeapBytes = mem.HeapAlloc
 	m.Process.SysBytes = mem.Sys
 	m.Process.GCRuns = mem.NumGC
+	m.Process.RSSBytes = rssBytes()
+	if db, ok := app.ConcurrentDB().(*dbx.DB); ok {
+		st := db.DB().Stats()
+		m.DBConns.Open, m.DBConns.InUse = st.OpenConnections, st.InUse
+		m.DBConns.Waits, m.DBConns.WaitedSec = st.WaitCount, st.WaitDuration.Seconds()
+	}
 	return m, nil
 }
 
@@ -256,6 +276,12 @@ func (m *metrics) prometheus() string {
 	fmt.Fprintf(&b, "chirkle_heap_bytes %d\n", m.Process.HeapBytes)
 	metric("chirkle_sys_bytes", "gauge", "Memory obtained from the OS by the Go runtime.")
 	fmt.Fprintf(&b, "chirkle_sys_bytes %d\n", m.Process.SysBytes)
+	metric("chirkle_requests_waiting", "gauge", "API requests waiting for a slot (admission).")
+	fmt.Fprintf(&b, "chirkle_requests_waiting %d\n", m.Admission.Waiting)
+	metric("chirkle_rss_bytes", "gauge", "Resident memory of the process (Linux; 0 elsewhere).")
+	fmt.Fprintf(&b, "chirkle_rss_bytes %d\n", m.Process.RSSBytes)
+	metric("chirkle_db_connections", "gauge", "Open read connections to the database.")
+	fmt.Fprintf(&b, "chirkle_db_connections %d\n", m.DBConns.Open)
 	return b.String()
 }
 
@@ -272,9 +298,9 @@ func wantsPrometheus(r *http.Request) bool {
 }
 
 // metricsRoute: GET /api/chat/metrics (superusers; the route requires it).
-func metricsRoute(l *live) func(*core.RequestEvent) error {
+func metricsRoute(l *live, a *admission) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		m, err := collectMetrics(e.App, l)
+		m, err := collectMetrics(e.App, l, a)
 		if err != nil {
 			return err
 		}
@@ -284,4 +310,19 @@ func metricsRoute(l *live) func(*core.RequestEvent) error {
 		}
 		return e.JSON(http.StatusOK, m)
 	}
+}
+
+// rssBytes: the process's resident memory from /proc (Linux), else 0.
+func rssBytes() uint64 {
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(line); len(f) >= 2 && f[0] == "VmRSS:" {
+			kb, _ := strconv.ParseUint(f[1], 10, 64)
+			return kb << 10
+		}
+	}
+	return 0
 }

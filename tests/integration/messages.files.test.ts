@@ -2,7 +2,7 @@
 
 import { describe, expect, inject, it } from "vitest";
 import { gifHeader, jpegHeader, pngOf, webpHeader } from "../support/images.ts";
-import { adminClient, expectRejected, newRoom, newUser, openDm, pngFile, post, type TestUser } from "./helpers.ts";
+import { adminClient, expectRejected, newRoom, newUser, openDm, pngFile, post, rawDb, type TestUser } from "./helpers.ts";
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
@@ -44,6 +44,30 @@ describe("attachments (§17.1)", () => {
       ),
     );
     await expectRejected(withFiles(a, room.id, [file("big.bin", "application/octet-stream", 20 * 1024 * 1024 + 1)]));
+  });
+
+  it("leaves no upload stored when the message is refused after its uploads were (docs/PERF.md §12)", async () => {
+    const a = await newUser();
+    const room = await newRoom(a);
+    const tag = `left${Date.now().toString(36)}`;
+    const stored = () => {
+      const db = rawDb();
+      try {
+        return db.prepare("SELECT COUNT(*) AS n FROM files WHERE name LIKE ?").get(`${tag}%`);
+      } finally {
+        db.close();
+      }
+    };
+    // Refused by the save's own validation (text over 2000), after both uploads were stored.
+    await expectRejected(withFiles(a, room.id, [pngFile(`${tag}1.png`), file(`${tag}2.txt`, "text/plain")], "x".repeat(2001)));
+    // The second upload too big: the first was stored already.
+    await expectRejected(
+      withFiles(a, room.id, [pngFile(`${tag}3.png`), file(`${tag}4.bin`, "application/octet-stream", 20 * 1024 * 1024 + 1)]),
+    );
+    expect(stored()).toEqual({ n: 0 });
+    // And taken, they are there, named once.
+    await withFiles(a, room.id, [pngFile(`${tag}5.png`)], "ok");
+    expect(stored()).toEqual({ n: 1 });
   });
 
   it("accepts 10 files of 20 MB in one message (the request body limit fits), and other requests keep 32 MB", async () => {

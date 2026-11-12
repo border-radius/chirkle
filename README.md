@@ -11,9 +11,10 @@ Mentions & replies, which load on first use).
   <img alt="A room in Chirkle: the room list with unread counts on the left; messages with avatars, a reply, an @mention of you, a photo and emoji reactions on the right" src="docs/screenshot-light.png">
 </picture>
 
-- Runs on a $5 VPS (1 vCPU, 1 GB of RAM): about 500 people online at a normal pace, or 100 chatting nonstop
-  (measured, [PERF.md §8](docs/PERF.md#8-2026-11-09-a-5-vps-one-cpu)); past 100–200 clients, everyone
-  reconnecting at once can still swamp it
+- Runs on a $5 VPS (1 vCPU, 1 GB of RAM): about 1,000 people online at a normal pace (2,000
+  with slow sends), or 300 chatting nonstop, and 1,000 reconnecting at once catch up within seconds; beyond that it
+  slows down but stays within its memory (measured, [PERF.md §13](docs/PERF.md#13-2026-11-12-one-serialization-per-answer-less-gc),
+  [§14](docs/PERF.md#14-2026-11-12-memory-under-overload-admission))
 - Public rooms anyone can create; hide rooms you don't care about; creators archive rooms (read-only, history kept)
 - Room access, chosen by each room's creator: **Private** (only the people they add), **Public** (everyone with an account) or **Open Air** (anyone can read it, no account needed; the home page shows these rooms to guests, who log in or sign up to join in); and who can post: everyone who can read it, or only the people they choose (the others read and react)
 - Live messages, edits and deletes (deleted messages leave a placeholder)

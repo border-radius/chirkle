@@ -71,7 +71,6 @@ routerAdd("GET", "/api/{path...}", () => {
 });
 routerAdd("POST", "/api/previews/tick", (e) => require(`${__hooks}/lib/previews.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/chat/dms", (e) => require(`${__hooks}/lib/dms.js`).openDm(e), $apis.requireAuth("users"));
-routerAdd("POST", "/api/chat/reads", (e) => require(`${__hooks}/lib/reads.js`).markRead(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/reactions", (e) => require(`${__hooks}/lib/reactions.js`).react(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/delete", (e) => require(`${__hooks}/lib/bulk.js`).deleteMessages(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/ban", (e) => require(`${__hooks}/lib/moderation.js`).ban(e), $apis.requireAuth("users"));
@@ -215,13 +214,17 @@ onRecordDelete((e) => {
 onRecordCreateRequest((e) => {
   const messages = require(`${__hooks}/lib/messages.js`);
   messages.beforeMessageCreateRequest(e);
-  // One transaction for the attachments' `files` rows (uploads, and files attached from collections, §31, §37) and
-  // the message: refused, nothing is left stored.
-  e.app.runInTransaction((tx) => {
-    e.app = tx;
-    messages.setRequestFiles(e);
+  // Checked, its mentions found, its uploads stored and its attachments set before the save (docs/PERF.md §12), which
+  // links them in its own transaction (below): the write connection isn't held for the reads, the uploads' round trips
+  // to S3 or the answer's enrich hook. Refused, nothing is left stored.
+  const prepared = messages.prepareCreate(e);
+  messages.setRequestFiles(e, prepared);
+  try {
     e.next();
-  });
+  } catch (err) {
+    require(`${__hooks}/lib/files.js`).discard(e.app, prepared.uploaded);
+    throw err;
+  }
 }, "messages");
 
 onRecordCreate((e) => {
@@ -271,19 +274,33 @@ onRecordCreate((e) => {
   const features = require(`${__hooks}/lib/features.js`);
   if (e.record) {
     messages.setTextKey(e.record);
-    // Who it mentions (§41): from its text, or as the linked instance it comes from says.
+    // Who it mentions (§41): from its text, or as the linked instance it comes from says. A create request's are
+    // found before its transaction (lib/messages.js prepareCreate).
     const fed = features.federation(e.app);
-    require(`${__hooks}/lib/handles.js`).setMentions(e.app, e.record, !!fed && fed.messages.isFromPeer(e.app, e.record));
+    if (!messages.checked(e.record)) {
+      require(`${__hooks}/lib/handles.js`).setMentions(e.app, e.record, !!fed && fed.messages.isFromPeer(e.app, e.record));
+    }
   }
-  e.next();
-  const rec = e.record;
-  if (!rec) return;
-  // Saved: whom it tells (§41), and what each feature does with a new message is queued, in the save's transaction.
-  require(`${__hooks}/lib/inbox.js`).messageCreated(e.app, rec);
-  features.telegram()?.outbound.queueCreate(e.app, rec);
-  require(`${__hooks}/lib/previews.js`).queue(e.app, rec);
-  require(`${__hooks}/lib/media.js`).add(e.app, rec);
-  features.federation(e.app)?.messages.messageCreated(e.app, rec);
+  // One transaction for the message, its attachments' links (§37) and what it tells and queues: whom it tells (§41),
+  // and what each feature does with a new message. Inside the caller's, when it has one (the bridges, forwards).
+  const app = e.app;
+  try {
+    app.runInTransaction((tx) => {
+      e.app = tx;
+      if (e.record) require(`${__hooks}/lib/files.js`).linkPending(tx, e.record);
+      e.next();
+      const rec = e.record;
+      if (!rec) return;
+      require(`${__hooks}/lib/inbox.js`).messageCreated(tx, rec);
+      features.telegram()?.outbound.queueCreate(tx, rec);
+      require(`${__hooks}/lib/previews.js`).queue(tx, rec);
+      require(`${__hooks}/lib/media.js`).add(tx, rec);
+      features.federation(tx)?.messages.messageCreated(tx, rec);
+    });
+  } finally {
+    // Committed (or the caller's): the after-save hooks (realtime, the DM's activity) run on the app as given.
+    e.app = app;
+  }
 }, "messages");
 
 onRecordAfterCreateSuccess((e) => {
@@ -292,8 +309,8 @@ onRecordAfterCreateSuccess((e) => {
 }, "messages");
 
 // Live messages (each message once to everyone listening who can see its room) are sent by the Go server
-// (server/live.go), as are the messages enrich hook (server/enrich.go), the list routes (server/lists.go) and the
-// unread counts (server/unread.go): docs/REFACTOR.md item 47.
+// (server/live.go), as are the messages enrich hook (server/enrich.go), the list routes (server/lists.go), the
+// unread counts (server/unread.go) and POST /api/chat/reads (server/reads.go): docs/REFACTOR.md item 47.
 
 // The inbox (§41): each row added or removed, once committed, to its person's apps.
 onRecordAfterCreateSuccess((e) => {

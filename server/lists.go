@@ -8,7 +8,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"slices"
 	"strconv"
@@ -76,7 +75,7 @@ func roomsRoute(e *core.RequestEvent) error {
 	if err := apis.EnrichRecords(e, items); err != nil {
 		return err
 	}
-	return e.JSON(http.StatusOK, items)
+	return writePicked(e, e.Request.URL.Query().Get("fields"), items)
 }
 
 // messagesRoute: GET /api/chat/rooms/{room}/messages?kind=latest|first|older|newer|changed → the messages. `older` and
@@ -128,10 +127,16 @@ func messagesRoute(e *core.RequestEvent) error {
 }
 
 // tagged answers with body and an ETag of it, or 304 when the client has that one already. The tag is a hash of the
-// records as they serialize with their expands and what the enrich hooks added. `no-store`: nothing keeps a page but
-// the app itself, and it sends the tag it kept.
+// answer's bytes: the records as they serialize with their expands, what the enrich hooks added and ?fields picked.
+// They are made once (pick.go), hashed and written: not serialized for the hash and then again, and with ?fields not
+// serialized, parsed and serialized once more as PocketBase's e.JSON does (PERF.md §13). `no-store`: nothing keeps a page but the app
+// itself, and it sends the tag it kept.
 func tagged(e *core.RequestEvent, q map[string]string, body []*core.Record) error {
-	raw, err := json.Marshal([]any{q["fields"], q["expand"], body})
+	data, err := pick(body, q["fields"])
+	if err != nil {
+		return err
+	}
+	raw, err := marshal(data)
 	if err != nil {
 		return err
 	}
@@ -145,7 +150,7 @@ func tagged(e *core.RequestEvent, q map[string]string, body []*core.Record) erro
 			return e.NoContent(http.StatusNotModified)
 		}
 	}
-	return e.JSON(http.StatusOK, body)
+	return e.Blob(http.StatusOK, "application/json", raw)
 }
 
 // searchWords: a search's words (§29), folded as the server stores text_key, each once, the first maxWords.
@@ -238,7 +243,7 @@ func notifiableRoute(e *core.RequestEvent) error {
 	if err != nil {
 		return err
 	}
-	return e.JSON(http.StatusOK, items)
+	return writePicked(e, q["fields"], items)
 }
 
 // listMessages: the messages matching every condition in where, a page of them as q's `limit` and `page` say,

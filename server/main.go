@@ -1,7 +1,7 @@
 // The Chirkle server (docs/REFACTOR.md item 47): PocketBase, as its own binary is, with the JS hooks (pb_hooks/) and
 // migrations (pb_migrations/), plus the hot paths in Go: the messages enrich hook (enrich.go), live messages
-// (live.go), the room list and message pages (lists.go) and the unread counts (unread.go). Everything else stays in
-// the JS hooks. Same flags, commands and routes as the stock `pocketbase` binary.
+// (live.go), the room list and message pages (lists.go), the unread counts (unread.go) and read positions (reads.go).
+// Everything else stays in the JS hooks. Same flags, commands and routes as the stock `pocketbase` binary.
 package main
 
 import (
@@ -37,6 +37,8 @@ func main() {
 			}
 		}
 	}
+	tuneGC()
+	startPprof()
 	app := pocketbase.New()
 	app.RootCmd.Use = "chirkle-server"
 	app.RootCmd.Version = pocketbase.Version + " (Chirkle " + version + ")"
@@ -80,7 +82,7 @@ func main() {
 		Dir:          migrationsDir,
 	})
 
-	register(app, os.Getenv("CHIRKLE_LEGACY") == "1")
+	register(app, os.Getenv("CHIRKLE_LEGACY") == "1", newAdmission(admissionSlots(hooksPool)))
 
 	// As the stock binary: pb_public/ unless a route (the hooks' page route, lib/http.js) serves it.
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
@@ -98,10 +100,12 @@ func main() {
 	}
 }
 
-// register binds the Go hooks and routes. `legacy` (CHIRKLE_LEGACY=1, tests only): answer as a server from before the
+// register binds the Go hooks, routes and admission (admission.go). `legacy` (CHIRKLE_LEGACY=1, tests only): answer as a server from before the
 // list routes and the live topic (2026-10-29), so the apps' fallbacks can be tested (android TestServer.legacyUrl).
-func register(app core.App, legacy bool) {
+func register(app core.App, legacy bool, admit *admission) {
+	admit.bind(app)
 	live := newLive(app)
+	readMarks := newReads(app)
 	// A client dropped for falling behind counts with live messages' own (GET /api/chat/metrics).
 	bindRealtime(app, func() { live.dropped.Add(1) })
 	bindEnrich(app)
@@ -115,7 +119,7 @@ func register(app core.App, legacy bool) {
 				if e.Router.HasRoute(method, path) {
 					return
 				}
-				r := e.Router.Route(method, path, h)
+				r := e.Router.Route(method, path, h).Unbind(admissionID) // no JS in the request (admission.go)
 				if auth {
 					r.Bind(apis.RequireAuth("users"))
 				}
@@ -127,8 +131,9 @@ func register(app core.App, legacy bool) {
 				add(http.MethodGet, "/api/chat/live", liveInfoRoute, false)
 			}
 			add(http.MethodGet, "/api/chat/unread", unreadRoute, true)
+			add(http.MethodPost, "/api/chat/reads", readMarks.route, true)
 			if !e.Router.HasRoute(http.MethodGet, "/api/chat/metrics") {
-				e.Router.GET("/api/chat/metrics", metricsRoute(live)).Bind(apis.RequireSuperuserAuth())
+				e.Router.GET("/api/chat/metrics", metricsRoute(live, admit)).Bind(apis.RequireSuperuserAuth()).Unbind(admissionID)
 			}
 			add(http.MethodGet, "/api/chat/unread/{room}", firstUnreadRoute, true)
 			return e.Next()

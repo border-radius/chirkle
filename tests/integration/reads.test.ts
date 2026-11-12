@@ -239,6 +239,37 @@ describe("POST /api/chat/reads (§18.2)", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("saves marks that arrive together (one transaction, server/reads.go) each as asked, and tells the other tabs", async () => {
+    const a = await newUser();
+    const users = await Promise.all(Array.from({ length: 4 }, () => newUser()));
+    const rooms = await Promise.all(Array.from({ length: 3 }, () => newRoom(a)));
+    const msgs = await Promise.all(rooms.map((r) => post(a, r.id, "one")));
+    // users[0]'s other tab hears its rows.
+    const tab = client();
+    tab.authStore.save(users[0]!.pb.authStore.token, users[0]!.pb.authStore.record);
+    const sub = await collect(tab, "room_reads");
+    try {
+      const res = await Promise.all(
+        users.flatMap((u) => rooms.flatMap((r, i) => [markRead(u, { room: r.id, at: msgs[i]!.created }), markRead(u, { room: r.id })])),
+      );
+      // Each answer is what is stored: the later of the two marks, whichever was saved first.
+      for (const [k, u] of users.entries()) {
+        const rows = await u.pb.collection("room_reads").getFullList({ filter: `user = "${u.user.id}"` });
+        expect(rows).toHaveLength(rooms.length);
+        for (const row of rows) {
+          expect(row.last_read_at > msgs[rooms.findIndex((r) => r.id === row.room)]!.created).toBe(true);
+          const mine = res.slice(k * rooms.length * 2, (k + 1) * rooms.length * 2).filter((x) => x.room === row.room);
+          expect(mine.some((x) => x.last_read_at === row.last_read_at)).toBe(true);
+        }
+        expect(await unread(u)).toEqual({});
+      }
+      await eventually(() => expect(new Set(sub.events.map((e) => e.record.room))).toEqual(new Set(rooms.map((r) => r.id))));
+      expect(sub.events.every((e) => e.record.user === users[0]!.user.id)).toBe(true);
+    } finally {
+      await sub.stop();
+    }
+  });
+
   it("404s for an unknown room and for someone else's DM; 400 for a bad date; 401 when anonymous", async () => {
     const a = await newUser();
     const b = await newUser();
