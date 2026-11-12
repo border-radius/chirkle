@@ -152,6 +152,9 @@ describe("anonymous rooms (§35)", () => {
       () => b.pb.collection("users").update(b.user.id, { name: "B" }, { expand: "messages_via_author" }),
       () => b.pb.send("/api/chat/rooms", { query: { expand: "created_by.messages_via_author" } }),
       () => b.pb.send(`/api/chat/rooms/${room.id}/messages`, { query: { expand: "author.messages_via_author" } }),
+      // The JS routes too (server/anonymous.go's /api/chat/* middleware).
+      () => b.pb.send("/api/chat/reactions", { method: "POST", body: {}, query: { expand: "author.messages_via_author" } }),
+      () => b.pb.send("/api/chat/forward", { method: "POST", body: {}, query: { expand: "author.messages_via_author" } }),
     ];
     for (const [i, call] of refused.entries()) expect(await status(call()), `refused[${i}]`).toBe(400);
     // PocketBase's own refusal, before any hook of ours: only superusers filter by @collection.

@@ -1,6 +1,8 @@
 // The Chirkle server (docs/REFACTOR.md item 47): PocketBase, as its own binary is, with the JS hooks (pb_hooks/) and
 // migrations (pb_migrations/), plus the hot paths in Go: the messages enrich hook (enrich.go), live messages
-// (live.go), the room list and message pages (lists.go), the unread counts (unread.go) and read positions (reads.go).
+// (live.go), the room list and message pages (lists.go), the unread counts (unread.go), read positions (reads.go), and
+// what every request or subscription would otherwise take a JS runtime for: the anonymous rooms' probe checks
+// (anonymous.go), the subscriptions' statistics (stats.go) and file and poster downloads (files.go).
 // Everything else stays in the JS hooks. Same flags, commands and routes as the stock `pocketbase` binary.
 package main
 
@@ -110,6 +112,9 @@ func register(app core.App, legacy bool, admit *admission) {
 	bindRealtime(app, func() { live.dropped.Add(1) })
 	bindEnrich(app)
 	bindAnonymous(app)
+	bindProbes(app) // before bindStats: a refused subscription counts nothing
+	bindStats(app)
+	bindFiles(app)
 	live.bind()
 
 	// After the JS hooks' routes (they bind at priority 0): a route they define (an old release's hooks, tests) wins.
@@ -136,6 +141,9 @@ func register(app core.App, legacy bool, admit *admission) {
 				e.Router.GET("/api/chat/metrics", metricsRoute(live, admit)).Bind(apis.RequireSuperuserAuth()).Unbind(admissionID)
 			}
 			add(http.MethodGet, "/api/chat/unread/{room}", firstUnreadRoute, true)
+			for path, h := range fileRoutes {
+				add(http.MethodGet, path, h, false)
+			}
 			return e.Next()
 		},
 		Priority: 900,

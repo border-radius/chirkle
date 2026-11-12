@@ -82,8 +82,7 @@ function overLimit(list, emoji, user) {
  * @param {core.RequestEvent} e
  */
 function react(e) {
-  // As the records API's (main.pb.js): this page's ?expand mustn't group messages by author (§35).
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
+  // Its ?expand can't group messages by author: refused before this runs (server/anonymous.go bindProbes, §35).
   const me = e.auth;
   if (!me) throw new UnauthorizedError("The request requires a logged-in user.");
   const info = e.requestInfo();

@@ -728,7 +728,7 @@ docs/QA.md "QA pass 36"). Three of the five flakes were real races, one a real a
 bug that loses live events (BUG-269). The items below are where the same kind of trouble is likely next. Ordered by
 value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
 
-#### 60. Realtime listeners: dispatch from the map, don't bind them (web) — high value, small
+#### 60. Realtime listeners: dispatch from the map, don't bind them (web) — high value, small ✅ (2026-11-12)
 - `web/src/pb.ts createRealtime` keeps listeners per subscription key in `subs` *and* binds each one to the
   `EventSource` with `addEventListener`, at three moments (`subscribe` when connected, `sendSubs`, and now the end of
   the connect, BUG-269). A listener added at any other moment is in `subs` but hears nothing; BUG-269 was exactly that
@@ -738,8 +738,13 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
   `onmessage`-style handler per event name), and have it call `subs.get(key)` at event time. `bindAll` and the
   binding rules go; a listener exists exactly while it is in `subs`. The unit tests in `tests/unit/pb.test.ts` (fake
   `EventSource`) cover the cases.
+- **Done (2026-11-12):** `bind(key)` adds one dispatcher per key to the current `EventSource` (when it opens, for
+  every key; on `subscribe`, for a new one), which calls `subs.get(key)` when the event comes and drops a replaced
+  connection's late events. `bindAll`, `removeEventListener` and the BUG-269 rebind are gone. PB_CONNECT keeps being
+  called by the connect itself, once subscribed. New unit test: listeners added while connected, removed, the last one
+  replaced before the unsubscribe was sent, and one added while reconnecting.
 
-#### 61. The JS runtime pool still sits in front of every records request and every file (server) — high value, medium
+#### 61. The JS runtime pool still sits in front of every records request and every file (server) — high value, medium ✅ (2026-11-12)
 - Item 47 moved the message pages, enrich, live fan-out and unread counts to Go, but each of these still takes a JS
   runtime from `--hooksPool` (PERF.md §6, §8):
   - `refuseProbes` on every records list, view, create, update and auth request (`main.pb.js`, five identical
@@ -758,6 +763,21 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
 - Related, fixed in this round: the JS hooks' inline realtime sends (inbox, badges, lost access, keepalive) could block
   for ever on a client that stopped reading (QA BUG-270); every client now has a buffered, never-blocking `Send`
   (`server/realtime.go`). `live.go`'s own per-client queues are now a second buffer and could go.
+- **Done (2026-11-12):**
+  - Probes: `server/anonymous.go bindProbes`: the records API's list, view, create, update and auth request hooks, the
+    realtime subscribe hook, and a middleware on every `/api/chat/*` route (so the JS routes `/api/chat/reactions` and
+    `/forward` and the Go lists, which each called it themselves, are covered by one check). The JS copy
+    (`lib/anonymous.js` probes, refuseProbes, refuseSubscriptionProbes) is gone; `anonymous.test.ts` gained the two
+    JS routes. A batch request's own requests go through the record hooks (each has its own URL); not tested, as the
+    batch API is off on the test server.
+  - Stats: `server/stats.go` notes the connection's app (the same client key lib/stats.js reads) and marks the
+    account active once an hour.
+  - Files: `server/files.go` serves `/api/files/messages/…`, `/api/files/collection_items/…` and both poster routes
+    (`shownBy`, thumbnails, `download`, the poster's Cache-Control as before), and refuses PocketBase's own route for
+    `files`; the JS routes, `files.serve`, `shownBy` and `media.poster`/`itemPoster` are gone. The federation's
+    file routes (`federation/inbox.js`, peers only) still serve in JS.
+  - No JS hook runs for a records read, a subscription or a download any more. `main.pb.js` has no `onRealtimeSubscribeRequest`.
+  - Left: the stress run with many slow downloads (before/after) wasn't made; `live.go`'s second queue stays.
 
 #### 62. e2e tests share one server and see each other's public rooms (tests) — high value, medium
 - Every e2e user can see every public room that any parallel test made, and gets each one's live events: one notify
@@ -789,9 +809,10 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
   media grid while seeing its messages). Suggestion: `access.canSee(viewer)` with a viewer type (`guest`, `user id`,
   `superuser`), used the same way by every route; the access matrix test gains a superuser column.
 
-#### 66. Small ones
+#### 66. Small ones ✅ (2026-11-12)
 - `server/enrich.go enrichInRooms`: the `checked` mark is deleted after `EnrichRecords` returns, not deferred; a panic
-  in an enrich hook leaves the entry (keyed by a request's info, so only a leak). `defer checked.Delete(info)`.
+  in an enrich hook leaves the entry (keyed by a request's info, so only a leak). `defer checked.Delete(info)`. Done.
 - `lib/stats.js subscribed` keeps `stats.touched.<user>` in the app store forever (one per account ever seen since
-  the start); the key could be the hour's set, replaced when the hour changes.
-- `pb_hooks/main.pb.js`: the five `refuseProbes` bindings are one loop (or item 61).
+  the start); the key could be the hour's set, replaced when the hour changes. Done with item 61 (`server/stats.go`
+  `touchedThisHour`).
+- `pb_hooks/main.pb.js`: the five `refuseProbes` bindings are one loop (or item 61). Gone with item 61.

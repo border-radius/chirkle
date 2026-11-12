@@ -1,15 +1,20 @@
 package main
 
 // Anonymous rooms (DESIGN.md §35), the parts the Go paths need: hiding a message's author in an answer or a live event
-// (hide), and refusing a page's ?expand that would group messages by author (refuseProbes). As pb_hooks/lib/anonymous.js,
-// which keeps these for the records API's request hooks and the JS routes.
+// (hide), and refusing every filter, sort or expand that would group messages by author (bindProbes): the records API's,
+// realtime subscriptions' and every /api/chat/* route's, JS ones included. pb_hooks/lib/anonymous.js keeps the rest.
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/hook"
 )
 
 type anonRoom struct {
@@ -144,22 +149,106 @@ func probes(filter, sort, expand, me string) bool {
 	return authorField.MatchString(fields) || authorBackRelation.MatchString(expand)
 }
 
-// refuseProbes: a route's ?expand (or filter, sort) mustn't group messages by author, unless a superuser asks.
+// refuseProbes: a request whose ?filter, ?sort or ?expand groups messages by author is refused, unless a superuser
+// asks. The query as the request has it (decoded: %61uthor is "author"); a batch request's own requests each have theirs.
 func refuseProbes(e *core.RequestEvent) error {
-	info, err := e.RequestInfo()
-	if err != nil {
-		return err
-	}
-	f, s, x := info.Query["filter"], info.Query["sort"], info.Query["expand"]
+	q := e.Request.URL.Query()
+	f, s, x := q.Get("filter"), q.Get("sort"), q.Get("expand")
 	if !mentionsAuthor.MatchString(strings.Join([]string{f, s, x}, " ")) {
 		return nil
 	}
 	me := ""
-	if info.Auth != nil {
-		me = info.Auth.Id
+	if e.Auth != nil {
+		me = e.Auth.Id
 	}
-	if !probes(f, s, x, me) || (info.Auth != nil && info.Auth.IsSuperuser()) {
+	if !probes(f, s, x, me) || e.HasSuperuserAuth() {
 		return nil
 	}
 	return e.BadRequestError(probeRefusal, nil)
+}
+
+// refuseSubscriptionProbes: the same, for the filter, sort and expand in a realtime subscription's options.
+func refuseSubscriptionProbes(e *core.RealtimeSubscribeRequestEvent) error {
+	if e.HasSuperuserAuth() {
+		return nil
+	}
+	me := ""
+	if e.Auth != nil {
+		me = e.Auth.Id
+	}
+	str := func(v any) string {
+		if v == nil {
+			return ""
+		}
+		return fmt.Sprint(v)
+	}
+	for _, topic := range e.Subscriptions {
+		at := strings.Index(topic, "?options=")
+		if at < 0 {
+			continue
+		}
+		var options struct {
+			Query map[string]any `json:"query"`
+		}
+		raw, err := url.QueryUnescape(topic[at+len("?options="):])
+		if err != nil || json.Unmarshal([]byte(raw), &options) != nil {
+			continue // PocketBase ignores options it can't read
+		}
+		q := options.Query
+		if probes(str(q["filter"]), str(q["sort"]), str(q["expand"]), me) {
+			return e.BadRequestError(probeRefusal, nil)
+		}
+	}
+	return nil
+}
+
+// bindProbes: nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or
+// expanding (§35). In Go, so none of these requests takes a JS runtime (docs/REFACTOR.md item 61): the records API's
+// request hooks (any collection: a relation or back-relation reaches messages from any of them; an auth answer has the
+// record too), realtime subscriptions, and a middleware for /api/chat/*, whose routes (Go or JS) answer with records.
+func bindProbes(app core.App) {
+	// Each calls its own event's Next: the embedded RequestEvent's is the router's chain, not the hook's.
+	app.OnRecordsListRequest().BindFunc(func(e *core.RecordsListRequestEvent) error {
+		if err := refuseProbes(e.RequestEvent); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+	record := func(e *core.RecordRequestEvent) error {
+		if err := refuseProbes(e.RequestEvent); err != nil {
+			return err
+		}
+		return e.Next()
+	}
+	app.OnRecordViewRequest().BindFunc(record)
+	app.OnRecordCreateRequest().BindFunc(record)
+	app.OnRecordUpdateRequest().BindFunc(record)
+	app.OnRecordAuthRequest().BindFunc(func(e *core.RecordAuthRequestEvent) error {
+		if err := refuseProbes(e.RequestEvent); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+	app.OnRealtimeSubscribeRequest().BindFunc(func(e *core.RealtimeSubscribeRequestEvent) error {
+		if err := refuseSubscriptionProbes(e); err != nil {
+			return err
+		}
+		return e.Next()
+	})
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		se.Router.Bind(&hook.Handler[*core.RequestEvent]{
+			Id: "chirkleProbes",
+			// Once the session is known, before the admission's wait (admission.go): a refused request doesn't wait.
+			Priority: apis.DefaultRateLimitMiddlewarePriority + 15,
+			Func: func(e *core.RequestEvent) error {
+				if strings.HasPrefix(e.Request.URL.Path, "/api/chat/") {
+					if err := refuseProbes(e); err != nil {
+						return err
+					}
+				}
+				return e.Next()
+			},
+		})
+		return se.Next()
+	})
 }

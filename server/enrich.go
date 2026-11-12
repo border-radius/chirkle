@@ -112,9 +112,8 @@ func enrichInRooms(e *core.RequestEvent, rooms []string, items []*core.Record) e
 		set[r] = true
 	}
 	checked.Store(info, set)
-	err = apis.EnrichRecords(e, items)
-	checked.Delete(info)
-	if err != nil {
+	defer checked.Delete(info) // also when an enrich hook panics: the mark would stay for ever
+	if err := apis.EnrichRecords(e, items); err != nil {
 		return err
 	}
 	showOriginals(e.App, items, set)

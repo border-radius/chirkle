@@ -272,4 +272,50 @@ describe("realtime", () => {
     expect(first).toEqual([{ action: "create" }]);
     expect(second).toEqual([{ action: "create" }]);
   });
+
+  it("a listener hears events exactly while it is subscribed, whenever it was added (item 60)", async () => {
+    vi.stubGlobal("EventSource", FakeSource);
+    const posts = stubPosts();
+    const pb = createClient("http://pb.test", createAuthStore());
+    const heard: string[] = [];
+    const listen = (name: string) => pb.realtime.subscribe("chat/messages", () => heard.push(name));
+    const a = listen("a");
+    await vi.waitFor(() => expect(FakeSource.all).toHaveLength(1));
+    FakeSource.all[0]!.emit("PB_CONNECT", { lastEventId: "c1", data: "{}" });
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    posts[0]!.respond(204);
+    const offA = await a;
+    const offB = await listen("b"); // connected, same topic: nothing to send
+    const emit = (i: number) => FakeSource.all[i]!.emit("chat/messages", { data: "{}" });
+    emit(0);
+    expect(heard).toEqual(["a", "b"]);
+
+    heard.length = 0;
+    void offA();
+    emit(0);
+    expect(heard).toEqual(["b"]);
+
+    // The last listener goes and a new one comes before the unsubscribe was sent: no change for the server.
+    heard.length = 0;
+    void offB();
+    const c = listen("c");
+    emit(0);
+    expect(heard).toEqual(["c"]);
+    await c;
+    expect(posts).toHaveLength(1);
+    expect(FakeSource.all[0]!.closed).toBe(false);
+
+    // A lost connection: the new EventSource dispatches to the same listeners, and one added while reconnecting.
+    heard.length = 0;
+    FakeSource.all[0]!.onerror!();
+    await vi.waitFor(() => expect(FakeSource.all).toHaveLength(2));
+    const d = listen("d");
+    FakeSource.all[1]!.emit("PB_CONNECT", { lastEventId: "c2", data: "{}" });
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    posts[1]!.respond(204);
+    await d;
+    emit(0); // the old connection hears nothing any more
+    emit(1);
+    expect(heard).toEqual(["c", "d"]);
+  });
 });

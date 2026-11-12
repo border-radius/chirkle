@@ -400,7 +400,8 @@ collapsed there:
   p95, and the server caught up within about 30 s. Before, it never did: each request beyond the pool built a fresh JS
   runtime. A page now runs no JS at all (the route, its enrich hook and the realtime events it may cause are Go), so it
   can't overflow the pool. What still runs JS per request: the records API's request hooks (`refuseProbes`), sign-ups and
-  logins, the realtime subscribe hook.
+  logins, the realtime subscribe hook. (Since REFACTOR item 61, 2026-11-12: the probe checks, the subscribe hook and
+  file and poster downloads are Go too; the JS hooks run only for writes and feature routes.)
 - **The fan-out:** each message goes once to every listening client's own queue (`server/live.go`), and a goroutine per
   client writes it out in order. The save no longer waits for 1000 SSE writers: all 600,000 events arrived, p99 0.66 s.
   A client 512 events behind would be disconnected (its app reloads what it missed); none was.

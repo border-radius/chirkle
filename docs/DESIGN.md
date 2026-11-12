@@ -135,7 +135,9 @@ chat/
 │   ├── pick.go                 # ?fields= picked straight from the records, one serialization (PERF.md §13)
 │   ├── admission.go            # at most 80% of --hooksPool API requests with JS hooks at once, the rest wait (PERF.md §14)
 │   ├── gc.go                   # GOGC 200 and a memory limit of 70% of the machine's, unless the environment sets them
-│   ├── access.go, anonymous.go, text.go  # canSee and seesSQL, hide and refuseProbes, searchKey: as lib/access.js, anonymous.js, text.js
+│   ├── files.go                # message and collection item files and video posters, from their `files` rows (§37)
+│   ├── stats.go                # a realtime subscription's app and account activity (§40.2)
+│   ├── access.go, anonymous.go, text.go  # canSee and seesSQL, hide and the probe checks (§35.3), searchKey: as lib/access.js, anonymous.js, text.js
 │   └── *_test.go               # go test: the shared text vectors, probes
 ├── pb_hooks/                   # server-side JS hooks (committed)
 │   ├── main.pb.js              # registrations only; every hook on messages, rooms and users (features' parts in order, §5.6)
@@ -3445,8 +3447,9 @@ routes (`/api/chat/rooms/{room}/messages`, search, `notifiable`) and realtime. T
 Filtering or sorting by `author` or `forwarded_from` would show who wrote what, as would expanding the back-relations
 `messages_via_author` and `messages_via_forwarded_from`. Relations reach messages from any collection
 (`@collection.messages.author`, `messages_via_room.author`). So `refuseProbes` (the record request hooks: list, view,
-create, update and every auth answer; and the routes that enrich records, PERF.md §6) and `refuseSubscriptionProbes`
-(realtime subscriptions' options) refuse those with 400, quoted values aside. `@collection` filters are PocketBase's
+create, update and every auth answer; and a middleware on every `/api/chat/*` route, Go or JS) and
+`refuseSubscriptionProbes` (realtime subscriptions' options) refuse those with 400. All in Go (`server/anonymous.go`
+`bindProbes`), so none of these requests takes a JS runtime (REFACTOR item 61). Quoted values aren't fields. `@collection` filters are PocketBase's
 own 403 for anyone but superusers. Two cases are
 allowed:
 - Superusers.
@@ -3633,11 +3636,11 @@ reverses: the down migration copies each file back into its messages and items.
 ### 37.2 URLs
 
 Unchanged: `/api/files/messages/{message}/{name}` and `/api/files/collection_items/{item}/{name}`, with `?thumb=`.
-Routes of their own (`files.serve`, more specific than PocketBase's `/api/files/{collection}/…`) answer them: if the
+Routes of their own (`server/files.go`, in Go so a download holds no JS runtime; more specific than PocketBase's `/api/files/{collection}/…`) answer them: if the
 message shows that name (its own, or a forward's original's, §21.3; not deleted) or the item has it, the `files` row's
 file is served as PocketBase's handler would serve it (thumbnails of the field's sizes or 100x100, made when first
 asked for; ranges; `download`; `Content-Disposition` for unsafe types). Otherwise 404, as for `/api/files/files/…`
-itself (`onFileDownloadRequest`). They go by collection name: with the collection's id (as the PocketBase SDK's
+itself (`OnFileDownloadRequest`). They go by collection name: with the collection's id (as the PocketBase SDK's
 `files.getURL` builds them) a message's or an item's file is a 404 since 2026-11-09. Not a router middleware, which
 would hold a JS runtime for every request (PERF.md §6, QA BUG-250).
 Posters (`/api/chat/posters/{message}/{file}`, `/api/chat/posters/items/{item}/{file}`) are checked the same way.
@@ -3792,12 +3795,12 @@ step through the samples) and their numbers in a table under each.
 
 - **Online now** is read from the realtime broker when asked: each client with at least one subscription; its
   account from its `auth`, superusers (the admin UI) left out. A client's app is noted when it subscribes
-  (`onRealtimeSubscribeRequest`) from its User-Agent: `okhttp/` is the Android app, `Mozilla/` a browser. Not on
-  connecting: a JS hook on `GET /api/realtime` would hold a JS runtime for as long as the connection is open (PERF.md
-  §6). In that hook `e.request` is undefined in the JS runtime: the header comes from `requestInfo().headers.user_agent`.
+  (`server/stats.go`, on the subscribe request, in Go: no JS runtime per subscription) from its User-Agent: `okhttp/`
+  is the Android app, `Mozilla/` a browser. Not on connecting: a hook on `GET /api/realtime` would run for as long as
+  the connection is open (PERF.md §6).
 - **`stats_samples`**: every 5 minutes (cron `stats`) the counts, no ids. Kept a year.
 - **`stats_activity`**: a row per account and UTC day it was online, with `last_at`; written by the 5-minute run for
-  everyone online and by a subscription (at most once an hour per account, `app.store()`), so a visit shorter than 5
+  everyone online and by a subscription (at most once an hour per account; `server/stats.go` keeps only the current hour's accounts), so a visit shorter than 5
   minutes counts. "Active in the last 24 hours" is `last_at` within them. Kept 90 days; deleted with its account.
 - Neither table has API rules: only `GET /api/chat/stats` reads them, and it answers counts.
 - **`site.no_stats`** (hidden, ticked by a superuser in the admin UI): nothing more is recorded. Live numbers and the

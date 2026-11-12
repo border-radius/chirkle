@@ -43,10 +43,6 @@ var pageKinds = map[string]pageKind{
 
 // roomsRoute: GET /api/chat/rooms → every room the caller can see, by name. Guests: the Open Air rooms (§23.3).
 func roomsRoute(e *core.RequestEvent) error {
-	// As the records API's: this page's ?expand mustn't group messages by author (§35).
-	if err := refuseProbes(e); err != nil {
-		return err
-	}
 	me := callerID(e.Auth)
 	where := "r.visibility = 'open' AND NOT r.archived"
 	if e.HasSuperuserAuth() {
@@ -84,9 +80,6 @@ func roomsRoute(e *core.RequestEvent) error {
 // §29; with `latest` and `older`). `limit` (at most 200) and `page` (from 1) as the records API has them. A room the
 // caller can't see has no messages. Answered with an ETag: asked again with it, an unchanged page is a 304 (PERF.md §5).
 func messagesRoute(e *core.RequestEvent) error {
-	if err := refuseProbes(e); err != nil {
-		return err
-	}
 	roomID := e.Request.PathValue("room")
 	info, err := e.RequestInfo()
 	if err != nil {
@@ -183,9 +176,6 @@ func searchWhere(text string, params dbx.Params) []string {
 // `since` that are DMs, replies to you or mentions of you (DESIGN.md §41), or any message in an `every` room
 // (ANDROID.md §21.2, §24): newest first, `limit` of them. The rooms you can't see are left out.
 func notifiableRoute(e *core.RequestEvent) error {
-	if err := refuseProbes(e); err != nil {
-		return err
-	}
 	info, err := e.RequestInfo()
 	if err != nil {
 		return err

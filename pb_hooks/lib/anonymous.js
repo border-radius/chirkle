@@ -50,65 +50,7 @@ function forget(app, roomId) {
   app.store().remove(`anonymous.${roomId}`);
 }
 
-/** Fields whose value says who wrote a message: no one but a superuser filters or sorts on them. */
-const AUTHOR_FIELD = /(^|[^a-z0-9])(author|forwarded_from)(?![a-z0-9])/i;
-/** A back-relation from users to the messages they wrote: expanded, it would group them by author. */
-const AUTHOR_BACK_RELATION = /_via_(author|forwarded_from)(?![a-z0-9_])/i;
-
-/**
- * An author compared with the caller (`author != {:me}`, `reply_to.author = {:me}`): says only which messages are
- * the caller's own. Apps from before 2026-10-29 filter so (docs/API.md); `ME` stands for the caller's id.
- */
-const OWN_AUTHOR = String.raw`\b(author|forwarded_from)\s*(=|!=|\?=|\?!=)\s*(@request\.auth\.id\b|"ME"|'ME')`;
-
-/**
- * Does a filter, sort or expand (as a client sends it) say who wrote a message? Quoted text is a value, not a field.
- * @param {{ filter?: unknown, sort?: unknown, expand?: unknown }} q
- * @param {string} me the caller's id ("" for guests)
- */
-function probes(q, me) {
-  const own = new RegExp(OWN_AUTHOR.replace(/ME/g, me.replace(/[^a-z0-9]/gi, "") || "@"), "gi");
-  const fields = `${q.filter ?? ""} ${q.sort ?? ""}`.replace(own, "").replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, "''");
-  return AUTHOR_FIELD.test(fields) || AUTHOR_BACK_RELATION.test(String(q.expand ?? ""));
-}
-
-const REFUSAL = "Messages can't be filtered, sorted or grouped by who wrote them.";
-
-/**
- * A request refused when its query filters, sorts or groups by author (the records API's ?filter, ?sort, ?expand, on any
- * collection, as a relation or back-relation can reach messages from any of them; our routes' ?expand). Called by the
- * record request hooks (main.pb.js) and by each route that enriches records. Superusers may.
- * @param {core.RequestEvent} e
- */
-function refuseProbes(e) {
-  // requestInfo, not e.request: the record request hooks' events have no `request` in JS. Its values are decoded
-  // (%61uthor is "author").
-  const info = e.requestInfo();
-  const q = { filter: info.query.filter ?? "", sort: info.query.sort ?? "", expand: info.query.expand ?? "" };
-  if (!/author|forwarded_from/i.test(`${q.filter} ${q.sort} ${q.expand}`)) return;
-  if (!probes(q, info.auth?.id ?? "")) return;
-  if (info.auth?.isSuperuser()) return;
-  throw new BadRequestError(REFUSAL);
-}
-
-/**
- * Realtime subscriptions: the same, for the filter, sort and expand in a subscription's options.
- * @param {core.RealtimeSubscribeRequestEvent} e
- */
-function refuseSubscriptionProbes(e) {
-  if (e.hasSuperuserAuth()) return;
-  for (const topic of e.subscriptions ?? []) {
-    const at = topic.indexOf("?options=");
-    if (at < 0) continue;
-    let query = {};
-    try {
-      query = JSON.parse(decodeURIComponent(topic.slice(at + "?options=".length)))?.query ?? {};
-    } catch {
-      query = {}; // PocketBase ignores options it can't read
-    }
-    if (probes(query, e.auth?.id ?? "")) throw new BadRequestError(REFUSAL);
-  }
-}
+// Filters, sorts and expands that would say who wrote a message are refused in Go (server/anonymous.go bindProbes).
 
 /**
  * The media grid's author of an item (lib/media.js list): the room for an anonymous message, as hide does.
@@ -121,4 +63,4 @@ function gridAuthor(e, row) {
   return { id: row.author, name: row.name };
 }
 
-module.exports = { forget, roomName, sourceName, refuseProbes, refuseSubscriptionProbes, gridAuthor };
+module.exports = { forget, roomName, sourceName, gridAuthor };

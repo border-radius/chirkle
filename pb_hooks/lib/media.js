@@ -19,7 +19,7 @@
 const { gridAuthor } = require(`${__hooks}/lib/anonymous.js`);
 const { visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { HEADER_BYTES, shownSize } = require(`${__hooks}/lib/images.js`);
-const { cleanupLater, ext, homeKeyOf, isMedia, isVideo, keyOf, posterKeyOf, shownBy, thumbsDirOf } = require(`${__hooks}/lib/files.js`);
+const { cleanupLater, ext, homeKeyOf, isMedia, isVideo, keyOf, posterKeyOf, thumbsDirOf } = require(`${__hooks}/lib/files.js`);
 
 /** The images PocketBase makes thumbnails of (avif it serves as it is). */
 const THUMB_EXT = ["jpg", "jpeg", "png", "gif", "webp"];
@@ -166,45 +166,7 @@ function list(e) {
 
 // ---------------------------------------------------------------- posters
 
-/**
- * GET /api/chat/posters/{message}/{file}: a video's poster frame, for whoever has the video's URL (§37.3): the message
- * (or as a forward, its original) shows the file. A `token` is ignored. 404 for anything else, and until the worker
- * has made it.
- * @param {core.RequestEvent} e
- */
-function poster(e) {
-  servePoster(e, "messages", e.request?.pathValue("message") ?? "");
-}
-
-/**
- * GET /api/chat/posters/items/{item}/{file}: a collection item's poster (§31), as the item's file is served.
- * @param {core.RequestEvent} e
- */
-function itemPoster(e) {
-  servePoster(e, "collection_items", e.request?.pathValue("item") ?? "");
-}
-
-/**
- * The poster of the video `file` that record `id` of `collection` shows.
- * @param {core.RequestEvent} e
- * @param {string} collection
- * @param {string} id
- */
-function servePoster(e, collection, id) {
-  const file = e.request?.pathValue("file") ?? "";
-  const row = isVideo(file) ? shownBy(e.app, collection, id, file) : null;
-  if (!row) throw new NotFoundError();
-  const fs = e.app.newFilesystem();
-  try {
-    const key = posterKeyOf(row);
-    if (!fs.exists(key)) throw new NotFoundError();
-    // Never changes under one name: a new upload gets a new file name.
-    e.response.header().set("Cache-Control", "private, max-age=2592000");
-    fs.serve(e.response, /** @type {any} */ (e.request), key, POSTER);
-  } finally {
-    fs.close();
-  }
-}
+// GET /api/chat/posters/… (a video's poster, for whoever has the video's URL) is served in Go: server/files.go.
 
 // ---------------------------------------------------------------- the worker
 
@@ -632,4 +594,4 @@ function tick(e) {
   return e.noContent(204);
 }
 
-module.exports = { add, drop, list, poster, itemPoster, run, wake, tick };
+module.exports = { add, drop, list, run, wake, tick };

@@ -289,16 +289,26 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
     const now = keys();
     return now.length !== lastSent.length || now.some((k) => !lastSent.includes(k));
   };
-  const bindAll = (add: boolean) => {
-    for (const [key, fns] of subs) for (const fn of fns) add ? es?.addEventListener(key, fn) : es?.removeEventListener(key, fn);
+  /** The keys the current EventSource has a dispatcher for. */
+  let bound = new Set<string>();
+  /**
+   * One dispatcher per key on the EventSource, which calls the key's listeners as `subs` holds them when the event
+   * comes: a listener hears events exactly while it is in `subs`, whenever it was added (QA BUG-269 was a listener
+   * added at a moment nothing bound it). PB_CONNECT's listeners are called by the connect itself, once subscribed.
+   */
+  const bind = (key: string) => {
+    const source = es;
+    if (!source || bound.has(key) || key === "PB_CONNECT") return;
+    bound.add(key);
+    source.addEventListener(key, (e) => {
+      if (es === source) for (const fn of subs.get(key) ?? []) fn(e); // a replaced connection's late events: dropped
+    });
   };
 
   async function sendSubs(): Promise<void> {
     if (!clientId) return;
     if (!subs.size) return disconnect();
     if (!unsent()) return;
-    bindAll(false);
-    bindAll(true);
     lastSent = keys();
     submitting = new AbortController();
     try {
@@ -327,6 +337,8 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
     connectTimer = setTimeout(() => connectError(new Error("EventSource connect took too long.")), CONNECT_TIMEOUT_MS);
     const source = new EventSource(url);
     es = source;
+    bound = new Set();
+    for (const key of subs.keys()) bind(key);
     // A connection closed meanwhile (a restart for another user, a reconnect) must leave the current one alone: its
     // late answers would otherwise settle or fail the new connection's pending subscribes.
     const current = () => es === source;
@@ -339,9 +351,6 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
         .then(async () => {
           for (let tries = 3; current() && unsent() && tries > 0; tries--) await submit();
           if (!current()) return;
-          // Listeners added while those were on their way, to a topic already sent, made no submit that binds them
-          // (QA BUG-269: the notifications' after the unread counts', during a login's reconnect). Binding is idempotent.
-          bindAll(true);
           for (const p of pending) p.resolve();
           pending = [];
           attempts = 0;
@@ -379,7 +388,6 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
   function disconnect(reconnecting = false) {
     clearTimeout(connectTimer);
     clearTimeout(reconnectTimer);
-    bindAll(false);
     submitting?.abort();
     submitting = null;
     es?.close();
@@ -411,23 +419,18 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
       };
       const fns = subs.get(key) ?? [];
       subs.set(key, [...fns, listener]);
+      bind(key);
       if (!es || !clientId || pending.length) await connect();
-      else {
-        // Bound now: a key dropped and taken again before the submits ran is no change to them, and they bind nothing.
-        es.addEventListener(key, listener);
-        if (!fns.length) await submit();
-      }
+      else if (!fns.length) await submit();
 
       return async () => {
         const left = (subs.get(key) ?? []).filter((f) => f !== listener);
-        es?.removeEventListener(key, listener);
         if (left.length) subs.set(key, left);
         else subs.delete(key);
         await submit();
       };
     },
     async unsubscribe() {
-      bindAll(false);
       subs.clear();
       await submit();
     },

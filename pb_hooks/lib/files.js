@@ -301,99 +301,7 @@ function attachUploads(app, rec, uploads) {
   setMessageFiles(app, rec, fromUploads(app, uploads));
 }
 
-/**
- * Does message `msg` (as stored) show stored name `name`: its own, or as a forward, its original's (§21.3)? Never
- * once deleted.
- * @param {core.App} app
- * @param {core.Record} msg
- * @param {string} name
- */
-function messageShows(app, msg, name) {
-  if (msg.getBool("deleted")) return false;
-  if (msg.getStringSlice("files").includes(name)) return true;
-  const id = msg.getString("forward_of");
-  if (!id) return false;
-  try {
-    const original = app.findRecordById("messages", id);
-    return !original.getBool("deleted") && original.getStringSlice("files").includes(name);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The `files` row that `collection`'s record `id` shows as `name` (a message's attachment, a collection item's file),
- * or null when it doesn't show it (any more).
- * @param {core.App} app
- * @param {string} collection "messages" or "collection_items"
- * @param {string} id
- * @param {string} name
- */
-function shownBy(app, collection, id, name) {
-  let rec;
-  try {
-    rec = app.findRecordById(collection, id);
-  } catch {
-    return null;
-  }
-  const shows = collection === "messages" ? messageShows(app, rec, name) : rec.getString("file") === name;
-  return shows ? byName(app, name) : null;
-}
-
-/** The images PocketBase makes thumbnails of, and the size it makes for any file field besides the field's own. */
-const THUMB_EXT = ["jpg", "jpeg", "png", "gif", "webp"];
-const DEFAULT_THUMB = "100x100";
-
-/**
- * GET /api/files/messages/{recordId}/{filename} and /api/files/collection_items/{recordId}/{filename}: a message's or
- * a collection item's file, served from its `files` row (§37). Routes of their own, more specific than PocketBase's
- * /api/files/{collection}/…, so no other request runs JS for this: a router middleware would hold a JS runtime for every
- * request, realtime connections and file downloads too (docs/PERF.md §6). As PocketBase's handler does: `thumb` (one of
- * the field's sizes, or 100x100) serves that thumbnail of an image, made when first asked for; `download` makes it an
- * attachment; ranges, and the headers that keep a file from running as a page (fs.serve). The token clients still
- * send is ignored. 404 when the message or item doesn't show it (deleted, taken out). A file not moved to its row's
- * folder yet is served from its old place (`src`), with a thumbnail only if one is there already: those folders have
- * the ones that were ever asked for. The `files` rows themselves are served only through these (main.pb.js).
- * @param {core.RequestEvent} e
- * @param {"messages" | "collection_items"} collection
- */
-function serve(e, collection) {
-  const req = e.request;
-  const id = req?.pathValue("recordId") ?? "";
-  const name = req?.pathValue("filename") ?? "";
-  const row = shownBy(e.app, collection, id, name);
-  if (!row) throw new NotFoundError();
-  const moved = !row.getString("src");
-  const key = keyOf(row);
-  const file = row.getString("file");
-  const q = req?.url?.query();
-  const thumb = q?.get("thumb") ?? "";
-  const sizes = /** @type {any} */ (row.collection().fields.getByName("file")).thumbs ?? [];
-  const fs = e.app.newFilesystem();
-  try {
-    let served = key;
-    if (thumb && (thumb === DEFAULT_THUMB || sizes.includes(thumb)) && THUMB_EXT.includes(ext(file))) {
-      const at = thumbKeyOf(key, thumb);
-      if (fs.exists(at)) served = at;
-      else if (moved && fs.exists(key)) {
-        try {
-          fs.createThumb(key, at, thumb);
-          served = at;
-        } catch {
-          served = key; // as PocketBase does: the file itself when it can't make one
-        }
-      }
-    }
-    if (served === key && !fs.exists(key)) throw new NotFoundError();
-    const download = q?.get("download") ?? "";
-    if (download && download !== "0" && download !== "false") {
-      e.response.header().set("Content-Disposition", `attachment; filename=${file}`);
-    }
-    fs.serve(e.response, /** @type {any} */ (req), served, file);
-  } finally {
-    fs.close();
-  }
-}
+// Serving a message's or collection item's file (only while it shows it) is in Go: server/files.go (§37).
 
 module.exports = {
   discard,
@@ -418,6 +326,4 @@ module.exports = {
   namedBy,
   setMessageFiles,
   attachUploads,
-  shownBy,
-  serve,
 };

@@ -11,47 +11,12 @@ onBootstrap((e) => {
 // open realtime connection and every file on its way from S3 would keep some, and room pages, whose enrich hooks need
 // one each, would make new ones (docs/PERF.md §6). What one would do for every request is done by the routes and hooks
 // it concerns: the headers by the routes that serve pages (lib/http.js), the body limit by PocketBase (it sizes each
-// collection's create and update by its fields, DESIGN.md §17.1), the files and the anonymous rooms' checks below.
+// collection's create and update by its fields, DESIGN.md §17.1), the files and the anonymous rooms' checks in Go.
 
-// Nobody but superusers finds out who wrote a message in an anonymous room by filtering, sorting or expanding (§35):
-// checked by everything that takes a filter, sort or expand (the routes here that enrich records do too).
-onRecordsListRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  e.next();
-});
-onRecordViewRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  e.next();
-});
-onRecordCreateRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  e.next();
-});
-onRecordUpdateRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  e.next();
-});
-// Every auth answer (password, OAuth2, OTP, refresh, impersonation) has the record, expanded as asked.
-onRecordAuthRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseProbes(e);
-  e.next();
-});
-onRealtimeSubscribeRequest((e) => {
-  require(`${__hooks}/lib/anonymous.js`).refuseSubscriptionProbes(e);
-  // Which app the connection is, and its account active today, for the statistics (§40).
-  require(`${__hooks}/lib/stats.js`).subscribed(e);
-  e.next();
-});
-
-// A message's or collection item's file is its shared `files` row's (§37): served without a file token, by routes more
-// specific than PocketBase's /api/files/{collection}/… (lib/files.js serve). The rows themselves never directly.
-routerAdd("GET", "/api/files/messages/{recordId}/{filename}", (e) => require(`${__hooks}/lib/files.js`).serve(e, "messages"));
-routerAdd("GET", "/api/files/collection_items/{recordId}/{filename}", (e) =>
-  require(`${__hooks}/lib/files.js`).serve(e, "collection_items"),
-);
-onFileDownloadRequest(() => {
-  throw new NotFoundError();
-}, "files");
+// In Go (server/), so they take no JS runtime (docs/REFACTOR.md item 61): refusing filters, sorts and expands that say who
+// wrote a message in an anonymous room (§35, server/anonymous.go bindProbes); a realtime subscription's app and account
+// for the statistics (§40, server/stats.go); messages' and collection items' files and video posters, served from their
+// `files` rows without a file token (§37, server/files.go), and the rows themselves never directly.
 
 // The app's pages (index.html at any path that isn't a file, §7.1) and its files, with their headers (§5.6).
 routerAdd("GET", "/{path...}", (e) => require(`${__hooks}/lib/http.js`).page(e));
@@ -76,8 +41,6 @@ routerAdd("POST", "/api/chat/delete", (e) => require(`${__hooks}/lib/bulk.js`).d
 routerAdd("POST", "/api/chat/ban", (e) => require(`${__hooks}/lib/moderation.js`).ban(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/forward", (e) => require(`${__hooks}/lib/bulk.js`).forward(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/media/{room}", (e) => require(`${__hooks}/lib/media.js`).list(e));
-routerAdd("GET", "/api/chat/posters/{message}/{file}", (e) => require(`${__hooks}/lib/media.js`).poster(e));
-routerAdd("GET", "/api/chat/posters/items/{item}/{file}", (e) => require(`${__hooks}/lib/media.js`).itemPoster(e));
 routerAdd("GET", "/api/chat/collections", (e) => require(`${__hooks}/lib/collections.js`).list(e), $apis.requireAuth("users"));
 routerAdd("GET", "/api/chat/badges", (e) => require(`${__hooks}/lib/collections.js`).badges(e));
 routerAdd("POST", "/api/chat/items", (e) => require(`${__hooks}/lib/collections.js`).saveItem(e), $apis.requireAuth("users"));

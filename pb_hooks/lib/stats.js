@@ -4,12 +4,13 @@
 //
 // Online is who has a realtime connection now: every open web tab and the Android app while it is in front hold one,
 // with at least one subscription. A connection's app (web or Android) is noted when it subscribes, from its
-// User-Agent (the app's OkHttp sends "okhttp/…"). Not on connecting: a JS hook on GET /api/realtime would hold a JS
-// runtime for as long as the connection is open (docs/PERF.md §6).
+// User-Agent (the app's OkHttp sends "okhttp/…"), by server/stats.go: in Go, so a subscription takes no JS runtime.
 //
 // Every 5 minutes `run` writes a sample of those counts and marks everyone online active today; a subscription marks
-// its account too, at most once an hour (so a visit shorter than 5 minutes counts). `site.no_stats` stops both.
+// its account too, at most once an hour (so a visit shorter than 5 minutes counts; server/stats.go). `site.no_stats`
+// stops both.
 
+/** The client store key of a connection's app (server/stats.go statsAppKey). */
 const KEY_APP = "chirkle_app";
 const SAMPLE_MINUTES = 5;
 const ACTIVITY_DAYS = 90;
@@ -18,13 +19,6 @@ const DAY_MS = 86_400_000;
 
 /** @param {Date} d @returns {string} as PocketBase stores dates */
 const dbDate = (d) => d.toISOString().replace("T", " ");
-
-/** @param {string} ua @returns {"web" | "android" | "other"} */
-function appOf(ua) {
-  if (/^okhttp\//i.test(ua)) return "android";
-  if (/^Mozilla\//.test(ua)) return "web";
-  return "other";
-}
 
 /** @param {core.App} app */
 function off(app) {
@@ -48,28 +42,6 @@ function touch(app, users, at) {
       )
       .bind({ id: $security.randomStringWithAlphabet(15, "abcdefghijklmnopqrstuvwxyz0123456789"), user, day, at: when })
       .execute();
-  }
-}
-
-/**
- * realtime subscribe request: note the connection's app, and mark its account active (once an hour). Never fails the
- * subscription.
- * @param {core.RealtimeSubscribeRequestEvent} e
- */
-function subscribed(e) {
-  try {
-    // (This event's e.request is undefined in the JS runtime; requestInfo has the headers, lowercased.)
-    e.client.set(KEY_APP, appOf(String(e.requestInfo().headers.user_agent ?? "")));
-    const user = e.auth && !e.auth.isSuperuser() && e.auth.collection().name === "users" ? e.auth.id : "";
-    if (!user) return;
-    const now = new Date();
-    const hour = now.toISOString().slice(0, 13);
-    const key = `stats.touched.${user}`;
-    if (e.app.store().get(key) === hour) return;
-    e.app.store().set(key, hour);
-    if (!off(e.app)) touch(e.app, [user], now);
-  } catch (err) {
-    e.app.logger().warn("stats: subscribe", "error", String(err));
   }
 }
 
@@ -249,4 +221,4 @@ function get(e) {
   });
 }
 
-module.exports = { appOf, subscribed, online, run, prune, tick, get };
+module.exports = { online, run, prune, tick, get };
