@@ -104,13 +104,14 @@ describe("GET /api/chat/unread (§18.2)", () => {
     expect(await status(client().send("/api/chat/unread", { method: "GET" }))).toBe(401);
   });
 
-  it("counts each room with a range scan on idx_messages_room_created", () => {
+  it("counts each room once, with a range scan of the covering idx_messages_unread (REFACTOR item 26)", () => {
     // As the Go server runs it (server/unread.go).
     const sql = goConst("unreadSQL").replaceAll(/\{:(\w+)\}/g, ":$1");
     const db = rawDb();
     try {
       const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all({ me: "x", since: "x" }) as { detail: string }[]).map((r) => r.detail);
-      expect(plan.join(" | ")).toMatch(/SEARCH m USING INDEX idx_messages_room_created \(room=\? AND created>\?\)/);
+      const scans = plan.filter((d) => /^SEARCH m /.test(d));
+      expect(scans).toEqual(["SEARCH m USING COVERING INDEX idx_messages_unread (room=? AND created>?)"]);
       expect(plan.join(" | ")).toContain("idx_room_reads_user_room");
     } finally {
       db.close();

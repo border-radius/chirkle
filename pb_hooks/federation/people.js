@@ -185,6 +185,7 @@ function userOf(app, sender, g, people = {}, own = false) {
   user.setPassword($security.randomString(40));
   user.set("peer", peer.id);
   user.set("instance", s.host);
+  user.set("kind", "peer");
   user.set("no_dms", true);
   saveWithName(app, user, profile.name, labelOf(peer, key));
   const made = new Record(app.findCollectionByNameOrId("fed_people"));

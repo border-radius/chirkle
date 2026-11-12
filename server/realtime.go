@@ -9,8 +9,8 @@ package main
 // ever, each holding its request and a JS runtime of the pool.
 //
 // So every client gets a buffered channel (bufferedClient): Send never waits, and a client too far behind is
-// discarded (its app reconnects and loads what it missed, as after any drop; live.go's queues did this for live
-// messages already). And each SSE write has a deadline (realtimeWriteTimeout): a connection that takes no data for
+// discarded (its app reconnects and loads what it missed, as after any drop). Live messages (live.go) go through
+// the same buffer. And each SSE write has a deadline (realtimeWriteTimeout): a connection that takes no data for
 // that long fails the write, which ends its loop and unregisters it.
 
 import (
@@ -22,7 +22,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
 )
 
-// realtimeBuffer: events waiting for one connection, at most (as liveQueue). Past that, the client is discarded.
+// realtimeBuffer: events waiting for one connection, at most. Past that, the client is discarded.
 const realtimeBuffer = 512
 
 // realtimeWriteTimeout: the longest one SSE write may take. A phone on a slow network takes a 4 KB event in well

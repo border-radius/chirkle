@@ -228,6 +228,7 @@ All schema is defined in `pb_migrations/` so every environment gets the same sch
 | `id` | text (15) | PB default |
 | `email` | email | unique, required; `emailVisibility = false` |
 | `name` | text | required, 1–32 chars, trimmed |
+| `kind` | select, hidden | `person` (signs in here), `telegram` (a Telegram sender's stand-in, §26.3) or `peer` (a linked instance's person, §33.4). Set by hooks only: `person` on any other create (`lib/users.js`), the bridges set their stand-ins'; no client sets it (create/update rules). Hooks ask `isStandIn`/`kindOf` (`lib/users.js`) instead of the made-up e-mail's domain (REFACTOR item 50, migration 51). |
 | `created` / `updated` | autodate | |
 
 ### 5.2 `rooms`
@@ -2391,9 +2392,26 @@ at 100):
   a message's fan-out ≈ 0.4 ms per connected listener (every open signed-in tab listens to every room it can see).
   Pages and sends don't depend on the size.
 - **First to matter:** the unread counts, fetched on load, on every reconnect and after reads elsewhere (debounced).
-  Around 4,000 visible rooms one fetch would take about a second of server time; then count only rooms with activity
-  since the caller's oldest read, or keep counts per user. Next, the fan-out: at hundreds of open tabs, each message
-  costs tens of ms of server time; a thinner event or batching would help (REFACTOR item 26).
+  Around 4,000 visible rooms one fetch would have taken about a second of server time (done, below). Next, the
+  fan-out: at hundreds of open tabs, each message costs tens of ms of server time (done since, below).
+
+Measured again 2026-11-13 (REFACTOR item 26), the Go server (§9 of PERF.md), 1,000 rooms, 200 users and listeners,
+100,000 messages, same machine:
+
+| Request | before | after |
+|---|---|---|
+| `GET /api/chat/unread` | 280 ms | 56 ms |
+| List rooms | 51 ms | 54 ms |
+| Latest page of a room | 8 ms | 8 ms |
+| Send a message | 9 ms | 10 ms |
+| Send, until all 200 listeners have the event | 29 ms | 26 ms |
+
+- **Unread counts:** each room's count is now made once (SQLite made it twice, for `n > 0` and for the value) and
+  reads only the partial index `idx_messages_unread` (room, created, author; not deleted), never the messages:
+  ≈ 0.05 ms per visible room in the worst case, so ~4,000 rooms ≈ 0.2 s. Per-user stored counts weren't needed.
+- **Fan-out:** since PERF.md §7 and item 47 a message is serialized once per way of seeing it, not once per listener;
+  what is left per listener is the room check and a non-blocking queue (`server/realtime.go`). The 26 ms is mostly
+  the test's own 200 Node clients. Live messages' second queue and goroutine per client are gone (`server/live.go`).
 
 ## 26. Telegram bridge
 
@@ -3930,8 +3948,9 @@ text and not JSON, as scrapers do. A scraper signs in with a superuser token (Po
 - `workers`: per worker (`previews`, `media`, `telegram`, `federation`, and the daily `retention`) its `last_pass`,
   `last_error` and `last_error_at` (since the start; `lib/worker.js` notes them in the app store after each pass), and
   `running` (a run holds its lock, renewed in the last 2 minutes).
-- `realtime`: `clients` (SSE connections), and live messages' `senders` (clients with a sender running), `queued`
-  (events waiting) and `dropped` (clients disconnected for falling 512 events behind, since the start; PERF.md §9).
+- `realtime`: `clients` (SSE connections), `senders` (connections with events waiting to be written; the name is
+  from when live messages had a sender per client), `queued` (events waiting, all connections) and `dropped`
+  (clients disconnected for falling 512 events behind, since the start; PERF.md §9).
 - `admission`: API requests that run JS hooks, `slots` (80% of `--hooksPool`), `running`, `waiting` for a slot,
   and `waits` (requests that found every slot taken, since the start; `server/admission.go`, PERF.md §14).
 - `db`: the sizes of `data.db`, `auxiliary.db` and their WAL files; `db_conns`: the read pool's `open` and `in_use`

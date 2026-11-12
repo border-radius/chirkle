@@ -28,8 +28,7 @@ const EMOJI_SHOWN = 5;
 function hasInbox(app, userId) {
   if (!userId) return false;
   try {
-    const u = app.findRecordById("users", userId);
-    return !/@(telegram|federation)\.invalid$/.test(u.getString("email"));
+    return !require(`${__hooks}/lib/users.js`).isStandIn(app.findRecordById("users", userId));
   } catch {
     return false;
   }

@@ -457,6 +457,7 @@ describe("room view", () => {
       button(msgEl(m.id), "Delete message")!.click();
       expect(bodyOf(m.id)).toBe("Message deleted");
       await vi.waitFor(() => expect(ctl.calls("softDelete")).toBe(1));
+      await ctl.settled("softDelete"); // and still so once the server said yes
       const el = msgEl(m.id)!;
       expect(el.classList.contains("deleted")).toBe(true);
       expect(el.querySelector(".author")!.textContent).toBe("Me");

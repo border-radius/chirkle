@@ -115,6 +115,7 @@ describe("app boot (§7.1)", () => {
     expect(app.store.get().user).toEqual(user);
     expect(ctl.calls("refreshAuth")).toBe(0); // the room list first (PERF.md §5)
     await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
+    await ctl.settled("refreshAuth");
     expect(app.store.get().roomsStatus).toBe("ready");
     expect(root.textContent).toContain("Ada");
     expect(meLink()).not.toBeNull();
@@ -480,6 +481,7 @@ describe("app boot (§7.1)", () => {
     vi.spyOn(api, "sessionExpiry").mockImplementation(() => Date.now() + 400); // renew every 200 ms
     app = startApp({ api, root });
     await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBeGreaterThanOrEqual(3));
+    await ctl.settled("refreshAuth");
     expect(app.store.get().user?.name).toBe("Ada");
   });
 
@@ -555,6 +557,7 @@ describe("app boot (§7.1)", () => {
       later(60_000);
       await expect(api.createRoom(room.name)).rejects.toThrow(); // taken
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(2));
+      await ctl.settled("refreshAuth");
       await expect(api.createRoom(room.name)).rejects.toThrow();
       await tick();
       expect(ctl.calls("refreshAuth")).toBe(2);

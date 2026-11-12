@@ -17,24 +17,31 @@ import (
 const unreadCap = 100
 
 // unreadSQL: unread messages per room the caller can see (§23.1): other people's, not deleted, newer than the caller's
-// read position (or their signup, for a room they never opened). One correlated count per room, so each one is a range
-// scan on idx_messages_room_created, stopped at unreadCap. Hidden and archived rooms are counted too; the client
+// read position (or their signup, for a room they never opened). Hidden and archived rooms are counted too; the client
 // doesn't show those (§18.4).
+//
+// The rooms with their read positions first (p), then one count per room (c), each a range scan from that position on
+// idx_messages_unread, stopped at unreadCap. That index is partial (not deleted) and holds the author, so the count
+// reads only the index, never a message (REFACTOR item 26). Both are MATERIALIZED: with a subquery instead, SQLite
+// evaluated each room's count twice, once for `n > 0` and once for the value. Measured on 1,000 rooms with ≥ 100
+// unread each (tests/perf/scale.ts): 283 ms before, 52 ms (DESIGN.md §25).
 var unreadSQL = `
-SELECT room, n FROM (
-  SELECT r.id AS room, (
+WITH p AS MATERIALIZED (
+  SELECT r.id AS room,
+    MAX(COALESCE((SELECT rr.last_read_at FROM room_reads rr WHERE rr.user = {:me} AND rr.room = r.id), ''), {:since}) AS pos
+  FROM rooms r
+  WHERE ` + seesSQL + `
+), c AS MATERIALIZED (
+  SELECT p.room AS room, (
     SELECT COUNT(*) FROM (
       SELECT 1 FROM messages m
-      WHERE m.room = r.id
-        AND m.created > MAX(COALESCE((SELECT rr.last_read_at FROM room_reads rr WHERE rr.user = {:me} AND rr.room = r.id), ''), {:since})
-        AND m.author != {:me}
-        AND m.deleted = FALSE
+      WHERE m.room = p.room AND m.created > p.pos AND m.author != {:me} AND m.deleted = FALSE
       LIMIT ` + strconv.Itoa(unreadCap) + `
     )
   ) AS n
-  FROM rooms r
-  WHERE ` + seesSQL + `
-) WHERE n > 0`
+  FROM p
+)
+SELECT room, n FROM c WHERE n > 0`
 
 // accountedFor: how far back GET /api/chat/unread lists the messages its counts already account for (QA BUG-106).
 const accountedFor = 30 * time.Second

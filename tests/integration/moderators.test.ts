@@ -177,6 +177,7 @@ describe("banning (§36.4)", () => {
       passwordConfirm: "password-123",
       name: `r-${b.user.id}`,
       instance: "b.example",
+      kind: "peer",
     });
     expect(await status(ban(m, remote.id))).toBe(400);
     expect(await status(client().send("/api/chat/ban", { method: "POST", body: { user: b.user.id, banned: true } }))).toBe(401);
@@ -221,10 +222,14 @@ describe("moderation QA (§36.6)", () => {
     const m = await newModerator();
     const admin = await adminClient();
     const name = `tg-${m.user.id}`;
-    const tg = await admin
-      .collection("users")
-      .create({ email: `${name}@t.local`, password: "password-123", passwordConfirm: "password-123", name, no_dms: true });
-    await admin.collection("tg_people").create({ user: tg.id, tg_user_id: 1e6 + Math.floor(Math.random() * 1e8), name: "x" });
+    const tg = await admin.collection("users").create({
+      email: `${name}@t.local`,
+      password: "password-123",
+      passwordConfirm: "password-123",
+      name,
+      no_dms: true,
+      kind: "telegram",
+    });
     expect(await status(ban(m, tg.id))).toBe(400);
   });
 

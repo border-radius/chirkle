@@ -73,7 +73,7 @@ describe("forgot password (§39)", () => {
       .replace(/[^a-z]/g, "")}@telegram.invalid`;
     await admin
       .collection("users")
-      .create({ email, password: "password-123", passwordConfirm: "password-123", name: `stand-in-${uniq()}` });
+      .create({ email, password: "password-123", passwordConfirm: "password-123", name: `stand-in-${uniq()}`, kind: "telegram" });
     expect(await status(reset(email))).toBe(200);
     await sleep(300);
     expect(mailsTo(email)).toHaveLength(0);

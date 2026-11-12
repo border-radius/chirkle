@@ -161,6 +161,7 @@ describe("sync (room list + hidden rows)", () => {
     ctl.reconnect();
     await vi.waitFor(() => expect(ctl.calls("listRooms")).toBe(2));
     expect(ctl.calls("listHidden")).toBe(2);
+    await Promise.all([ctl.settled("listRooms"), ctl.settled("listHidden")]);
     expect(statuses).not.toContain("loading");
   });
 

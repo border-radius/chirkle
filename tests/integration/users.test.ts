@@ -1,7 +1,7 @@
 import { describe, expect, inject, it } from "vitest";
 import { type Api, createApi } from "../../web/src/api.ts";
 import { createClient } from "../../web/src/pb.ts";
-import { client, expectRejected, newRoom, newUser, post, uniq } from "./helpers.ts";
+import { adminClient, client, expectRejected, newRoom, newUser, post, uniq } from "./helpers.ts";
 
 const realClient = (): Api => createApi(createClient(inject("pbUrl")));
 
@@ -72,6 +72,33 @@ describe("users rules (§5.5)", () => {
   it("a user cannot make their email public", async () => {
     const a = await newUser();
     await expectRejected(a.pb.collection("users").update(a.user.id, { emailVisibility: true }));
+  });
+
+  it("a signup is a person; nobody says otherwise of their own account, and clients never see the kind (REFACTOR item 50)", async () => {
+    const a = await newUser();
+    expect(a.user).not.toHaveProperty("kind");
+    const admin = await adminClient();
+    expect((await admin.collection("users").getOne(a.user.id)).kind).toBe("person");
+    // Refused, or the hidden field ignored: either way the account stays a person.
+    const said = await a.pb
+      .collection("users")
+      .update(a.user.id, { kind: "telegram" })
+      .then(
+        () => 200,
+        (err: { status: number }) => err.status,
+      );
+    expect([200, 400, 403]).toContain(said);
+    expect((await admin.collection("users").getOne(a.user.id)).kind).toBe("person");
+    const email = `${uniq()}@test.local`;
+    await client()
+      .collection("users")
+      .create({ email, password: "password-123", passwordConfirm: "password-123", name: `k-${uniq()}`, kind: "peer" })
+      .catch(() => {});
+    const made = await admin
+      .collection("users")
+      .getFirstListItem(`email = "${email}"`)
+      .catch(() => null);
+    if (made) expect(made.kind).toBe("person");
   });
 });
 

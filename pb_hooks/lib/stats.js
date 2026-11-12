@@ -126,7 +126,7 @@ function tick(e) {
 }
 
 /** Accounts of this server's own: not a linked server's people (§33), nor the Telegram bridge's stand-ins (§26). */
-const LOCAL_USER = "(u.peer = '' AND u.id NOT IN (SELECT user FROM tg_people))";
+const LOCAL_USER = "u.kind NOT IN ('telegram', 'peer')";
 
 const DAYS_SQL = `
 SELECT date(m.created, {:shift}) AS day, COUNT(*) AS messages, COUNT(DISTINCT m.author) AS people

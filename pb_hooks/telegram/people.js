@@ -92,6 +92,7 @@ function personOf(app, msg) {
   const user = new Record(app.findCollectionByNameOrId("users"));
   user.set("email", `tg${s.id.replace(/\D/g, "")}.${$security.randomStringWithAlphabet(6, "abcdefghijklmnopqrstuvwxyz")}@telegram.invalid`);
   user.setPassword($security.randomString(40));
+  user.set("kind", "telegram");
   user.set("no_dms", true);
   // Their Telegram username as their handle when it is one and free (§41), so "@username" means them on both sides.
   const { HANDLE, freeHandle, normalHandle } = require(`${__hooks}/lib/handles.js`);
@@ -138,14 +139,13 @@ function refreshPhoto(app, row, user, tgUserId) {
 }
 
 /**
- * Is this user a Telegram stand-in? Their messages came from Telegram and don't go back.
+ * Is this user a Telegram stand-in (`users.kind`, §5.1)? Their messages came from Telegram and don't go back.
  * @param {core.App} app
  * @param {string} userId
  */
 function isStandIn(app, userId) {
   try {
-    app.findFirstRecordByFilter("tg_people", "user = {:user}", { user: userId });
-    return true;
+    return require(`${__hooks}/lib/users.js`).kindOf(app.findRecordById("users", userId)) === "telegram";
   } catch {
     return false;
   }

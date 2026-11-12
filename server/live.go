@@ -10,14 +10,14 @@ package main
 // Who gets it is who that subscription's list rule lets see the message: anyone who can see its room
 // (tests/integration/access.matrix.test.ts).
 //
-// Sending never waits on a client (PERF.md §8: a slow reader held the save's hook): each client has a queue of its own,
-// sent in order by a goroutine; a client whose queue is full is disconnected, and its app loads what it missed when it
-// reconnects, as after any drop. Apps ask GET /api/chat/live first; a server from before has no such route (404).
+// Sending never waits on a client (PERF.md §8: a slow reader held the save's hook): every connection's client is a
+// bufferedClient (realtime.go), whose Send only queues; a client whose buffer is full is disconnected, and its app loads
+// what it missed when it reconnects, as after any drop. Until 2026-11-13 live messages had a queue and a sender
+// goroutine per client of their own, from before every client was buffered (REFACTOR item 26). Apps ask
+// GET /api/chat/live first; a server from before has no such route (404).
 
 import (
-	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -29,21 +29,14 @@ const liveTopic = "chat/messages"
 // liveFields: what an event carries, the fields the apps ask the records API for (shared/contract.json fields.message).
 const liveFields = "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance,reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files,expand.reply_to.expand.author.id,expand.reply_to.expand.author.name,forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions"
 
-// Events waiting for one client, at most. A client this far behind is disconnected.
-const liveQueue = 512
-
-// A client's sender goroutine ends after this long with nothing to send.
-const liveIdle = time.Minute
-
 type live struct {
-	app    core.App
-	mu     sync.Mutex
-	queues map[subscriptions.Client]chan subscriptions.Message
+	app core.App
 	// dropped: clients disconnected for being too far behind, since the start (GET /api/chat/metrics).
 	dropped atomic.Int64
 }
 
-// liveStats: the senders running now, the events waiting in their queues, and the clients dropped since the start.
+// liveStats: the connections with realtime events waiting to be written (`senders`, the name from when live messages
+// had a sender per client), the events waiting, and the clients dropped since the start.
 type liveStats struct {
 	Senders int   `json:"senders"`
 	Queued  int   `json:"queued"`
@@ -51,17 +44,20 @@ type liveStats struct {
 }
 
 func (l *live) stats() liveStats {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	st := liveStats{Senders: len(l.queues), Dropped: l.dropped.Load()}
-	for _, q := range l.queues {
-		st.Queued += len(q)
+	st := liveStats{Dropped: l.dropped.Load()}
+	for _, c := range l.app.SubscriptionsBroker().Clients() {
+		if b, ok := c.(*bufferedClient); ok {
+			if n := len(b.ch); n > 0 {
+				st.Senders++
+				st.Queued += n
+			}
+		}
 	}
 	return st
 }
 
 func newLive(app core.App) *live {
-	return &live{app: app, queues: map[subscriptions.Client]chan subscriptions.Message{}}
+	return &live{app: app}
 }
 
 func (l *live) bind() {
@@ -167,72 +163,19 @@ func (l *live) send(record *core.Record, action string) error {
 		if err != nil {
 			return err
 		}
-		l.enqueue(c, subscriptions.Message{Name: liveTopic, Data: data})
+		l.deliver(c, subscriptions.Message{Name: liveTopic, Data: data})
 	}
 	return nil
 }
 
-// enqueue hands m to c's sender, starting one if c has none.
-func (l *live) enqueue(c subscriptions.Client, m subscriptions.Message) {
-	l.mu.Lock()
-	q, ok := l.queues[c]
-	if !ok {
-		q = make(chan subscriptions.Message, liveQueue)
-		l.queues[c] = q
-		go l.drain(c, q)
+// deliver hands m to c without waiting: a bufferedClient queues it (or drops a client too far behind). Any other client
+// (none is: bindRealtime wraps each one) gets it as PocketBase's own record events do, in a goroutine.
+func (l *live) deliver(c subscriptions.Client, m subscriptions.Message) {
+	if b, ok := c.(*bufferedClient); ok {
+		b.Send(m)
+		return
 	}
-	select {
-	case q <- m:
-		l.mu.Unlock()
-	default:
-		l.mu.Unlock()
-		l.dropped.Add(1)
-		l.app.Logger().Warn("live: a client is too far behind, disconnected", "client", c.Id())
-		c.Discard()
-	}
-}
-
-// drain sends c's queue in order. Send waits for the connection to take each event, and returns at once for a client
-// that is gone (discarded); the goroutine ends when the client is gone or idle.
-func (l *live) drain(c subscriptions.Client, q chan subscriptions.Message) {
-	idle := time.NewTimer(liveIdle)
-	defer idle.Stop()
-	for {
-		select {
-		case m := <-q:
-			if c.IsDiscarded() {
-				l.forget(c, q)
-				return
-			}
-			c.Send(m)
-			idle.Reset(liveIdle)
-		case <-idle.C:
-			if l.forgetIfEmpty(c, q) {
-				return
-			}
-			idle.Reset(liveIdle)
-		}
-	}
-}
-
-func (l *live) forget(c subscriptions.Client, q chan subscriptions.Message) {
-	l.mu.Lock()
-	if l.queues[c] == q {
-		delete(l.queues, c)
-	}
-	l.mu.Unlock()
-}
-
-func (l *live) forgetIfEmpty(c subscriptions.Client, q chan subscriptions.Message) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if len(q) > 0 {
-		return false
-	}
-	if l.queues[c] == q {
-		delete(l.queues, c)
-	}
-	return true
+	go c.Send(m)
 }
 
 // liveInfoRoute: GET /api/chat/live, that this server sends messages on liveTopic.

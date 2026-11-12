@@ -283,18 +283,30 @@ rule is nowhere to read.
   0.3rem side by side), so tokens would either just rename numbers or change the look, a design decision rather than a
   refactor. And `var()` costs bytes with the CSS at 5.86 of its 6 KB budget.
 
-### 26. Plan for scale
+### 26. Plan for scale ✅ (2026-11-13)
 Fine at today's size; the first things to break as usage grows.
 - [x] Load-test once with a seeded database (200 rooms, 100k messages); record the numbers in DESIGN.md. Done:
       `tests/perf/scale.ts` (sizes from env vars) and DESIGN §25. 200 rooms / 50 listeners: unread 52 ms, room list
       19 ms, fan-out to every listener 34 ms; 1,000 rooms / 200 listeners: 237, 80 and 82 ms. Pages and sends: 5–10 ms
       at any size. All linear in rooms or listeners.
-- [ ] `UNREAD_SQL` runs correlated subqueries over every visible room per fetch. Measured: ≈ 0.24 ms per visible room in
+- [x] `UNREAD_SQL` runs correlated subqueries over every visible room per fetch. Measured: ≈ 0.24 ms per visible room in
       the worst case (every room at the 100 cap), so about a second at ~4,000 rooms. Not needed yet; when it is, count
       only rooms with activity since the caller's oldest read, or keep counts per user. The owner's call when to.
-- [ ] `subscribeAllMessages` sends every message event in every visible room to every client (N×M fan-out). Measured:
+      **Done (2026-11-13):** measured again on the Go server, 280 ms at 1,000 rooms. The plan showed each room's count
+      made twice (for `n > 0` and for the value), each reading up to 100 messages. `server/unread.go unreadSQL` now
+      materializes the read positions, then the counts, and counts on a new partial covering index
+      (`idx_messages_unread`: room, created, author, not deleted; migration 50): 56 ms, ≈ 0.05 ms a room, so ~4,000
+      rooms ≈ 0.2 s. Rooms without new messages already cost one index seek, so "only rooms with activity" would have
+      saved nothing; per-user counts weren't needed. `reads.test.ts` pins the plan (one covering scan).
+      `tests/perf/scale.ts` keeps its database with `DATA_DIR`.
+- [x] `subscribeAllMessages` sends every message event in every visible room to every client (N×M fan-out). Measured:
       ≈ 0.4 ms of server time per listener per message. Not needed yet; a thinner event or batching when open tabs
       reach the hundreds.
+      **Done:** mostly by PERF.md §7 and item 47 (one topic, the event serialized once per way of seeing it, not per
+      listener): 200 listeners get a message in 26 ms end to end, most of it the test's own Node clients. Left was
+      live.go's second queue and sender goroutine per client (item 61); removed 2026-11-13, events go straight into
+      the connection's buffer (`server/realtime.go`). `/api/chat/metrics` `senders`/`queued` now count every
+      connection's waiting events.
 
 ### 27. Operations
 - [x] `HEALTHCHECK` in the Dockerfile against `/api/health` (busybox `wget`), for plain Docker / Compose; Dokku already
@@ -509,7 +521,7 @@ and so do the Chromium e2e suite and the app's tests.
   (collections). Fields that won't move; not worth routes.
 
 ### Left open from the review
-- Scale (§26 above): `UNREAD_SQL`, realtime fan-out, queue polling. Not needed at the measured sizes.
+- Scale (§26 above): `UNREAD_SQL` and realtime fan-out done 2026-11-13; queue polling not needed at the measured sizes.
 - ~~`cache.spec.ts` QA BUG-104 flake~~: a real loss of the write made as the page goes; fixed (item 42).
 - `keepToRoom` (enrich hook) looks up the room per message with reactions or a reply. Measured 2026-10-28: a page of 50
   messages with reactions takes ~15 ms against ~7.5 ms without (the lookup is all of the difference, ~0.15 ms a message).
@@ -607,11 +619,19 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   - `tests/integration/retention.test.ts` runs a server of its own (the prune goes through every table). Two migration
     tests reverted "the last N" migrations; they name theirs now (`migrateDownPast`), so a new one can't shift them.
 
-#### 50. Say what kind of account a user is
+#### 50. Say what kind of account a user is ✅ (2026-11-13)
 - Telegram senders and linked instances' people are told apart by their e-mail domain (`@telegram.invalid`,
   `@federation.invalid`) in `lib/inbox.js`, `lib/users.js`, `telegram/people.js` and `federation/people.js`.
 - Suggestion: a `users.kind` select (`person`, `telegram`, `peer`), set by the bridges, backfilled by a migration from
   the same patterns; hooks and rules test the field. The e-mails stay as they are (PocketBase needs one).
+- **Done (2026-11-13):** `users.kind` (hidden select, migration 51, backfilled from the e-mail domains, `tg_people` and
+  `peer`). `lib/users.js beforeUserSave` makes every other new account a `person`; `telegram/people.js` and
+  `federation/people.js` set theirs. `kindOf`/`isStandIn` (`lib/users.js`) replaced four different tests: the
+  inbox's e-mail regex, the reset's `.invalid`, the ban check (`instance` or a `tg_people` row), the Telegram
+  bridge's own `tg_people` lookup, and `/stats`' `peer = '' AND NOT IN tg_people`. Rules refuse `kind` in a client's
+  body (PocketBase also ignores a hidden field there). The federation's `standInRow` stays where the `fed_people` row
+  itself is needed. Tests: `users.test.ts` (signup is a person, can't change it), the bridges' stand-ins,
+  `users_kind.migration.test.ts`.
 
 #### 51. Operational visibility ✅ (2026-11-12)
 - Today there is `/api/health` and the moderators' `/stats` page. Workers stalling (the fed_queue rows left by a raw
@@ -651,9 +671,18 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   - Done on the way: the stats page's "Server" card (item 51) took `statsJs` over its old 5.5 KB; the page is 9.31 of
     10 KB now.
 
-#### 53. Split `views/room.ts` again (web), after 52 (unblocked: modules may share code now)
+#### 53. Split `views/room.ts` again (web), after 52 (unblocked: modules may share code now) ✅ (2026-11-13)
 - 1,155 lines (892 at round 4): the collections' badges, parking/resuming, the viewer and grid wiring and the composer
   wiring all live in one closure. Each is a module with a narrow host, as `writes.ts` was (item 41).
+- **Done (2026-11-13):** 1,133 → 763 lines. Out of the closure, each with its host as an interface: `room/badges.ts`
+  (badges, save menu, picker of items), `room/gallery.ts` (viewer and media grid, and telling them of live changes),
+  `room/parking.ts` (park/resume, the "pinned" bottom, the signal that ends when the room is left),
+  `room/reading.ts` (read state: the rows observer, markRead, the reader), `room/pickers.ts` (the emoji picker,
+  emoji and people suggestions) and `room/footer.ts` (composer or banner, the ways to the composer: focus on entering
+  and on window focus, Ctrl+/, dropped files). `room.ts` keeps the controller wiring, drawing (apply/flush/draw, the
+  pill), the header, list, composer and selection set-up, the dialogs, search, not-found/gone and the lifecycle.
+  No behaviour change (unit, component and Chromium e2e suites). Cost: the critical path 61.53 → 62.08 KB of 62.50
+  (property names across module boundaries aren't minified).
 
 #### 54. One schema for the `/api/chat/*` answers
 - `shared/contract.json` covers fields and limits, `docs/API.md` describes routes in prose. The routes' JSON shapes are
@@ -726,7 +755,7 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 A review made while tracing this round's flaky tests (unit, component and Chromium e2e suites run 5–11 times each,
 docs/QA.md "QA pass 36"). Three of the five flakes were real races, one a real app bug (BUG-268), one a real client
 bug that loses live events (BUG-269). The items below are where the same kind of trouble is likely next. Ordered by
-value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
+value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written (50 and 53 done 2026-11-13).
 
 #### 60. Realtime listeners: dispatch from the map, don't bind them (web) — high value, small ✅ (2026-11-12)
 - `web/src/pb.ts createRealtime` keeps listeners per subscription key in `subs` *and* binds each one to the
@@ -777,7 +806,8 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
     `files`; the JS routes, `files.serve`, `shownBy` and `media.poster`/`itemPoster` are gone. The federation's
     file routes (`federation/inbox.js`, peers only) still serve in JS.
   - No JS hook runs for a records read, a subscription or a download any more. `main.pb.js` has no `onRealtimeSubscribeRequest`.
-  - Left: the stress run with many slow downloads (before/after) wasn't made; `live.go`'s second queue stays.
+  - Left: the stress run with many slow downloads (before/after) wasn't made. (`live.go`'s second queue: gone with
+    item 26, 2026-11-13.)
 
 #### 62. e2e tests share one server and see each other's public rooms (tests) — high value, medium ✅ (2026-11-13)
 - Every e2e user can see every public room that any parallel test made, and gets each one's live events: one notify
@@ -798,13 +828,21 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
   pass alone (3/3 each). history.spec.ts takes ~1.3 min alone, so CPU load on this 8-core box still reaches it; that
   is item 58's to measure. The a11y contrast flake of the run before did not come back.
 
-#### 63. "Called" isn't "answered" in the component tests (tests) — medium value, small
+#### 63. "Called" isn't "answered" in the component tests (tests) — medium value, small ✅ (2026-11-13)
 - `instrument().calls(op)` counts calls; 37 waits in the component tests are on a count, and then assert state the answer sets
   (`vi.waitFor(() => expect(ctl.calls("x")).toBe(n))`). Two of this round's flakes were that: a session refresh
   counted but still in flight overwrote what the test changed next (BUG-33's test) or swapped the token under a
   refused request (BUG-51's).
 - Done for those: `instrument()` has `settled(op)` (every call so far answered, and its handlers run). Suggestion:
   sweep the other waits; where the next assertion depends on the answer, wait on `settled`.
+- **Done (2026-11-13):** every `calls()` in `tests/component` read. Eleven now wait on `settled` too: counts or
+  state read after an answer (`unread.test.ts` ×3, one of them a `sleep(50)`; `prefetch.test.ts` the cached count
+  after a refetch, and the live subscription, a `sleep(200)`), checks that nothing more happens which passed
+  vacuously before the answer (`room-controller.test.ts` no page after `changes`, `sync.test.ts` no "loading"
+  after a reconnect's reload), the placeholder after a delete (`compose.test.ts`), and the session refreshes still
+  in flight in `app.test.ts` (×3). Left on counts, on purpose: waits followed only by other counts, waits on a
+  `hold()`-ed call (it can't settle before `release()`: `sync.test.ts` ×2, `unread.test.ts` ×1 keep their
+  "answered by the server, held here" sleeps), and `toBe(0)` checks.
 
 #### 64. Jump to's ordering in shared vectors (web, Android) — medium value, small
 - `web/src/views/switcher.ts` and Android's `Jump.kt` are ports of each other, with hand-copied cases

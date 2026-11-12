@@ -189,6 +189,7 @@ describe("Telegram bridge (§26)", () => {
     expect(author.name).toBe("Ann Lee (TG)");
     expect(author.no_dms).toBe(true);
     expect(author.avatar).toMatch(/^avatar_\w{10}\.jpg$/);
+    expect((await admin.collection("users").getOne(author.id)).kind).toBe("telegram");
     expect(await status(owner.pb.send("/api/chat/dms", { method: "POST", body: { user: author.id } }))).toBe(400);
     // Not sent back to the group it came from.
     await tick();

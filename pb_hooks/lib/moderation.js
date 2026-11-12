@@ -73,20 +73,6 @@ function refuseBanned(rec, password) {
 }
 
 /**
- * Is this user a Telegram stand-in (§26.3)? Asked of tg_people whether or not the bridge is on now.
- * @param {core.App} app
- * @param {string} userId
- */
-function isStandIn(app, userId) {
-  try {
-    app.findFirstRecordByFilter("tg_people", "user = {:user}", { user: userId });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * POST /api/chat/ban { user, banned } → the user's public profile with `banned`. Moderators only. Not themselves,
  * another moderator, or someone who doesn't sign in here (a linked instance's people, a Telegram stand-in); anyone
  * banned can be unbanned (a superuser may have banned them).
@@ -108,7 +94,7 @@ function ban(e) {
   }
   if (user.id === me?.id) throw bad("user", "You can't ban yourself.");
   if (body.banned && user.getBool("moderator")) throw bad("user", "Moderators can't be banned here; an admin can.");
-  if (body.banned && (user.getString("instance") || isStandIn(e.app, user.id))) {
+  if (body.banned && require(`${__hooks}/lib/users.js`).isStandIn(user)) {
     throw bad("user", "Only people who sign in here can be banned.");
   }
   if (user.getBool("banned") !== body.banned) {

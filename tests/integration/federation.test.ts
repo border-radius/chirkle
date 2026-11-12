@@ -437,6 +437,7 @@ describe("a shared public room (§33.5)", () => {
     });
     expect(copy.expand?.author?.name).toBe(`${ann.name} (A)`);
     expect(copy.expand?.author?.instance).toBe(A.host);
+    expect((await B.admin.collection("users").getOne(copy.author)).kind).toBe("peer");
 
     // B → A, as a reply.
     const reply = await bob.pb

@@ -147,6 +147,7 @@ describe("prefetching rooms with unread messages (§7.5)", () => {
     // ...and one of them is read meanwhile: only the other is fetched, once, REFETCH_MS after the first fetch.
     store.set(clearUnread(read.id));
     await vi.waitFor(() => expect(net.calls("page")).toBe(3));
+    await net.settled("page");
     expect(cache.rooms.get(room.id)?.unread).toBe(6);
     await sleep(600);
     expect(net.calls("page")).toBe(3);
@@ -187,7 +188,7 @@ describe("prefetching rooms with unread messages (§7.5)", () => {
     ours.add(theirs.id);
     const m = await other.api.send({ id: newId(), room: theirs.id, text: "my password is hunter2" });
     await vi.waitFor(() => expect(net.calls("subscribeAllMessages")).toBe(1));
-    await sleep(200); // the server has the subscription
+    await net.settled("subscribeAllMessages"); // the server has the subscription
     await other.api.softDelete(m.id);
     await vi.waitFor(() => expect(cache.rooms.get(theirs.id)?.items).toEqual([expect.objectContaining({ id: m.id, deleted: true })]));
     expect(JSON.stringify(cache.rooms.get(theirs.id))).not.toContain("hunter2");

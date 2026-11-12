@@ -2,41 +2,42 @@
 // the emoji picker (§20), selecting messages to forward or delete them (§21), archived mode, read state (§18.3).
 // The message window and everything that changes it live in room/controller.ts (no DOM). This module puts the
 // controller's changes on screen and wires the parts in room/: header (title + actions menu), search (§29), messages (the list),
-// composer, selection (the bar while selecting), reply, notice (the status line), names (who reacted), forward dialog,
-// access dialog (§23.2). A guest reads an Open Air room without a composer (§23.3). Images and videos can be saved to
-// collections and attached from them (§31): the save menu and the picker are the collections' lazy chunk.
+// composer and footer (what shows instead of it), selection (the bar while selecting), reply, notice (the status line),
+// names (who reacted), pickers (emoji, suggestions), reading (read state), parking (kept while away), gallery (viewer
+// and media grid), badges (collections), forward dialog, access dialog (§23.2). A guest reads an Open Air room without
+// a composer (§23.3). Images and videos can be saved to collections and attached from them (§31): the save menu and
+// the picker are the collections' lazy chunk.
 
 import { errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, holdKeys, typeInto, uniqueId } from "../dom.ts";
-import { newer, older, PAGE_SIZE, withFiles } from "../lib/cursor.ts";
-import { attachmentName, isMedia, isVideo } from "../lib/files.ts";
-import { emptyForward, lastSaved } from "../lib/messages.ts";
+import { PAGE_SIZE } from "../lib/cursor.ts";
+import { emptyForward } from "../lib/messages.ts";
 import { canManage, canPost, dmClosed, isDm, otherMember, roomTitle } from "../lib/rooms.ts";
 import { isNearBottom } from "../lib/scroll.ts";
-import { formatFull, formatTime, parsePb } from "../lib/time.ts";
-import type { Badge, Message } from "../lib/types.ts";
+import { formatTime, parsePb } from "../lib/time.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import { roomSections } from "../store.ts";
 import { avatar } from "../ui/avatar.ts";
-import type { EmojiPicker, PickerRequest } from "../ui/emoji-picker.ts";
-import type { EmojiSuggest } from "../ui/emoji-suggest.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
-import type { RoomReader } from "../unread.ts";
-import { chunkContext, collectionChunk } from "./collection.ts";
 import type { AccessDialog } from "./room/access.ts";
+import { createRoomCollections } from "./room/badges.ts";
 import { createComposer, validEdit } from "./room/composer.ts";
 import { type Change, createRoomController, type Phase, type RoomController } from "./room/controller.ts";
+import { createFooter } from "./room/footer.ts";
 import type { ForwardDialog } from "./room/forward.ts";
+import { createGallery } from "./room/gallery.ts";
 import { createRoomHeader } from "./room/header.ts";
 import { createMessageList } from "./room/messages.ts";
 import { createNameLookup } from "./room/names.ts";
 import { createNotice } from "./room/notice.ts";
+import { createParking } from "./room/parking.ts";
+import { createPickers } from "./room/pickers.ts";
 import { reactionFocus } from "./room/reactions.ts";
+import { createReading } from "./room/reading.ts";
 import { createReply } from "./room/reply.ts";
 import { createSelection } from "./room/selection.ts";
-import type { ViewerImage } from "./room/viewer.ts";
 
 /**
  * Two changes as one: the later scroll and notice, and a render if either asked for one, keeping the anchor if either
@@ -76,116 +77,31 @@ export function createRoomView({
   let ctl: RoomController;
   /** The phase the header, footer and list were last drawn for. */
   let shown: Phase = "loading";
-  /** Reports what is on screen as read (unread.ts), from mount on. */
-  let reader: RoomReader | null = null;
   /** The messages the forward dialog is open for. */
   let forwarding: string[] = [];
-  /** Tells the open viewer that a message changed or went (§17.7). */
-  let viewing: ((m: Message, gone: boolean) => void) | undefined;
-  /** And the open media grid (§30). */
-  let gridding: ((m: Message, gone: boolean) => void) | undefined;
-  /** Put the caret in the composer as soon as it is shown: on entering the room (§22.5). */
-  let focusComposer = true;
-  /**
-   * Kept, out of the page, after you left the room (park), until you come back (resume): still live and drawn, never
-   * measured. A scroll asked for meanwhile waits for the resume. At the live bottom (`pinned`), the list stays there;
-   * else where it was: the message at the top (`parkedAt`) goes back where it was.
-   */
-  let parked = false;
-  let parkedScroll: Change["scroll"];
-  let parkedAt: { id: string; dy: number; top: number } | undefined;
-  let pinned = true;
-  /** Ends when the room is left (parked or unmounted): what shows over the page for it (the media grid, the viewer). */
-  let onScreen = new AbortController();
-  scope.defer(() => onScreen.abort());
 
   const room = () => store.get().rooms.get(roomId);
   const me = () => store.get().user;
-
-  // ---------------------------------------------------------------- collections (§31)
-
-  /** What each collection's badge says, by id: undefined while asked. Asked for together, after a render. */
-  const badges = new Map<string, Badge | undefined>();
-  const asking = new Set<string>();
-  let listening = false;
-  function badge(id: string): Badge | undefined {
-    if (!badges.has(id)) {
-      badges.set(id, undefined);
-      ask(id);
-      // Told live when one is made public or private, renamed or deleted; asked again after a reconnect (missed).
-      if (!listening) {
-        listening = true;
-        scope.sub(api.subscribeBadges(ask));
-        scope.defer(api.onConnect((re) => re && [...badges.keys()].map(ask)));
-      }
-    }
-    return badges.get(id);
-  }
-  /** Asked together, at the end of the task. A badge shown says what it said until the answer. */
-  function ask(id: string) {
-    if (!badges.has(id) || asking.has(id)) return;
-    if (!asking.size) queueMicrotask(askBadges);
-    asking.add(id);
-  }
-  function askBadges() {
-    const ids = [...asking];
-    asking.clear();
-    for (let i = 0; i < ids.length; i += 50) {
-      const some = ids.slice(i, i + 50);
-      api.badges(some, signal).then(
-        (got) => {
-          for (const id of some) badges.set(id, got[id] ?? null);
-          render({ anchor: true });
-        },
-        () => {
-          for (const id of some) badges.delete(id); // asked again by the next render
-        },
-      );
-    }
-  }
-  const lazy = () => ({ ...chunkContext({ api, store, collections }), signal });
-  const noCollections = () => notice.say("Couldn't open collections. Check your connection.");
-  /** The save menu for a file of `m` (a forward's is its original's, §21.3). */
-  function saveFile(m: Message, file: string, opener: HTMLElement) {
-    collectionChunk().then(
-      (c) => scope.active && void c.openSave({ ...lazy(), from: { message: m.forward_of || m.id, file }, opener }),
-      () => scope.active && noCollections(),
-    );
-  }
-  /** The picker: the items picked join the composer's tray. */
-  function pickItems(opener: HTMLElement, max: number) {
-    collectionChunk().then(
-      (c) =>
-        scope.active &&
-        void c.openPicker({
-          ...lazy(),
-          max,
-          opener,
-          onPick: (items) =>
-            composer.addItems(
-              items.map((it) => ({
-                file: new File([], it.name || it.file),
-                url: it.video ? (it.poster ? api.itemPosterUrl(it) : "") : api.itemUrl(it, "800x480f"),
-                item: { id: it.id, collection: it.collection },
-              })),
-            ),
-        }),
-      () => scope.active && noCollections(),
-    );
-  }
+  const state = () => ctl.state();
 
   // ---------------------------------------------------------------- parts
 
-  /** One emoji picker for the composer and every message's reactions, once opened: a lazy chunk (openPicker). */
-  let picker: EmojiPicker | null = null;
-  /** The message the picker was opened to react to ("": the composer's). */
-  let reactingTo = "";
   const notice = createNotice(signal);
+  const say = (text: string) => notice.say(text);
   const nameOf = createNameLookup({
     usersById: (ids, sig) => api.usersById(ids, sig),
     signedIn: () => !!me(),
     onFound: () => render({ anchor: true }),
     signal,
+  });
+  const colls = createRoomCollections({
+    api,
+    store,
+    collections,
+    scope,
+    rerender: () => render({ anchor: true }),
+    addItems: (items) => composer.addItems(items),
+    say,
   });
   const header = createRoomHeader({
     titleId: `${vid}-title`,
@@ -193,7 +109,7 @@ export function createRoomView({
     avatarUrl: api.avatarUrl,
     onJumpToBeginning: () => void now(() => ctl.jump("first")),
     onSearch: () => void openSearch(),
-    onMedia: openMedia,
+    onMedia: () => gallery.openGrid(),
     onAccess: () => void openAccess(),
     onClosed: () => navigate("/"),
     onNotify: notify,
@@ -217,7 +133,7 @@ export function createRoomView({
       }
       if (r) accessDialog.open(r, canManage(r, me()), me());
     } catch {
-      if (scope.active) notice.say("Couldn't open room access. Check your connection.");
+      if (scope.active) say("Couldn't open room access. Check your connection.");
     }
   }
   const newAccessDialog = (create: typeof import("./room/access.ts").createAccessDialog) => {
@@ -246,7 +162,7 @@ export function createRoomView({
   };
   const messages = createMessageList({
     state: () => {
-      const s = ctl.state();
+      const s = state();
       return {
         win: s.win,
         ready: s.phase === "ready",
@@ -279,9 +195,9 @@ export function createRoomView({
     onDiscard: (id) => now(() => ctl.discard(id)),
     fileUrl: api.fileUrl,
     posterUrl: api.posterUrl,
-    onOpenImage: (m, file, opener) => void viewImage(m, file, opener),
-    badge,
-    ...(me() ? { onSave: saveFile } : {}),
+    onOpenImage: (m, file, opener) => void gallery.view(m, file, opener),
+    badge: colls.badge,
+    ...(me() ? { onSave: colls.saveFile } : {}),
     avatarUrl: api.avatarUrl,
     onMessageUser: (userId) => void messageUser(userId),
     isBanned: (userId) => api.isBanned(userId),
@@ -302,17 +218,14 @@ export function createRoomView({
     },
     onStepReply: (dir) => reply.step(dir),
     onCancelReply: () => reply.set(null),
-    onEmoji: (opener, insert) => {
-      reactingTo = "";
-      void openPicker(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() });
-    },
-    onEmojiName: (textarea) => void suggestEmoji(textarea),
-    onMention: (textarea) => void suggestPeople(textarea),
+    onEmoji: (opener, insert) => void pickers.open(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() }),
+    onEmojiName: (textarea) => pickers.suggestEmoji(textarea),
+    onMention: (textarea) => pickers.suggestPeople(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).
     onChange: (text) => {
       if (roomId) drafts.set(roomId, text);
     },
-    onCollections: pickItems,
+    onCollections: colls.pickItems,
     signal,
   });
   /** The forward dialog (§21.3), once Forward was chosen: a lazy chunk. */
@@ -350,38 +263,14 @@ export function createRoomView({
     });
   const list = messages.el;
   const pill = h("button", { type: "button", class: "new-messages ic i-down", hidden: true });
-  const footer = h("footer", { class: "room-footer" });
-  const banner = h("p", { class: "archived-banner ic i-archive" }, "This room is archived. History is read-only.");
-  const guestBanner = h(
-    "p",
-    { class: "guest-banner ic i-globe" },
-    // One flex item: the links stay in the sentence, not spaced apart by the banner's gap.
-    h("span", {}, [
-      "You're reading as a guest. ",
-      h("a", { href: "/login" }, "Log in"),
-      " or ",
-      h("a", { href: "/signup" }, "sign up"),
-      " to join the conversation.",
-    ]),
-  );
-  const readerBanner = h(
-    "p",
-    { class: "guest-banner reader-banner ic i-lock" },
-    "Only some people can post in this room. You can read along and react.",
-  );
-  const closedBanner = h("p", { class: "guest-banner reader-banner ic i-x" });
+  const parking = createParking(list, signal);
+  const reading = createReading(list, state, scope);
   const bar = createLoadbar();
   scope.defer(() => bar.set(false));
-  const shell = h("section", { class: "room", "aria-labelledby": `${vid}-title` }, [
-    header.el,
-    notice.el,
-    h("div", { class: "room-body" }, [bar.el, list, pill]),
-    footer,
-  ]);
 
   const reply = createReply({
     find: (id) => ctl.find(id),
-    list: () => ctl.state().win.items,
+    list: () => state().win.items,
     repliable: (m) => ctl.repliable(m),
     composer,
     reveal: (id) => list.querySelector(`li[data-id="${CSS.escape(id)}"]`)?.scrollIntoView?.({ block: "nearest" }),
@@ -394,7 +283,7 @@ export function createRoomView({
     selectable: (m) => ctl.selectable(m),
     deletable: (m) => ctl.deletable(m),
     onStart: (id) => {
-      picker?.close();
+      pickers.close();
       messages.focusIn(id, ["input.select"], true);
     },
     onChange: (list) => {
@@ -407,78 +296,59 @@ export function createRoomView({
     notice,
     signal,
   });
+  const footer = createFooter({
+    composer,
+    selection,
+    room,
+    me,
+    closePicker: () => pickers.close(),
+    parked: () => parking.parked,
+    active: () => scope.active,
+    signal,
+  });
+  const shell = h("section", { class: "room", "aria-labelledby": `${vid}-title` }, [
+    header.el,
+    notice.el,
+    h("div", { class: "room-body" }, [bar.el, list, pill]),
+    footer.el,
+  ]);
+  const pickers = createPickers({ api, roomId: () => roomId, shell, scope, say });
+  const gallery = createGallery({
+    api,
+    roomId: () => roomId,
+    room,
+    win: () => state().win,
+    goTo: (id) => now(() => ctl.goTo(id)),
+    saveFile: colls.saveFile,
+    signedIn: () => !!me(),
+    screen: () => parking.screen,
+    scope,
+    say,
+  });
 
   /** Render the list, then mark what it shows as read (once it is laid out). */
   function render(o?: { anchor?: boolean }) {
     selection.prune();
     messages.render(o);
     // Deleted (or gone from the list) meanwhile: nothing left to react to (QA BUG-121).
-    if (reactingTo && picker?.isOpen) {
-      const m = ctl.find(reactingTo);
-      if (!m || !ctl.reactable(m)) picker?.close();
+    if (pickers.reactingTo && pickers.isOpen) {
+      const m = ctl.find(pickers.reactingTo);
+      if (!m || !ctl.reactable(m)) pickers.close();
     }
-    watchRows();
-    readSoon();
-  }
-
-  /**
-   * The messages shown whole or scrolled past (§18.3), as the browser tells it (PERF.md §5): their bottom is above the
-   * list's. By id, the element that is. Measuring them ourselves after a render made the browser lay the list out at
-   * once, and again for every scroll event.
-   */
-  const above = new Map<string, Element>();
-  const rows = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        const id = (e.target as HTMLElement).dataset.id!;
-        if (e.intersectionRatio >= 0.999) above.set(id, e.target);
-        else if (above.get(id) === e.target) above.delete(id);
-      }
-      markRead();
-    },
-    // Everything above the list's bottom counts: whole means the bottom is in.
-    { root: list, rootMargin: "1000000px 0px 0px 0px", threshold: 1 },
-  );
-  scope.defer(() => rows.disconnect());
-  const watched = new Set<Element>();
-  /** Watch the rows a render added; forget those it took away. */
-  function watchRows() {
-    for (const el of watched) {
-      if (el.parentNode === list) continue;
-      rows.unobserve(el);
-      watched.delete(el);
-      const id = (el as HTMLElement).dataset.id!;
-      if (above.get(id) === el) above.delete(id);
-    }
-    for (const el of list.children) {
-      if (!el.classList.contains("msg") || watched.has(el)) continue;
-      rows.observe(el);
-      watched.add(el);
-    }
-  }
-  /** markRead after the next frame's layout: what a render changed may not cross a row's edge (a first page replacing the kept one). */
-  let reading = false;
-  function readSoon() {
-    if (reading) return;
-    reading = true;
-    requestAnimationFrame(() =>
-      setTimeout(() => {
-        reading = false;
-        if (scope.active) markRead();
-      }),
-    );
+    reading.watchRows();
+    reading.readSoon();
   }
 
   async function deleteSelected(ids: string[]) {
     const failed = await now(() => ctl.removeMany(ids));
     // Say why: network trouble, rate limiting or the server's reason (QA BUG-58).
-    if (failed && scope.active) notice.say(`Couldn't delete those messages. ${reasonOf(failed)}`);
+    if (failed && scope.active) say(`Couldn't delete those messages. ${reasonOf(failed)}`);
   }
 
   async function openForward(ids: string[]) {
     if (!ids.length) return;
     forwarding = ids;
-    picker?.close();
+    pickers.close();
     try {
       const { createForwardDialog } = await import("./room/forward.ts");
       if (!scope.active || forwarding !== ids) return;
@@ -488,7 +358,7 @@ export function createRoomView({
       }
       forwardDialog.open(ids.length);
     } catch {
-      if (scope.active) notice.say("Couldn't open Forward. Check your connection.");
+      if (scope.active) say("Couldn't open Forward. Check your connection.");
     }
   }
 
@@ -534,7 +404,7 @@ export function createRoomView({
 
   /** Put a controller change on screen. */
   function draw(c: Change) {
-    const s = ctl.state();
+    const s = state();
     if (s.phase !== shown) {
       shown = s.phase;
       if (s.phase === "not-found") return renderNotFound();
@@ -542,15 +412,12 @@ export function createRoomView({
       renderHeader();
       renderFooter();
     }
-    if (c.notice !== undefined) notice.say(c.notice);
+    if (c.notice !== undefined) say(c.notice);
     if (c.render) {
       render(c.render);
       reply.refresh();
     }
-    if (parked) {
-      parkedScroll = c.scroll ?? parkedScroll;
-      return;
-    }
+    if (parking.hold(c.scroll)) return;
     if (c.scroll === "bottom") scrollToBottom();
     else if (c.scroll === "top") list.scrollTop = 0;
     else if (c.scroll === "target") {
@@ -559,7 +426,7 @@ export function createRoomView({
       const el = id && list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(id)}"]`);
       if (el) list.scrollTop = el.offsetTop - list.clientHeight / (s.targetId ? 2 : 4);
     }
-    if (c.scroll) markRead(); // what the scroll brought into view (render read where the list was before it)
+    if (c.scroll) reading.markRead(); // what the scroll brought into view (render read where the list was before it)
     renderPill();
   }
 
@@ -569,7 +436,7 @@ export function createRoomView({
    * aren't on screen: scrolled up, or the window is back in history (§22.7).
    */
   function renderPill() {
-    const s = ctl.state();
+    const s = state();
     const away = s.phase === "ready" && (s.win.hasNewer || !isNearBottom(list));
     const back = s.phase === "ready" && s.back !== null;
     pill.hidden = s.pill === null && !away && !back;
@@ -583,52 +450,16 @@ export function createRoomView({
           : "Jump to latest";
   }
 
-  /**
-   * The newest messages are on screen (§18.3): loaded, scrolled to the bottom, in a visible tab. Scrolled up, a new
-   * message only shows the pill, and stays unread until you scroll down to it.
-   */
-  const atLiveEdge = () => {
-    const s = ctl.state();
-    return s.phase === "ready" && !s.win.hasNewer && !s.unsure && isNearBottom(list) && document.visibilityState !== "hidden";
-  };
-
-  /**
-   * What is on screen is read (§18.3): up to the newest saved message shown whole, or everything once the newest
-   * messages are on screen. Scrolling down through what is unread reads it as it comes into view. Nothing in a hidden
-   * tab, or while a kept window shows before the server has said where the unread messages start (QA BUG-102).
-   */
-  function markRead() {
-    const s = ctl.state();
-    if (!reader || s.phase !== "ready" || s.unsure || document.visibilityState === "hidden") return;
-    const caughtUp = atLiveEdge();
-    const m = caughtUp ? lastSaved(s.win) : lastShown();
-    if (m) reader.seen(m.created, caughtUp);
-  }
-
-  /** The newest saved message whose bottom is on screen (or scrolled past). */
-  function lastShown(): Message | undefined {
-    const { items } = ctl.state().win;
-    for (let i = items.length - 1; i >= 0; i--) {
-      const m = items[i]!;
-      if (!m.status && above.has(m.id)) return m;
-    }
-    return undefined;
-  }
-
-  /** Stop reading what is on screen (leaving, or parked). Left before the first page was in, the server may have more than the kept window showed: it says what is unread. */
-  function leaveReader() {
-    reader?.close(atLiveEdge() && !ctl.state().stale);
-    reader = null;
-  }
-
   function scrollToBottom() {
     list.scrollTop = list.scrollHeight;
-    markRead();
+    reading.markRead();
   }
 
   function renderHeader() {
     header.update({ room: room(), hidden: store.get().hidden.has(roomId), me: me() });
   }
+
+  const renderFooter = () => footer.render(shown === "failed");
 
   /** "Message" on an author: open the DM with them (§16.5). */
   async function messageUser(userId: string) {
@@ -636,7 +467,7 @@ export function createRoomView({
       const dm = await actions.openDm(userId);
       if (scope.active) navigate(`/r/${dm.id}`);
     } catch (e) {
-      if (scope.active) notice.say(`Couldn't open that conversation. ${errorMessage(e)}`);
+      if (scope.active) say(`Couldn't open that conversation. ${errorMessage(e)}`);
     }
   }
 
@@ -644,93 +475,9 @@ export function createRoomView({
   async function setBanned(userId: string, banned: boolean) {
     try {
       await api.setBanned(userId, banned);
-      if (scope.active) notice.say(banned ? "Banned. They can't sign in until unbanned." : "Unbanned.");
+      if (scope.active) say(banned ? "Banned. They can't sign in until unbanned." : "Unbanned.");
     } catch (e) {
-      if (scope.active) notice.say(`Couldn't ${banned ? "ban" : "unban"} them. ${errorMessage(e)}`);
-    }
-  }
-
-  /**
-   * A thumbnail was clicked: show it in the viewer (§17.7) with the room's other images and videos, oldest first: the
-   * window's to start with, the viewer fetches the others when it gets near them.
-   * The viewer is a lazy chunk, loaded on the first click. If it can't be (offline, or a new version was deployed),
-   * the image opens in a new tab, as a thumbnail did before the viewer.
-   * From the media grid (§30): its `images` and `more`, and `leave` closes it on "Show in chat".
-   */
-  async function viewImage(
-    m: Message,
-    file: string,
-    opener: HTMLElement,
-    images?: ViewerImage[],
-    more?: [boolean, boolean],
-    leave?: () => void,
-  ) {
-    const media = (x: Message) => (x.files ?? []).filter(isMedia).map((f) => ({ message: x, file: f, video: isVideo(f) }));
-    const { win } = ctl.state();
-    images ??= win.items.flatMap((x) => (x.deleted || x.localFiles?.length ? [] : media(x)));
-    const id = roomId;
-    const start = images.findIndex((i) => i.message.id === m.id && i.file === file);
-    try {
-      const { openViewer } = await import("./room/viewer.ts");
-      if (!scope.active) return;
-      await openViewer({
-        images,
-        start,
-        more: more ?? [win.hasOlder, win.hasNewer],
-        page: async (back, edge) => {
-          const messages = await api.page(withFiles(back ? older(id, edge) : newer(id, edge)), signal);
-          return { messages: back ? messages.reverse() : messages, done: messages.length < PAGE_SIZE };
-        },
-        media,
-        name: attachmentName,
-        when: (x) => formatFull(parsePb(x.created)),
-        fileUrl: api.fileUrl,
-        onJump: (x) => {
-          leave?.();
-          return now(() => ctl.goTo(x.id));
-        },
-        ...(me() ? { onSave: saveFile } : {}),
-        opener,
-        follow: (fn) => (viewing = fn),
-        signal: onScreen.signal,
-      });
-    } catch {
-      if (scope.active) window.open(api.fileUrl(m, file), "_blank", "noopener");
-    }
-  }
-
-  function renderFooter() {
-    const r = room();
-    // No composer while the room failed to load: you'd be writing into history you can't see.
-    // (The composer element, and anything typed into it, is kept for when the load succeeds.)
-    if (!r || shown === "failed") return footer.replaceChildren();
-    if (selection.ids) {
-      // The composer (and anything typed into it) comes back when selecting ends.
-      selection.refresh();
-      if (footer.firstChild !== selection.bar) footer.replaceChildren(selection.bar);
-      picker?.close();
-    } else if (r.archived) {
-      footer.replaceChildren(banner);
-      picker?.close(); // nothing left to insert into or react to
-    } else if (!me()) {
-      if (footer.firstChild !== guestBanner) footer.replaceChildren(guestBanner);
-    } else if (!canPost(r, me())) {
-      // A reader (§23.6). What they had typed stays in the composer, for if they may post again.
-      if (footer.firstChild !== readerBanner) footer.replaceChildren(readerBanner);
-    } else if (dmClosed(r, me())) {
-      // Readable, but the server refuses what is sent (QA BUG-178). What was typed stays, as for a reader.
-      closedBanner.textContent = dmClosed(r, me());
-      if (footer.firstChild !== closedBanner) footer.replaceChildren(closedBanner);
-    } else if (footer.firstChild !== composer.el) footer.replaceChildren(composer.el);
-    composer.setPlaceholder(`Message ${roomTitle(r, me())}`);
-    // Entering a room (or switching to another one), you can just type. Not on touch screens: it would pop up the
-    // keyboard over the messages you came to read.
-    if (focusComposer && footer.contains(composer.el)) {
-      focusComposer = false;
-      // In the next frame, whose layout it then uses: focus() lays the page out at once, and on entering a room that
-      // came in the middle of drawing it (PERF.md §5).
-      if (!matchMedia("(hover:none)").matches)
-        requestAnimationFrame(() => scope.active && !parked && footer.contains(composer.el) && composer.focus());
+      if (scope.active) say(`Couldn't ${banned ? "ban" : "unban"} them. ${errorMessage(e)}`);
     }
   }
 
@@ -742,7 +489,7 @@ export function createRoomView({
   function awaitReturn() {
     offReturn ??= store.subscribe((s, prev) => {
       // Parked, it is made afresh when you come back (resume can't show it).
-      if (s.rooms.has(roomId) && !prev.rooms.has(roomId) && s.user === prev.user && !parked) reopen();
+      if (s.rooms.has(roomId) && !prev.rooms.has(roomId) && s.user === prev.user && !parking.parked) reopen();
     });
   }
 
@@ -764,30 +511,12 @@ export function createRoomView({
   function renderGone() {
     shown = "not-found";
     awaitReturn();
-    picker?.close();
+    pickers.close();
     forwardDialog?.close();
     accessDialog?.close();
     const back = h("a", { href: "/" }, "Back to rooms");
     shell.replaceChildren(notFound("You can't see this room any more.", [back]));
     scope.dispose();
-  }
-
-  /** The room's images and videos as a grid (§30): a lazy chunk, like search. It opens the viewer with `viewImage`. */
-  function openMedia() {
-    import("./room/media.ts").then(
-      (m) =>
-        scope.active &&
-        m.openMedia({
-          room: roomId,
-          label: room()?.kind === "dm" ? "" : room()?.name,
-          api,
-          name: attachmentName,
-          open: viewImage,
-          follow: (fn) => (gridding = fn),
-          signal: onScreen.signal,
-        }),
-      () => scope.active && notice.say("Couldn't open media. Check your connection."),
-    );
   }
 
   /** The search bar (§29), while open. */
@@ -826,7 +555,7 @@ export function createRoomView({
       search.focus();
       typeInto(search.el.querySelector("input"), held.take());
     } catch {
-      if (scope.active) notice.say("Couldn't open search. Check your connection.");
+      if (scope.active) say("Couldn't open search. Check your connection.");
     } finally {
       held.take();
     }
@@ -878,62 +607,15 @@ export function createRoomView({
     const user = me();
     if (!m || !user || !ctl.reactable(m)) return;
     const mine = new Set(ctl.reactions(m).flatMap((r) => (r.users.includes(user.id) ? [r.emoji] : [])));
-    reactingTo = id;
-    void openPicker(opener, {
-      label: "Add reaction",
-      chosen: mine,
-      onPick: (emoji) => void react(id, emoji, !mine.has(emoji)),
-      restoreFocus: () => messages.focusIn(id, [".actions .react", ".reactions .add-reaction"]),
-    });
-  }
-
-  /**
-   * Open the emoji picker next to `opener`. A lazy chunk, loaded the first time; if it can't be (offline, or a new
-   * version was deployed), say so. Not if the opener went meanwhile (its message, or the composer, is gone).
-   */
-  async function openPicker(opener: HTMLElement, req: PickerRequest) {
-    try {
-      const { createEmojiPicker, loadStylesheet } = await import("../ui/emoji-picker.ts");
-      await loadStylesheet();
-      if (!scope.active || !opener.isConnected) return;
-      if (!picker) {
-        picker = createEmojiPicker({ signal });
-        shell.append(picker.el);
-      }
-      picker.open(opener, req);
-    } catch {
-      if (scope.active) notice.say("Couldn't open the emoji. Check your connection.");
-    }
-  }
-
-  /** Emoji by name in the composer (§20.6), from the picker's chunk: once loaded they follow the textarea. Quietly not, offline. */
-  let suggest: EmojiSuggest | Promise<unknown> | null = null;
-  function suggestEmoji(textarea: HTMLTextAreaElement) {
-    suggest ??= import("../ui/emoji-picker.ts").then(
-      async ({ createEmojiSuggest, loadStylesheet }) => {
-        await loadStylesheet();
-        if (!scope.active) return;
-        suggest = createEmojiSuggest({ textarea, signal });
-        suggest.update(true);
+    void pickers.open(
+      opener,
+      {
+        label: "Add reaction",
+        chosen: mine,
+        onPick: (emoji) => void react(id, emoji, !mine.has(emoji)),
+        restoreFocus: () => messages.focusIn(id, [".actions .react", ".reactions .add-reaction"]),
       },
-      () => {
-        suggest = null;
-      },
-    );
-  }
-
-  /** People by handle in the composer (§41), a lazy chunk: once loaded it follows the textarea. Quietly not, offline. */
-  let people = false;
-  function suggestPeople(textarea: HTMLTextAreaElement) {
-    if (people) return;
-    people = true;
-    void import("../ui/mention-suggest.ts").then(
-      ({ createMentionSuggest }) =>
-        scope.active &&
-        createMentionSuggest({ api, textarea, room: () => roomId, avatar: (u) => avatar(u, 24, api.avatarUrl), signal }).update(),
-      () => {
-        people = false;
-      },
+      id,
     );
   }
 
@@ -950,22 +632,19 @@ export function createRoomView({
         roomId,
         msgId: params.msgId,
         scope,
-        nearBottom: () => (parked ? pinned : isNearBottom(list)),
+        nearBottom: () => (parking.parked ? parking.pinned : isNearBottom(list)),
         onChange: apply,
         onUpload: (id, fraction) => messages.setUpload(id, fraction),
         onBusy: bar.set,
         cache,
         early: params.msgId ? undefined : early?.take(roomId),
-        onEvent: (m, gone) => {
-          viewing?.(m, gone);
-          gridding?.(m, gone);
-        },
+        onEvent: gallery.changed,
       });
 
       pill.addEventListener(
         "click",
         () => {
-          const s = ctl.state();
+          const s = state();
           if (s.back !== null) return void now(() => ctl.goBack());
           if (s.pill === "history" || s.win.hasNewer) return void now(() => ctl.jump("latest"));
           scrollToBottom();
@@ -989,60 +668,21 @@ export function createRoomView({
         "visibilitychange",
         () => {
           flush();
-          markRead();
+          reading.markRead();
         },
         { signal },
       );
-      // Coming back to the window: put the caret in the composer so you can just type. Only when nothing else has
-      // focus (or a link does, e.g. an attachment opened in a new tab): never away from a field, menu or confirm you
-      // were on. Not with text selected (you may be copying it), and not on touch screens (it pops up the keyboard).
-      window.addEventListener(
-        "focus",
-        () =>
-          !parked &&
-          footer.contains(composer.el) &&
-          document.activeElement!.matches("body,a") &&
-          getSelection()!.isCollapsed &&
-          !matchMedia("(hover:none)").matches &&
-          composer.focus(),
-        { signal },
-      );
-      // Ctrl+/ (⌘/ on a Mac) anywhere: to the composer, as its key badge says (§7.6). By the key's place too, for layouts
-      // where it types something else (Cyrillic: "."). Not for a room kept in the background, nor while there is no
-      // composer (a banner instead); behind a modal dialog the composer is inert, so focus stays there.
-      document.addEventListener(
-        "keydown",
-        (e) => {
-          if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== "/" && e.code !== "Slash")) return;
-          if (parked || !footer.contains(composer.el)) return;
-          e.preventDefault();
-          composer.focus();
-        },
-        { signal },
-      );
+      footer.bind(shell);
       // When the list gets shorter (the attachment tray opens, the textarea grows, the keyboard opens) while it is
       // at the live bottom, keep it there instead of letting the newest messages slide under the composer (BUG-31).
-      list.addEventListener("scroll", () => (pinned = isNearBottom(list)), { signal });
       if (typeof ResizeObserver === "function") {
         const resizes = new ResizeObserver(() => {
-          const s = ctl.state();
-          if (pinned && !parked && s.phase === "ready" && !s.win.hasNewer) scrollToBottom();
+          const s = state();
+          if (parking.pinned && !parking.parked && s.phase === "ready" && !s.win.hasNewer) scrollToBottom();
         });
         resizes.observe(list);
         scope.defer(() => resizes.disconnect());
       }
-      // Files dropped anywhere on the room go to the composer (§17.4).
-      const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
-      shell.addEventListener("dragover", (e) => hasFiles(e) && footer.contains(composer.el) && e.preventDefault(), { signal });
-      shell.addEventListener(
-        "drop",
-        (e) => {
-          if (!hasFiles(e) || !footer.contains(composer.el)) return;
-          e.preventDefault();
-          void composer.addFiles([...(e.dataTransfer?.files ?? [])]);
-        },
-        { signal },
-      );
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -1068,8 +708,8 @@ export function createRoomView({
       store.set({ activeRoomId: roomId });
       // Not if another room is open by now (this one was kept, and goes).
       scope.defer(() => store.get().activeRoomId === roomId && store.set({ activeRoomId: null }));
-      reader = unread.open(roomId);
-      scope.defer(leaveReader);
+      reading.open(unread.open(roomId));
+      scope.defer(reading.leave);
       scope.defer(
         store.subscribe((s, prev) => {
           // Lost while you were in it (§23.4). Not on logging out: the views start over then anyway.
@@ -1088,40 +728,29 @@ export function createRoomView({
       ctl.start();
     },
     park() {
-      leaveReader();
-      const top = list.scrollTop;
-      const first = [...list.querySelectorAll<HTMLElement>("li.msg")].find((el) => el.offsetTop + el.offsetHeight > top);
-      parkedAt = { id: first?.dataset.id ?? "", dy: (first?.offsetTop ?? 0) - top, top };
-      parked = true;
-      onScreen.abort();
-      onScreen = new AbortController();
-      picker?.close();
+      reading.leave();
+      parking.park();
+      pickers.close();
       forwardDialog?.close();
       accessDialog?.close();
       ctl.park();
     },
     resume() {
       if (!scope.active || shown === "not-found" || shown === "failed" || offReturn) return false;
-      parked = false;
+      const scroll = parking.unpark();
       store.set({ activeRoomId: roomId });
-      reader = unread.open(roomId);
-      focusComposer = true;
+      reading.open(unread.open(roomId));
+      footer.focusNext();
       renderHeader();
       renderFooter();
-      const scroll = parkedScroll;
-      parkedScroll = undefined;
-      // The first message that came meanwhile is brought into view; else a scroll asked for meanwhile, or the bottom.
-      if (!now(() => ctl.resume())) {
-        if (scroll) draw({ scroll });
-        else if (pinned) scrollToBottom();
-        else if (parkedAt) {
-          const el = parkedAt.id && list.querySelector<HTMLElement>(`li.msg[data-id="${CSS.escape(parkedAt.id)}"]`);
-          list.scrollTop = el ? el.offsetTop - parkedAt.dy : parkedAt.top;
-        }
-      }
-      parkedAt = undefined;
+      parking.restore(
+        now(() => ctl.resume()),
+        scroll,
+        (s) => draw({ scroll: s }),
+        scrollToBottom,
+      );
       renderPill();
-      readSoon();
+      reading.readSoon();
       return true;
     },
     unmount() {

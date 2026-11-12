@@ -97,7 +97,7 @@ describe("unread counts (§18.3)", () => {
       expect(count(active.id)).toBeUndefined();
       unread!.refresh(); // before the read is sent
       await vi.waitFor(() => expect(ctl.calls("unreadCounts")).toBe(2));
-      await sleep(50);
+      await ctl.settled("unreadCounts");
       expect(count(r.id)).toBe(1);
       expect(count(active.id)).toBeUndefined();
     });
@@ -140,6 +140,7 @@ describe("unread counts (§18.3)", () => {
       const calls = ctl.calls("unreadCounts");
       store.set({ away: true });
       await vi.waitFor(() => expect(ctl.calls("unreadCounts")).toBe(calls + 1));
+      await ctl.settled("unreadCounts");
       expect(count(active.id)).toBe(2);
     });
 
@@ -174,6 +175,7 @@ describe("unread counts (§18.3)", () => {
       ctl.failNext("unreadCounts", new ApiError("Failed to fetch", 0));
       start();
       await vi.waitFor(() => expect(ctl.calls("unreadCounts")).toBe(1));
+      await ctl.settled("unreadCounts");
       expect(count(r.id)).toBeUndefined();
       ctl.reconnect();
       await vi.waitFor(() => expect(count(r.id)).toBe(1));

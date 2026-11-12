@@ -1884,7 +1884,8 @@
         "CREATE INDEX `idx_messages_room_created` ON `messages` (`room`, `created`, `id`)",
         "CREATE INDEX `idx_messages_forward_of` ON `messages` (`forward_of`)",
         "CREATE UNIQUE INDEX idx_messages_remote ON messages (room, remote_id) WHERE remote_id != ''",
-        "CREATE INDEX idx_messages_created ON messages (created)"
+        "CREATE INDEX idx_messages_created ON messages (created)",
+        "CREATE INDEX idx_messages_unread ON messages (room, created, author) WHERE deleted = FALSE"
       ]
     },
     {
@@ -3087,7 +3088,8 @@
         "@request.body.peer:isset = false",
         "@request.body.instance:isset = false",
         "@request.body.moderator:isset = false",
-        "@request.body.banned:isset = false"
+        "@request.body.banned:isset = false",
+        "@request.body.kind:isset = false"
       ],
       "updateRule": [
         "id = @request.auth.id",
@@ -3097,7 +3099,8 @@
         "@request.body.peer:isset = false",
         "@request.body.instance:isset = false",
         "@request.body.moderator:isset = false",
-        "@request.body.banned:isset = false"
+        "@request.body.banned:isset = false",
+        "@request.body.kind:isset = false"
       ],
       "deleteRule": null,
       "authRule": "banned = false",
@@ -3317,6 +3320,21 @@
           "required": false,
           "system": false,
           "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": true,
+          "maxSelect": 1,
+          "name": "kind",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "select",
+          "values": [
+            "person",
+            "telegram",
+            "peer"
+          ]
         }
       ],
       "indexes": [

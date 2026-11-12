@@ -493,6 +493,7 @@ describe("room controller (§7.5, no DOM)", () => {
       const pages = net.calls("page");
       net.reconnect();
       await vi.waitFor(() => expect(net.calls("changes")).toBe(1));
+      await net.settled("changes"); // nor after the answer
       expect(net.calls("page")).toBe(pages);
     });
 

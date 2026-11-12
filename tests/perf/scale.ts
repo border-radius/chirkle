@@ -3,7 +3,8 @@
 //
 //   node --experimental-eventsource --no-warnings tests/perf/scale.ts
 //
-// Sizes can be changed with env vars (ROOMS, USERS, MESSAGES, LISTENERS). Prints a table; nothing is kept.
+// Sizes can be changed with env vars (ROOMS, USERS, MESSAGES, LISTENERS). Prints a table; nothing is kept, unless
+// DATA_DIR names a directory for the server's data (then the seeded database stays there, to look into).
 
 import { performance } from "node:perf_hooks";
 import { type Api, createApi } from "../../web/src/api.ts";
@@ -22,7 +23,7 @@ const MESSAGES = Number(process.env.MESSAGES ?? 100_000);
 const LISTENERS = Number(process.env.LISTENERS ?? 50);
 const RUNS = 20;
 
-const pb = await startPocketBase({ fixtureRoute: true });
+const pb = await startPocketBase({ fixtureRoute: true, ...(process.env.DATA_DIR ? { dataDir: process.env.DATA_DIR } : {}) });
 try {
   await disableRateLimits(pb.url);
   const client = (): Api => createApi(createClient(pb.url));

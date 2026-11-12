@@ -36,6 +36,20 @@ function checkPasswordLength(password) {
   }
 }
 
+/**
+ * What kind of account `user` is (§5.1, `users.kind`): "person" (signs in here), "telegram" (a Telegram sender's
+ * stand-in, §26.3) or "peer" (a linked instance's person, §33.4). Never set: a person.
+ * @param {core.Record} user
+ * @returns {"person" | "telegram" | "peer"}
+ */
+function kindOf(user) {
+  const kind = user.getString("kind");
+  return kind === "telegram" || kind === "peer" ? kind : "person";
+}
+
+/** A stand-in: an account nobody signs in to here (a Telegram sender's, another instance's person's). @param {core.Record} user */
+const isStandIn = (user) => kindOf(user) !== "person";
+
 /** @param {core.RequestEvent} e */
 function searchUsers(e) {
   const me = e.auth;
@@ -81,6 +95,8 @@ function beforeUserSave(e) {
   const rec = recordOf(e);
   const email = rec.getString("email");
   if (rec.isNew() || email !== rec.original().getString("email")) rec.set("email", email.trim().toLowerCase());
+  // Signups and accounts a superuser makes are people; the bridges set their stand-ins' kind before saving.
+  if (rec.isNew() && !rec.getString("kind")) rec.set("kind", "person");
   cleanName(rec);
   if (!rec.isNew() && rec.getString("name") === rec.original().getString("name")) {
     // Name unchanged: keep its key. Accounts named before name_key existed may share a name (the migration made
@@ -110,14 +126,14 @@ function findLoginByEmail(e) {
 
 /**
  * users request-password-reset (§39): no email to a stand-in (Telegram, another instance): its address is made
- * up (`….invalid`) and nobody can log in as it. Answered like any other request, as PocketBase does for an unknown
+ * up (`….invalid`) and nobody can log in as it (`kind`, §5.1). Answered like any other request, as PocketBase does for an unknown
  * address, so it doesn't tell which addresses have accounts. Only called for an address that matched: PocketBase
  * answers an unknown one before the hooks, so the clients send it in lower case, the way emails are stored (QA BUG-47).
  * @param {core.RecordRequestPasswordResetRequestEvent} e
  */
 function skipStandInReset(e) {
-  if (e.record?.getString("email").endsWith(".invalid")) return e.noContent(204);
+  if (e.record && isStandIn(e.record)) return e.noContent(204);
   return e.next();
 }
 
-module.exports = { beforeUserSave, checkPasswordLength, findLoginByEmail, searchUsers, skipStandInReset };
+module.exports = { beforeUserSave, checkPasswordLength, findLoginByEmail, isStandIn, kindOf, searchUsers, skipStandInReset };
