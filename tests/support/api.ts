@@ -159,6 +159,11 @@ type AsyncOp = { [K in keyof Api]: Api[K] extends (...a: never[]) => Promise<unk
 export interface Controls {
   /** How many times `op` has been called. */
   calls(op: AsyncOp): number;
+  /**
+   * Resolves once every call of `op` made so far has been answered (or failed), and the caller's own handlers have run:
+   * "called" isn't "done" (a session refresh still in flight overwrites what the test changes meanwhile).
+   */
+  settled(op: AsyncOp): Promise<void>;
   /** Make the next call to `op` reject with `err` (queue several by calling repeatedly). */
   failNext(op: AsyncOp, err: Error): void;
   /** Delay every response of `op` until the returned function is called. The request itself goes out
@@ -195,6 +200,7 @@ export function instrument(api: Api): Controls {
   const failures = new Map<string, Error[]>();
   const holds = new Map<string, Promise<void>>();
   const connectFns = new Set<(reconnect: boolean) => void>();
+  const inFlight = new Map<string, Promise<unknown>[]>();
 
   for (const op of Object.keys(api) as (keyof Api)[]) {
     if (SYNC.has(op)) continue;
@@ -202,15 +208,19 @@ export function instrument(api: Api): Controls {
       api,
       op as AsyncOp,
       (original) =>
-        (async (...args: never[]) => {
-          counts.set(op, (counts.get(op) ?? 0) + 1);
-          const held = holds.get(op);
-          const queued = failures.get(op);
-          const failure = queued?.length ? queued.shift() : undefined;
-          const result = failure ? Promise.reject(failure) : (original as (...a: never[]) => Promise<unknown>)(...args);
-          result.catch(() => {}); // observed below; avoid an unhandled rejection while held
-          if (held) await held;
-          return result;
+        ((...args: never[]) => {
+          const p = (async () => {
+            counts.set(op, (counts.get(op) ?? 0) + 1);
+            const held = holds.get(op);
+            const queued = failures.get(op);
+            const failure = queued?.length ? queued.shift() : undefined;
+            const result = failure ? Promise.reject(failure) : (original as (...a: never[]) => Promise<unknown>)(...args);
+            result.catch(() => {}); // observed below; avoid an unhandled rejection while held
+            if (held) await held;
+            return result;
+          })();
+          inFlight.set(op, [...(inFlight.get(op) ?? []), p]);
+          return p;
         }) as never,
     );
   }
@@ -226,6 +236,10 @@ export function instrument(api: Api): Controls {
 
   return {
     calls: (op) => counts.get(op) ?? 0,
+    async settled(op) {
+      await Promise.allSettled(inFlight.get(op) ?? []);
+      await new Promise((r) => setTimeout(r, 0)); // the callers' then() handlers, and what they set off
+    },
     failNext: (op, err) => failures.set(op, [...(failures.get(op) ?? []), err]),
     hold(op) {
       let release!: () => void;

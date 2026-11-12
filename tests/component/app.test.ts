@@ -431,7 +431,7 @@ describe("app boot (§7.1)", () => {
     ctl.failNext("refreshAuth", new ApiError("Failed to fetch", 0));
     app = startApp({ api, root });
     await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
-    await tick();
+    await ctl.settled("refreshAuth");
     expect(app.store.get().user?.name).toBe("Ada");
     expect(location.pathname).toBe("/");
   });
@@ -488,7 +488,7 @@ describe("app boot (§7.1)", () => {
     const ctl = instrument(api);
     app = startApp({ api, root });
     await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
-    await tick();
+    await ctl.settled("refreshAuth");
     vi.spyOn(api, "sessionExpiry").mockReturnValue(Date.now() - 1);
     document.dispatchEvent(new Event("visibilitychange"));
     await vi.waitFor(() => expect(location.pathname).toBe("/login"));
@@ -503,7 +503,7 @@ describe("app boot (§7.1)", () => {
       const room = await ada.api.createRoom(`r-${newId()}`);
       app = startApp({ api: ada.api, root });
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
-      await tick();
+      await ctl.settled("refreshAuth");
       const elsewhere = newApi();
       await elsewhere.logIn(ada.email, ada.password);
       await elsewhere.changePassword(ada.password, "new-password-1");
@@ -551,7 +551,7 @@ describe("app boot (§7.1)", () => {
       const room = await api.createRoom(`r-${newId()}`);
       app = startApp({ api, root });
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
-      await tick();
+      await ctl.settled("refreshAuth");
       later(60_000);
       await expect(api.createRoom(room.name)).rejects.toThrow(); // taken
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(2));
@@ -704,6 +704,8 @@ describe("app boot (§7.1)", () => {
       const ctl = instrument(api);
       app = startApp({ api, root });
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
+      // Answered: a refresh still in flight would save the server's copy over the other tab's change.
+      await ctl.settled("refreshAuth");
       const listsBefore = ctl.calls("listRooms");
       pb.authStore.save(pb.authStore.token, { ...pb.authStore.record!, name: "Ada King", avatar: "new_abcdefghij.png" });
       await tick();
@@ -750,7 +752,7 @@ describe("app boot (§7.1)", () => {
       const ctl = instrument(api);
       app = startApp({ api, root });
       await vi.waitFor(() => expect(ctl.calls("refreshAuth")).toBe(1));
-      await tick();
+      await ctl.settled("refreshAuth");
       expect(ctl.calls("unsubscribeAll")).toBe(0);
       app.logOut();
       await tick();

@@ -101,9 +101,11 @@ func main() {
 // register binds the Go hooks and routes. `legacy` (CHIRKLE_LEGACY=1, tests only): answer as a server from before the
 // list routes and the live topic (2026-10-29), so the apps' fallbacks can be tested (android TestServer.legacyUrl).
 func register(app core.App, legacy bool) {
+	live := newLive(app)
+	// A client dropped for falling behind counts with live messages' own (GET /api/chat/metrics).
+	bindRealtime(app, func() { live.dropped.Add(1) })
 	bindEnrich(app)
 	bindAnonymous(app)
-	live := newLive(app)
 	live.bind()
 
 	// After the JS hooks' routes (they bind at priority 0): a route they define (an old release's hooks, tests) wins.

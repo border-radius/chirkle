@@ -252,4 +252,24 @@ describe("realtime", () => {
     posts[2]!.respond(204);
     await vi.waitFor(() => expect(pb.realtime.isConnected).toBe(true));
   });
+
+  it("QA BUG-269: a second listener on a topic, added while the connection's subscriptions are on their way, gets its events", async () => {
+    vi.stubGlobal("EventSource", FakeSource);
+    const posts = stubPosts();
+    const pb = createClient("http://pb.test", createAuthStore());
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const a = pb.realtime.subscribe("chat/messages", (e) => first.push(e)); // e.g. the unread counts
+    await vi.waitFor(() => expect(FakeSource.all).toHaveLength(1));
+    FakeSource.all[0]!.emit("PB_CONNECT", { lastEventId: "c1", data: "{}" });
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    // The notifications chunk, loaded meanwhile: the same topic, so nothing new to send.
+    const b = pb.realtime.subscribe("chat/messages", (e) => second.push(e));
+    posts[0]!.respond(204);
+    await Promise.all([a, b]);
+    expect(posts).toHaveLength(1);
+    FakeSource.all[0]!.emit("chat/messages", { data: JSON.stringify({ action: "create" }) });
+    expect(first).toEqual([{ action: "create" }]);
+    expect(second).toEqual([{ action: "create" }]);
+  });
 });

@@ -50,3 +50,21 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expect(message(b, "remember this?")).toHaveCount(0); // the window moved back in history
   });
 }
+
+test("QA BUG-271: a long quote stays within its message, also when the reply continues a group", async ({ browser }) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada);
+  const a = await openRoom(browser, ada, room);
+  await send(a, `a long one: ${"and on ".repeat(40)}`);
+  const original = message(a, "a long one");
+  await original.hover();
+  await original.getByRole("button", { name: "Reply" }).click();
+  await send(a, "continuing"); // Ada's own message right after hers: no name, no avatar
+  const reply = message(a, "continuing");
+  await expect(reply).not.toHaveClass(/group-start/);
+  const [right, edge] = await reply.evaluate((li) => {
+    const box = li.getBoundingClientRect();
+    return [li.querySelector(".reply-quote")!.getBoundingClientRect().right, box.right - parseFloat(getComputedStyle(li).paddingRight)];
+  });
+  expect(right).toBeLessThanOrEqual(edge + 0.5); // was 32px past it
+});

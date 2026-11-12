@@ -2885,3 +2885,128 @@ the server can't say it past 72 (`passwordMaxBytes` in shared/contract.json, `LI
   unread): REFACTOR.md item 49.
 - Left as they are: "admin", "support" and "moderator" can be handles (only all/everyone/here/room/channel are
   reserved, DESIGN.md §41.1); a name made only of combining marks is accepted (it shows as floating accents).
+
+# QA pass 36 — flaky tests, 2026-11-12
+
+The unit and component suites were run 11 times, the integration suite twice and the Chromium e2e suite four times
+(and single specs up to 16 times at 4 workers), on the tree as committed, to find the tests that fail now and then.
+Five did. Each was traced to its cause; two of the causes were app bugs.
+
+| # | Test | Rate | Cause | Fix |
+|---|---|---|---|---|
+| — | `room-controller.test.ts` "with the count in, opens the kept window at the first unread message…" | 2 in 6 | The test assumed the room's realtime subscription is in before its first page. When the page wins, the controller rightly fetches a catch-up page (QA BUG-61), so `page` was called twice | The test waits for the subscription first |
+| — | `app.test.ts` BUG-33 "a profile change in another tab…" | 1 in 6 | It changed the shared session as soon as the session refresh was *called*; the refresh's answer, still on its way, saved the server's copy over it | `instrument().settled(op)`: wait for the answer |
+| — | `app.test.ts` BUG-51 "a refused change with a good session keeps you logged in…" | 2 in 6 | Same race: the refresh landed between sending the refused change and its refusal, so the refusal came back with an old token, which `onRejected` rightly ignores; no second check | Same (five waits in the file) |
+| BUG-268 | `switcher.spec.ts` "jump to (§32): … Ctrl+K Enter goes back" | 1 in 4 | Real: Jump to ranked a room by the later of when it was last open and when it was *made*. Another test's new public room outranked the room you had just left, so Ctrl+K Enter went there | See below |
+| BUG-269 | `notify.spec.ts` "the pop-up is the worker's…" | 1 in 4 | Real: the notifications' live listener was never bound (see below), so no message reached it | See below |
+| — | `attachments.spec.ts` "the image viewer…" (the final Ctrl-click) | 1 in 4–8 | Environment: Chromium's headless shell segfaults (`Received signal 11 SEGV_MAPERR`, after GPU shared-image errors) opening a tab by a modified click here, and the tab never comes. The app's handler was right | The test checks the app's side: the click isn't taken (`defaultPrevented` false, no viewer) on a `target=_blank` link to the file. 16 of 16 since |
+
+After the fixes: unit + component 5 of 5 runs clean (824 tests; 3 of 6 failed before), Chromium e2e 89 of 89 in
+the runs since, the viewer spec 16 of 16 and the notify spec 16 of 16 alone. The integration suite had no flakes in
+two runs (535 tests).
+
+## BUG-268 — Ctrl+K Enter didn't go back once someone made a room (Medium)
+
+**Steps:** open room A, then room B; meanwhile anyone makes a public room C. Ctrl+K, Enter.
+**Expected:** back to A (§32: "Ctrl+K Enter goes back to where you were before").
+**Actual:** C, a room you never opened: its creation time was newer than when you left A.
+**Fix (web and Android):** a room whose only time is its creation (never opened in this tab or app, no latest message)
+comes after everything with activity or opened here (`made` in `views/switcher.ts` and `Jump.kt`); among those, newest
+first as before. A collection with nothing in it, never opened, has no time at all and goes with them (Android's
+`JumpTest` caught it ranking above such a room). Typed queries rank by the match first, as before. Tests:
+`switcher.test.ts` (two cases), `JumpTest.kt`.
+
+## BUG-269 — A second live listener on a topic, added while connecting, heard nothing (Medium)
+
+**Steps:** turn notifications on, then log in (or reload) and have someone send you a DM at once.
+**Expected:** a pop-up. **Actual (sometimes):** none, and none for any later message either, until the connection
+dropped and came back. The trace showed the notifier never got any event.
+**Cause:** `web/src/pb.ts` binds each listener to the EventSource when its subscriptions are sent. A `subscribe()`
+made while the connection's first POST was on its way only queued behind it; the POST then binds the listeners it
+saw, and nothing is sent again for a topic already in the set (`chat/messages`, which the unread counts subscribe to
+first). The notifications chunk, loading just then, stayed unbound. A room view opened during a reconnect could lose
+its live messages the same way.
+**Fix:** once the connection's subscriptions are in, every listener is bound (binding is idempotent). Test:
+`pb.test.ts` "QA BUG-269". Android dispatches from its listener map at event time and wasn't affected. REFACTOR item
+60 suggests doing the same on the web.
+
+# Security audit — internal, 2026-11-12
+
+A review of what changed since the audit of 2026-10-29: anonymous rooms (§35), moderators and bans (§36), shared
+files (§37), password reset (§39), statistics and metrics (§40, §42), mentions and the inbox (§41), retention, and the
+Go server (item 47), with each suspicion tried against a throwaway server (scripts in the session, not kept). Numbering
+continues from BUG-269.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-270 | Medium | Realtime | A realtime client that stops reading blocks every JS hook that sends to it: a message mentioning, replying or reacting to its person never got an answer, and held a JS runtime | Fixed |
+| SEC-2 | Low | Handles | Anyone can take `@admin`, `@moderator`, `@support`, `@chirkle`; only the group words are reserved | Reported |
+| SEC-3 | Low | Accounts | A signup may use an `@telegram.invalid` or `@federation.invalid` address and is then treated as a stand-in in places (no inbox, reset mail skipped) | Reported |
+| SEC-4 | Low | Search | A guest's search in an Open Air room is up to five `LIKE '%…%'` scans of the room per request, limited only by PocketBase's general per-IP limit | Reported |
+
+## BUG-270 — A stalled realtime reader blocks hooks (Medium)
+
+**Steps:** as Eve, open `/api/realtime`, subscribe to `chat/inbox` (and anything busy, e.g. `messages/*`), then stop
+reading the stream. Once the connection's buffers are full (here ~10 MB of events; a client that sets a tiny TCP
+window gets there in seconds), Bob sends a message that mentions @eve.
+**Expected:** Bob's message is sent. **Actual:** his request never answered (15 s and counting; the message was
+saved). Every further mention, reply or reaction to Eve pinned another request and a JS runtime of the pool, and any
+collection's badge change (sent to every listener, guests too) or keepalive pass would hang the same way.
+**Cause:** PocketBase's realtime client has an unbuffered channel read by the connection's SSE loop, and it clears
+the connection's write deadline. A loop stuck in a write never reads its channel again, nor its idle and lifetime
+timers. PocketBase's own record events send in goroutines (which then leak); the JS hooks send inline
+(`lib/inbox.js tell`, `lib/collections.js tellBadges`, `lib/access.js dropLostAccess`, `lib/keepalive.js`).
+**Fix (server, Go):** `server/realtime.go`. Every connection's client is wrapped with a buffered channel (512 events,
+as live messages had), so `Send` never waits; a client that falls that far behind is discarded, and its app reconnects
+and catches up as after any drop. Each SSE write gets a 30 s deadline, so a connection that takes nothing for that
+long ends and is unregistered. After: the same steps, Bob's message answered in 7 ms. Tests: `server/realtime_test.go`.
+
+## Reported, not changed
+
+- **SEC-2 (handles):** `lib/handles.js RESERVED` has only `all`, `everyone`, `here`, `room`, `channel`. A name like
+  `@admin` or `@support` lends a stranger authority in a mention. Suggestion: reserve a few more for new handles
+  (existing ones stay, as migration 46 did), and show moderators' handles with their badge. A product call.
+- **SEC-3 (stand-in addresses):** stand-ins are told apart by their e-mail domain (`lib/inbox.js hasInbox`,
+  `lib/users.js skipStandInReset`). A person who signs up with such an address only hurts themselves today (no
+  inbox, no reset mail), but any future rule that trusts the domain would be theirs to use. REFACTOR item 50
+  (`users.kind`) removes it; meanwhile the signup hook could refuse `.invalid` addresses.
+- **SEC-4 (search cost):** `server/lists.go searchWhere`: each word is a substring match over the room's `text_key`.
+  Fine for today's rooms; a guest repeating searches in a very large Open Air room costs a scan each. A per-IP rule
+  for `GET /api/chat/rooms/*/messages?q=` (or an FTS index) when rooms get big.
+
+## Checked and fine
+
+- Anonymous rooms: no real author through `expand` to any depth (`reply_to.reply_to.reply_to.author`), on the records
+  API, the Go pages, `notifiable`, the inbox, the media grid, "@" suggestions, or a forward out of the room; filters
+  and sorts naming an author (also through back-relations and `@collection`) are refused.
+- Private rooms: reads, first-unread, pages, media, "@" suggestions, reactions, forwards, deletes and hiding are all
+  refused or empty for a non-member; a mention of a non-member makes no inbox row; unread counts leave the room out.
+- Accounts: direct changes of `email`, `verified`, `moderator`, `banned`, `instance` are refused; handles are ASCII;
+  a guest sees no e-mail and can't list users; `POST /api/chat/password` is limited (5 a minute).
+- Every superuser and moderator route refuses a plain user (stats, metrics, the ticks, ban).
+- Files: an uploaded SVG and HTML are served as attachments with a sandbox CSP and `nosniff`; a deleted message's
+  files (and thumbnails) are 404.
+- Collections: following a private one, adding to someone else's: refused.
+- Password change: PocketBase drops the realtime auth of every connection whose token key changed; the changing tab
+  re-sends its subscriptions with its new token (`pb.ts`).
+- Android: backups leave out the session, the database and files; cleartext is off in release builds.
+- Linked instances get real authors of anonymous rooms by design (DESIGN.md §35).
+
+# QA pass 37 — heavy testing, 2026-11-12
+
+After the flaky-test hunt and the audit: the API and the Go routes probed against a throwaway server (metrics in JSON
+and Prometheus, ETags and 304s, bad list parameters, retention, unread counts; mentions and replies in the inbox
+through edits, deletes, self-mentions, private rooms and membership changes, handle case and punctuation), and the web
+app driven by script in Chromium at desktop and phone sizes, light and dark, with screenshots of each screen.
+
+| # | Severity | Area | Summary | Status |
+|---|---|---|---|---|
+| BUG-271 | Low | Web | A reply's quote that continues a group (no name above it) ran 32px past the message column, under the window's edge on a phone | Fixed |
+
+## BUG-271 — A reply's quote past the column (Low)
+
+**Steps:** send a long message, then reply to it yourself right away (the reply continues your group: no name, no
+avatar). **Expected:** the quote is cut with "…" at the column's edge, like the text. **Actual:** it ran 32px further,
+over the gutter and, on a phone, under the window's edge. **Cause:** `replies.css`: a group's first message lets its
+quote reach left to the avatar (`margin-left: -32px`, `max-width: calc(100% + 32px)`); a later message took back the
+margin but kept the width. **Fix:** `max-width: 100%` there too. Test: `replies.spec.ts` "QA BUG-271" (fails without).

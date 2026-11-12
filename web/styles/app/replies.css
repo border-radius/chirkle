@@ -33,7 +33,10 @@
 }
 
 /* No avatar under a reply that goes on a group: no curve. */
+/* No avatar to reach to: the quote is as wide as the text at most (QA BUG-271: it kept the 32px more and ran past the
+   column, under the window's edge). */
 .msg:not(.group-start) > .reply-quote {
+  max-width: 100%;
   margin-left: 0;
 }
 

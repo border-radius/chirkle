@@ -11,7 +11,15 @@ import java.text.Normalizer
  * A room or DM to go to, or a collection ([room] null). [note]: "Hidden" or "Archived" (found only when typed for, [away]),
  * a collection's "Collection" or whose it is, else "".
  */
-data class JumpTarget(val room: Room?, val name: String, val note: String, val at: String, val collection: MediaCollection? = null) {
+data class JumpTarget(
+    val room: Room?,
+    val name: String,
+    val note: String,
+    val at: String,
+    val collection: MediaCollection? = null,
+    /** [at] is only when the room was made: after everything with activity or opened here (QA BUG-268). */
+    val made: Boolean = false,
+) {
     val away: Boolean get() = room != null && note.isNotEmpty()
     val id: String get() = room?.id ?: collection!!.id
 }
@@ -68,9 +76,13 @@ class RecentlyOpened {
  */
 fun jumpTargets(s: RoomSections, me: String?, collections: Collections? = null, opened: (String) -> String): List<JumpTarget> {
     fun later(at: String, id: String) = opened(id).let { if (it > at) it else at }
-    fun t(r: Room, note: String) =
-        JumpTarget(r, if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name, note, later(r.lastMessageAt.ifEmpty { r.created }, r.id))
-    fun c(c: MediaCollection) = JumpTarget(null, c.name, c.owner?.name ?: "Collection", later(c.lastAdded, c.id), c)
+    fun t(r: Room, note: String): JumpTarget {
+        val active = later(r.lastMessageAt, r.id)
+        val name = if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name
+        return JumpTarget(r, name, note, active.ifEmpty { r.created }, made = active.isEmpty())
+    }
+    // Nothing in it and never opened: no activity either, so with the rooms only made (QA BUG-268).
+    fun c(c: MediaCollection) = later(c.lastAdded, c.id).let { JumpTarget(null, c.name, c.owner?.name ?: "Collection", it, c, made = it.isEmpty()) }
     return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, "Hidden") } + s.archived.map { t(it, "Archived") } +
         (collections?.mine.orEmpty() + collections?.subs.orEmpty()).map(::c)
 }
@@ -81,11 +93,11 @@ fun jumpTargets(s: RoomSections, me: String?, collections: Collections? = null, 
  */
 fun jumpMatches(all: List<JumpTarget>, query: String): List<JumpTarget> {
     val q = jumpFold(query.trim().removePrefix("#").removePrefix("@").trim())
-    val recent = compareByDescending<JumpTarget> { it.at }
+    val recent = compareBy<JumpTarget> { it.made }.thenByDescending { it.at }
     if (q.isEmpty()) return all.filter { !it.away }.sortedWith(recent).take(MAX_TARGETS)
     return all.map { it to jumpScore(it.name, q) }
         .filter { it.second >= 0 }
-        .sortedWith(compareBy<Pair<JumpTarget, Int>> { it.second }.thenBy { it.first.away }.thenByDescending { it.first.at })
+        .sortedWith(compareBy<Pair<JumpTarget, Int>> { it.second }.thenBy { it.first.away }.thenBy { it.first.made }.thenByDescending { it.first.at })
         .take(MAX_TARGETS)
         .map { it.first }
 }

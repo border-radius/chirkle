@@ -339,6 +339,9 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
         .then(async () => {
           for (let tries = 3; current() && unsent() && tries > 0; tries--) await submit();
           if (!current()) return;
+          // Listeners added while those were on their way, to a topic already sent, made no submit that binds them
+          // (QA BUG-269: the notifications' after the unread counts', during a login's reconnect). Binding is idempotent.
+          bindAll(true);
           for (const p of pending) p.resolve();
           pending = [];
           attempts = 0;

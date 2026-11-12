@@ -302,9 +302,24 @@ test("the image viewer: loaded on first use, steps through the room's images, cl
   await expect(opener).toBeFocused();
   await other.close();
 
-  // Ctrl/Cmd-click still opens the image in a new tab.
-  const [tab] = await Promise.all([a.context().waitForEvent("page"), opener.click({ modifiers: ["ControlOrMeta"] })]);
-  await tab.waitForURL(/\/api\/files\/messages\//); // under load it can still be about:blank here
+  // Ctrl/Cmd-click is left to the browser, which opens the file in a new tab: the app doesn't take the click, and the
+  // tile is a new-tab link to it. Checked there, not by waiting for the tab: here, Chromium's headless shell crashes
+  // (SIGSEGV) opening a tab by a modified click about 1 in 4 times, and the tab never comes (an environment flake
+  // since 2026-11-03). A listener after the app's sees what it decided, then keeps the tab from opening.
+  await expect(opener).toHaveAttribute("target", "_blank");
+  expect(await opener.getAttribute("href")).toMatch(/\/api\/files\/messages\/[^/]+\/square/);
+  await a.evaluate(() =>
+    addEventListener(
+      "click",
+      (e) => {
+        (window as unknown as { modified?: unknown }).modified = { taken: e.defaultPrevented, ctrl: e.ctrlKey || e.metaKey };
+        e.preventDefault();
+      },
+      { once: true },
+    ),
+  );
+  await opener.click({ modifiers: ["ControlOrMeta"] });
+  expect(await a.evaluate(() => (window as unknown as { modified?: unknown }).modified)).toEqual({ taken: false, ctrl: true });
   await expect(a.locator("dialog.viewer")).toHaveCount(0);
 });
 

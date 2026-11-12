@@ -2984,7 +2984,9 @@ shows, not to the composer behind it (where Enter would send it), and Escape mea
 - **With nothing typed:** most recent first, by the later of a DM's latest message (`last_message_at`; rooms have
   none, §16), a collection's latest item or a room's creation, and when it was last open in this tab (`app.ts`
   notes it as you go, forgotten on reload and when the session changes); the page you are on last: Ctrl+K Enter goes
-  back to where you were before. At most 50 shown, where you are still last.
+  back to where you were before. A room whose only time is its creation (never opened here, no latest message) comes
+  after all the others, so someone's new room doesn't come before the one you left (QA BUG-268); so does a collection
+  with nothing in it, never opened. At most 50 shown, where you are still last.
 - **Matching** (`matches` in `views/switcher.ts`): names folded (case, accents, width: "ete" finds "Été"), a leading
   `#` or `@` ignored. Best first: the whole name, its start, a word's start (`ops` in `dev-ops`), inside a word, then
   its letters in order (`gnrl`); then not hidden or archived, then most recent.

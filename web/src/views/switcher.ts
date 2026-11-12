@@ -33,8 +33,14 @@ export interface Target {
   name: string;
   /** Said after the name: "Hidden", "Archived", "Collection", whose collection it is. */
   note: string;
-  /** Latest activity (PocketBase time): a DM's latest message, a collection's latest item, or when it was last open. */
+  /**
+   * Latest activity (PocketBase time): a DM's latest message, a collection's latest item, or when it was last open; else
+   * a room's creation.
+   */
   at: string;
+  /** `at` is only when the room was made: after everything with activity or opened here (someone's new room isn't
+   * where you were before). */
+  made?: boolean;
   /** Hidden or archived: after the others that match as well. */
   away: boolean;
   /** Where you are now: last with nothing typed. */
@@ -77,11 +83,13 @@ export function targets(o: Pick<SwitcherOptions, "sections" | "unread" | "other"
   };
   const room = (r: Room, note: string): Target => {
     const other = o.other(r, s.user);
+    const active = later(r.last_message_at || "", r.id);
     return {
       path: `/r/${r.id}`,
       name: other?.name ?? r.name,
       note,
-      at: later(r.last_message_at || r.created || "", r.id),
+      at: active || r.created || "",
+      ...(!active && { made: true }),
       away: !!note,
       current: r.id === s.activeRoomId,
       unread: o.unread(s, r),
@@ -89,15 +97,20 @@ export function targets(o: Pick<SwitcherOptions, "sections" | "unread" | "other"
       other,
     };
   };
-  const coll = (c: Collection): Target => ({
-    path: `/c/${c.id}`,
-    name: c.name,
-    note: c.owner?.name ?? "Collection",
-    at: later(c.last_added, c.id),
-    away: false,
-    current: c.id === s.activeCollectionId,
-    unread: c.owner ? (c.new ?? 0) : 0,
-  });
+  const coll = (c: Collection): Target => {
+    const at = later(c.last_added, c.id);
+    return {
+      path: `/c/${c.id}`,
+      name: c.name,
+      note: c.owner?.name ?? "Collection",
+      at,
+      away: false,
+      current: c.id === s.activeCollectionId,
+      unread: c.owner ? (c.new ?? 0) : 0,
+      // Nothing in it and never opened: no activity either, so with the rooms only made (QA BUG-268).
+      ...(!at && { made: true }),
+    };
+  };
   return [
     ...rooms.map((r) => room(r, "")),
     ...dms.map((r) => room(r, "")),
@@ -107,7 +120,7 @@ export function targets(o: Pick<SwitcherOptions, "sections" | "unread" | "other"
   ];
 }
 
-const recent = (a: Target, b: Target) => +a.current - +b.current || (a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
+const recent = (a: Target, b: Target) => +a.current - +b.current || +!!a.made - +!!b.made || (a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
 
 /**
  * What to show for `query`: the best matches first, then those not hidden or archived, then the most recent. With

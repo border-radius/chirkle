@@ -1702,3 +1702,16 @@ button at the bottom right reads "Back" (content description "Back to reply"), s
 latest or the first page clears the stack; search results go to a message without adding to it. At most 50.
 
 Tests: `ServicesTest` "after following quotes, goes back to each reply in turn, then forgets them".
+
+## 68. QA pass 36 ports (2026-11-12)
+
+- **Jump to's order (BUG-268).** A room whose only time is its creation (never opened in the app, no latest message)
+  comes after every room with activity or opened here (`JumpTarget.made`, `Jump.kt`), as on the web: someone's new
+  public room no longer comes before the room you left. A collection with nothing in it, never opened, goes with
+  them. A typed query still ranks by the match first.
+- BUG-269 (a live listener added while connecting, never bound) was web-only: `Realtime.kt` dispatches from its
+  listener map at event time. BUG-270 (a realtime client that stops reading blocked the server's hooks) is fixed in
+  the server; the app reconnects after the server drops a client that fell 512 events behind, as after any drop.
+  BUG-271 (a reply's quote 32px past the column) was web-only: the app's quote is inside the text column.
+
+Tests: `JumpTest` "QA BUG-268".

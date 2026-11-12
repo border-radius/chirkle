@@ -73,10 +73,37 @@ describe("jump to: matching", () => {
     s.activeRoomId = "ran";
     const opened = { gen: "2026-10-23 09:00:00.000Z", ran: "2026-10-23 10:00:00.000Z", c1: "2026-10-23 08:00:00.000Z" };
     const list = matches(targets(opts(s, vi.fn(), opened), s), "").map((t) => t.name);
-    expect(list).toEqual(["general", "Cats", "dev-ops", "Bob Été", "random"]);
+    // dev-ops was never opened and has only its creation: after the DM, whose message is activity (QA BUG-268).
+    expect(list).toEqual(["general", "Cats", "Bob Été", "dev-ops", "random"]);
     // A room opened long ago doesn't hide a newer message.
     const later = { ...opened, gen: "2026-10-01 09:00:00.000Z" };
     expect(matches(targets(opts(s, vi.fn(), later), s), "")[0]?.name).toBe("Cats");
+  });
+
+  it("QA BUG-268: a room someone made after you left one doesn't come before it: Ctrl+K Enter still goes back", () => {
+    const s = state();
+    for (const [id, r] of s.rooms) if (r.kind !== "dm") s.rooms.set(id, { ...r, last_message_at: "" });
+    s.rooms.set("new", room("new", "brand-new", "2026-10-23 11:00:00.000Z", { last_message_at: "" }));
+    s.activeRoomId = "ran";
+    const opened = { gen: "2026-10-23 10:00:00.000Z", ran: "2026-10-23 10:00:00.000Z" };
+    const list = matches(targets(opts(s, vi.fn(), opened), s), "").map((t) => t.name);
+    expect(list[0]).toBe("general");
+    // Never opened, no activity: after those, newest made first.
+    expect(list.indexOf("brand-new")).toBeGreaterThan(list.indexOf("Bob Été"));
+    expect(list.at(-1)).toBe("random");
+    // Typed for, it is still ranked by the match first.
+    expect(matches(targets(opts(s, vi.fn(), opened), s), "brand")[0]?.name).toBe("brand-new");
+  });
+
+  it("QA BUG-268: a collection with nothing in it, never opened, is with the rooms only made (as on Android)", () => {
+    const s = state();
+    s.collections = {
+      ...s.collections!,
+      subs: [{ id: "c2", name: "General pics", public: true, items: 0, last_added: "", owner: { id: "bob", name: "Bob Été" } }],
+    };
+    // general has its creation only; the empty collection has no time at all: after it, not before.
+    expect(names(s, "gen")).toEqual(["general", "General pics", "old-general"]);
+    expect(names(s, "").at(-2)).toBe("General pics");
   });
 
   it("with more than 50, where you are is still last (QA BUG-139)", () => {

@@ -718,3 +718,78 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   table (§37): a sum per owner, checked on upload, shown on the profile.
 - **P11. First-run setup.** A fresh server asks its first visitor (with a one-time code printed in the log) for the
   site name, signups mode and SMTP, instead of sending them to PocketBase's admin UI.
+
+## Round 6 (2026-11-12), after the flaky-test hunt
+
+A review made while tracing this round's flaky tests (unit, component and Chromium e2e suites run 5–11 times each,
+docs/QA.md "QA pass 36"). Three of the five flakes were real races, one a real app bug (BUG-268), one a real client
+bug that loses live events (BUG-269). The items below are where the same kind of trouble is likely next. Ordered by
+value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
+
+#### 60. Realtime listeners: dispatch from the map, don't bind them (web) — high value, small
+- `web/src/pb.ts createRealtime` keeps listeners per subscription key in `subs` *and* binds each one to the
+  `EventSource` with `addEventListener`, at three moments (`subscribe` when connected, `sendSubs`, and now the end of
+  the connect, BUG-269). A listener added at any other moment is in `subs` but hears nothing; BUG-269 was exactly that
+  (a second listener on `chat/messages` added while the connection's POST was in flight, so the notifications chunk
+  stayed silent until the next reconnect).
+- Suggestion: as Android's `Realtime.kt` does, bind one dispatcher per key when the key is first sent (or a single
+  `onmessage`-style handler per event name), and have it call `subs.get(key)` at event time. `bindAll` and the
+  binding rules go; a listener exists exactly while it is in `subs`. The unit tests in `tests/unit/pb.test.ts` (fake
+  `EventSource`) cover the cases.
+
+#### 61. The JS runtime pool still sits in front of every records request and every file (server) — high value, medium
+- Item 47 moved the message pages, enrich, live fan-out and unread counts to Go, but each of these still takes a JS
+  runtime from `--hooksPool` (PERF.md §6, §8):
+  - `refuseProbes` on every records list, view, create, update and auth request (`main.pb.js`, five identical
+    bindings), and `refuseSubscriptionProbes` + `stats.subscribed` on every realtime subscribe. The probe test is
+    already in Go too (`server/anonymous.go probes`), a second copy of `lib/anonymous.js`'s regexes that the two
+    must keep in step by hand.
+  - Every attachment, collection file and video poster download (`lib/files.js serve`, `lib/media.js servePoster`):
+    `fs.serve` streams the whole file inside the JS handler, so a 20 MB file to a slow phone holds a runtime for
+    minutes. That is BUG-250's mechanism (a runtime held across a long response) on a route instead of a middleware;
+    many concurrent downloads (a room of videos on a slow network) overflow the pool, and each call beyond it builds a
+    fresh runtime.
+- Suggestion: move `refuseProbes`/`refuseSubscriptionProbes` (drop the JS copy; the Go one is tested against the same
+  cases), `stats.subscribed` (a Go counter; it only notes an hour per user) and file serving (`shownBy` is two finds;
+  `fs.Serve` is the same call in Go) to `server/`. The JS hooks then run only for writes and feature routes.
+  `scripts/stress.ts` with many concurrent slow downloads is the before/after check.
+- Related, fixed in this round: the JS hooks' inline realtime sends (inbox, badges, lost access, keepalive) could block
+  for ever on a client that stopped reading (QA BUG-270); every client now has a buffered, never-blocking `Send`
+  (`server/realtime.go`). `live.go`'s own per-client queues are now a second buffer and could go.
+
+#### 62. e2e tests share one server and see each other's public rooms (tests) — high value, medium
+- Every e2e user can see every public room that any parallel test made, and gets each one's live events: one notify
+  trace had 50 `GET /api/chat/unread` and a prefetch of a dozen strangers' rooms in five seconds (a new room in the
+  list refreshes the counts, `unread.ts`; new rooms are prefetched, `prefetch.ts`). That load and coupling is behind
+  this round's switcher flake (another test's new room outranked the room "you came from", which also exposed
+  BUG-268) and much of the "load flake" history in the QA notes.
+- Suggestion: one server per Playwright worker (`tests/e2e/server.ts` already starts one; key it by
+  `workerIndex` in a worker-scoped fixture and `E2E_PORT + workerIndex`), or a test-only site switch that lists
+  public rooms only to their creators and members. Specs that need two users share a worker anyway.
+
+#### 63. "Called" isn't "answered" in the component tests (tests) — medium value, small
+- `instrument().calls(op)` counts calls; 37 waits in the component tests are on a count, and then assert state the answer sets
+  (`vi.waitFor(() => expect(ctl.calls("x")).toBe(n))`). Two of this round's flakes were that: a session refresh
+  counted but still in flight overwrote what the test changed next (BUG-33's test) or swapped the token under a
+  refused request (BUG-51's).
+- Done for those: `instrument()` has `settled(op)` (every call so far answered, and its handlers run). Suggestion:
+  sweep the other waits; where the next assertion depends on the answer, wait on `settled`.
+
+#### 64. Jump to's ordering in shared vectors (web, Android) — medium value, small
+- `web/src/views/switcher.ts` and Android's `Jump.kt` are ports of each other, with hand-copied cases
+  (`switcher.test.ts`, `JumpTest.kt`). BUG-268 had to be fixed and tested twice.
+- Suggestion: `shared/vectors/jump.json` (targets with `at`/`made`/`current`/`away`, queries, expected order), run by
+  both, as `room.json` is for the room controller (item 40).
+
+#### 65. One meaning of "superuser" for room access (server) — low value, small
+- `server/access.go callerID` returns "" for superusers ("whom no room is hidden from"), but `canSee(a, "")` treats ""
+  as a guest; every Go route then special-cases `e.HasSuperuserAuth()` itself (rooms, messages), and `lib/media.js list` passes `e.auth?.id` (a superuser sees no private room's
+  media grid while seeing its messages). Suggestion: `access.canSee(viewer)` with a viewer type (`guest`, `user id`,
+  `superuser`), used the same way by every route; the access matrix test gains a superuser column.
+
+#### 66. Small ones
+- `server/enrich.go enrichInRooms`: the `checked` mark is deleted after `EnrichRecords` returns, not deferred; a panic
+  in an enrich hook leaves the entry (keyed by a request's info, so only a leak). `defer checked.Delete(info)`.
+- `lib/stats.js subscribed` keeps `stats.touched.<user>` in the app store forever (one per account ever seen since
+  the start); the key could be the hour's set, replaced when the hour changes.
+- `pb_hooks/main.pb.js`: the five `refuseProbes` bindings are one loop (or item 61).

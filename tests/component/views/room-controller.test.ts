@@ -789,6 +789,9 @@ describe("room controller (§7.5, no DOM)", () => {
       start(room);
       await vi.waitFor(() => expect(state()).toMatchObject({ stale: true, unreadId: all[27]!.id }));
       expect(changes.at(-1)).toEqual({ render: {}, scroll: "target" });
+      // Live first: a subscription still pending when the page is in adds a catch-up page (QA BUG-61), which under load
+      // made this count 2.
+      await subscribed(me.api);
       for (const r of release) r();
       await vi.waitFor(() => expect(state().stale).toBe(false));
       expect(state().unreadId).toBe(all[27]!.id);

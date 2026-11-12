@@ -36,7 +36,16 @@ class JumpTest {
     private val sections = RoomSections(listOf(devOps, general, random), listOf(dm), emptyList(), listOf(old))
 
     @Test fun `with nothing typed, the most recent first and no archived room`() {
-        assertEquals(listOf("random", "Bob Été", "general", "dev-ops"), jumpMatches(jumpTargets(sections, "me") { "" }, "").map { it.name })
+        // The DM's message is activity; the rooms have only their creation, newest first after it (QA BUG-268).
+        assertEquals(listOf("Bob Été", "random", "general", "dev-ops"), jumpMatches(jumpTargets(sections, "me") { "" }, "").map { it.name })
+    }
+
+    @Test fun `a room someone made after you left one doesn't come before it (QA BUG-268)`() {
+        val opened = mapOf("gen" to "2026-10-23 09:00:00.000Z", "ran" to "2026-10-23 09:00:00.000Z")
+        val fresh = Room("new", "brand-new", created = "2026-10-23 10:00:00.000Z")
+        val s = RoomSections(listOf(devOps, general, random, fresh), listOf(dm), emptyList(), listOf(old))
+        val list = jumpMatches(jumpTargets(s, "me") { opened[it].orEmpty() }, "").map { it.name }
+        assertEquals(listOf("general", "random", "Bob Été", "brand-new", "dev-ops"), list)
     }
 
     @Test fun `a room open a moment ago comes first (QA BUG-134)`() {
