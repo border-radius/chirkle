@@ -139,6 +139,8 @@ const opened = new Set<BrowserContext>();
  * page at once on each of its messages, which made later specs time out (QA pass 14). Specs import `test` from here.
  */
 export const test = base.extend<{ closeOpened: undefined }, { firefoxBlankFirst: undefined }>({
+  /** This worker's own server (paths.ts): pages' relative URLs and every context's, browser.newContext()'s too. */
+  baseURL: E2E_BASE,
   /**
    * Playwright's Firefox misses "load" on a new page's first goto now and then (1 in 5 here, any page, even a bare
    * one), and the test hangs until its timeout. Going to about:blank first doesn't. Every new page, the `page`

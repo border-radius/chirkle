@@ -49,7 +49,7 @@
     "format": "biome check --write .",
     "lint:sinks": "sh scripts/check-no-html-sinks.sh",
     "test": "vitest run --project unit --project component",
-    "test:go": "cd server && go vet ./... && go test ./...",
+    "test:go": "cd server && nice -n 19 go vet ./... && nice -n 19 go test -p 2 ./...",
     "test:unit": "vitest run --project unit",
     "test:watch": "vitest --project unit --project component",
     "test:int": "vitest run --project integration",

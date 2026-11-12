@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { LOCAL, localWorkers } from "./tests/support/low-priority.ts";
 
 // unit: no server. component (the client against the server, in happy-dom) and integration (the server's API and hooks)
 // run against a real, throwaway PocketBase (temp data dir) started by tests/support/global-setup.ts.
@@ -15,6 +16,8 @@ const define = {
 
 export default defineConfig({
   test: {
+    // Locally half the cores, at low priority (tests/support/low-priority.ts); CI keeps Vitest's default.
+    ...(LOCAL ? { maxWorkers: localWorkers(0.5) } : {}),
     coverage: {
       provider: "v8",
       include: ["web/src/**/*.ts"],

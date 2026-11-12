@@ -1,6 +1,6 @@
 // Spawns a throwaway Chirkle server (bin/chirkle-server: PocketBase with the Go paths, server/) on a free port with its
 // own temp data dir.
-// Shared by the Vitest integration globalSetup and the Playwright webServer.
+// Shared by the Vitest integration globalSetup and the Playwright global setup (tests/e2e/global-setup.ts).
 import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";

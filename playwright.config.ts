@@ -1,18 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
+import { LOCAL, localWorkers } from "./tests/support/low-priority.ts";
 
-const PORT = Number(process.env.E2E_PORT ?? 8091);
 const CI = !!process.env.CI;
-// Set when pb_public/ is already a fresh production build (CI's e2e jobs build just before).
-const SKIP_BUILD = !!process.env.E2E_SKIP_BUILD;
 
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
+  // Locally a quarter of the cores (2 of 8): each worker is a Chromium and a server, all at low priority
+  // (tests/support/low-priority.ts). CI keeps Playwright's default.
+  ...(LOCAL ? { workers: localWorkers(0.25) } : {}),
   forbidOnly: CI,
   retries: CI ? 1 : 0,
   reporter: CI ? [["github"], ["html", { open: "never" }]] : "list",
+  // Builds, then starts one server per worker on E2E_PORT (default 8091) + the worker's slot; fixtures.ts points each
+  // worker's baseURL at its own (tests/e2e/paths.ts, docs/REFACTOR.md item 62). E2E_SKIP_BUILD=1 skips the build.
+  globalSetup: "./tests/e2e/global-setup.ts",
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
     // The service worker fetches hashed assets itself, out of reach of page.route(); pwa.spec.ts allows it (§27).
     serviceWorkers: "block",
@@ -26,13 +29,4 @@ export default defineConfig({
         ]
       : []),
   ],
-  webServer: {
-    command: SKIP_BUILD ? "node tests/e2e/server.ts" : "npm run build && node tests/e2e/server.ts",
-    url: `http://127.0.0.1:${PORT}/api/health`,
-    env: { E2E_PORT: String(PORT) },
-    reuseExistingServer: false,
-    timeout: 60_000,
-    // Default is SIGKILL, which skips server.ts cleanup and leaks the temp data dir.
-    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-  },
 });

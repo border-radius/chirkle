@@ -884,7 +884,7 @@ Each test file creates fresh users through a helper, so tests don't depend on ea
 
 ### 9.3 End-to-end tests (`tests/e2e/`)
 
-Playwright's `webServer` starts the built app on a fresh PocketBase with a temp data dir (the same helper as §9.2).
+Playwright's global setup (`tests/e2e/global-setup.ts`) builds the app and serves it from one fresh server per worker, each with its own temp data dir (the same helper as §9.2): worker n uses port `E2E_PORT` (default 8091) + n, and `fixtures.ts` points the worker's `baseURL` and API helpers there (`paths.ts`). So no test sees another worker's rooms, people or live events. Locally the test runs stay out of the way of the desktop (`tests/support/low-priority.ts`): Playwright and Vitest drop to the lowest CPU priority, which every browser, server and worker they start inherits, and use a quarter (Playwright) or half (Vitest) of the cores; `npm run test:go` runs under `nice` with `-p 2`. CI keeps the defaults; `TEST_NICE=0` opts out and `--workers`/`--maxWorkers` still override.
 
 1. **Signup to first message:** sign up, see the empty room list, create "general", send "hello", and see it rendered with the user's name.
 2. **Realtime between two users:** two browser contexts, A and B, are in the same room. A sends a message and B sees it within 1 second without reloading. B deletes their own message, and A sees it turn into a "Message deleted" placeholder that keeps B's name and the time. After a reload the placeholder is still there.

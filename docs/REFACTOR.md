@@ -779,7 +779,7 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
   - No JS hook runs for a records read, a subscription or a download any more. `main.pb.js` has no `onRealtimeSubscribeRequest`.
   - Left: the stress run with many slow downloads (before/after) wasn't made; `live.go`'s second queue stays.
 
-#### 62. e2e tests share one server and see each other's public rooms (tests) — high value, medium
+#### 62. e2e tests share one server and see each other's public rooms (tests) — high value, medium ✅ (2026-11-13)
 - Every e2e user can see every public room that any parallel test made, and gets each one's live events: one notify
   trace had 50 `GET /api/chat/unread` and a prefetch of a dozen strangers' rooms in five seconds (a new room in the
   list refreshes the counts, `unread.ts`; new rooms are prefetched, `prefetch.ts`). That load and coupling is behind
@@ -788,6 +788,15 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written.
 - Suggestion: one server per Playwright worker (`tests/e2e/server.ts` already starts one; key it by
   `workerIndex` in a worker-scoped fixture and `E2E_PORT + workerIndex`), or a test-only site switch that lists
   public rooms only to their creators and members. Specs that need two users share a worker anyway.
+- Done, one server per worker, started up front: `tests/e2e/global-setup.ts` (replaces `server.ts` and the
+  `webServer`) builds unless `E2E_SKIP_BUILD`, then starts `config.workers` servers on `E2E_PORT` + slot.
+  `paths.ts` picks the worker's from `TEST_PARALLEL_INDEX` (stable 0 … workers − 1, also for a worker that replaces
+  a failed one, which keeps that server's data); `fixtures.ts` overrides `baseURL`, which every context gets,
+  `browser.newContext()`'s too. A worker-scoped fixture starting its server lazily was the other way; the global
+  setup keeps server start-up out of the tests' timeouts. Two full Chromium runs after it (4 workers): 89 + 2 failed,
+  90 + 1 failed; the failures (collections focus at :185, history.spec.ts twice, once at its 2-minute timeout)
+  pass alone (3/3 each). history.spec.ts takes ~1.3 min alone, so CPU load on this 8-core box still reaches it; that
+  is item 58's to measure. The a11y contrast flake of the run before did not come back.
 
 #### 63. "Called" isn't "answered" in the component tests (tests) — medium value, small
 - `instrument().calls(op)` counts calls; 37 waits in the component tests are on a count, and then assert state the answer sets
