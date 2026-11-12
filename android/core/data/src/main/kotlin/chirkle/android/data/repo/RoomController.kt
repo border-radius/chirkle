@@ -706,10 +706,15 @@ class RoomController(
      */
     fun react(id: String, emoji: String, on: Boolean): Deferred<String?>? = writer.react(id, emoji, on)
 
-    /** Hide the "new messages below" pill: the list is at the bottom now. */
+    /**
+     * The list is at the bottom now: hide the "new messages below" pill, and, at the live edge, forget the replies to go
+     * back to (DESIGN.md §19.5): nothing is needed to come back to the latest messages.
+     */
     fun dismissPill() {
-        if (pill != Pill.Below) return
-        pill = null
+        val forget = back.isNotEmpty() && !win.hasNewer
+        if (pill != Pill.Below && !forget) return
+        if (pill == Pill.Below) pill = null
+        if (forget) back.clear()
         publish()
     }
 

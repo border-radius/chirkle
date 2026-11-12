@@ -92,7 +92,10 @@ export interface RoomController {
   goTo(id: string, from?: string): Promise<void>;
   /** Back to the reply whose quote was followed last (`state().back`), and forget it (§19.5). */
   goBack(): Promise<void>;
-  /** The user is at the bottom now: hide a "new messages below" pill. */
+  /**
+   * The user is at the bottom now: hide a "new messages below" pill, and, at the live edge, forget the replies to go
+   * back to (§19.5): nothing is needed to come back to the latest messages.
+   */
   dismissPill(): void;
   find(id: string): Message | undefined;
   /** Can I edit this message right now? Not a forward: its words are someone else's (§21.3). */
@@ -715,8 +718,10 @@ export function createRoomController(opts: {
       return track(goTo(id));
     },
     dismissPill() {
-      if (pill !== "below") return;
-      pill = null;
+      const forget = back.length > 0 && !win.hasNewer;
+      if (pill !== "below" && !forget) return;
+      if (pill === "below") pill = null;
+      if (forget) back.length = 0;
       emit();
     },
     find,

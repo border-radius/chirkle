@@ -1697,11 +1697,13 @@ logs you in" (a too-long password first).
 
 DESIGN.md §19.5 on the app. Tapping a quote passes the reply (`RowActions.onQuote(id, from)` → `RoomController.goTo(id,
 from)`), which is pushed on a stack once the original shows; `RoomState.back` is the last one. While there is one, the
-button at the bottom right reads "Back" (content description "Back to reply"), shows even at the bottom, and each tap
+button at the bottom right reads "Back" (content description "Back to reply"), and each tap
 (`RoomController.goBack`) goes to that reply and drops it; then it is "Jump to latest" / "New" again. Jumping to the
-latest or the first page clears the stack; search results go to a message without adding to it. At most 50.
+latest or the first page clears the stack, and so does reaching the bottom of the latest messages
+(`RoomController.dismissPill`, not at the bottom of a window back in history; 2026-11-13); search results go to a message without adding to it. At most 50.
 
-Tests: `ServicesTest` "after following quotes, goes back to each reply in turn, then forgets them".
+Tests: `ServicesTest` "after following quotes, goes back to each reply in turn, then forgets them" (also at the bottom
+of the latest messages, not of history).
 
 ## 68. QA pass 36 ports (2026-11-12)
 

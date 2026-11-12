@@ -13,6 +13,7 @@ import {
   headerMenu,
   ids,
   key,
+  list,
   me,
   mount,
   msgEl,
@@ -120,6 +121,26 @@ describe("room view", () => {
       pill().click();
       await vi.waitFor(() => expect(target(r2.id)).toBe(true));
       expect(pill().textContent).not.toBe("Back to reply");
+    });
+
+    it("scrolling down to the latest messages forgets the replies to go back to; the bottom of history doesn't (§19.5)", async () => {
+      const room = await newRoom();
+      const all = await seedMessages(room.id, me.user.id, 300);
+      const near = await me.api.send({ id: newId(), room: room.id, text: "re: recent", replyTo: all[280]!.id });
+      const far = await me.api.send({ id: newId(), room: room.id, text: "re: old", replyTo: all[10]!.id });
+      await mount(room);
+      const toBottom = () => {
+        list().scrollTop = list().scrollHeight;
+        list().dispatchEvent(new Event("scroll"));
+      };
+      quoteOf(near.id)!.click();
+      expect(pill().textContent).toBe("Back to reply");
+      toBottom();
+      expect(pill().textContent).not.toBe("Back to reply");
+      quoteOf(far.id)!.click();
+      await vi.waitFor(() => expect(msgEl(all[10]!.id)?.classList.contains("target")).toBe(true));
+      toBottom(); // the bottom of the window back in history, not the latest messages
+      expect(pill().textContent).toBe("Back to reply");
     });
 
     it("Jump to beginning forgets the replies to go back to (§19.5)", async () => {

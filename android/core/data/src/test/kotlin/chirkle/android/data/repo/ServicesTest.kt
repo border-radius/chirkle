@@ -199,12 +199,18 @@ class ServicesTest {
         eventually(what = "at r1") { c.state.value.targetId == r1.id && c.state.value.back == r2.id }
         c.goTo(sent[9].id, from = r1.id)
         eventually(what = "far back") { c.state.value.targetId == sent[9].id && c.state.value.back == r1.id && c.state.value.hasNewer }
+        c.dismissPill() // the bottom of the window back in history: not the latest messages
+        assertEquals(r1.id, c.state.value.back)
         c.goBack()
         eventually(what = "back at r1") { c.state.value.targetId == r1.id && c.state.value.back == r2.id }
         c.goBack()
         eventually(what = "back at r2") { c.state.value.targetId == r2.id && c.state.value.back == null }
         c.goTo(r1.id, from = r2.id)
         eventually(what = "at r1 again") { c.state.value.back == r2.id }
+        c.dismissPill() // scrolled down to the latest messages: nothing to go back for
+        assertNull(c.state.value.back)
+        c.goTo(r1.id, from = r2.id)
+        eventually(what = "at r1 once more") { c.state.value.back == r2.id }
         c.jump(PageKind.First)
         eventually(what = "forgotten") { c.state.value.back == null && c.state.value.items.firstOrNull()?.id == sent[0].id }
         c.close()
