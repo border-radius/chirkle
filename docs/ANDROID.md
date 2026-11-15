@@ -169,7 +169,9 @@ Few modules, for build speed. A feature module never imports another; they meet 
 A port of `web/src/pb.ts` (§6): JSON or multipart requests with the auth header; a `filter()` that binds parameters as
 `pb.filter()` does (never string concatenation, which prevents filter injection); the realtime protocol (one SSE
 stream, the `PB_CONNECT` client id, subscriptions POSTed to `/api/realtime` and resent after reconnects with the same
-backoff). It asks for the web's `MSG_FIELDS`, so it never pulls anyone's email.
+backoff). It asks for the web's `MSG_FIELDS`, so it never pulls anyone's email. Every answer is closed, also one whose
+call was cancelled as it arrived: left unread, its body would be read by the next request on that connection as its
+status line (QA BUG-279).
 
 **Text folding** for search (§29.1) and display names (§22.1) is a port of `foldKey` / `nameKey`: no invisible
 characters, NFKC (`java.text.Normalizer`), upper then lower case, the dotted İ dropped. The web's unit cases for them

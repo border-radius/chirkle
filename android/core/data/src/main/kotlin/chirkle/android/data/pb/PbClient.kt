@@ -100,7 +100,19 @@ class PbClient(baseUrl: String, val http: OkHttpClient, val authStore: AuthStore
         } catch (e: IOException) {
             throw PbError(0, cause = e)
         }
-        return withContext(Dispatchers.IO) {
+        // Closed whatever happens, also when cancelled before readAnswer's block starts: an answer left unread holds its
+        // connection, and OkHttp may hand it to another call with the old body still in front of the new status line
+        // ("Unexpected status line: {…}HTTP/1.1 200 OK", which failed a later request at random).
+        return try {
+            readAnswer(response)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            response.close()
+            throw e
+        }
+    }
+
+    private suspend fun readAnswer(response: Response): JsonElement =
+        withContext(Dispatchers.IO) {
             response.use {
                 val text = try {
                     it.body.string()
@@ -117,7 +129,6 @@ class PbClient(baseUrl: String, val http: OkHttpClient, val authStore: AuthStore
                 json
             }
         }
-    }
 
     /**
      * Bind `{:name}` placeholders in a filter expression, quoting and escaping the values as `pb.filter()` does: a
@@ -170,7 +181,8 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
         }
 
         override fun onResponse(call: Call, response: Response) {
-            if (cont.isActive) cont.resume(response) else response.close()
+            // Cancelled after this resume but before the caller ran, the answer would be dropped unread: close it then.
+            if (cont.isActive) cont.resume(response) { _, r, _ -> r.close() } else response.close()
         }
     })
 }

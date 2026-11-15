@@ -2296,3 +2296,34 @@ closes the emoji and people offered…" (fails without).
   room, loses it the moment it stops being Open Air, and an archived one leaves the guest home live.
 - Not bugs: `POST /api/chat/password` takes no confirmation (the clients compare the two fields); the app's inbox row
   puts two spaces before the time on purpose.
+
+# QA pass 40 — flaky tests, 2026-11-15
+
+The unit and component suites were run 6 times (879/879 each), the integration suite twice (546/546) and the Android
+unit tests 4 times in full and 16 times for `:core:data` alone, at one Gradle worker, to find the tests that fail now
+and then. The Chromium e2e runs were stopped for lack of memory partway through the first (38 passed, none failed), so
+the browser suite wasn't covered this time. The web suites had no flakes. Three Android tests failed now and then
+(3 in 20 runs), each in a different place, all from one app bug. Numbering continues from BUG-278.
+
+| # | Test | Rate | Cause | Fix |
+|---|---|---|---|---|
+| BUG-279 | `CollectionsTest` "a follow made while the list's subscription is on its way…" (its signup's login), `NotifyCheckTest` "finds new DMs…" (a `markRead`), `ServicesTest` "after following quotes…" (a send) | 3 in 20 module runs, a different test each time | Real: an answer whose call was cancelled as it arrived was never closed, and a later request on its connection read the old body as its status line | See below |
+
+## BUG-279 — A request failed with "Something went wrong." after another was cancelled (Medium, Android)
+
+**Steps:** any request the app cancels just as its answer arrives (a screen closed, the services stopped, a search
+replaced while it loads), then more requests to the server.
+**Expected:** they go through. **Actual (sometimes):** one later request, any of them (a login, a send, a read mark),
+failed as network trouble, `ProtocolException: Unexpected status line: {"data":{},"message":"Only superusers can
+perform this action.","status":403}HTTP/1.1 200 OK`: the cancelled call's body, unread, in front of the next answer on
+the same connection. Tracing every call's connection (an OkHttp `EventListener`) showed it: `needsFileTokens()` got its
+403's headers (`Content-Length: 77`), its coroutine was cancelled, its body was never read or closed, and 4 s later a
+send was given that connection. A raw-socket stress test of the server (960 answers, PocketBase's empty-list throttle
+hit 272 times) had found its framing right.
+**Cause:** `PbClient.send` dropped the `Response` unclosed in two places. `Call.await()` resumed with it, and a
+cancellation that came before the caller ran threw the value away (coroutines' prompt cancellation). And
+`withContext(Dispatchers.IO) { response.use { … } }`, cancelled before its block started, never got to the `use`.
+**Fix:** `await()` closes an answer its caller won't get (`resume(response) { … close() }`), and `send` closes it when
+the read is cancelled. Test: `PbClientTest` (MockWebServer: the caller's thread busy when the answer comes, then
+cancelled; the connection must be idle and the next answer read right; fails without). After: `:core:data` 10 of 10
+runs and the full Android run clean. The web is not affected (the browser owns its connections).
