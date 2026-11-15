@@ -3,6 +3,7 @@
 // one), and the new-collection dialog.
 package chirkle.android.ui
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,6 +103,7 @@ fun collectionError(e: Throwable): String = reasonOf(e)
  */
 @Composable
 fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val app by services.store.flow.collectAsState()
     // On the main thread, as the services are: the sheet is another window, and its state must reach it.
@@ -110,7 +112,7 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
     val saved = remember { mutableStateMapOf<String, String>() }
     /** Collection id → ticked or unticked, while that is saving. */
     val busy = remember { mutableStateMapOf<String, Boolean>() }
-    var status by remember { mutableStateOf("Loading…") }
+    var status by remember { mutableStateOf(res.getString(R.string.ui_loading)) }
     var name by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(from) {
         withContext(services.main) {
@@ -123,11 +125,11 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
 
     suspend fun toggle(id: String, on: Boolean) {
         busy[id] = on
-        status = if (on) "Saving…" else "Removing…"
+        status = if (on) res.getString(R.string.ui_saving) else res.getString(R.string.ui_removing)
         try {
             if (on) saved[id] = services.api.saveItem(id, from).id
             else saved[id]?.let { services.api.removeItem(it); saved.remove(id) }
-            status = if (on) "Saved." else "Removed."
+            status = if (on) res.getString(R.string.ui_saved) else res.getString(R.string.ui_removed)
             services.collections.refresh()
         } catch (e: Exception) {
             // In there already (saved elsewhere meanwhile): it is ticked.
@@ -140,7 +142,7 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
     ChirkleSheet(onDismiss) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(ChirkleIcons.Collection, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text("Save to collection", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ui_save_to_collection), style = MaterialTheme.typography.titleMedium)
         }
         val mine = app.collections?.mine.orEmpty()
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
@@ -150,26 +152,26 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
-                        .toggleable(checked, enabled = c.id !in busy && status != "Loading…", role = Role.Checkbox) { on -> scope.launch { toggle(c.id, on) } }
+                        .toggleable(checked, enabled = c.id !in busy && status != stringResource(R.string.ui_loading), role = Role.Checkbox) { on -> scope.launch { toggle(c.id, on) } }
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked, onCheckedChange = null, enabled = c.id !in busy)
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(if (c.public) "Public: anyone can see it" else "Private", style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                        Text(if (c.public) stringResource(R.string.ui_public_anyone_can_see_it_2) else stringResource(R.string.ui_private), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                     }
                     // Saving copies the file on the server, which can take a while.
                     if (c.id in busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
             }
         }
-        val text = status.ifEmpty { if (mine.isEmpty() && app.collections != null) "You have no collections yet. Make one:" else "" }
+        val text = status.ifEmpty { if (mine.isEmpty() && app.collections != null) stringResource(R.string.ui_you_have_no_collections_yet) else "" }
         if (text.isNotEmpty()) {
             Text(text, color = Chirkle.colors.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite })
         }
         Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(name, { name = it }, label = { Text("New collection") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.ui_new_collection)) }, singleLine = true, modifier = Modifier.weight(1f))
             Button(
                 enabled = name.isNotBlank(),
                 onClick = {
@@ -184,7 +186,7 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
                         }
                     }
                 },
-            ) { Text("Create") }
+            ) { Text(stringResource(R.string.ui_create)) }
         }
     }
 }
@@ -214,13 +216,13 @@ fun NewCollectionDialog(onCreated: (String) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(ChirkleIcons.Collection, contentDescription = null) },
-        title = { Text("New collection") },
+        title = { Text(stringResource(R.string.ui_new_collection)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     name,
                     { name = it },
-                    label = { Text("Name") },
+                    label = { Text(stringResource(R.string.ui_name)) },
                     singleLine = true,
                     isError = error.isNotEmpty(),
                     supportingText = if (error.isNotEmpty()) ({ Text(error) }) else null,
@@ -233,11 +235,11 @@ fun NewCollectionDialog(onCreated: (String) -> Unit, onDismiss: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(public, onCheckedChange = null)
-                    Text("Public: anyone can see it and subscribe", Modifier.padding(start = 12.dp))
+                    Text(stringResource(R.string.ui_public_anyone_can_see_it), Modifier.padding(start = 12.dp))
                 }
             }
         },
-        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text("Create") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text(stringResource(R.string.ui_create)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
     )
 }

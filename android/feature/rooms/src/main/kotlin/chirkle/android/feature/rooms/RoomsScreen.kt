@@ -6,6 +6,9 @@
 // folded Hidden & archived section, on the sidebar's darker surface.
 package chirkle.android.feature.rooms
 
+import android.content.res.Resources
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -115,6 +118,7 @@ private enum class Section { Rooms, Dms, Hidden, Archived }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: () -> Unit, onOpenCollection: (String) -> Unit = {}, onAccounts: () -> Unit = {}, onInbox: () -> Unit = {}) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val s by services.store.flow.collectAsStateWithLifecycle()
     val me = s.user
@@ -127,10 +131,11 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
     val sections = remember(s.rooms, s.hidden, me, s.activeRoomId, s.unread) { roomSections(s.rooms.values, s.hidden.keys, me?.id, s.activeRoomId, s.unread) }
     val folded by services.settings.folded.collectAsStateWithLifecycle()
 
-    fun act(label: String, room: Room, block: suspend () -> Unit) {
+    /** [failed]: what to say when it fails, a string with the room's name and the reason. */
+    fun act(failed: Int, room: Room, block: suspend () -> Unit) {
         scope.launch {
             runCatching { block() }.onFailure { e ->
-                snackbar.showSnackbar("Couldn't $label “${if (room.isDm) room.title(me?.id) else room.name}”. ${errorMessage(e)}")
+                snackbar.showSnackbar(res.getString(failed, if (room.isDm) room.title(me?.id) else room.name, errorMessage(e)))
             }
         }
     }
@@ -157,12 +162,12 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 TopAppBar(
-                    navigationIcon = { IconButton(onClick = ::closeJump) { Icon(ChirkleIcons.Back, contentDescription = "Close search") } },
+                    navigationIcon = { IconButton(onClick = ::closeJump) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.rooms_close_search)) } },
                     title = {
                         androidx.compose.material3.TextField(
                             jumpQuery,
                             { jumpQuery = it },
-                            placeholder = { Text("Jump to a room or person", maxLines = 1) },
+                            placeholder = { Text(stringResource(R.string.rooms_jump_to_a_room_or), maxLines = 1) },
                             singleLine = true,
                             colors = androidx.compose.material3.TextFieldDefaults.colors(
                                 focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -174,11 +179,11 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = {
                                 jumpMatches(jumpTargets(sections, me?.id, s.collections, services.opened::get), jumpQuery).firstOrNull()?.let { closeJump(); open(it) }
                             }),
-                            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = "Jump to" },
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = res.getString(R.string.rooms_jump_to_2) },
                         )
                     },
                     actions = {
-                        if (jumpQuery.isNotEmpty()) IconButton(onClick = { jumpQuery = "" }) { Icon(ChirkleIcons.Close, contentDescription = "Clear") }
+                        if (jumpQuery.isNotEmpty()) IconButton(onClick = { jumpQuery = "" }) { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.rooms_clear)) }
                     },
                 )
                 return@Scaffold
@@ -197,7 +202,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = "Accounts", onClick = onAccounts).semantics(mergeDescendants = true) {
+                    Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = stringResource(R.string.rooms_accounts), onClick = onAccounts).semantics(mergeDescendants = true) {
                         contentDescription = s.site.title
                     },
                     contentAlignment = Alignment.Center,
@@ -208,19 +213,19 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .clickable { jumping = true }
-                        .semantics(mergeDescendants = true) { contentDescription = "Jump to a room or person" }
+                        .semantics(mergeDescendants = true) { contentDescription = res.getString(R.string.rooms_jump_to_a_room_or) }
                         .padding(horizontal = 6.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("Jump to…", color = Chirkle.colors.muted, maxLines = 1)
+                    Text(stringResource(R.string.rooms_jump_to), color = Chirkle.colors.muted, maxLines = 1)
                     // Which account this is, once there are several (ANDROID.md §17.2).
                     val many = (chirkle.android.ui.LocalAccounts.current?.list?.collectAsStateWithLifecycle()?.value?.count { it.user != null } ?: 0) > 1
                     if (many) Text(chirkle.android.data.lib.serverLabel(services.server), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (me != null) {
-                    IconButton(onClick = onProfile, modifier = Modifier.size(48.dp).semantics { contentDescription = "Profile" }) { Avatar(me, 32.dp) }
+                    IconButton(onClick = onProfile, modifier = Modifier.size(48.dp).semantics { contentDescription = res.getString(R.string.rooms_profile) }) { Avatar(me, 32.dp) }
                 } else {
-                    TextButton(onClick = onLogIn) { Text("Log in") }
+                    TextButton(onClick = onLogIn) { Text(stringResource(R.string.rooms_log_in)) }
                 }
             }
         },
@@ -229,8 +234,8 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
     ) { padding ->
         if (jumping) {
             val found = remember(sections, s.collections, jumpQuery, me) { jumpMatches(jumpTargets(sections, me?.id, s.collections, services.opened::get), jumpQuery) }
-            LazyColumn(Modifier.fillMaxSize().semantics { contentDescription = "Rooms" }, contentPadding = padding) {
-                if (found.isEmpty()) empty("Nothing found.")
+            LazyColumn(Modifier.fillMaxSize().semantics { contentDescription = res.getString(R.string.rooms_rooms) }, contentPadding = padding) {
+                if (found.isEmpty()) empty(res.getString(R.string.rooms_nothing_found))
                 items(found, key = { "j" + it.id }) { t ->
                     JumpRow(t, s, me?.id) { closeJump(); open(t) }
                 }
@@ -246,7 +251,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             if (s.rooms.isEmpty() && (s.roomsStatus == LoadStatus.Loading || s.roomsStatus == LoadStatus.Idle)) {
                 item(key = "loading") {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(32.dp).semantics { contentDescription = "Loading rooms" })
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(32.dp).semantics { contentDescription = res.getString(R.string.rooms_loading_rooms) })
                     }
                 }
                 return@LazyColumn
@@ -254,14 +259,14 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             if (s.roomsStatus == LoadStatus.Error && s.rooms.isEmpty()) {
                 item {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Couldn't load rooms. Check your connection. ", Modifier.weight(1f))
-                        TextButton(onClick = { scope.launch { services.rooms.reload() } }) { Text("Retry") }
+                        Text(stringResource(R.string.rooms_couldnt_load_rooms_check_your), Modifier.weight(1f))
+                        TextButton(onClick = { scope.launch { services.rooms.reload() } }) { Text(stringResource(R.string.rooms_retry)) }
                     }
                 }
             }
             if (me == null) {
-                header("Open Air rooms")
-                if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) empty("No Open Air rooms yet. Log in to see the others.")
+                header(res.getString(R.string.rooms_open_air_rooms))
+                if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) empty(res.getString(R.string.rooms_no_open_air_rooms_yet))
                 items(sections.rooms, key = { it.id }) { r -> RoomRow(r, s, me?.id, onOpenRoom, emptyList()) }
                 return@LazyColumn
             }
@@ -271,25 +276,25 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
             val toggle = services.settings::toggleFolded
             // Mentions & replies (DESIGN.md §41): right after Jump to, with how many are new.
             item(key = "inbox") { InboxRow(s.inbox, onInbox) }
-            foldHeader("rooms", "Rooms", "rooms" in folded, toggle, "New room") { newRoom = true }
+            foldHeader("rooms", res.getString(R.string.rooms_rooms), "rooms" in folded, toggle, res.getString(R.string.rooms_new_room)) { newRoom = true }
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
-                empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) "No other rooms. Hidden and archived ones are listed below." else "No rooms yet. Create the first one.")
+                empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) res.getString(R.string.rooms_no_other_rooms_hidden_and) else res.getString(R.string.rooms_no_rooms_yet_create_the))
             }
-            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Rooms, s, ::act, { archiving = it }, services), button = false) }
-            foldHeader("dms", "Direct messages", "dms" in folded, toggle, "New direct message") { newDm = true }
+            items(shown("rooms", sections.rooms), key = { it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(res, r, Section.Rooms, s, ::act, { archiving = it }, services), button = false) }
+            foldHeader("dms", res.getString(R.string.rooms_direct_messages), "dms" in folded, toggle, res.getString(R.string.rooms_new_direct_message)) { newDm = true }
             items(shown("dms", sections.dms), key = { it.id }) { r ->
-                RoomRow(r, s, me.id, onOpenRoom, listOf("Close conversation" to { act("close", r) { services.actions.hide(r.id) } }), button = false)
+                RoomRow(r, s, me.id, onOpenRoom, listOf(stringResource(R.string.rooms_close_conversation) to { act(R.string.rooms_couldnt_close, r) { services.actions.hide(r.id) } }), button = false)
             }
-            collections(s.collections, "collections" in folded, { toggle("collections") }, onOpenCollection) { newCollection = true }
+            collections(res, s.collections, "collections" in folded, { toggle("collections") }, onOpenCollection) { newCollection = true }
             // Hidden & archived (§7.1): one fold with how many; inside, a part for each.
             val moreCount = sections.hidden.size + sections.archived.size
             if (moreCount > 0) {
-                fold("Hidden & archived", moreCount, showMore) { showMore = !showMore }
+                fold(res.getString(R.string.rooms_hidden_archived), moreCount, showMore) { showMore = !showMore }
                 if (showMore) {
-                    if (sections.hidden.isNotEmpty()) part("Hidden", ChirkleIcons.Hide)
-                    items(sections.hidden, key = { "h" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Hidden, s, ::act, { archiving = it }, services)) }
-                    if (sections.archived.isNotEmpty()) part("Archived", ChirkleIcons.Archive)
-                    items(sections.archived, key = { "a" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(r, Section.Archived, s, ::act, { archiving = it }, services)) }
+                    if (sections.hidden.isNotEmpty()) part(res.getString(R.string.rooms_hidden), ChirkleIcons.Hide)
+                    items(sections.hidden, key = { "h" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(res, r, Section.Hidden, s, ::act, { archiving = it }, services)) }
+                    if (sections.archived.isNotEmpty()) part(res.getString(R.string.rooms_archived), ChirkleIcons.Archive)
+                    items(sections.archived, key = { "a" + it.id }) { r -> RoomRow(r, s, me.id, onOpenRoom, menuItems(res, r, Section.Archived, s, ::act, { archiving = it }, services)) }
                 }
             }
         }
@@ -300,23 +305,23 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
     archiving?.let { r ->
         AlertDialog(
             onDismissRequest = { archiving = null },
-            title = { Text("Archive room") },
-            text = { Text("Archive “${r.name}”? It becomes read-only for everyone.") },
-            confirmButton = { TextButton(onClick = { archiving = null; act("archive", r) { services.actions.setArchived(r.id, true) } }) { Text("Archive") } },
-            dismissButton = { TextButton(onClick = { archiving = null }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.rooms_archive_room)) },
+            text = { Text(stringResource(R.string.rooms_archive_it_becomes_read_only, r.name)) },
+            confirmButton = { TextButton(onClick = { archiving = null; act(R.string.rooms_couldnt_archive, r) { services.actions.setArchived(r.id, true) } }) { Text(stringResource(R.string.rooms_archive)) } },
+            dismissButton = { TextButton(onClick = { archiving = null }) { Text(stringResource(R.string.rooms_cancel)) } },
         )
     }
     if (newCollection) chirkle.android.ui.NewCollectionDialog(onCreated = { newCollection = false; onOpenCollection(it) }, onDismiss = { newCollection = false })
     if (newRoom) NewRoomDialog(onCreated = { newRoom = false; onOpenRoom(it.id) }, onDismiss = { newRoom = false })
     if (newDm) {
         UserSearchDialog(
-            title = "New message",
+            title = stringResource(R.string.rooms_new_message),
             onPick = { u ->
                 newDm = false
                 scope.launch {
                     runCatching { services.actions.openDm(u.id) }
                         .onSuccess { onOpenRoom(it.id) }
-                        .onFailure { e -> snackbar.showSnackbar("Couldn't open the conversation with “${u.name}”. ${errorMessage(e)}") }
+                        .onFailure { e -> snackbar.showSnackbar(res.getString(R.string.rooms_couldnt_open_the_conversation_with, u.name, errorMessage(e))) }
                 }
             },
             onDismiss = { newDm = false },
@@ -326,21 +331,22 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
 }
 
 private fun menuItems(
+    res: Resources,
     r: Room,
     section: Section,
     s: AppState,
-    act: (String, Room, suspend () -> Unit) -> Unit,
+    act: (Int, Room, suspend () -> Unit) -> Unit,
     archive: (Room) -> Unit,
     services: chirkle.android.data.repo.ChirkleServices,
 ): List<Pair<String, () -> Unit>> {
     // Its creator's, or a moderator's (DESIGN.md §36).
     val mine = r.canManage(s.user)
     val items = mutableListOf<Pair<String, () -> Unit>>()
-    if (section == Section.Rooms) items += "Hide" to { act("hide", r) { services.actions.hide(r.id) } }
+    if (section == Section.Rooms) items += res.getString(R.string.rooms_hide) to { act(R.string.rooms_couldnt_hide, r) { services.actions.hide(r.id) } }
     // An archived room you had hidden is listed under Archived; it can still be unhidden from there.
-    if (section == Section.Hidden || (section == Section.Archived && r.id in s.hidden)) items += "Unhide" to { act("unhide", r) { services.actions.unhide(r.id) } }
-    if (mine && section != Section.Archived) items += "Archive" to { archive(r) }
-    if (mine && section == Section.Archived) items += "Unarchive" to { act("unarchive", r) { services.actions.setArchived(r.id, false) } }
+    if (section == Section.Hidden || (section == Section.Archived && r.id in s.hidden)) items += res.getString(R.string.rooms_unhide) to { act(R.string.rooms_couldnt_unhide, r) { services.actions.unhide(r.id) } }
+    if (mine && section != Section.Archived) items += res.getString(R.string.rooms_archive) to { archive(r) }
+    if (mine && section == Section.Archived) items += res.getString(R.string.rooms_unarchive) to { act(R.string.rooms_couldnt_unarchive, r) { services.actions.setArchived(r.id, false) } }
     return items
 }
 
@@ -365,14 +371,16 @@ private fun JumpRow(t: chirkle.android.data.lib.JumpTarget, s: AppState, me: Str
 
 @Composable
 private fun MentionBadge() {
+    val res = LocalContext.current.resources
     Box(Modifier.size(24.dp).background(Chirkle.colors.fill, CircleShape), contentAlignment = Alignment.Center) {
-        Text("@", color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = "Mentions you" })
+        Text("@", color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_mentions_you) })
     }
 }
 
 /** The "Mentions & replies" row (DESIGN.md §41): an "@" where a room has its icon, and how many are new. */
 @Composable
 private fun InboxRow(new: Int, onOpen: () -> Unit) {
+    val res = LocalContext.current.resources
     Row(
         Modifier
             .fillMaxWidth()
@@ -388,7 +396,7 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
             Text("@", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
         Text(
-            "Mentions & replies",
+            stringResource(R.string.rooms_mentions_replies),
             modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -400,7 +408,7 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
                 Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (new > 99) "99+" else new.toString(), color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, modifier = Modifier.semantics { contentDescription = "$new new" })
+                Text(if (new > 99) "99+" else new.toString(), color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_new, new) })
             }
         }
     }
@@ -408,6 +416,7 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
 
 @Composable
 private fun UnreadBadge(badge: Int) {
+    val res = LocalContext.current.resources
     Box(
         Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
@@ -416,7 +425,7 @@ private fun UnreadBadge(badge: Int) {
             if (badge > 99) "99+" else badge.toString(),
             color = Chirkle.colors.onFill,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.semantics { contentDescription = "$badge unread" },
+            modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_unread, badge) },
         )
     }
 }
@@ -434,15 +443,15 @@ private fun LazyListScope.header(text: String) = item(key = "header-$text") {
  * Yours (🔒 when private), then those you follow with their owner's name and how many items are new (§31.3), three to a
  * row as tinted tiles (the redesign's AndroidRooms board). Folded: only those you follow with new items.
  */
-private fun LazyListScope.collections(c: chirkle.android.data.model.Collections?, folded: Boolean, toggle: () -> Unit, onOpen: (String) -> Unit, onNew: () -> Unit) {
+private fun LazyListScope.collections(res: Resources, c: chirkle.android.data.model.Collections?, folded: Boolean, toggle: () -> Unit, onOpen: (String) -> Unit, onNew: () -> Unit) {
     item(key = "header-collections") {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            FoldTitle("Collections", folded, toggle, Modifier.weight(1f))
-            IconButton(onClick = onNew, modifier = Modifier.size(48.dp)) { Icon(ChirkleIcons.Add, contentDescription = "New collection", tint = Chirkle.colors.muted) }
+            FoldTitle(stringResource(R.string.rooms_collections), folded, toggle, Modifier.weight(1f))
+            IconButton(onClick = onNew, modifier = Modifier.size(48.dp)) { Icon(ChirkleIcons.Add, contentDescription = stringResource(R.string.rooms_new_collection), tint = Chirkle.colors.muted) }
         }
     }
     if (c == null) return
-    if (c.mine.isEmpty() && c.subs.isEmpty()) empty("No collections yet. Save images and videos from the chat to one.")
+    if (c.mine.isEmpty() && c.subs.isEmpty()) empty(res.getString(R.string.rooms_no_collections_yet_save_images))
     val shown = (if (folded) emptyList() else c.mine) + (if (folded) c.subs.filter { it.new > 0 } else c.subs)
     items(shown.chunked(3), key = { row -> "c" + row.first().id }) { row ->
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -478,7 +487,7 @@ private fun FoldTitle(text: String, folded: Boolean, toggle: () -> Unit, modifie
         modifier
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(24.dp))
-            .clickable(onClickLabel = if (folded) "Expand" else "Collapse", onClick = toggle)
+            .clickable(onClickLabel = if (folded) stringResource(R.string.rooms_expand) else stringResource(R.string.rooms_collapse), onClick = toggle)
             .padding(start = 12.dp, end = 12.dp)
             .semantics(mergeDescendants = true) { heading() },
         verticalAlignment = Alignment.CenterVertically,
@@ -499,6 +508,7 @@ private val Hues = listOf(Color(0xFFA78BFA), Color(0xFF38BDF8), Color(0xFFFB923C
 
 @Composable
 private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen: (String) -> Unit, modifier: Modifier) {
+    val res = LocalContext.current.resources
     val hue = Hues[c.id.first().code % Hues.size]
     Column(
         modifier
@@ -524,7 +534,7 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
                         if (c.new > 99) "99+" else c.new.toString(),
                         color = Chirkle.colors.onFill,
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.semantics { contentDescription = "${c.new} new" },
+                        modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_new, c.new) },
                     )
                 }
             }
@@ -544,7 +554,7 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             if (locked && c.preview.isNotEmpty()) Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
         }
         Text(
-            c.owner?.name ?: if (c.items == 1) "1 item" else "${c.items} items",
+            c.owner?.name ?: if (c.items == 1) "1 item" else stringResource(R.string.rooms_items, c.items),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 11.sp,
@@ -589,7 +599,7 @@ private fun LazyListScope.fold(text: String, count: Int, open: Boolean, toggle: 
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(24.dp))
-            .clickable(onClickLabel = if (open) "Collapse" else "Expand", onClick = toggle)
+            .clickable(onClickLabel = if (open) stringResource(R.string.rooms_collapse) else stringResource(R.string.rooms_expand), onClick = toggle)
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) { heading(); contentDescription = "$text ($count)" },
         verticalAlignment = Alignment.CenterVertically,
@@ -608,6 +618,7 @@ private fun LazyListScope.fold(text: String, count: Int, open: Boolean, toggle: 
  * AndroidRooms board): a long press opens their menu; hidden and archived rows keep theirs.
  */
 private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit, menu: List<Pair<String, () -> Unit>>, button: Boolean = true) {
+    val res = LocalContext.current.resources
     var open by remember { mutableStateOf(false) }
     val badge = unreadBadge(r, s.unread, s.hidden.keys)
     val title = r.title(me)
@@ -619,7 +630,7 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
                 .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (current) Chirkle.colors.tint else androidx.compose.ui.graphics.Color.Transparent)
-                .combinedClickable(onClick = { onOpen(r.id) }, onLongClick = if (menu.isNotEmpty()) ({ open = true }) else null, onLongClickLabel = "Actions for $title")
+                .combinedClickable(onClick = { onOpen(r.id) }, onLongClick = if (menu.isNotEmpty()) ({ open = true }) else null, onLongClickLabel = stringResource(R.string.rooms_actions_for, title))
                 .padding(start = 12.dp, end = if (menu.isNotEmpty() && button) 0.dp else 12.dp)
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically,
@@ -650,13 +661,13 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
                 // The menu opens at the button (a long press on the row opens it there too).
                 Box {
                     if (button) {
-                        IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "Actions for $title" }) {
+                        IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_actions_for, title) }) {
                             Icon(ChirkleIcons.More, contentDescription = null, tint = Chirkle.colors.muted)
                         }
                     }
                     DropdownMenu(open, onDismissRequest = { open = false }) {
                         for ((label, run) in menu) {
-                            DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(menuIcon(label), contentDescription = null) }, onClick = { open = false; run() })
+                            DropdownMenuItem(text = { Text(label) }, leadingIcon = { Icon(menuIcon(res, label), contentDescription = null) }, onClick = { open = false; run() })
                         }
                     }
                 }
@@ -665,14 +676,15 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
     }
 }
 
-private fun menuIcon(label: String) = when (label) {
-    "Unhide" -> ChirkleIcons.Show
-    "Archive", "Unarchive" -> ChirkleIcons.Archive
+private fun menuIcon(res: Resources, label: String) = when (label) {
+    res.getString(R.string.rooms_unhide) -> ChirkleIcons.Show
+    res.getString(R.string.rooms_archive), res.getString(R.string.rooms_unarchive) -> ChirkleIcons.Archive
     else -> ChirkleIcons.Hide
 }
 
 @Composable
 private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val scope = rememberCoroutineScope()
     var name by rememberSaveable { mutableStateOf("") }
@@ -684,7 +696,7 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
     fun create() {
         if (busy) return
         if (textLength(name.trim()) > Limits.ROOM_NAME) {
-            error = "Must be no more than ${Limits.ROOM_NAME} characters."
+            error = res.getString(R.string.rooms_must_be_no_more_than, Limits.ROOM_NAME)
             return
         }
         busy = true
@@ -692,19 +704,19 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
         scope.launch {
             runCatching { services.actions.create(name, visibility) }
                 .onSuccess(onCreated)
-                .onFailure { e -> error = if (e is ApiError && e.codes["name"] == "validation_not_unique") "A room with this name already exists." else (e as? ApiError)?.fields?.get("name") ?: errorMessage(e) }
+                .onFailure { e -> error = if (e is ApiError && e.codes["name"] == "validation_not_unique") res.getString(R.string.rooms_a_room_with_this_name) else (e as? ApiError)?.fields?.get("name") ?: errorMessage(e) }
             busy = false
         }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New room") },
+        title = { Text(stringResource(R.string.rooms_new_room)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     name,
                     { name = it },
-                    label = { Text("Room name") },
+                    label = { Text(stringResource(R.string.rooms_room_name)) },
                     placeholder = { Text("room-name") },
                     singleLine = true,
                     isError = error.isNotEmpty(),
@@ -713,7 +725,7 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (name.isNotBlank()) create() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(nameFocus),
                 )
-                Text("Who can see it", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.rooms_who_can_see_it), style = MaterialTheme.typography.titleSmall)
                 for (v in listOf(Visibility.Public, Visibility.Private, Visibility.Open)) {
                     Row(
                         Modifier.fillMaxWidth().selectable(visibility == v, role = Role.RadioButton) { visibility = v }.padding(vertical = 4.dp),
@@ -729,7 +741,7 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text("Create") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text(stringResource(R.string.rooms_create)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.rooms_cancel)) } },
     )
 }

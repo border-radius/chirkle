@@ -2,6 +2,7 @@
 // or why you can't post, search (§29), selecting messages to forward or delete (§21), and the room's menu.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.Context
 import android.net.Uri
@@ -124,6 +125,7 @@ class RoomNav(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<String, List<Uri>>? = null, onIncomingTaken: () -> Unit = {}) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val context = LocalContext.current
     val app = context.applicationContext as android.app.Application
@@ -279,22 +281,22 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         topBar = {
             when {
                 vm.selecting -> TopAppBar(
-                    navigationIcon = { IconButton(onClick = vm::clearSelection) { Icon(ChirkleIcons.Close, contentDescription = "Cancel") } },
-                    title = { Text("${vm.selected.size} selected", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
+                    navigationIcon = { IconButton(onClick = vm::clearSelection) { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_cancel)) } },
+                    title = { Text(stringResource(R.string.room_selected_2, vm.selected.size), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
                     actions = {
-                        if (me != null) IconButton(onClick = { forwarding = vm.selected.toList() }) { Icon(ChirkleIcons.Forward, contentDescription = "Forward") }
-                        if (vm.canDeleteSelected) IconButton(onClick = { confirmDelete = vm.selected.toList() }) { Icon(ChirkleIcons.Delete, contentDescription = "Delete") }
+                        if (me != null) IconButton(onClick = { forwarding = vm.selected.toList() }) { Icon(ChirkleIcons.Forward, contentDescription = stringResource(R.string.room_forward)) }
+                        if (vm.canDeleteSelected) IconButton(onClick = { confirmDelete = vm.selected.toList() }) { Icon(ChirkleIcons.Delete, contentDescription = stringResource(R.string.room_delete)) }
                     },
                 )
                 vm.searching -> TopAppBar(
-                    navigationIcon = { IconButton(onClick = vm::closeSearch) { Icon(ChirkleIcons.Back, contentDescription = "Close search") } },
+                    navigationIcon = { IconButton(onClick = vm::closeSearch) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_close_search)) } },
                     title = {
                         val searchFocus = remember { FocusRequester() }
                         LaunchedEffect(Unit) { searchFocus.requestFocus() }
                         TextField(
                             vm.query,
                             vm::onQuery,
-                            placeholder = { Text("Search ${room?.title(me?.id) ?: ""}", maxLines = 1) },
+                            placeholder = { Text(stringResource(R.string.room_search, room?.title(me?.id) ?: ""), maxLines = 1) },
                             singleLine = true,
                             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { vm.searchNow() }),
                             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
@@ -303,12 +305,12 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                                 .fillMaxWidth()
                                 .focusRequester(searchFocus)
                                 .onFocusChanged { if (it.isFocused) vm.showResults() }
-                                .semantics { contentDescription = "Search messages" },
+                                .semantics { contentDescription = res.getString(R.string.room_search_messages) },
                         )
                     },
                 )
                 else -> TopAppBar(
-                    navigationIcon = { IconButton(onClick = nav.back) { Icon(ChirkleIcons.Back, contentDescription = "Back to rooms") } },
+                    navigationIcon = { IconButton(onClick = nav.back) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_back_to_rooms)) } },
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // A DM shows who it is with.
@@ -339,11 +341,11 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         }
                     },
                     actions = {
-                        if (room != null) IconButton(onClick = { nav.media(roomId) }) { Icon(ChirkleIcons.Image, contentDescription = "Media") }
-                        if (room != null) IconButton(onClick = vm::openSearch) { Icon(ChirkleIcons.Search, contentDescription = "Search messages") }
+                        if (room != null) IconButton(onClick = { nav.media(roomId) }) { Icon(ChirkleIcons.Image, contentDescription = stringResource(R.string.room_media)) }
+                        if (room != null) IconButton(onClick = vm::openSearch) { Icon(ChirkleIcons.Search, contentDescription = stringResource(R.string.room_search_messages)) }
                         if (room != null) {
                             Box {
-                                IconButton(onClick = { roomMenu = true }) { Icon(ChirkleIcons.More, contentDescription = "Room actions") }
+                                IconButton(onClick = { roomMenu = true }) { Icon(ChirkleIcons.More, contentDescription = stringResource(R.string.room_room_actions)) }
                                 RoomMenu(roomMenu, { roomMenu = false }, room, me != null, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar) { c.jump(PageKind.First) }
                             }
                         }
@@ -356,12 +358,12 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             Box(Modifier.navigationBarsPadding().imePadding()) {
                 when {
                     room == null || state.phase == Phase.NotFound -> {}
-                    me == null -> ReadOnly("You're reading as a guest. ", "Log in", ChirkleIcons.Globe, nav.logIn)
-                    room.archived -> ReadOnly("This room is archived. History is read-only.", icon = ChirkleIcons.Archive)
-                    !room.canPost(me.id) -> ReadOnly("Only some people can post in this room. You can read along and react.")
+                    me == null -> ReadOnly(stringResource(R.string.room_youre_reading_as_a_guest), stringResource(R.string.room_log_in), ChirkleIcons.Globe, nav.logIn)
+                    room.archived -> ReadOnly(stringResource(R.string.room_this_room_is_archived_history), icon = ChirkleIcons.Archive)
+                    !room.canPost(me.id) -> ReadOnly(stringResource(R.string.room_only_some_people_can_post))
                     room.dmClosed(me).isNotEmpty() -> ReadOnly(room.dmClosed(me), icon = ChirkleIcons.Close)
                     vm.selecting -> {}
-                    else -> Composer(vm, "Message ${room.title(me.id)}", focus, onCollections = { pickingItems = true }) { composerEmoji = true }
+                    else -> Composer(vm, stringResource(R.string.room_message_2, room.title(me.id)), focus, onCollections = { pickingItems = true }) { composerEmoji = true }
                 }
             }
         },
@@ -369,13 +371,13 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.phase) {
                 Phase.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                Phase.NotFound -> Centered(if (room == null && app_.rooms.isNotEmpty()) "You can't see this room any more." else "This room doesn't exist.")
+                Phase.NotFound -> Centered(if (room == null && app_.rooms.isNotEmpty()) stringResource(R.string.room_you_cant_see_this_room) else stringResource(R.string.room_this_room_doesnt_exist))
                 Phase.Failed -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Couldn't load this room. Check your connection. ")
-                    TextButton(onClick = c::retry) { Text("Retry") }
+                    Text(stringResource(R.string.room_couldnt_load_this_room_check))
+                    TextButton(onClick = c::retry) { Text(stringResource(R.string.room_retry)) }
                 }
                 Phase.Ready -> {
-                    LazyColumn(state = list, reverseLayout = true, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp), modifier = Modifier.fillMaxSize().semantics { contentDescription = "Messages" }) {
+                    LazyColumn(state = list, reverseLayout = true, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp), modifier = Modifier.fillMaxSize().semantics { contentDescription = res.getString(R.string.room_messages) }) {
                         items(rows, key = { it.key }, contentType = { it::class }) { row ->
                             when (row) {
                                 is ListRow.Msg -> MessageRow(row.m, row.first, row.target, me?.id, vm.selecting, row.m.id in vm.selected, actions)
@@ -393,7 +395,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     // After following quotes it steps back through the replies, one per tap (DESIGN.md §19.5).
                     val back = state.back != null
                     if (back || state.pill != null || !atBottom || state.hasNewer) {
-                        val label = if (back) "Back to reply" else if (state.pill != null) "New messages · Jump to latest" else "Jump to latest"
+                        val label = if (back) stringResource(R.string.room_back_to_reply) else if (state.pill != null) stringResource(R.string.room_new_messages_jump_to_latest) else stringResource(R.string.room_jump_to_latest)
                         SmallFloatingActionButton(
                             onClick = {
                                 if (back) return@SmallFloatingActionButton c.goBack()
@@ -403,8 +405,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = label },
                         ) {
                             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (back) Text("Back", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
-                                else if (state.pill != null) Text("New", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
+                                if (back) Text(stringResource(R.string.room_back), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
+                                else if (state.pill != null) Text(stringResource(R.string.room_new_2), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
                                 Icon(ChirkleIcons.Down, contentDescription = null)
                             }
                         }
@@ -425,51 +427,51 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             value = if (bannable) runCatching { services.api.isBanned(m.author) }.getOrNull() else null
         }
         val items = buildList {
-            if (c.repliable(m)) add(MenuItem("Reply", ChirkleIcons.Reply) { sheetFor = null; vm.reply(m); focus.requestFocusSafely() })
-            if (c.editable(m)) add(MenuItem("Edit", ChirkleIcons.Edit) { sheetFor = null; vm.startEdit(m); focus.requestFocusSafely() })
-            if (m.text.isNotEmpty() && !m.deleted) add(MenuItem("Copy text", ChirkleIcons.Copy) {
+            if (c.repliable(m)) add(MenuItem(stringResource(R.string.room_reply), ChirkleIcons.Reply) { sheetFor = null; vm.reply(m); focus.requestFocusSafely() })
+            if (c.editable(m)) add(MenuItem(stringResource(R.string.room_edit), ChirkleIcons.Edit) { sheetFor = null; vm.startEdit(m); focus.requestFocusSafely() })
+            if (m.text.isNotEmpty() && !m.deleted) add(MenuItem(stringResource(R.string.room_copy_text), ChirkleIcons.Copy) {
                 sheetFor = null
                 scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", m.text))) }
             })
-            if (me != null && c.selectable(m)) add(MenuItem("Forward", ChirkleIcons.Forward) { sheetFor = null; forwarding = listOf(m.id) })
-            if (c.selectable(m)) add(MenuItem("Select", ChirkleIcons.Check) { sheetFor = null; vm.toggleSelect(m) })
-            if (c.deletable(m)) add(MenuItem("Delete", ChirkleIcons.Delete, danger = true) { sheetFor = null; confirmDelete = listOf(m.id) })
+            if (me != null && c.selectable(m)) add(MenuItem(stringResource(R.string.room_forward), ChirkleIcons.Forward) { sheetFor = null; forwarding = listOf(m.id) })
+            if (c.selectable(m)) add(MenuItem(stringResource(R.string.room_select), ChirkleIcons.Check) { sheetFor = null; vm.toggleSelect(m) })
+            if (c.deletable(m)) add(MenuItem(stringResource(R.string.room_delete), ChirkleIcons.Delete, danger = true) { sheetFor = null; confirmDelete = listOf(m.id) })
             // A moderator bans this instance's people, those who take no DMs too (QA BUG-230); an anonymous room's author
             // is the room (§35), no one to ban. The server refuses a Telegram stand-in, and says so.
             val name = author?.name.orEmpty()
             when (banned) {
-                false -> add(MenuItem("Ban $name", ChirkleIcons.Lock, danger = true) { sheetFor = null; banning = m.author to name })
-                true -> add(MenuItem("Unban $name", ChirkleIcons.Lock) { sheetFor = null; vm.setBanned(m.author, false) })
+                false -> add(MenuItem(stringResource(R.string.room_ban_2, name), ChirkleIcons.Lock, danger = true) { sheetFor = null; banning = m.author to name })
+                true -> add(MenuItem(stringResource(R.string.room_unban, name), ChirkleIcons.Lock) { sheetFor = null; vm.setBanned(m.author, false) })
                 null -> {}
             }
         }
         MessageSheet(m, c.reactable(m), recent, items, onReact = { e -> sheetFor = null; vm.react(m, e) }, onMoreEmoji = { sheetFor = null; emojiFor = m }, onDismiss = { sheetFor = null })
     }
-    emojiFor?.let { m -> EmojiSheet("Add reaction", recent, onPick = { e -> emojiFor = null; vm.react(m, e) }, onDismiss = { emojiFor = null }) }
-    if (composerEmoji) EmojiSheet("Insert emoji", recent, onPick = { e -> composerEmoji = false; vm.insert(e); services.recentEmoji.remember(e) }, onDismiss = { composerEmoji = false })
+    emojiFor?.let { m -> EmojiSheet(stringResource(R.string.room_add_reaction), recent, onPick = { e -> emojiFor = null; vm.react(m, e) }, onDismiss = { emojiFor = null }) }
+    if (composerEmoji) EmojiSheet(stringResource(R.string.room_insert_emoji), recent, onPick = { e -> composerEmoji = false; vm.insert(e); services.recentEmoji.remember(e) }, onDismiss = { composerEmoji = false })
     confirmDelete?.let { ids ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
-            title = { Text(if (ids.size == 1) "Delete message" else "Delete these messages?") },
-            text = { Text(if (ids.size == 1) "Delete this message? Everyone will see that it was deleted." else "Delete these ${ids.size} messages? Everyone will see that they were deleted.") },
+            title = { Text(if (ids.size == 1) stringResource(R.string.room_delete_message) else stringResource(R.string.room_delete_these_messages)) },
+            text = { Text(if (ids.size == 1) stringResource(R.string.room_delete_this_message_everyone_will) else stringResource(R.string.room_delete_these_messages_everyone_will, ids.size)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = null
                     if (ids.size == 1 && !vm.selecting) c.find(ids[0])?.let(vm::delete) else vm.deleteSelected()
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.room_delete), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.room_cancel)) } },
         )
     }
     banning?.let { (id, name) ->
         AlertDialog(
             onDismissRequest = { banning = null },
-            title = { Text("Ban $name") },
-            text = { Text("Ban $name? They are signed out everywhere and can't sign in until unbanned.") },
+            title = { Text(stringResource(R.string.room_ban_2, name)) },
+            text = { Text(stringResource(R.string.room_ban_they_are_signed_out, name)) },
             confirmButton = {
-                TextButton(onClick = { banning = null; vm.setBanned(id, true) }) { Text("Ban", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { banning = null; vm.setBanned(id, true) }) { Text(stringResource(R.string.room_ban), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { banning = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { banning = null }) { Text(stringResource(R.string.room_cancel)) } },
         )
     }
     saving?.let { from -> chirkle.android.ui.SaveToCollectionSheet(from) { saving = null } }
@@ -487,13 +489,14 @@ private fun FocusRequester.requestFocusSafely() {
 
 @Composable
 private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, signedIn: Boolean, manage: Boolean, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState, toBeginning: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val scope = rememberCoroutineScope()
     var archive by remember { mutableStateOf(false) }
     val every by services.notifyRooms.set.collectAsStateWithLifecycle()
     fun act(label: String, block: suspend () -> Unit) {
         close()
-        scope.launch { runCatching { block() }.onFailure { snackbar.showSnackbar("That didn't work. ${chirkle.android.data.api.errorMessage(it)}") } }
+        scope.launch { runCatching { block() }.onFailure { snackbar.showSnackbar(res.getString(R.string.room_that_didnt_work, chirkle.android.data.api.errorMessage(it))) } }
     }
     DropdownMenu(open, onDismissRequest = close) {
         // A guest gets only Jump to beginning (DESIGN.md §23.3).
@@ -501,37 +504,37 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
             // Its access for its creator (or a moderator); its members for the others, only in a private room: a public or
             // Open Air room has none, and its screen was empty (QA BUG-274; the web's menu, header.ts).
             if (!room.isDm && (manage || room.visibility == chirkle.android.data.model.Visibility.Private)) {
-                DropdownMenuItem(text = { Text(if (manage) "Room access…" else "Members (${room.members.size})") }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
+                DropdownMenuItem(text = { Text(if (manage) stringResource(R.string.room_room_access) else stringResource(R.string.room_members_2, room.members.size)) }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
             }
-            if (room.isDm) DropdownMenuItem(text = { Text("Close conversation") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
-            else if (hidden) DropdownMenuItem(text = { Text("Unhide room") }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
+            if (room.isDm) DropdownMenuItem(text = { Text(stringResource(R.string.room_close_conversation)) }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
+            else if (hidden) DropdownMenuItem(text = { Text(stringResource(R.string.room_unhide_room)) }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
             // Hiding an archived room is pointless: it is listed under Hidden & archived already (the web's menu).
-            else if (!room.archived) DropdownMenuItem(text = { Text("Hide room") }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
+            else if (!room.archived) DropdownMenuItem(text = { Text(stringResource(R.string.room_hide_room)) }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })
         }
         // Every message of this room notifies, on this device (§24); DMs all do already.
         if (signedIn && !room.isDm && (!room.archived || room.id in every)) {
             val on = room.id in every
             DropdownMenuItem(
-                text = { Text(if (on) "Stop notifying of every message" else "Notify of every message") },
+                text = { Text(if (on) stringResource(R.string.room_stop_notifying_of_every_message) else stringResource(R.string.room_notify_of_every_message)) },
                 leadingIcon = { Icon(if (on) ChirkleIcons.BellOff else ChirkleIcons.Bell, contentDescription = null) },
                 onClick = { close(); services.notifyRooms.set(room.id, !on) },
             )
         }
         // Its creator's, or a moderator's (DESIGN.md §36).
         if (manage) {
-            if (room.archived) DropdownMenuItem(text = { Text("Unarchive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { act("unarchive") { services.actions.setArchived(room.id, false) } })
-            else DropdownMenuItem(text = { Text("Archive room") }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { close(); archive = true })
+            if (room.archived) DropdownMenuItem(text = { Text(stringResource(R.string.room_unarchive_room)) }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { act("unarchive") { services.actions.setArchived(room.id, false) } })
+            else DropdownMenuItem(text = { Text(stringResource(R.string.room_archive_room)) }, leadingIcon = { Icon(ChirkleIcons.Archive, contentDescription = null) }, onClick = { close(); archive = true })
         }
         // The first page, at the top (DESIGN.md §7.1), as the web's menu has it.
-        DropdownMenuItem(text = { Text("Jump to beginning") }, leadingIcon = { Icon(ChirkleIcons.Top, contentDescription = null) }, onClick = { close(); toBeginning() })
+        DropdownMenuItem(text = { Text(stringResource(R.string.room_jump_to_beginning)) }, leadingIcon = { Icon(ChirkleIcons.Top, contentDescription = null) }, onClick = { close(); toBeginning() })
     }
     if (archive) {
         AlertDialog(
             onDismissRequest = { archive = false },
-            title = { Text("Archive room") },
-            text = { Text("Archive “${room.name}”? It becomes read-only for everyone.") },
-            confirmButton = { TextButton(onClick = { archive = false; act("archive") { services.actions.setArchived(room.id, true) } }) { Text("Archive") } },
-            dismissButton = { TextButton(onClick = { archive = false }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.room_archive_room)) },
+            text = { Text(stringResource(R.string.room_archive_it_becomes_read_only, room.name)) },
+            confirmButton = { TextButton(onClick = { archive = false; act("archive") { services.actions.setArchived(room.id, true) } }) { Text(stringResource(R.string.room_archive)) } },
+            dismissButton = { TextButton(onClick = { archive = false }) { Text(stringResource(R.string.room_cancel)) } },
         )
     }
 }
@@ -591,6 +594,7 @@ private fun Beginning(text: String, room: chirkle.android.data.model.Room?, me: 
  */
 @Composable
 private fun NewLine() {
+    val res = LocalContext.current.resources
     val alpha = remember { androidx.compose.animation.core.Animatable(1f) }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(chirkle.android.data.repo.UNREAD_LINE_MS - NEW_LINE_FADE_MS)
@@ -608,16 +612,17 @@ private fun NewLine() {
             fontWeight = FontWeight.Bold,
             letterSpacing = androidx.compose.ui.unit.TextUnit(0.04f, androidx.compose.ui.unit.TextUnitType.Em),
             color = Chirkle.colors.new,
-            modifier = Modifier.semantics { contentDescription = "New" },
+            modifier = Modifier.semantics { contentDescription = res.getString(R.string.room_new_2) },
         )
     }
 }
 
 @Composable
 private fun SearchResults(vm: RoomViewModel, onPick: (Message) -> Unit) {
+    val res = LocalContext.current.resources
     if (!vm.resultsShown || (vm.query.isBlank() && vm.results.isEmpty())) return
     Surface(Modifier.fillMaxWidth().heightIn(max = 420.dp), tonalElevation = 3.dp, shadowElevation = 6.dp) {
-        LazyColumn(Modifier.semantics { contentDescription = "Search results" }) {
+        LazyColumn(Modifier.semantics { contentDescription = res.getString(R.string.room_search_results) }) {
             item { Text(vm.searchStatus, color = Chirkle.colors.muted, modifier = Modifier.padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite }) }
             items(vm.results, key = { it.id }) { m ->
                 val accent = MaterialTheme.colorScheme.primary
@@ -640,7 +645,7 @@ private fun SearchResults(vm: RoomViewModel, onPick: (Message) -> Unit) {
                     )
                 }
             }
-            if (vm.moreResults) item { TextButton(onClick = vm::searchMore, modifier = Modifier.padding(8.dp)) { Text("Show older results") } }
+            if (vm.moreResults) item { TextButton(onClick = vm::searchMore, modifier = Modifier.padding(8.dp)) { Text(stringResource(R.string.room_show_older_results)) } }
         }
     }
 }

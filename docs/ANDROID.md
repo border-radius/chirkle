@@ -1757,10 +1757,13 @@ From docs/REFACTOR.md round 5 (items 54–56). Nothing changes for the app's use
   (Sync.kt) and a real server, as `RoomScenariosTest` does `room.json`: messages, your own, mentions, replies, a
   reaction, a room read in part, caught up, scrolled up, read on another device, a deleted unread message. Recorded from
   the web's `unread.ts`; the app passed it unchanged.
-- **Strings:** the auth screen's text is `feature/auth/src/main/res/values/strings.xml` (`stringResource` in
-  `AuthScreen`; `AuthViewModel` gets a resolver of the application's resources for its messages), as the web's
-  `web/src/strings/login.ts`. One strings.xml per feature module, moved screen by screen; `tests/unit/strings.test.ts`
-  keeps a moved file free of inline text. What is left: docs/REFACTOR.md item 56.
+- **Strings:** every screen's text is its module's `res/values/strings.xml` (`app`, `core/ui` and each feature), as
+  the web's `web/src/strings/`: `stringResource` in composables, `LocalContext.current.resources` in their lambdas,
+  a `Resources` parameter for plain helpers (`accessWarning`, `passwordProblem`, `inboxWhat`, `Formats.day`),
+  `AuthViewModel` a resolver and RoomViewModel its Application. Counts are plurals (`room_found`, `room_items`).
+  `core/data`'s text (errors, visibility labels, emoji categories) is `lib/Strings.kt`: no Context there.
+  `tests/unit/strings.test.ts` fails on inline text in the app's shipped Kotlin. A translation is a `values-xx/`
+  beside each strings.xml, and `lib/Strings.kt` would then move to resources too.
 - **QA:** docs/QA.md's bug tables have a "Fix in" column (`web`, `app`, `server`, or `app n/a (why)`): a web fix
   says what the app got (`tests/unit/qa.test.ts`).
 

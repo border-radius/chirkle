@@ -1,6 +1,7 @@
 // A new collection (§31): the sidebar's "+".
 
 import { h } from "../../dom.ts";
+import * as S from "../../strings/collection-create.ts";
 import { calls } from "./calls.ts";
 import { type Base, icon, loadStylesheet, reason } from "./shared.ts";
 
@@ -15,12 +16,12 @@ export async function openCreate(o: CreateOptions): Promise<void> {
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(), { signal });
-  const title = h("h2", { id: "coll-create-title" }, [icon(), " New collection"]);
-  const input = h("input", { required: true, autocomplete: "off", "aria-label": "Name", placeholder: "Name" });
+  const title = h("h2", { id: "coll-create-title" }, [icon(), S.NEW_COLLECTION]);
+  const input = h("input", { required: true, autocomplete: "off", "aria-label": S.NAME, placeholder: S.NAME });
   // A switch, as Settings' choices are.
   const pub = h("input", { type: "checkbox", role: "switch", class: "switch" });
   const err = h("p", { class: "coll-status", role: "alert" });
-  const submit = h("button", { type: "submit", class: "primary" }, "Create");
+  const submit = h("button", { type: "submit", class: "primary" }, S.CREATE);
   const form = h(
     "form",
     {
@@ -45,16 +46,12 @@ export async function openCreate(o: CreateOptions): Promise<void> {
       },
       signal,
     },
-    [
-      h("p", { class: "coll-new-form" }, [input, submit]),
-      h("label", { class: "coll-public" }, [pub, "Public: anyone can see it and subscribe"]),
-      err,
-    ],
+    [h("p", { class: "coll-new-form" }, [input, submit]), h("label", { class: "coll-public" }, [pub, S.PUBLIC_ANYONE_CAN_SEE_IT_AND]), err],
   );
   const dialog = h("dialog", { class: "coll-dialog coll-create", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": S.CLOSE, on: { click: () => close() }, signal }),
     ]),
     form,
   ]);

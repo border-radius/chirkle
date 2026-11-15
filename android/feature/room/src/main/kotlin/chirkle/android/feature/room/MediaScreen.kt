@@ -2,6 +2,7 @@
 // headings, 60 a page, older ones fetched near the end. A tile opens the viewer there; a video's tile is its poster.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -126,10 +127,10 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
 
     Scaffold(topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back to the room") } },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_back_to_the_room)) } },
             title = {
                 Column {
-                    Text("Media")
+                    Text(stringResource(R.string.room_media))
                     app.rooms[roomId]?.let { Text(it.title(app.user?.id), style = MaterialTheme.typography.labelMedium, color = Chirkle.colors.muted) }
                 }
             },
@@ -160,8 +161,8 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
                 }
                 val it = row as MediaItem
                 val label = buildString {
-                    append(it.name.ifEmpty { "Attachment" })
-                    if (it.video) append(", video")
+                    append(it.name.ifEmpty { stringResource(R.string.room_attachment) })
+                    if (it.video) append(stringResource(R.string.room_video))
                     it.author?.let { a -> append(", ").append(a.name) }
                     append(", ").append(Formats.time(it.sent))
                 }
@@ -170,7 +171,7 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
                         .aspectRatio(1f)
                         // A video without a poster: a dark tile, as in the room and on collections.
                         .background(if (it.video) Color(0xFF13111D) else MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable(onClickLabel = "Open") { onOpen(it.message, it.file) }
+                        .clickable(onClickLabel = stringResource(R.string.room_open)) { onOpen(it.message, it.file) }
                         .semantics { contentDescription = label },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -190,10 +191,10 @@ fun MediaScreen(roomId: String, onOpen: (msgId: String, file: String) -> Unit, o
                     when {
                         loading -> CircularProgressIndicator(Modifier.size(28.dp))
                         failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Couldn't load media.", color = Chirkle.colors.muted)
-                            TextButton(onClick = ::load) { Text("Retry") }
+                            Text(stringResource(R.string.room_couldnt_load_media), color = Chirkle.colors.muted)
+                            TextButton(onClick = ::load) { Text(stringResource(R.string.room_retry)) }
                         }
-                        items.isEmpty() -> Text("No photos or videos here yet.", color = Chirkle.colors.muted, textAlign = TextAlign.Center)
+                        items.isEmpty() -> Text(stringResource(R.string.room_no_photos_or_videos_here), color = Chirkle.colors.muted, textAlign = TextAlign.Center)
                     }
                 }
             }

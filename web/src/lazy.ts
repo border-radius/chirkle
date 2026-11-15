@@ -3,6 +3,7 @@
 
 import { h } from "./dom.ts";
 import type { View } from "./router.ts";
+import * as S from "./strings/lazy.ts";
 
 /**
  * A page from a lazy chunk: "Loading…" until `load` gives its view, which is then mounted in its place (if it is still
@@ -14,7 +15,7 @@ export function lazyView(load: () => Promise<View>, failed: string): View {
   return {
     mount(el, params) {
       gone = false;
-      el.replaceChildren(h("p", { class: "empty", role: "status" }, "Loading…"));
+      el.replaceChildren(h("p", { class: "empty", role: "status" }, S.LOADING));
       load().then(
         (v) => {
           if (gone) return;

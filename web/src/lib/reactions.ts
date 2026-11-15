@@ -1,5 +1,6 @@
 // Emoji reactions (§20): pure helpers for showing them and for changing them optimistically.
 
+import * as S from "../strings/lib-reactions.ts";
 import type { Reaction } from "./types.ts";
 
 /**
@@ -19,7 +20,7 @@ export function reactors(users: readonly string[], me: string, names: (id: strin
   const known: string[] = [];
   let others = 0;
   for (const id of users) {
-    const name = id === me ? "You" : names(id);
+    const name = id === me ? S.YOU : names(id);
     if (name === undefined) others++;
     else if (id === me) known.unshift(name);
     else known.push(name);
@@ -30,5 +31,5 @@ export function reactors(users: readonly string[], me: string, names: (id: strin
   if (others)
     shown.push(others === 1 && !shown.length ? "1 person" : `${others} ${others === 1 ? "other" : shown.length ? "others" : "people"}`);
   if (shown.length === 1) return shown[0]!;
-  return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;
+  return S.and(shown.slice(0, -1).join(", "), shown.at(-1));
 }

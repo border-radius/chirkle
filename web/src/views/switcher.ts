@@ -7,6 +7,7 @@
 import { h } from "../dom.ts";
 import type { Collection, Room, User } from "../lib/types.ts";
 import type { AppState } from "../store.ts";
+import * as S from "../strings/switcher.ts";
 
 export interface SwitcherOptions {
   state: () => AppState;
@@ -102,7 +103,7 @@ export function targets(o: Pick<SwitcherOptions, "sections" | "unread" | "other"
     return {
       path: `/c/${c.id}`,
       name: c.name,
-      note: c.owner?.name ?? "Collection",
+      note: c.owner?.name ?? S.COLLECTION,
       at,
       away: false,
       current: c.id === s.activeCollectionId,
@@ -114,8 +115,8 @@ export function targets(o: Pick<SwitcherOptions, "sections" | "unread" | "other"
   return [
     ...rooms.map((r) => room(r, "")),
     ...dms.map((r) => room(r, "")),
-    ...hidden.map((r) => room(r, "Hidden")),
-    ...archived.map((r) => room(r, "Archived")),
+    ...hidden.map((r) => room(r, S.HIDDEN)),
+    ...archived.map((r) => room(r, S.ARCHIVED)),
     ...[...(s.collections?.mine ?? []), ...(s.collections?.subs ?? [])].map(coll),
   ];
 }
@@ -154,22 +155,22 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
     role: "combobox",
     autocomplete: "off",
     spellcheck: false,
-    placeholder: "Jump to a room or person",
-    "aria-label": "Jump to",
+    placeholder: S.JUMP_TO_A_ROOM_OR_PERSON,
+    "aria-label": S.JUMP_TO,
     "aria-autocomplete": "list",
     "aria-expanded": "true",
     "aria-controls": `${id}-list`,
   });
   const status = h("p", { class: "search-status", role: "status" });
-  const list = h("ul", { id: `${id}-list`, class: "search-results forward-list", role: "listbox", "aria-label": "Rooms" });
+  const list = h("ul", { id: `${id}-list`, class: "search-results forward-list", role: "listbox", "aria-label": S.ROOMS });
   const mac = /Mac|iP/.test(navigator.platform);
   const keys = h("p", { class: "jump-keys", "aria-hidden": "true" }, [
-    h("span", {}, "↑ ↓ to choose"),
-    h("span", {}, "Enter to go"),
-    h("span", {}, `${mac ? "⌘" : "Ctrl+"}K again to close`),
+    h("span", {}, S.TO_CHOOSE),
+    h("span", {}, S.ENTER_TO_GO),
+    h("span", {}, S.kAgainToClose(mac)),
   ]);
-  const field = h("label", { class: "jump-field ic i-search" }, [input, h("kbd", { "aria-hidden": "true" }, "Esc")]);
-  const el = h("dialog", { class: "forward switcher", "aria-label": "Jump to" }, [field, status, list, keys]);
+  const field = h("label", { class: "jump-field ic i-search" }, [input, h("kbd", { "aria-hidden": "true" }, S.ESC)]);
+  const el = h("dialog", { class: "forward switcher", "aria-label": S.JUMP_TO }, [field, status, list, keys]);
   let shown: Target[] = [];
   let at = 0;
 
@@ -208,7 +209,7 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
         icon,
         h("span", { class: "name" }, [t.name, t.note ? h("small", {}, ` ${t.note}`) : null]),
         t.unread
-          ? h("span", { class: "badge" }, [t.unread > 99 ? "99+" : t.unread, h("span", { class: "visually-hidden" }, " unread")])
+          ? h("span", { class: "badge" }, [t.unread > 99 ? "99+" : t.unread, h("span", { class: "visually-hidden" }, S.UNREAD)])
           : null,
       ],
     );
@@ -217,7 +218,7 @@ export function createSwitcher(o: SwitcherOptions): Switcher {
   function show() {
     shown = matches(targets(o, o.state()), input.value);
     list.replaceChildren(...shown.map(option));
-    status.textContent = shown.length ? "" : "Nothing found.";
+    status.textContent = shown.length ? "" : S.NOTHING_FOUND;
     at = 0;
     choose(0);
   }

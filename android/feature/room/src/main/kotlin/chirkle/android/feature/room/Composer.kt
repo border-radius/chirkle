@@ -4,6 +4,8 @@
 // offers emoji by name in a strip over the field (DESIGN.md §20.6).
 package chirkle.android.feature.room
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,16 +78,17 @@ import chirkle.android.ui.ChirkleIcons
 
 @Composable
 fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCollections: (() -> Unit)? = null, onEmoji: () -> Unit) {
+    val res = LocalContext.current.resources
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(Limits.ATTACHMENTS)) { vm.attach(it) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.attach(it) }
     var attachMenu by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth()) {
             vm.editing?.let {
-                Bar("Edit message", "Enter to save · Esc to cancel", "Cancel edit", vm::cancelEdit)
+                Bar(stringResource(R.string.room_edit_message), stringResource(R.string.room_enter_to_save_esc_to), stringResource(R.string.room_cancel_edit), vm::cancelEdit)
             }
             vm.replyTo?.let { r ->
-                Bar("Replying to ${r.expand?.author?.name ?: "Unknown"}", r.quote().line(), "Cancel reply", vm::cancelReply)
+                Bar(stringResource(R.string.room_replying_to, r.expand?.author?.name ?: stringResource(R.string.room_unknown)), r.quote().line(), stringResource(R.string.room_cancel_reply), vm::cancelReply)
             }
             if (vm.attachments.isNotEmpty() || vm.items.isNotEmpty() || vm.preparing.isNotEmpty()) {
                 LazyRow(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -107,7 +110,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                                         .clip(androidx.compose.foundation.shape.CircleShape)
                                         .background(Color.Black.copy(alpha = 0.6f))
                                         .clickable { vm.removeAttachment(f) }
-                                        .semantics { contentDescription = "Remove ${f.name}" },
+                                        .semantics { contentDescription = res.getString(R.string.room_remove, f.name) },
                                     contentAlignment = Alignment.Center,
                                 ) { Icon(ChirkleIcons.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                             }
@@ -117,7 +120,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             selected = false,
                             onClick = { vm.removeAttachment(f) },
                             label = { Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(120.dp)) },
-                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = "Remove ${f.name}", modifier = Modifier.size(16.dp)) },
+                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_remove, f.name), modifier = Modifier.size(16.dp)) },
                         )
                     }
                     // Videos being compressed (VideoPrep): × stops one.
@@ -127,19 +130,19 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             onClick = { vm.cancelPreparing(p) },
                             label = {
                                 Text(
-                                    if (p.progress < 0) "Waiting: ${p.name}" else "Compressing ${p.progress}%: ${p.name}",
+                                    if (p.progress < 0) stringResource(R.string.room_waiting, p.name) else stringResource(R.string.room_compressing, p.progress, p.name),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.width(160.dp),
                                 )
                             },
-                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = "Remove ${p.name}", modifier = Modifier.size(16.dp)) },
+                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_remove, p.name), modifier = Modifier.size(16.dp)) },
                         )
                     }
                     // From a collection (§31.3): after the uploads, as the server attaches them.
                     items(vm.items, key = { "item-" + it.id }) { it ->
                         Box(Modifier.size(64.dp)) {
-                            chirkle.android.ui.ItemPicture(it, Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).semantics { contentDescription = it.name + ", from a collection" })
+                            chirkle.android.ui.ItemPicture(it, Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).semantics { contentDescription = it.name + res.getString(R.string.room_from_a_collection_2) })
                             Box(
                                 Modifier
                                     .align(Alignment.TopEnd)
@@ -148,7 +151,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                                     .clip(androidx.compose.foundation.shape.CircleShape)
                                     .background(Color.Black.copy(alpha = 0.6f))
                                     .clickable { vm.removeItem(it) }
-                                    .semantics { contentDescription = "Remove ${it.name}" },
+                                    .semantics { contentDescription = res.getString(R.string.room_remove, it.name) },
                                 contentAlignment = Alignment.Center,
                             ) { Icon(ChirkleIcons.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) }
                         }
@@ -156,7 +159,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                 }
             }
             val n = textLength(vm.text.text)
-            val error = vm.composerError.ifEmpty { if (n > Limits.MESSAGE_TEXT) "Too long: ${n - Limits.MESSAGE_TEXT} characters over the ${Limits.MESSAGE_TEXT} limit." else "" }
+            val error = vm.composerError.ifEmpty { if (n > Limits.MESSAGE_TEXT) stringResource(R.string.room_too_long_characters_over_the, n - Limits.MESSAGE_TEXT, Limits.MESSAGE_TEXT) else "" }
             if (error.isNotEmpty()) {
                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
@@ -173,7 +176,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    IconButton(onClick = onEmoji) { Icon(ChirkleIcons.Emoji, contentDescription = "Insert emoji", tint = Chirkle.colors.muted) }
+                    IconButton(onClick = onEmoji) { Icon(ChirkleIcons.Emoji, contentDescription = stringResource(R.string.room_insert_emoji), tint = Chirkle.colors.muted) }
                     val textColor = MaterialTheme.colorScheme.onSurface
                     BasicTextField(
                         value = vm.text,
@@ -186,7 +189,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                             .weight(1f)
                             .padding(vertical = 13.dp)
                             .focusRequester(focus)
-                            .semantics { contentDescription = "Message" }
+                            .semantics { contentDescription = res.getString(R.string.room_message) }
                             .onPreviewKeyEvent { e ->
                                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 val plain = !e.isShiftPressed && !e.isCtrlPressed && !e.isAltPressed && !e.isMetaPressed
@@ -217,16 +220,16 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                     )
                     if (vm.editing == null) {
                         Box {
-                            IconButton(onClick = { attachMenu = true }) { Icon(ChirkleIcons.Attach, contentDescription = "Attach files", tint = Chirkle.colors.muted) }
+                            IconButton(onClick = { attachMenu = true }) { Icon(ChirkleIcons.Attach, contentDescription = stringResource(R.string.room_attach_files), tint = Chirkle.colors.muted) }
                             DropdownMenu(attachMenu, onDismissRequest = { attachMenu = false }) {
-                                DropdownMenuItem(text = { Text("Photos and videos") }, leadingIcon = { Icon(ChirkleIcons.Image, contentDescription = null) }, onClick = {
+                                DropdownMenuItem(text = { Text(stringResource(R.string.room_photos_and_videos)) }, leadingIcon = { Icon(ChirkleIcons.Image, contentDescription = null) }, onClick = {
                                     attachMenu = false
                                     pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                                 })
-                                DropdownMenuItem(text = { Text("Files") }, leadingIcon = { Icon(ChirkleIcons.File, contentDescription = null) }, onClick = { attachMenu = false; pickFiles.launch(arrayOf("*/*")) })
+                                DropdownMenuItem(text = { Text(stringResource(R.string.room_files)) }, leadingIcon = { Icon(ChirkleIcons.File, contentDescription = null) }, onClick = { attachMenu = false; pickFiles.launch(arrayOf("*/*")) })
                                 if (onCollections != null) {
                                     DropdownMenuItem(
-                                        text = { Text("From a collection") },
+                                        text = { Text(stringResource(R.string.room_from_a_collection)) },
                                         leadingIcon = { Icon(ChirkleIcons.Collection, contentDescription = null) },
                                         onClick = { attachMenu = false; onCollections() },
                                     )
@@ -249,7 +252,7 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                     colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = bg, contentColor = fg, disabledContainerColor = bg, disabledContentColor = fg),
                     modifier = Modifier.size(52.dp),
                 ) {
-                    Icon(if (vm.editing != null) ChirkleIcons.Check else ChirkleIcons.Send, contentDescription = if (vm.editing != null) "Save" else "Send", modifier = Modifier.size(20.dp))
+                    Icon(if (vm.editing != null) ChirkleIcons.Check else ChirkleIcons.Send, contentDescription = if (vm.editing != null) stringResource(R.string.room_save) else stringResource(R.string.room_send), modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -259,10 +262,11 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
 /** The emoji a ":name" finds, in a row over the field: a tap puts one in; the chosen one (for Enter) is tinted. */
 @Composable
 private fun Suggestions(vm: RoomViewModel) {
+    val res = LocalContext.current.resources
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     androidx.compose.runtime.LaunchedEffect(vm.suggestion) { list.animateScrollToItem(vm.suggestion) }
     LazyRow(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp).semantics { contentDescription = "Emoji" },
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp).semantics { contentDescription = res.getString(R.string.room_emoji) },
         state = list,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -271,7 +275,7 @@ private fun Suggestions(vm: RoomViewModel) {
                 Modifier
                     .clip(RoundedCornerShape(18.dp))
                     .background(if (i == vm.suggestion) Chirkle.colors.tint else MaterialTheme.colorScheme.surfaceContainer)
-                    .clickable(onClickLabel = "Insert") { vm.pickSuggestion(i) }
+                    .clickable(onClickLabel = stringResource(R.string.room_insert)) { vm.pickSuggestion(i) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
                     .semantics(mergeDescendants = true) { contentDescription = "${n.emoji} ${n.name}" },
                 verticalAlignment = Alignment.CenterVertically,
@@ -291,6 +295,7 @@ private fun Suggestions(vm: RoomViewModel) {
  */
 @Composable
 private fun People(vm: RoomViewModel) {
+    val res = LocalContext.current.resources
     val scroll = androidx.compose.foundation.rememberScrollState()
     Column(
         Modifier
@@ -301,14 +306,14 @@ private fun People(vm: RoomViewModel) {
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .verticalScroll(scroll)
-            .semantics { contentDescription = "People" },
+            .semantics { contentDescription = res.getString(R.string.room_people) },
     ) {
         vm.people.forEachIndexed { i, u ->
             Row(
                 Modifier
                     .fillMaxWidth()
                     .background(if (i == vm.suggestion) Chirkle.colors.tint else Color.Transparent)
-                    .clickable(onClickLabel = "Mention") { vm.pickPerson(i) }
+                    .clickable(onClickLabel = stringResource(R.string.room_mention)) { vm.pickPerson(i) }
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .semantics(mergeDescendants = true) { contentDescription = "${u.name} @${u.handle}" },
                 verticalAlignment = Alignment.CenterVertically,

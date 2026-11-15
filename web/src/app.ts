@@ -21,6 +21,7 @@ import { createRenewal } from "./renewal.ts";
 import { createRouter, here, type Router, type View } from "./router.ts";
 import { startSite } from "./site.ts";
 import { type AppState, createStore, initialState, type Store } from "./store.ts";
+import * as S from "./strings/app.ts";
 import { createSync } from "./sync.ts";
 import { avatar } from "./ui/avatar.ts";
 import { createUnread } from "./unread.ts";
@@ -308,7 +309,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       mount(el) {
         stop = new AbortController();
         const { signal } = stop;
-        el.replaceChildren(h("p", { class: "empty", role: "status" }, "Loading…"));
+        el.replaceChildren(h("p", { class: "empty", role: "status" }, S.LOADING));
         import("./views/inbox.ts").then(
           (m) =>
             void (
@@ -326,7 +327,7 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
               })
             ),
           () => {
-            if (!signal.aborted) el.textContent = "Couldn't open your mentions and replies. Check your connection.";
+            if (!signal.aborted) el.textContent = S.COULDNT_OPEN_YOUR_MENTIONS_AND_REPLIES;
           },
         );
       },
@@ -362,11 +363,11 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
             },
           }),
         ),
-      "Couldn't open this page. Check your connection.",
+      S.COULDNT_OPEN_THIS_PAGE_CHECK_YOUR,
     );
   /** Settings (a lazy chunk). */
   const profilePage = () =>
-    lazyView(() => import("./views/profile.ts").then((m) => m.createProfileView(ctx)), "Couldn't open Settings. Check your connection.");
+    lazyView(() => import("./views/profile.ts").then((m) => m.createProfileView(ctx)), S.COULDNT_OPEN_SETTINGS_CHECK_YOUR_CONNECTION);
   const router = createRouter({
     onNavigate,
     root: main,

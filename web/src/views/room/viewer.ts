@@ -8,6 +8,7 @@
 
 import { h } from "../../dom.ts";
 import type { Message } from "../../lib/types.ts";
+import * as S from "../../strings/room-viewer.ts";
 
 /** The stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
 declare const VIEWER_CSS: string;
@@ -107,21 +108,21 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
       { type: "button", class: `viewer-button ${cls}`, "aria-label": label, title: label, autofocus, on: { click: onClick }, signal },
       glyph,
     );
-  const download = h("a", { class: "viewer-button", "aria-label": "Download", title: "Download" }, "↓");
-  const closeButton = button("", "Close", "×", () => close(true), true);
+  const download = h("a", { class: "viewer-button", "aria-label": S.DOWNLOAD, title: S.DOWNLOAD }, "↓");
+  const closeButton = button("", S.CLOSE, "×", () => close(true), true);
   // The eye icon is drawn in CSS.
   const { onJump, onSave } = o;
   const jump =
     onJump &&
-    button("viewer-jump", "Show in chat", "", () => {
+    button("viewer-jump", S.SHOW_IN_CHAT, "", () => {
       const at = shown();
       close(true, false);
       void onJump(at.message).then(() => !o.signal.aborted && tile(at)?.focus({ preventScroll: true }));
     });
-  const save = onSave && button("", "Save to collection", "", () => onSave(shown().message, shown().file, save!));
+  const save = onSave && button("", S.SAVE_TO_COLLECTION, "", () => onSave(shown().message, shown().file, save!));
   save?.append(h("span", { class: "ci", "aria-hidden": "true" }));
-  const prev = button("viewer-prev", "Previous image", "‹", () => void go(-1));
-  const next = button("viewer-next", "Next image", "›", () => void go(1));
+  const prev = button("viewer-prev", S.PREVIOUS_IMAGE, "‹", () => void go(-1));
+  const next = button("viewer-next", S.NEXT_IMAGE, "›", () => void go(1));
   // Not draggable: Firefox (which has no -webkit-user-drag) would drag the image away instead of swiping.
   // What you are waiting for: ahead of thumbnails still loading in the list (PERF.md §5).
   const img = h("img", { alt: "", decoding: "async", draggable: "false", fetchpriority: "high" });
@@ -129,7 +130,7 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
   const failureText = h("span");
   const failure = h("p", { class: "viewer-error", hidden: true }, [
     failureText,
-    h("button", { type: "button", class: "link", on: { click: () => load() }, signal }, "Retry"),
+    h("button", { type: "button", class: "link", on: { click: () => load() }, signal }, S.RETRY),
   ]);
   const stage = h("div", { class: "viewer-stage" }, [img, video, failure, prev, next]);
   const dialog = h("dialog", { class: "viewer", "aria-labelledby": title.id }, [
@@ -272,7 +273,7 @@ export async function openViewer(o: ViewerOptions): Promise<void> {
     stage.classList.remove("loading");
     img.hidden = true;
     video.hidden = true;
-    failureText.textContent = shown().video ? "Couldn't play video. " : "Couldn't load image. ";
+    failureText.textContent = shown().video ? S.COULDNT_PLAY_VIDEO : S.COULDNT_LOAD_IMAGE;
     failure.hidden = false;
   }
 

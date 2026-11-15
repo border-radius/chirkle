@@ -2,6 +2,7 @@
 
 import { h } from "../../dom.ts";
 import type { Collection } from "../../lib/types.ts";
+import * as S from "../../strings/collection-save.ts";
 import type { From } from "./calls.ts";
 import { calls } from "./calls.ts";
 import { type Base, icon, lists, loadStylesheet, reason } from "./shared.ts";
@@ -21,10 +22,10 @@ export async function openSave(o: SaveOptions): Promise<void> {
   const scope = new AbortController();
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(), { signal });
-  const title = h("h2", { id: "coll-save-title" }, [icon(), " Save to collection"]);
+  const title = h("h2", { id: "coll-save-title" }, [icon(), S.SAVE_TO_COLLECTION]);
   const list = h("ul", { class: "coll-choices" });
-  const status = h("p", { class: "coll-status", role: "status" }, "Loading…");
-  const input = h("input", { placeholder: "New collection", "aria-label": "New collection name", autocomplete: "off" });
+  const status = h("p", { class: "coll-status", role: "status" }, S.LOADING);
+  const input = h("input", { placeholder: S.NEW_COLLECTION, "aria-label": S.NEW_COLLECTION_NAME, autocomplete: "off" });
   const form = h(
     "form",
     {
@@ -44,12 +45,12 @@ export async function openSave(o: SaveOptions): Promise<void> {
       },
       signal,
     },
-    [input, h("button", { type: "submit" }, "Create")],
+    [input, h("button", { type: "submit" }, S.CREATE)],
   );
   const dialog = h("dialog", { class: "coll-dialog coll-save", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": S.CLOSE, on: { click: () => close() }, signal }),
     ]),
     h("div", { class: "coll-body" }, [list, status, form]),
   ]);
@@ -60,7 +61,7 @@ export async function openSave(o: SaveOptions): Promise<void> {
 
   async function toggle(id: string, on: boolean) {
     busy.set(id, on);
-    status.textContent = on ? "Saving…" : "Removing…";
+    status.textContent = on ? S.SAVING : S.REMOVING;
     render();
     try {
       if (on) saved[id] = (await call.save(id, o.from)).id;
@@ -68,7 +69,7 @@ export async function openSave(o: SaveOptions): Promise<void> {
         await call.unsave(saved[id]);
         delete saved[id];
       }
-      status.textContent = on ? "Saved." : "Removed.";
+      status.textContent = on ? S.SAVED : S.REMOVED;
       o.service.refresh();
     } catch (e) {
       // In there already (another tab): it is ticked.
@@ -93,13 +94,13 @@ export async function openSave(o: SaveOptions): Promise<void> {
             box,
             " ",
             c.name,
-            h("span", { class: "coll-meta" }, c.public ? " · Public: anyone can see it" : " · Private"),
+            h("span", { class: "coll-meta" }, c.public ? S.PUBLIC_ANYONE_CAN_SEE_IT : " · Private"),
             busy.has(c.id) ? h("span", { class: "coll-spin", "aria-hidden": "true" }) : null,
           ]),
         );
       }),
     );
-    if (!mine.length && status.textContent === "") status.textContent = "You have no collections yet. Make one:";
+    if (!mine.length && status.textContent === "") status.textContent = S.YOU_HAVE_NO_COLLECTIONS_YET_MAKE;
   }
 
   function close() {

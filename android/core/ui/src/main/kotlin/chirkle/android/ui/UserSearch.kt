@@ -2,6 +2,8 @@
 // address, "ann@b.example", finds someone on a linked instance (§33.5).
 package chirkle.android.ui
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,22 +50,23 @@ fun UserSearchDialog(
     remote: Boolean = true,
     room: String? = null,
 ) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     var query by remember { mutableStateOf("") }
     var found by remember { mutableStateOf<List<User>?>(null) }
     // The query [found] answers: Done picks only from the current query's results.
     var foundFor by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Type a name.") }
+    var status by remember { mutableStateOf(res.getString(R.string.ui_type_a_name)) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(query) {
         if (query.isBlank()) {
             found = null
-            status = "Type a name."
+            status = res.getString(R.string.ui_type_a_name)
             return@LaunchedEffect
         }
         delay(250)
-        status = "Searching…"
+        status = res.getString(R.string.ui_searching)
         val q = query.trim()
         var refused = ""
         found = runCatching { if (remote && isAddress(q)) listOf(services.api.remoteUser(q, room)) else services.api.searchUsers(q) }
@@ -72,8 +75,8 @@ fun UserSearchDialog(
         foundFor = q
         status = when {
             refused.isNotEmpty() -> refused
-            found == null -> "Couldn't search. Check your connection."
-            found!!.isEmpty() -> "No one found."
+            found == null -> res.getString(R.string.ui_couldnt_search_check_your_connection)
+            found!!.isEmpty() -> res.getString(R.string.ui_no_one_found)
             else -> ""
         }
     }
@@ -85,7 +88,7 @@ fun UserSearchDialog(
                 OutlinedTextField(
                     query,
                     { query = it },
-                    placeholder = { Text("Find someone…") },
+                    placeholder = { Text(stringResource(R.string.ui_find_someone)) },
                     singleLine = true,
                     // Done picks the first found, as the forward sheet and Jump to do (QA BUG-272).
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
@@ -105,15 +108,15 @@ fun UserSearchDialog(
                             Avatar(u, 32.dp)
                             Column(Modifier.weight(1f)) {
                                 Text(u.name)
-                                if (u.instance.isNotEmpty()) Text("On ${u.instance}", style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
-                                if (u.noDms && confirm == null) Text("Doesn't take direct messages", style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                                if (u.instance.isNotEmpty()) Text(stringResource(R.string.ui_on, u.instance), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                                if (u.noDms && confirm == null) Text(stringResource(R.string.ui_doesnt_take_direct_messages), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                             }
-                            if (u.id in selected) Icon(ChirkleIcons.Check, contentDescription = "Added", tint = MaterialTheme.colorScheme.primary)
+                            if (u.id in selected) Icon(ChirkleIcons.Check, contentDescription = stringResource(R.string.ui_added), tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(confirm ?: "Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(confirm ?: stringResource(R.string.ui_cancel)) } },
     )
 }

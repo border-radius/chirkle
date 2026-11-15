@@ -1,5 +1,7 @@
 package chirkle.android.nav
 
+import androidx.compose.ui.res.stringResource
+import chirkle.android.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,8 +25,8 @@ import chirkle.android.ui.ChirkleIcons
 fun SharePickerScreen(rooms: List<chirkle.android.data.model.Room>, me: String?, onPick: (String) -> Unit, onCancel: () -> Unit) {
     Scaffold(topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onCancel) { Icon(ChirkleIcons.Close, contentDescription = "Cancel") } },
-            title = { Text("Share to") },
+            navigationIcon = { IconButton(onClick = onCancel) { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.app_cancel)) } },
+            title = { Text(stringResource(R.string.app_share_to)) },
         )
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {

@@ -16,6 +16,7 @@ import {
   type Visibility,
 } from "./lib/types.ts";
 import { type AuthRecord, type PbClient, PbError, type Query, type RequestOptions } from "./pb.ts";
+import * as S from "./strings/api.ts";
 
 export type AvatarSize = 48 | 96;
 export type Unsubscribe = () => Promise<void>;
@@ -251,10 +252,10 @@ export const SIGNUP_LOGIN_FAILED = "signup_login_failed";
 
 /** A sentence to show for a failed request: network trouble, rate limiting, or the server's own message. */
 export function errorMessage(err: unknown): string {
-  if (!(err instanceof ApiError)) return "Something went wrong. Please try again.";
-  if (err.status === 0) return "Can't reach the server. Check your connection.";
+  if (!(err instanceof ApiError)) return S.SOMETHING_WENT_WRONG_PLEASE_TRY_AGAIN;
+  if (err.status === 0) return S.CANT_REACH_THE_SERVER_CHECK_YOUR;
   // e.g. PocketBase's default `*:auth` limit (2 requests per 3 seconds) or our messages/signup limits
-  if (err.status === 429) return "Too many attempts. Wait a few seconds and try again.";
+  if (err.status === 429) return S.TOO_MANY_ATTEMPTS_WAIT_A_FEW;
   return err.message;
 }
 
@@ -451,7 +452,7 @@ export function createApi(client: PbClient): Api {
     );
   const me = () => {
     const u = api.currentUser();
-    if (!u) throw new ApiError("Not logged in.", 401);
+    if (!u) throw new ApiError(S.NOT_LOGGED_IN, 401);
     return u.id;
   };
 
@@ -481,7 +482,7 @@ export function createApi(client: PbClient): Api {
       await wrap(users.action("confirm-password-reset", { token, password, passwordConfirm: password }));
     },
     async refreshAuth() {
-      if (!api.currentUser()) throw new ApiError("Not logged in.", 401);
+      if (!api.currentUser()) throw new ApiError(S.NOT_LOGGED_IN, 401);
       return toUser(await wrap(users.authRefresh()));
     },
     sessionExpiry: () => pb.authStore.expiresAt,

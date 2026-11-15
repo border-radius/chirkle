@@ -9,6 +9,7 @@
 import type { Api } from "../api.ts";
 import { h } from "../dom.ts";
 import type { User } from "../lib/types.ts";
+import * as S from "../strings/ui-mention-suggest.ts";
 
 /** The emoji picker's stylesheet, which styles .emoji-suggest (scripts/lib/build-utils.mjs). */
 declare const EMOJI_CSS: string;
@@ -40,7 +41,7 @@ export function createMentionSuggest(opts: {
   const { api, textarea, signal } = opts;
   if (!document.querySelector(`link[href="${EMOJI_CSS}"]`)) document.head.append(h("link", { rel: "stylesheet", href: EMOJI_CSS }));
   const id = `${textarea.id}-people`;
-  const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": "People", hidden: true });
+  const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": S.PEOPLE, hidden: true });
   document.body.append(el);
   signal.addEventListener("abort", () => el.remove(), { once: true });
 

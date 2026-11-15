@@ -4,6 +4,7 @@
 
 import type { Api } from "./api.ts";
 import { h } from "./dom.ts";
+import * as S from "./strings/update.ts";
 
 /** At most one check this often from the tab coming into view (a reconnect checks anyway). */
 const MIN_GAP = 60_000;
@@ -35,7 +36,7 @@ export function startUpdates(
     if (next && next !== current && !shown()) {
       root.prepend(
         h("div", { class: "update-bar", role: "status" }, [
-          "A new version of the app is out. ",
+          S.A_NEW_VERSION_OF_THE_APP,
           // The page itself, loaded again: the router would show it in place (and middle-click opens it fresh anyway).
           h(
             "a",
@@ -48,7 +49,7 @@ export function startUpdates(
                 },
               },
             },
-            "Reload",
+            S.RELOAD,
           ),
         ]),
       );

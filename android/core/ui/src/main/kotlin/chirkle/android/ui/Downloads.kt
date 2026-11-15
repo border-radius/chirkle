@@ -23,6 +23,6 @@ fun download(context: Context, url: String, name: String): Boolean {
         else req.setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, file)
         (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
     }.isSuccess
-    android.widget.Toast.makeText(context, if (ok) "Downloading $name" else "Couldn't download $name.", android.widget.Toast.LENGTH_SHORT).show()
+    android.widget.Toast.makeText(context, if (ok) context.getString(R.string.ui_downloading, name) else context.getString(R.string.ui_couldnt_download, name), android.widget.Toast.LENGTH_SHORT).show()
     return ok
 }

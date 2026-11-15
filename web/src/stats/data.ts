@@ -1,3 +1,4 @@
+import * as S from "../strings/stats-data.ts";
 // Usage statistics (DESIGN.md §40): what GET /api/chat/stats answers, and the figures the page works out from it.
 // Pure, so tests/unit can check them.
 
@@ -100,9 +101,9 @@ export function niceMax(max: number, min = 4): number {
 
 /** "1.5 h", "40 min", "12 h": person-time for a tile. */
 export function formatHours(h: number): string {
-  if (h < 1) return `${Math.round(h * 60)} min`;
-  if (h < 10) return `${(Math.round(h * 10) / 10).toLocaleString()} h`;
-  return `${Math.round(h).toLocaleString()} h`;
+  if (h < 1) return S.min(Math.round(h * 60));
+  if (h < 10) return S.hours((Math.round(h * 10) / 10).toLocaleString());
+  return S.hours(Math.round(h).toLocaleString());
 }
 
 /** `part` of `whole` as a whole percent ("–" with nothing to divide). */
@@ -137,14 +138,14 @@ export function formatBytes(n: number): string {
 
 /** A span of seconds, short: "40 s", "12 min", "5 h", "3 d". */
 export function formatSpan(s: number): string {
-  if (s < 60) return `${Math.round(s)} s`;
-  if (s < 3600) return `${Math.round(s / 60)} min`;
-  if (s < 86_400) return `${Math.round(s / 3600)} h`;
-  return `${Math.round(s / 86_400)} d`;
+  if (s < 60) return S.sec(Math.round(s));
+  if (s < 3600) return S.min(Math.round(s / 60));
+  if (s < 86_400) return S.hours(String(Math.round(s / 3600)));
+  return S.days(Math.round(s / 86_400));
 }
 
 /** How long before `now` (epoch ms) an RFC 3339 time was, "12 min ago"; `never` when there is none. */
-export function ago(at: string, now: number, never = "not since the start"): string {
+export function ago(at: string, now: number, never = S.NOT_SINCE_START): string {
   const t = Date.parse(at);
-  return at && !Number.isNaN(t) ? `${formatSpan(Math.max(0, (now - t) / 1000))} ago` : never;
+  return at && !Number.isNaN(t) ? S.ago(formatSpan(Math.max(0, (now - t) / 1000))) : never;
 }

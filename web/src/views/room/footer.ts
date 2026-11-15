@@ -6,6 +6,7 @@
 import { h } from "../../dom.ts";
 import { canPost, dmClosed, roomTitle } from "../../lib/rooms.ts";
 import type { Room, User } from "../../lib/types.ts";
+import * as S from "../../strings/room-footer.ts";
 import type { Composer } from "./composer.ts";
 import type { Selection } from "./selection.ts";
 
@@ -45,24 +46,20 @@ export function createFooter({
   signal: AbortSignal;
 }): Footer {
   const el = h("footer", { class: "room-footer" });
-  const banner = h("p", { class: "archived-banner ic i-archive" }, "This room is archived. History is read-only.");
+  const banner = h("p", { class: "archived-banner ic i-archive" }, S.THIS_ROOM_IS_ARCHIVED_HISTORY_IS);
   const guestBanner = h(
     "p",
     { class: "guest-banner ic i-globe" },
     // One flex item: the links stay in the sentence, not spaced apart by the banner's gap.
     h("span", {}, [
-      "You're reading as a guest. ",
-      h("a", { href: "/login" }, "Log in"),
-      " or ",
-      h("a", { href: "/signup" }, "sign up"),
-      " to join the conversation.",
+      S.YOURE_READING_AS_A_GUEST,
+      h("a", { href: "/login" }, S.LOG_IN),
+      S.OR,
+      h("a", { href: "/signup" }, S.SIGN_UP),
+      S.TO_JOIN,
     ]),
   );
-  const readerBanner = h(
-    "p",
-    { class: "guest-banner reader-banner ic i-lock" },
-    "Only some people can post in this room. You can read along and react.",
-  );
+  const readerBanner = h("p", { class: "guest-banner reader-banner ic i-lock" }, S.ONLY_SOME_PEOPLE_CAN_POST_IN);
   const closedBanner = h("p", { class: "guest-banner reader-banner ic i-x" });
   let focusComposer = true;
   const composing = () => el.contains(composer.el);
@@ -93,7 +90,7 @@ export function createFooter({
         closedBanner.textContent = dmClosed(r, me());
         show(closedBanner);
       } else show(composer.el);
-      composer.setPlaceholder(`Message ${roomTitle(r, me())}`);
+      composer.setPlaceholder(S.message(roomTitle(r, me())));
       // Entering a room (or switching to another one), you can just type. Not on touch screens: it would pop up the
       // keyboard over the messages you came to read.
       if (focusComposer && composing()) {

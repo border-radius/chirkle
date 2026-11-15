@@ -45,10 +45,10 @@ object Notifications {
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannels(
             listOf(
-                NotificationChannel(DMS, "Direct messages", NotificationManager.IMPORTANCE_HIGH).apply { setShowBadge(true) },
-                NotificationChannel(ROOMS, "Mentions and replies", NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
-                NotificationChannel(ROOM_ALL, "Room messages", NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
-                NotificationChannel(SENDING, "Sending", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
+                NotificationChannel(DMS, context.getString(R.string.app_direct_messages), NotificationManager.IMPORTANCE_HIGH).apply { setShowBadge(true) },
+                NotificationChannel(ROOMS, context.getString(R.string.app_mentions_and_replies), NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
+                NotificationChannel(ROOM_ALL, context.getString(R.string.app_room_messages), NotificationManager.IMPORTANCE_DEFAULT).apply { setShowBadge(true) },
+                NotificationChannel(SENDING, context.getString(R.string.app_sending), NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
             ),
         )
     }
@@ -89,20 +89,20 @@ object Notifications {
         if (!allowed(context)) return
         val me = services.store.get().user ?: services.api.currentUser() ?: return
         val nm = NotificationManagerCompat.from(context)
-        val self = Person.Builder().setName("You").setKey(me.id).build()
+        val self = Person.Builder().setName(context.getString(R.string.app_you)).setKey(me.id).build()
         val existing = nm.activeNotifications.firstOrNull { it.id == id(acct, room.id) }?.notification
         val style = existing?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) } ?: NotificationCompat.MessagingStyle(self)
         if (!room.isDm) style.setConversationTitle(room.title(me.id)).setGroupConversation(true)
         val author = m.expand?.author
         // When it was sent: a check finds it up to 15 minutes later (QA BUG-154).
         val sent = parsePb(m.created).takeIf { it != Long.MIN_VALUE } ?: System.currentTimeMillis()
-        style.addMessage(bodyOf(m), sent, Person.Builder().setName(author?.name ?: "Unknown").setKey(m.author).build())
-        val reply = NotificationCompat.Action.Builder(0, "Reply", action(context, ActionReceiver.REPLY, acct, room.id, m, mutable = true))
-            .addRemoteInput(RemoteInput.Builder(KEY_REPLY).setLabel("Reply").build())
+        style.addMessage(bodyOf(m), sent, Person.Builder().setName(author?.name ?: context.getString(R.string.app_unknown)).setKey(m.author).build())
+        val reply = NotificationCompat.Action.Builder(0, context.getString(R.string.app_reply), action(context, ActionReceiver.REPLY, acct, room.id, m, mutable = true))
+            .addRemoteInput(RemoteInput.Builder(KEY_REPLY).setLabel(context.getString(R.string.app_reply)).build())
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
             .setShowsUserInterface(false)
             .build()
-        val read = NotificationCompat.Action.Builder(0, "Mark as read", action(context, ActionReceiver.READ, acct, room.id, m, mutable = false))
+        val read = NotificationCompat.Action.Builder(0, context.getString(R.string.app_mark_as_read), action(context, ActionReceiver.READ, acct, room.id, m, mutable = false))
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
             .setShowsUserInterface(false)
             .build()
@@ -186,7 +186,7 @@ object Notifications {
     }
 
     /** What expedited work shows before Android 12, when it runs as a foreground service. */
-    fun sending(context: Context, title: String = "Sending messages…") = NotificationCompat.Builder(context, SENDING)
+    fun sending(context: Context, title: String = context.getString(R.string.app_sending_messages)) = NotificationCompat.Builder(context, SENDING)
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle(title)
         .setProgress(0, 0, true)

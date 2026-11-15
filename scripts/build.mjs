@@ -1,5 +1,6 @@
 // Production build: web/ → pb_public/ (hashed assets + index.html), then enforce the size budget (DESIGN.md §7.7).
 
+import { readFileSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import * as esbuild from "esbuild";
@@ -16,6 +17,7 @@ import {
   formatSizes,
   INBOX,
   injectAssets,
+  inlineStringsPlugin,
   latinFont,
   MEDIA,
   OUTDIR,
@@ -39,6 +41,8 @@ const shared = {
   metafile: true,
   legalComments: "none",
   logLevel: "warning",
+  // The text constants inlined where they are used (web/src/strings/, docs/REFACTOR.md item 56).
+  plugins: [inlineStringsPlugin((p) => readFileSync(p, "utf8"))],
 };
 
 // The viewer's and the media grid's stylesheets first: the app's build needs their hashed names.

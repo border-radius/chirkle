@@ -7,6 +7,7 @@ import { h } from "./dom.ts";
 import { JUMP } from "./jump.ts";
 import type { Site } from "./lib/types.ts";
 import type { AppState, Store } from "./store.ts";
+import * as S from "./strings/header.ts";
 import { avatar } from "./ui/avatar.ts";
 
 /** The site's logo and title, a link home. `by`: with "chirps on Chirkle" under the title (byLine), the title then
@@ -25,7 +26,7 @@ export function brand(site: Site, by = false): HTMLElement {
 export function byLine({ title }: Site, tag: "span" | "p" = "span"): HTMLElement | null {
   if (title.trim().toLowerCase() === "chirkle") return null;
   return h(tag, { class: "brand-by" }, [
-    "chirps on ",
+    S.CHIRPS_ON,
     h("a", { href: "https://chirkle.com", target: "_blank", rel: "noopener" }, "Chirkle"),
   ]);
 }
@@ -38,11 +39,11 @@ export function jumpButton(text: boolean): HTMLElement {
     {
       type: "button",
       class: text ? "jump-button ic i-search" : "icon-button ic i-search",
-      "aria-label": "Jump to",
-      title: `Jump to (${mac ? "⌘" : "Ctrl+"}K)`,
+      "aria-label": S.JUMP_TO,
+      title: S.jumpToK(mac),
       on: { click: () => document.dispatchEvent(new Event(JUMP)) },
     },
-    text ? [h("span", {}, "Jump to…"), h("kbd", { "aria-hidden": "true" }, mac ? "⌘K" : "Ctrl K")] : [],
+    text ? [h("span", {}, S.JUMP_TO_ELLIPSIS), h("kbd", { "aria-hidden": "true" }, mac ? "⌘K" : S.CTRL_K)] : [],
   );
 }
 
@@ -56,14 +57,14 @@ export function createHeader({ api, store }: { api: Api; store: Store<AppState> 
       user
         ? h("div", { class: "bar-end" }, [
             jumpButton(false),
-            h("a", { href: "/me", class: "me-link", title: "Your profile" }, [
+            h("a", { href: "/me", class: "me-link", title: S.YOUR_PROFILE }, [
               avatar(user, 32, api.avatarUrl),
               h("span", { class: "who" }, user.name),
             ]),
           ])
-        : h("nav", { class: "guest-links", "aria-label": "Account" }, [
-            h("a", { href: "/login", class: "guest-link" }, "Log in"),
-            h("a", { href: "/signup", class: "guest-link primary" }, "Sign up"),
+        : h("nav", { class: "guest-links", "aria-label": S.ACCOUNT }, [
+            h("a", { href: "/login", class: "guest-link" }, S.LOG_IN),
+            h("a", { href: "/signup", class: "guest-link primary" }, S.SIGN_UP),
           ]),
     );
   }

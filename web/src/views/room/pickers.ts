@@ -4,6 +4,7 @@
 
 import type { Api } from "../../api.ts";
 import type { Scope } from "../../scope.ts";
+import * as S from "../../strings/room-pickers.ts";
 import { avatar } from "../../ui/avatar.ts";
 import type { EmojiPicker, PickerRequest } from "../../ui/emoji-picker.ts";
 import type { EmojiSuggest } from "../../ui/emoji-suggest.ts";
@@ -63,7 +64,7 @@ export function createPickers({
         }
         picker.open(opener, req);
       } catch {
-        if (scope.active) say("Couldn't open the emoji. Check your connection.");
+        if (scope.active) say(S.COULDNT_OPEN_THE_EMOJI_CHECK_YOUR);
       }
     },
     close() {

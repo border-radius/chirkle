@@ -15,6 +15,7 @@ import { h, uniqueId } from "../../dom.ts";
 import { LIMITS } from "../../lib/limits.ts";
 import { isAddress, postingOf, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
 import type { Posting, Room, User, Visibility } from "../../lib/types.ts";
+import * as S from "../../strings/room-access.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
 import { createUserSearch, SearchError, type UserSearch } from "../../ui/user-search.ts";
 
@@ -49,18 +50,17 @@ const CHOICES: readonly Visibility[] = ["private", "public", "open"];
 const ICONS: Record<string, string> = { private: "ic i-lock", open: "ic i-globe", everyone: "ic i-users", selected: "ic i-check" };
 
 const POSTING: Record<Posting, { label: string; icon: string; hint: string }> = {
-  everyone: { label: "Everyone who can see it", icon: "", hint: "Guests of an Open Air room only read." },
-  selected: { label: "Only people you choose", icon: "", hint: "Everyone else reads and reacts, but can't post." },
+  everyone: { label: S.EVERYONE_WHO_CAN_SEE_IT, icon: "", hint: S.GUESTS_OF_AN_OPEN_AIR_ROOM },
+  selected: { label: S.ONLY_PEOPLE_YOU_CHOOSE, icon: "", hint: S.EVERYONE_ELSE_READS_AND_REACTS_BUT },
 };
 
 /** What a change of visibility does that may not be obvious, or "". */
 function warning(from: Visibility, to: Visibility, mine: boolean): string {
   if (from === to) return "";
-  if (to === "open") return "Everything ever written here, and everything to come, becomes readable by anyone on the web.";
-  if (from === "private") return "Everyone with an account will be able to read the whole history.";
-  if (to === "private")
-    return `Only ${mine ? "you and the people you add" : "its creator and the people added"} will see this room. Everyone else loses it from their list.`;
-  return "People without an account won't see this room any more.";
+  if (to === "open") return S.EVERYTHING_EVER_WRITTEN_HERE_AND_EVERYTHING;
+  if (from === "private") return S.EVERYONE_WITH_AN_ACCOUNT_WILL_BE;
+  if (to === "private") return S.onlyWillSeeThisRoomEveryone(mine);
+  return S.PEOPLE_WITHOUT_AN_ACCOUNT_WONT_SEE;
 }
 
 /** A list of people with Add and Remove: the members, or who can post. */
@@ -128,12 +128,12 @@ export function createAccessDialog(opts: {
     visibility = v;
     changed();
   });
-  choices.legend.textContent = "Who can see it";
+  choices.legend.textContent = S.WHO_CAN_SEE_IT;
   const postingChoices = cards(["everyone", "selected"] as const, POSTING, (p) => {
     posting = p;
     changed();
   });
-  postingChoices.legend.textContent = "Who can post";
+  postingChoices.legend.textContent = S.WHO_CAN_POST;
 
   /**
    * One list of people. `pickable` says who its search offers: the members are anyone; who can post, in a private
@@ -145,7 +145,7 @@ export function createAccessDialog(opts: {
     const addBtn = h(
       "button",
       { type: "button", class: "add-member ic i-plus", on: { click: () => toggleSearch(p) }, signal },
-      "Add people",
+      S.ADD_PEOPLE,
     );
     const slot = h("div", { class: "member-search" });
     // Search above the list, so it stays in reach however many people there are.
@@ -163,14 +163,14 @@ export function createAccessDialog(opts: {
         const full = p.list.length >= maxMembers;
         addBtn.hidden = !editable || search?.p === p;
         addBtn.disabled = full;
-        addBtn.title = full ? `A room can have up to ${maxMembers} ${label.toLowerCase()}.` : "";
+        addBtn.title = full ? S.upTo(maxMembers, p === members) : "";
         ul.replaceChildren(
           ...shown.map((u) => {
             const owner = u.id === room?.created_by;
             return h("li", { class: "member", dataset: { userId: u.id } }, [
               avatar(u, 32, opts.avatarUrl),
               h("span", { class: "member-name" }, [u.name, u.id === myId ? h("span", {}, " (you)") : null]),
-              owner ? h("span", { class: "member-role" }, "Creator") : null,
+              owner ? h("span", { class: "member-role" }, S.CREATOR) : null,
               u.instance ? h("span", { class: "member-role" }, u.instance) : null,
               editable && !owner
                 ? h(
@@ -178,11 +178,11 @@ export function createAccessDialog(opts: {
                     {
                       type: "button",
                       class: "remove-member",
-                      "aria-label": `Remove ${u.name}`,
+                      "aria-label": S.remove(u.name),
                       on: { click: () => remove(p, u.id) },
                       signal,
                     },
-                    "Remove",
+                    S.REMOVE,
                   )
                 : null,
             ]);
@@ -193,13 +193,13 @@ export function createAccessDialog(opts: {
     return p;
   }
 
-  const members = people("Members", "members", () => true);
-  const writers = people("Who can post", "writers", (u) => visibility !== "private" || has(members, u));
+  const members = people(S.MEMBERS, "members", () => true);
+  const writers = people(S.WHO_CAN_POST, "writers", (u) => visibility !== "private" || has(members, u));
   const warn = h("p", { class: "access-warning", role: "status" });
   const sharedEl = h("p", { class: "access-shared" });
   const error = h("p", { class: "field-error", role: "alert" });
-  const cancel = h("button", { type: "button", class: "cancel", on: { click: () => close() }, signal }, "Cancel");
-  const save = h("button", { type: "button", class: "primary save", on: { click: () => void submit() }, signal }, "Save");
+  const cancel = h("button", { type: "button", class: "cancel", on: { click: () => close() }, signal }, S.CANCEL);
+  const save = h("button", { type: "button", class: "primary save", on: { click: () => void submit() }, signal }, S.SAVE);
   const buttons = h("div", { class: "dialog-actions" }, [cancel, save]);
   // For the pointer only: the footer's Cancel/Close and Escape do the same, so it isn't a second "Close" to tab to or hear.
   const x = h("button", {
@@ -249,10 +249,10 @@ export function createAccessDialog(opts: {
     sharedEl.textContent = !hosts.length
       ? ""
       : room.shared?.home
-        ? `This room's home is ${room.shared.home}: who is in it is decided there.`
-        : `Shared with ${hosts.join(", ")}: its messages are kept there too.${editable ? ` Add people there by their address, like ann@${hosts[0]}.` : ""}`;
+        ? S.thisRoomsHomeIsWhoIs(room.shared.home)
+        : S.sharedWith(hosts, editable);
     save.hidden = !editable;
-    cancel.textContent = editable ? "Cancel" : "Close";
+    cancel.textContent = editable ? S.CANCEL : S.CLOSE;
   }
 
   function remove(p: People, userId: string) {
@@ -273,7 +273,7 @@ export function createAccessDialog(opts: {
       p.list = p.list.filter((x) => x.id !== u.id);
       if (p === members) writers.list = writers.list.filter((x) => x.id !== u.id);
     } else if (p.list.length >= maxMembers) {
-      error.textContent = `A room can have up to ${maxMembers} ${p === members ? "members" : "people who post"}.`;
+      error.textContent = S.upTo(maxMembers, p === members);
       return;
     } else p.list = [...p.list, u];
     error.textContent = "";
@@ -305,7 +305,7 @@ export function createAccessDialog(opts: {
         avatarUrl: opts.avatarUrl,
         onPick: (u) => toggle(p, u),
         isPicked: (u) => has(p, u),
-        label: p === members ? "Find someone to add as a member" : "Find someone who can post",
+        label: p === members ? S.FIND_SOMEONE_TO_ADD_AS_A : S.FIND_SOMEONE_WHO_CAN_POST,
         onClose: () => {
           toggleSearch(null);
           p.addBtn.focus();
@@ -365,7 +365,7 @@ export function createAccessDialog(opts: {
     // it so with themselves (§36), who would otherwise lose it.
     if (me && !known.has(me.id)) known.set(me.id, me);
     const list = [...new Set(ids.length ? ids : [r.created_by, myId || r.created_by])].map(
-      (uid) => known.get(uid) ?? { id: uid, name: "Unknown" },
+      (uid) => known.get(uid) ?? { id: uid, name: S.UNKNOWN },
     );
     return list.sort((a, b) => Number(b.id === r.created_by) - Number(a.id === r.created_by));
   }
@@ -380,7 +380,7 @@ export function createAccessDialog(opts: {
       posting = postingOf(r);
       members.list = users(r, r.members ?? [], undefined, me);
       writers.list = users(r, r.writers ?? [], r.expand?.writers, me);
-      title.textContent = editable ? "Room access" : "Members";
+      title.textContent = editable ? S.ROOM_ACCESS : S.MEMBERS;
       sub.textContent = `#${r.name}`;
       error.textContent = "";
       toggleSearch(null);

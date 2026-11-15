@@ -4,6 +4,7 @@
 // No UI: the screen renders [state] and follows [scrolls]. Runs on the main thread; writes outlive the screen.
 package chirkle.android.data.repo
 
+import chirkle.android.data.lib.Strings
 import chirkle.android.data.api.Action
 import chirkle.android.data.api.ApiError
 import chirkle.android.data.api.ChirkleApi
@@ -386,7 +387,7 @@ class RoomController(
         }
         if (g != gen || !run.active) return
         if (around !is Around.Found) {
-            notice = if (around == Around.Missing) "That message isn't available any more." else "Couldn't load that message. Check your connection."
+            notice = if (around == Around.Missing) Strings.THAT_MESSAGE_ISNT_AVAILABLE_ANY_MORE else Strings.COULDNT_LOAD_THAT_MESSAGE_CHECK_YOUR
             return publish()
         }
         gen++
@@ -487,7 +488,7 @@ class RoomController(
             win = loaded.win.merge(meanwhile).merge(loaded.win.items)
             setTarget(loaded.target)
             setUnread(loaded.unread)
-            notice = if (msgId != null && loaded.target == null) "That message isn't in this room. Showing the latest messages instead." else ""
+            notice = if (msgId != null && loaded.target == null) Strings.THAT_MESSAGE_ISNT_IN_THIS_ROOM else ""
             // A stale window was already shown at the first unread message, or scrolled: stay there (QA BUG-96).
             scroll = when {
                 targetId != null || !stale || retarget -> if (targetId != null || loaded.unread != null) Scroll.Target else Scroll.Bottom

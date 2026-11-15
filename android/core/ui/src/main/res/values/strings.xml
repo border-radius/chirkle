@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This module's text (docs/REFACTOR.md item 56): one strings.xml per module, as the web's web/src/strings/.
+     Copy changes here; a translation sits beside it (values-xx/). -->
+<resources>
+    <string name="ui_cancel">Cancel</string>
+    <string name="ui_create">Create</string>
+    <string name="ui_public_anyone_can_see_it">Public: anyone can see it and subscribe</string>
+    <string name="ui_name">Name</string>
+    <string name="ui_new_collection">New collection</string>
+    <string name="ui_you_have_no_collections_yet">You have no collections yet. Make one:</string>
+    <string name="ui_private">Private</string>
+    <string name="ui_public_anyone_can_see_it_2">Public: anyone can see it</string>
+    <string name="ui_loading">Loading…</string>
+    <string name="ui_save_to_collection">Save to collection</string>
+    <string name="ui_removed">Removed.</string>
+    <string name="ui_saved">Saved.</string>
+    <string name="ui_removing">Removing…</string>
+    <string name="ui_saving">Saving…</string>
+    <string name="ui_couldnt_download">Couldn\'t download %1$s.</string>
+    <string name="ui_downloading">Downloading %1$s</string>
+    <string name="ui_yesterday">Yesterday</string>
+    <string name="ui_today">Today</string>
+    <string name="ui_added">Added</string>
+    <string name="ui_doesnt_take_direct_messages">Doesn\'t take direct messages</string>
+    <string name="ui_on">On %1$s</string>
+    <string name="ui_find_someone">Find someone…</string>
+    <string name="ui_no_one_found">No one found.</string>
+    <string name="ui_couldnt_search_check_your_connection">Couldn\'t search. Check your connection.</string>
+    <string name="ui_searching">Searching…</string>
+    <string name="ui_type_a_name">Type a name.</string>
+</resources>

@@ -4,9 +4,10 @@
 import { h } from "../../dom.ts";
 import { MAX_SELECTED } from "../../lib/limits.ts";
 import type { Message } from "../../lib/types.ts";
+import * as S from "../../strings/room-selection.ts";
 import type { Notice } from "./notice.ts";
 
-const LIMIT_NOTICE = `You can select up to ${MAX_SELECTED} messages at a time.`;
+const LIMIT_NOTICE = S.youCanSelectUpToMessages(MAX_SELECTED);
 
 export interface Selection {
   /** The bar to show in place of the composer while selecting. */
@@ -48,19 +49,19 @@ export function createSelection(opts: {
   /** The bar asks "Delete these messages?". */
   let confirming = false;
 
-  const bar = h("div", { class: "selection-bar", role: "toolbar", "aria-label": "Selected messages" });
+  const bar = h("div", { class: "selection-bar", role: "toolbar", "aria-label": S.SELECTED_MESSAGES });
   const button = (label: string, run: () => void, cls = "") =>
     h("button", { type: "button", class: cls, on: { click: run }, signal }, label);
   const count = h("span", { class: "sel-count", role: "status" });
-  const deleteBtn = button("Delete", () => setConfirm(true), "danger ic i-trash");
+  const deleteBtn = button(S.DELETE, () => setConfirm(true), "danger ic i-trash");
   // The buttons wrap together: on a narrow screen they go under the count, Cancel never on a line of its own.
   const group = (...b: HTMLElement[]) => h("div", { class: "bar-actions" }, b);
   const actions = [
     count,
     group(
-      button("Forward", () => opts.onForward([...(selected ?? [])]), "primary ic i-fwd"),
+      button(S.FORWARD, () => opts.onForward([...(selected ?? [])]), "primary ic i-fwd"),
       deleteBtn,
-      button("Cancel", () => end(true)),
+      button(S.CANCEL, () => end(true)),
     ),
   ];
   const confirmText = h("span");
@@ -68,7 +69,7 @@ export function createSelection(opts: {
     confirmText,
     group(
       button(
-        "Delete",
+        S.DELETE,
         () => {
           const ids = [...(selected ?? [])];
           end(true);
@@ -76,7 +77,7 @@ export function createSelection(opts: {
         },
         "danger confirm-delete",
       ),
-      button("Cancel", () => setConfirm(false), "cancel"),
+      button(S.CANCEL, () => setConfirm(false), "cancel"),
     ),
   ];
 
@@ -86,12 +87,12 @@ export function createSelection(opts: {
   function update() {
     const n = selected?.size ?? 0;
     if (confirming && allMine()) {
-      confirmText.textContent = n === 1 ? "Delete this message? " : `Delete these ${n} messages? `;
+      confirmText.textContent = n === 1 ? S.DELETE_THIS_MESSAGE : S.deleteTheseMessages(n);
       if (bar.firstChild !== confirmText) bar.replaceChildren(...confirmActions);
       return;
     }
     confirming = false;
-    count.textContent = `${n} selected`;
+    count.textContent = S.selected(n);
     deleteBtn.hidden = !allMine();
     if (bar.firstChild !== count) bar.replaceChildren(...actions);
   }

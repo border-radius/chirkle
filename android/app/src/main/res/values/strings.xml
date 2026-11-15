@@ -1,3 +1,17 @@
 <resources>
     <string name="app_name">Chirkle</string>
+    <string name="app_update">Update</string>
+    <string name="app_this_version_of_the_app">This version of the app is too old for the server. Update it to go on.</string>
+    <string name="app_update_required">Update required</string>
+    <string name="app_share_to">Share to</string>
+    <string name="app_cancel">Cancel</string>
+    <string name="app_sending_messages">Sending messages…</string>
+    <string name="app_mark_as_read">Mark as read</string>
+    <string name="app_reply">Reply</string>
+    <string name="app_unknown">Unknown</string>
+    <string name="app_you">You</string>
+    <string name="app_sending">Sending</string>
+    <string name="app_room_messages">Room messages</string>
+    <string name="app_mentions_and_replies">Mentions and replies</string>
+    <string name="app_direct_messages">Direct messages</string>
 </resources>

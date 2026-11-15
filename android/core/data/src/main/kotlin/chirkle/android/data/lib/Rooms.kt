@@ -30,16 +30,16 @@ fun Room.canManage(me: User?): Boolean {
 /** How each visibility is called and explained (§23.1). */
 val Visibility.label: String
     get() = when (this) {
-        Visibility.Private -> "Private"
-        Visibility.Public -> "Public"
-        Visibility.Open -> "Open Air"
+        Visibility.Private -> Strings.PRIVATE
+        Visibility.Public -> Strings.PUBLIC
+        Visibility.Open -> Strings.OPEN_AIR
     }
 
 val Visibility.hint: String
     get() = when (this) {
-        Visibility.Private -> "Only the people you add can read and post."
-        Visibility.Public -> "Everyone with an account can read and post."
-        Visibility.Open -> "Anyone can read it, even without an account. Everyone with an account can post."
+        Visibility.Private -> Strings.ONLY_THE_PEOPLE_YOU_ADD_CAN
+        Visibility.Public -> Strings.EVERYONE_WITH_AN_ACCOUNT_CAN_READ
+        Visibility.Open -> Strings.ANYONE_CAN_READ_IT
     }
 
 /**
@@ -49,8 +49,8 @@ val Visibility.hint: String
 fun Room.sharedNote(): String {
     val s = shared ?: return ""
     if (s.with.isEmpty()) return ""
-    val down = if (s.down && s.home.isNotEmpty()) " · ${s.home} can't be reached right now" else ""
-    return "Shared with ${s.with.joinToString(", ")}$down"
+    val down = if (s.down && s.home.isNotEmpty()) Strings.cantBeReachedRightNow(s.home) else ""
+    return Strings.sharedWith(s.with.joinToString(", "), down)
 }
 
 private val ADDRESS = Regex("""^[^@\s][^@]*@([a-z0-9-]+(?:\.[a-z0-9-]+)*(?::\d+)?)$""", RegexOption.IGNORE_CASE)
@@ -65,7 +65,7 @@ fun isAddress(q: String): Boolean {
 fun Room.otherMember(me: String?): User? {
     if (!isDm) return null
     val otherId = members.find { it != me } ?: return null
-    return expand?.members?.find { it.id == otherId } ?: User(otherId, "Unknown")
+    return expand?.members?.find { it.id == otherId } ?: User(otherId, Strings.UNKNOWN)
 }
 
 /**
@@ -74,13 +74,13 @@ fun Room.otherMember(me: String?): User? {
  */
 fun Room.dmClosed(me: User?): String {
     if (me == null || !isDm) return ""
-    if (me.noDms) return "You've turned off direct messages."
+    if (me.noDms) return Strings.YOUVE_TURNED_OFF_DIRECT_MESSAGES
     val other = otherMember(me.id)
-    return if (other?.noDms == true) "${other.name} doesn't take direct messages." else ""
+    return if (other?.noDms == true) Strings.doesntTakeDirectMessages(other.name) else ""
 }
 
 /** What to call a room: "#name", or the other member's name for a DM. */
-fun Room.title(me: String?): String = if (isDm) otherMember(me)?.name ?: "Unknown" else "#$name"
+fun Room.title(me: String?): String = if (isDm) otherMember(me)?.name ?: Strings.UNKNOWN else "#$name"
 
 data class RoomSections(val rooms: List<Room>, val dms: List<Room>, val hidden: List<Room>, val archived: List<Room>)
 

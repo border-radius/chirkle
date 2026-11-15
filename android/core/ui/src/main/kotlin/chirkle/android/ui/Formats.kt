@@ -1,6 +1,7 @@
 // Times as the web shows them (DESIGN.md §7.5, §7.6.1: web/src/lib/time.ts), with formatters made once per locale.
 package chirkle.android.ui
 
+import android.content.res.Resources
 import android.text.format.DateFormat
 import chirkle.android.data.lib.parsePb
 import java.time.Instant
@@ -39,14 +40,14 @@ object Formats {
     }
 
     /** A day divider: "Today", "Yesterday", or a weekday and date. */
-    fun day(created: String, now: Long = System.currentTimeMillis()): String {
+    fun day(created: String, res: Resources, now: Long = System.currentTimeMillis()): String {
         val ms = parsePb(created)
         if (ms == Long.MIN_VALUE) return ""
         val d = zoned(ms).toLocalDate()
         val today = zoned(now).toLocalDate()
         return when (d) {
-            today -> "Today"
-            today.minusDays(1) -> "Yesterday"
+            today -> res.getString(R.string.ui_today)
+            today.minusDays(1) -> res.getString(R.string.ui_yesterday)
             else -> (if (d.year == today.year) fmt("EEEEMMMMd") else fmt("EEEEyMMMMd")).format(d)
         }
     }

@@ -1,0 +1,42 @@
+// The user-facing text of views/collection/page.ts (docs/REFACTOR.md item 56): one module per source file, so a lazy
+// screen's text stays in its own chunk. Copy changes here; a translation would replace these.
+
+export const BACK_TO_ROOMS = "Back to rooms";
+export const IT_MAY_BE_PRIVATE_OR_DELETED = "It may be private, or deleted. ";
+export const COULDNT_SAVE = "Couldn't save.";
+export const COULDNT_DELETE_IT = "Couldn't delete it.";
+export const COULDNT_REMOVE_IT = "Couldn't remove it.";
+export const NOTHING_HERE_YET = "Nothing here yet.";
+export const NOTHING_HERE_YET_UPLOAD_IMAGES_AND = "Nothing here yet. Upload images and videos, or save them from the chat.";
+export const uploadingOf = (n: string | number, total: string | number) => `Uploading ${n} of ${total}…`;
+export const WAITING_FOR_THE_SERVER = "Waiting for the server…";
+export const couldntUpload = (files: string | number) => `Couldn't upload ${files}`;
+export const RENAME = "Rename";
+export const COLLECTION_NAME = "Collection name";
+export const CANCEL = "Cancel";
+export const SAVE = "Save";
+export const DELETE = "Delete";
+export const DELETE_COLLECTION = "Delete collection";
+export const PRIVATE = "Private";
+export const PUBLIC = "Public";
+export const by = (ownerName: string | number) => `By ${ownerName}`;
+export const YOURS = "Yours";
+export const UPLOAD = "Upload";
+export const MAKE_PUBLIC = "Make public";
+export const MAKE_PRIVATE = "Make private";
+export const SUBSCRIBE = "Subscribe";
+export const UNSUBSCRIBE = "Unsubscribe";
+export const saveToCollection = (name: string | number) => `Save ${name} to collection`;
+export const SAVE_TO_COLLECTION = "Save to collection";
+export const removeFromTheCollection = (name: string | number) => `Remove ${name} from the collection`;
+export const REMOVE_FROM_COLLECTION = "Remove from collection";
+export const LOADING = "Loading…";
+export const COULDNT_LOAD_THE_COLLECTION = "Couldn't load the collection. ";
+export const RETRY = "Retry";
+export const added = (when: string | number) => `Added ${when}`;
+export const THIS_COLLECTION_DOESNT_EXIST = " This collection doesn't exist.";
+export const notAnImageOrVideo = (name: string | number) => `${name}: not an image or video`;
+export const largerThan20Mb = (name: string | number) => `${name}: larger than 20 MB`;
+export const items = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
+export const deleteCollection = (name: string, n: number) => `Delete “${name}”${n ? ` and its ${items(n)}` : ""}? This can't be undone.`;
+export const newSinceYourLastVisit = (n: string | number) => `${n} new since your last visit`;

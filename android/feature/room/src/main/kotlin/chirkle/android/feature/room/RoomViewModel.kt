@@ -316,18 +316,18 @@ class RoomViewModel(
 
     private fun tooLong(s: String): String? {
         val n = textLength(s)
-        return if (n > Limits.MESSAGE_TEXT) "Too long: ${n - Limits.MESSAGE_TEXT} characters over the ${Limits.MESSAGE_TEXT} limit." else null
+        return if (n > Limits.MESSAGE_TEXT) app.getString(R.string.room_too_long_characters_over_the, n - Limits.MESSAGE_TEXT, Limits.MESSAGE_TEXT) else null
     }
 
     /** Send what is written (or save the edit). */
     fun submit() {
         val body = text.text
         editing?.let { m ->
-            if (isBlank(body)) return run { composerError = "A message can't be empty. Use Delete to remove it." }
+            if (isBlank(body)) return run { composerError = app.getString(R.string.room_a_message_cant_be_empty) }
             tooLong(body)?.let { return run { composerError = it } }
             val saved = controller.edit(m.id, body.trim())
             cancelEdit()
-            viewModelScope.launch { if (saved?.await() == false) toast = "Couldn't save your edit." }
+            viewModelScope.launch { if (saved?.await() == false) toast = app.getString(R.string.room_couldnt_save_your_edit) }
             return
         }
         if (preparing.isNotEmpty()) return
@@ -352,13 +352,13 @@ class RoomViewModel(
             val rejected = mutableListOf<Pair<String, String>>()
             val room = filesLeft
             for ((i, v) in videos.withIndex()) {
-                if (i < room) prepareVideo(v, dir) else rejected += v.name to "at most ${Limits.ATTACHMENTS} files per message"
+                if (i < room) prepareVideo(v, dir) else rejected += v.name to app.getString(R.string.room_at_most_files_per_message, Limits.ATTACHMENTS)
             }
             val picked = withContext(Dispatchers.IO) { others.mapNotNull { copy(it, dir) } }
             val check = checkFiles(attachments.size + items.size + preparing.size, picked, { it.name }, { it.size })
             for (f in picked - check.accepted.toSet()) File(f.uri).delete()
             attachments = attachments + check.accepted
-            composerError = (rejected + check.rejected).joinToString(" ") { (name, why) -> "“$name” wasn't added: $why." }
+            composerError = (rejected + check.rejected).joinToString(" ") { (name, why) -> app.getString(R.string.room_wasnt_added, name, why) }
         }
     }
 
@@ -388,13 +388,13 @@ class RoomViewModel(
                 }
                 preparing = preparing - p
                 if (file == null) {
-                    composerError = "“${v.name}” wasn't added: too long to send (about ${VideoPrep.maxMinutes()} minutes at most)."
+                    composerError = app.getString(R.string.room_wasnt_added_too_long_to, v.name, VideoPrep.maxMinutes())
                     return@launch
                 }
                 val check = checkFiles(attachments.size + items.size + preparing.size, listOf(file), { it.name }, { it.size })
                 if (check.accepted.isEmpty()) File(file.uri).delete()
                 attachments = attachments + check.accepted
-                composerError = check.rejected.joinToString(" ") { (name, why) -> "“$name” wasn't added: $why." }
+                composerError = check.rejected.joinToString(" ") { (name, why) -> app.getString(R.string.room_wasnt_added, name, why) }
             } finally {
                 preparing = preparing - p
                 preparingJobs.remove(p.id)
@@ -473,7 +473,7 @@ class RoomViewModel(
         selected = when {
             m.id in selected -> selected - m.id
             selected.size >= Limits.MAX_SELECTED -> {
-                toast = "You can select up to ${Limits.MAX_SELECTED} messages at a time."
+                toast = app.getString(R.string.room_you_can_select_up_to, Limits.MAX_SELECTED)
                 selected
             }
             else -> selected + m.id
@@ -491,7 +491,7 @@ class RoomViewModel(
         val ids = selected.toList()
         val done = controller.removeMany(ids) ?: return
         selected = emptySet()
-        viewModelScope.launch { done.await()?.let { toast = "Couldn't delete those messages. ${reasonOf(it)}" } }
+        viewModelScope.launch { done.await()?.let { toast = app.getString(R.string.room_couldnt_delete_those_messages, reasonOf(it)) } }
     }
 
     /** Forward [ids] into [room] (§21.3); the copies are mine and say who first wrote them. */
@@ -506,10 +506,10 @@ class RoomViewModel(
             }
                 .onSuccess {
                     selected = emptySet()
-                    toast = if (ordered.size == 1) "Message forwarded." else "${ordered.size} messages forwarded."
+                    toast = if (ordered.size == 1) app.getString(R.string.room_message_forwarded) else app.getString(R.string.room_messages_forwarded, ordered.size)
                     then(room)
                 }
-                .onFailure { toast = "Couldn't forward. ${reasonOf(it)}" }
+                .onFailure { toast = app.getString(R.string.room_couldnt_forward, reasonOf(it)) }
         }
     }
 
@@ -520,22 +520,22 @@ class RoomViewModel(
         val done = controller.react(m.id, emoji, !mine) ?: return
         viewModelScope.launch {
             val failure = done.await() ?: return@launch
-            toast = failure.ifEmpty { if (mine) "Couldn't remove your $emoji reaction." else "Couldn't add your $emoji reaction." }
+            toast = failure.ifEmpty { if (mine) app.getString(R.string.room_couldnt_remove_your_reaction, emoji) else app.getString(R.string.room_couldnt_add_your_reaction, emoji) }
         }
         services.recentEmoji.remember(emoji)
     }
 
     fun delete(m: Message) {
         val done = controller.remove(m.id) ?: return
-        viewModelScope.launch { if (!done.await()) toast = "Couldn't delete this message." }
+        viewModelScope.launch { if (!done.await()) toast = app.getString(R.string.room_couldnt_delete_this_message) }
     }
 
     /** A moderator's Ban or Unban (DESIGN.md §36). */
     fun setBanned(user: String, banned: Boolean) {
         viewModelScope.launch {
             toast = runCatching { services.api.setBanned(user, banned) }.fold(
-                { if (banned) "Banned. They can't sign in until unbanned." else "Unbanned." },
-                { "Couldn't ${if (banned) "ban" else "unban"} them. ${chirkle.android.data.api.errorMessage(it)}" },
+                { if (banned) app.getString(R.string.room_banned_they_cant_sign_in) else app.getString(R.string.room_unbanned) },
+                { app.getString(if (banned) R.string.room_couldnt_ban else R.string.room_couldnt_unban, chirkle.android.data.api.errorMessage(it)) },
             )
         }
     }
@@ -608,17 +608,17 @@ class RoomViewModel(
             return
         }
         if (!next) words = w
-        searchStatus = "Searching…"
+        searchStatus = app.getString(R.string.room_searching)
         val before = if (next) results.lastOrNull()?.let { Cursor(it.created, it.id) } else null
         val page = runCatching { services.api.page(searchQuery(roomId, w, before)) }.getOrNull()
         if (page == null) {
-            searchStatus = "Couldn't search. Check your connection."
+            searchStatus = app.getString(R.string.room_couldnt_search_check_your_connection)
             return
         }
         results = if (next) results + page else page
         moreResults = page.size >= PAGE_SIZE
         val n = results.size
-        searchStatus = if (n == 0) "No messages found." else "$n${if (moreResults) "+" else ""} ${if (n == 1) "message" else "messages"} found."
+        searchStatus = if (n == 0) app.getString(R.string.room_no_messages_found) else app.resources.getQuantityString(if (moreResults) R.plurals.room_found_more else R.plurals.room_found, n, n)
     }
 
     val searchWordsShown: List<String> get() = words
@@ -664,7 +664,7 @@ class RoomViewModel(
             val prev = items.getOrNull(i - 1)
             out += ListRow.Msg(m, startsGroup(prev, m) || newDay(prev, m), m.id == s.targetId)
             if (m.id == s.unreadId) out += ListRow.NewLine
-            if (newDay(prev, m)) out += ListRow.Day(Formats.day(m.created), "day-${m.id}")
+            if (newDay(prev, m)) out += ListRow.Day(Formats.day(m.created, app.resources), "day-${m.id}")
         }
         if (!s.hasOlder && s.phase == chirkle.android.data.repo.Phase.Ready && !s.stale) out += ListRow.Beginning(beginning())
         return out
@@ -685,8 +685,8 @@ class RoomViewModel(
     private fun newDay(prev: Message?, m: Message): Boolean = prev == null || Formats.localDay(prev.created) != Formats.localDay(m.created)
 
     private fun beginning(): String {
-        val r = services.store.get().rooms[roomId] ?: return "Beginning of the room"
-        return if (r.isDm) "Beginning of your conversation with ${r.otherMember(me)?.name ?: "Unknown"}" else "Beginning of #${r.name}"
+        val r = services.store.get().rooms[roomId] ?: return app.getString(R.string.room_beginning_of_the_room)
+        return if (r.isDm) app.getString(R.string.room_beginning_of_your_conversation_with, r.otherMember(me)?.name ?: app.getString(R.string.room_unknown)) else app.getString(R.string.room_beginning_of, r.name)
     }
 
     /** The newest page of messages with attachments, for the viewer (§17.7). */

@@ -1,6 +1,7 @@
 // Choosing a server (ANDROID.md §17.2): for the first account, for another one, or instead of the one on screen.
 package chirkle.android.feature.auth
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -77,12 +78,12 @@ fun ServerScreen(onCancel: (() -> Unit)?) {
             Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Spacer(Modifier.height(24.dp))
                 chirkle.android.ui.BrandMark("", 64.dp)
-                Text("Choose your server", style = MaterialTheme.typography.headlineMedium)
-                Text("The address of the chat you use, as you would open it in a browser.", color = Chirkle.colors.muted)
+                Text(stringResource(R.string.auth_choose_your_server), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(R.string.auth_the_address_of_the_chat), color = Chirkle.colors.muted)
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it; problem = "" },
-                    label = { Text("Server address") },
+                    label = { Text(stringResource(R.string.auth_server_address)) },
                     placeholder = { Text("chat.example.org") },
                     singleLine = true,
                     isError = problem.isNotEmpty(),
@@ -91,8 +92,8 @@ fun ServerScreen(onCancel: (() -> Unit)?) {
                     keyboardActions = KeyboardActions(onGo = { go() }),
                     modifier = Modifier.fillMaxWidth().semantics { if (problem.isNotEmpty()) error(problem) },
                 )
-                Button(onClick = ::go, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(if (busy) "Checking…" else "Continue") }
-                if (onCancel != null) TextButton(onClick = onCancel, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Cancel") }
+                Button(onClick = ::go, enabled = !busy, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(if (busy) stringResource(R.string.auth_checking) else stringResource(R.string.auth_continue)) }
+                if (onCancel != null) TextButton(onClick = onCancel, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text(stringResource(R.string.auth_cancel)) }
             }
         }
     }

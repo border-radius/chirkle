@@ -721,22 +721,31 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   live (before that, a first message could be missed by both: neither exposes when its subscription is in). The
   inbox page itself is a server route, checked by its schema (item 54) and `mentions.test.ts`.
 
-#### 56. Strings in one place (web and Android) — started (2026-11-15)
+#### 56. Strings in one place (web and Android) ✅ (2026-11-15)
 - Every user-facing string is inline (web views; Android composables: `strings.xml` has 3 lines). That blocks
   translations (see P8) and makes copy changes a code search.
 - Suggestion: a `strings.ts` for the web (lazy chunks get theirs through their kit) and `strings.xml` resources for the
   app, moved screen by screen; no i18n framework until a second language exists.
-- **Started:** the web keeps one strings module per screen, `web/src/strings/<screen>.ts`, of exported constants (and
-  functions for text with values): one shared `strings.ts` would go into a chunk on the critical path with every lazy
-  screen's text in it, and esbuild shortens the names of exported constants, so a moved screen costs nothing (the
-  critical path stayed at 62.10 KB). The app keeps one `strings.xml` per feature module; a view model gets a resolver of
-  the application's resources from its screen. Moved: the login, signup and reset pages (`strings/login.ts`;
-  `feature/auth` strings.xml for `AuthScreen` and `AuthViewModel`). `tests/unit/strings.test.ts` keeps a moved file
-  free of inline text (literals that read as English).
-- **Left**, by inline literals (a rough count): web `stats/main.ts` (78), `views/rooms.ts` (45), `room/messages.ts` (42),
-  `views/room.ts` (37), `collection/page.ts` (37), `profile.ts` (33), `room/composer.ts` (29), `room/header.ts` (28),
-  `room/access.ts` (27), then about 30 files with fewer than 20 each (≈ 640 in all); the app's other feature modules
-  and `core/ui` (≈ 330). Each screen as its own change, adding its files to `MOVED`.
+- **Done:** no user-facing text is inline any more.
+  - **Web:** one module per source file, `web/src/strings/<file>.ts` (51 modules, ≈ 590 strings): exported constants,
+    and functions for text with values or with a choice in it (`couldntBan(banned, why)`, `found(n, more)`), so a
+    sentence is whole in one place and never put together from lowercase pieces (`act("unhide")` → `Couldn't
+    ${label}` became one string per action). Not one shared `strings.ts`: it would be a chunk on the critical path
+    with every lazy screen's text in it. The build puts the text back where it is used
+    (`inlineStrings`, scripts/lib/build-utils.mjs: constants, and functions that are a template of their parameters
+    alone), as esbuild doesn't inline across modules: without it the critical path grew 1.23 KB (63.33 KB, over the
+    budget); with it, 62.25 KB (from 62.10).
+  - **App:** each module's `res/values/strings.xml` (≈ 410 strings, plurals where a count is in the sentence),
+    read with `stringResource` in composables and `LocalContext.current.resources` in their lambdas; plain helpers
+    (`accessWarning`, `passwordProblem`, `inboxWhat`, `Formats.day`, the rooms menu) take `Resources`, and
+    RoomViewModel and the notifications use their Application or Context. `core/data`'s text (error messages, the
+    visibility labels, the emoji categories, ≈ 45) is `lib/Strings.kt`, Kotlin: that layer has no Context and its
+    functions are plain and tested on the JVM.
+  - `tests/unit/strings.test.ts` scans all of web/src and the app's shipped Kotlin and fails on a literal that reads
+    as words; key names, headers, selectors, class lists, field lists and SQL are told apart, the few look-alikes
+    (the product name, a developer's error, byte units) are listed by value. `tests/unit/build/strings.test.ts` checks
+    the build's inlining. Lint: numbers in strings are `%d` (StringFormatMatches); its PluralsCandidate warnings stay
+    where the web's wording is plural-only too ("Must be at least %d characters").
 
 #### 57. A doctor for the dev environment ✅ (2026-11-15)
 - Many "flakes" in the QA notes were the environment: no fonts (FONTCONFIG_FILE), a full `/tmp`, stale PocketBase

@@ -3,6 +3,7 @@
 // and only built for a push or a notification's action.
 package chirkle.android.data.repo
 
+import chirkle.android.data.lib.Strings
 import chirkle.android.data.api.ApiError
 import chirkle.android.data.api.ChirkleApi
 import chirkle.android.data.api.userOf
@@ -177,9 +178,9 @@ class Accounts(
             api.health()
             api.site()
         } catch (e: ApiError) {
-            throw ServerProblem(if (e.status == 0) "Can't reach that server. Check the address and your connection." else "That address isn't a chat server.")
+            throw ServerProblem(if (e.status == 0) Strings.CANT_REACH_THAT_SERVER_CHECK_THE else Strings.THAT_ADDRESS_ISNT_A_CHAT_SERVER)
         } catch (e: Exception) {
-            throw ServerProblem("That address isn't a chat server.")
+            throw ServerProblem(Strings.THAT_ADDRESS_ISNT_A_CHAT_SERVER)
         }
         return server
     }

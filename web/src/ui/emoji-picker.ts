@@ -12,6 +12,7 @@
 import { h } from "../dom.ts";
 import { CATEGORIES, type EmojiCategory, recentEmoji, rememberEmoji } from "../lib/emoji.ts";
 import { findEmoji, namedEmoji } from "../lib/emoji-names.ts";
+import * as S from "../strings/ui-emoji-picker.ts";
 
 export { createEmojiSuggest } from "./emoji-suggest.ts";
 
@@ -107,8 +108,8 @@ export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
   const search = h("input", {
     type: "search",
     class: "emoji-search",
-    placeholder: "Search emoji",
-    "aria-label": "Search emoji",
+    placeholder: S.SEARCH_EMOJI,
+    "aria-label": S.SEARCH_EMOJI,
     autocomplete: "off",
     enterkeyhint: "done",
   });
@@ -152,7 +153,7 @@ export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
     if (searching) {
       const hits = findEmoji(q);
       found.replaceChildren(
-        h("h2", { class: "emoji-heading", id: "emoji-found-h" }, hits.length ? "Found" : "No emoji found"),
+        h("h2", { class: "emoji-heading", id: "emoji-found-h" }, hits.length ? S.FOUND : S.NO_EMOJI_FOUND),
         h(
           "div",
           { class: "emoji-grid", role: "group", "aria-labelledby": "emoji-found-h" },
@@ -190,7 +191,7 @@ export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
   function render() {
     const cats: EmojiCategory[] = [];
     const recent = recentEmoji();
-    if (recent.length) cats.push({ name: "Recent", icon: "🕘", emoji: recent });
+    if (recent.length) cats.push({ name: S.RECENT, icon: "🕘", emoji: recent });
     cats.push(...CATEGORIES);
     if (!built || tabs.childElementCount !== cats.length) {
       tabs.replaceChildren(

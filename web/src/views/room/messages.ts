@@ -13,6 +13,7 @@ import { reactors } from "../../lib/reactions.ts";
 import { captureAnchor, restoreAnchor } from "../../lib/scroll.ts";
 import { dayLabel, formatFull, formatTime, parsePb } from "../../lib/time.ts";
 import type { Badge, LinkPreview, Message, Quoted, Reaction, User } from "../../lib/types.ts";
+import * as S from "../../strings/room-messages.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
 import { type ActionMenu, createActionMenu, type MenuItem } from "../../ui/menu.ts";
 import { createAttachments } from "./attachments.ts";
@@ -70,11 +71,11 @@ const byId = (id: string) => `li.msg[data-id="${CSS.escape(id)}"]`;
 /** A message toolbar's buttons, in order: label, class (and `data-act`), icon. "react" is the reactions' own. */
 const TOOLS = [
   ["", "react", ""],
-  ["Reply", "reply", "reply"],
-  ["Forward", "forward", "fwd"],
-  ["Select", "select", "check"],
-  ["Edit", "edit", "edit"],
-  ["Delete", "delete", "trash"],
+  [S.REPLY, "reply", "reply"],
+  [S.FORWARD, "forward", "fwd"],
+  [S.SELECT, "select", "check"],
+  [S.EDIT, "edit", "edit"],
+  [S.DELETE, "delete", "trash"],
 ] as const;
 
 export function createMessageList(opts: {
@@ -133,14 +134,14 @@ export function createMessageList(opts: {
   signal: AbortSignal;
 }): MessageList {
   const { signal } = opts;
-  const el = h("ol", { class: "messages", "aria-live": "polite", "aria-busy": "true", "aria-label": "Messages" });
+  const el = h("ol", { class: "messages", "aria-live": "polite", "aria-busy": "true", "aria-label": S.MESSAGES });
   const topSentinel = h("li", { class: "sentinel", dataset: { sentinel: "top" }, "aria-hidden": "true" });
   const bottomSentinel = h("li", { class: "sentinel", dataset: { sentinel: "bottom" }, "aria-hidden": "true" });
   const beginning = h("li", { class: "beginning" });
-  const newLine = h("li", { class: "new-line" }, h("span", {}, "New"));
+  const newLine = h("li", { class: "new-line" }, h("span", {}, S.NEW));
   const loadError = h("li", { class: "load-error", role: "alert" }, [
-    "Couldn't load this room. Check your connection. ",
-    h("button", { type: "button", class: "link", on: { click: () => opts.onRetryLoad() }, signal }, "Retry"),
+    S.COULDNT_LOAD_THIS_ROOM_CHECK_YOUR,
+    h("button", { type: "button", class: "link", on: { click: () => opts.onRetryLoad() }, signal }, S.RETRY),
   ]);
 
   // Day dividers ("Today") and time-only stamps depend on the current date: redraw when it changes.
@@ -370,7 +371,7 @@ export function createMessageList(opts: {
         authorMenus.set(d, menu);
       }
       const user = d.dataset.user!;
-      const items: MenuItem[] = d.dataset.nodm ? [] : [{ label: "Message", run: () => opts.onMessageUser(user) }];
+      const items: MenuItem[] = d.dataset.nodm ? [] : [{ label: S.MESSAGE, run: () => opts.onMessageUser(user) }];
       menu.update(items);
       const { isBanned, onBan } = opts;
       if (!d.dataset.ban || !isBanned || !onBan) return;
@@ -380,10 +381,10 @@ export function createMessageList(opts: {
           menu.update([
             ...items,
             banned
-              ? { label: "Unban", run: () => onBan(user, false), sep: true }
+              ? { label: S.UNBAN, run: () => onBan(user, false), sep: true }
               : {
-                  label: "Ban…",
-                  confirm: { text: `Ban ${name}? They are signed out everywhere and can't sign in until unbanned.`, action: "Ban" },
+                  label: S.BAN,
+                  confirm: { text: S.banTheyAreSignedOutEverywhere(name), action: S.BAN_ACTION },
                   run: () => onBan(user, true),
                   sep: true,
                 },
@@ -408,12 +409,12 @@ export function createMessageList(opts: {
   }
 
   function editBox(m: Message): HTMLElement[] {
-    const hintText = "Enter to save · Esc to cancel";
+    const hintText = S.ENTER_TO_SAVE_ESC_TO_CANCEL;
     const hint = h("p", { class: "hint", "aria-live": "polite" }, hintText);
     const box = h("textarea", {
       class: "edit-input",
       rows: rowsFor(m.text),
-      "aria-label": "Edit message",
+      "aria-label": S.EDIT_MESSAGE,
       value: editText ?? m.text,
       on: {
         input: (e) => {
@@ -520,7 +521,7 @@ export function createMessageList(opts: {
     const hit = cache.get(m.id);
     if (hit && hit.sig === sig) return hit.el;
 
-    const author: User = m.expand?.author ?? (me && m.author === me.id ? me : { id: m.author, name: "Unknown" });
+    const author: User = m.expand?.author ?? (me && m.author === me.id ? me : { id: m.author, name: S.UNKNOWN });
     const cls = [
       "msg",
       groupStart && "group-start",
@@ -540,7 +541,7 @@ export function createMessageList(opts: {
           type: "checkbox",
           class: "select",
           checked: picked,
-          "aria-label": `Select message from ${author.name}, ${formatFull(ms)}`,
+          "aria-label": S.selectMessageFrom(author.name, formatFull(ms)),
         }),
       );
     }
@@ -556,7 +557,7 @@ export function createMessageList(opts: {
       );
     }
     if (m.forwarded_from && !m.deleted) {
-      parts.push(h("div", { class: "forwarded" }, `Forwarded from ${m.expand?.forwarded_from?.name ?? "Unknown"}`));
+      parts.push(h("div", { class: "forwarded" }, S.forwardedFrom(m.expand?.forwarded_from?.name)));
     }
     if (editing === m.id) {
       parts.push(...editBox(m));
@@ -565,11 +566,11 @@ export function createMessageList(opts: {
       const gone = m.deleted || emptyForward(m);
       parts.push(
         gone
-          ? h("div", { class: "body placeholder" }, m.deleted ? "Message deleted" : "The original message was deleted")
+          ? h("div", { class: "body placeholder" }, m.deleted ? S.MESSAGE_DELETED : S.THE_ORIGINAL_MESSAGE_WAS_DELETED)
           : h("div", { class: "body" }, bodyText(m.text, me && m.mentions?.includes(me.id) ? (me.handle ?? "") : "")),
       );
       if (m.edited_at && !m.deleted)
-        parts.push(h("span", { class: "edited", title: `Edited ${formatFull(parsePb(m.edited_at))}` }, "(edited)"));
+        parts.push(h("span", { class: "edited", title: S.edited(formatFull(parsePb(m.edited_at))) }, S.EDITED));
     }
     if (!m.deleted) parts.push(attachments(m));
     if (!m.deleted && m.previews?.length) parts.push(previewList(m.previews));
@@ -579,9 +580,9 @@ export function createMessageList(opts: {
       const replyGone = !!quoted?.deleted;
       parts.push(
         h("div", { class: "send-error" }, [
-          replyGone ? "Not sent: the message you replied to was deleted. " : "Not sent. ",
-          btn(replyGone ? "Send without quote" : "Retry", "send"),
-          btn("Discard", "discard"),
+          replyGone ? S.NOT_SENT_THE_MESSAGE_YOU_REPLIED : S.NOT_SENT,
+          btn(replyGone ? S.SEND_WITHOUT_QUOTE : S.RETRY, "send"),
+          btn(S.DISCARD, "discard"),
         ]),
       );
     }
@@ -589,16 +590,16 @@ export function createMessageList(opts: {
       // Selecting: no actions on single messages.
     } else if (confirmDelete === m.id) {
       parts.push(
-        h("div", { class: "confirm", role: "group", "aria-label": "Confirm delete" }, [
-          "Delete this message? ",
+        h("div", { class: "confirm", role: "group", "aria-label": S.CONFIRM_DELETE }, [
+          S.DELETE_THIS_MESSAGE,
           // Together, so that a narrow screen wraps both under the question rather than Cancel alone.
-          h("span", { class: "bar-actions" }, [btn("Delete message", "confirm", "danger"), btn("Cancel", "cancel", "cancel")]),
+          h("span", { class: "bar-actions" }, [btn(S.DELETE_MESSAGE, "confirm", "danger"), btn(S.CANCEL, "cancel", "cancel")]),
         ]),
       );
     } else if (editing !== m.id && (reactable || repliable || deletable || selectable)) {
       parts.push(toolbar([reactable, repliable, selectable && !emptyForward(m), selectable, editable, deletable]) as HTMLElement);
     }
-    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, err.retry ? [`${err.text} `, btn("Retry", "retry")] : err.text));
+    if (err) parts.push(h("div", { class: "msg-error", role: "alert" }, err.retry ? [`${err.text} `, btn(S.RETRY, "retry")] : err.text));
 
     const li = h("li", { class: cls, dataset: { id: m.id } }, parts);
     if (touched === m.id) li.classList.add("touched");
@@ -664,8 +665,8 @@ export function createMessageList(opts: {
       {
         type: "button",
         class: `reply-quote${q.deleted ? " deleted" : ""}`,
-        title: "Show the original message",
-        "aria-label": `Quoting ${name || "a message"}: ${spoken}. Show the original message.`,
+        title: S.SHOW_THE_ORIGINAL_MESSAGE,
+        "aria-label": S.quotingShowTheOriginalMessage(name, spoken),
         dataset: { act: "quote", quote: q.id },
       },
       [name ? h("span", { class: "reply-author" }, name) : null, h("span", { class: "reply-text" }, text)],
@@ -679,7 +680,7 @@ export function createMessageList(opts: {
    */
   function authorEl(author: User, me: User | null, known: boolean, room: string): HTMLElement {
     // Someone on a linked instance says where (§33.4).
-    const where = author.instance ? `On ${author.instance}` : undefined;
+    const where = author.instance ? S.on(author.instance) : undefined;
     if (!me || author.id === me.id || !known) return h("span", { class: "author", title: where }, author.name);
     // A moderator bans this instance's people (§36), those who take no DMs too (QA BUG-230); an anonymous room's author
     // is the room (§35), no one to ban.
@@ -695,7 +696,7 @@ export function createMessageList(opts: {
       h("summary", { class: "author" }, author.name),
       h("div", { class: "menu-items" }, [
         where ? h("p", {}, where) : null,
-        author.no_dms ? null : h("button", { type: "button" }, "Message"),
+        author.no_dms ? null : h("button", { type: "button" }, S.MESSAGE),
       ]),
     ]);
   }

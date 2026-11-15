@@ -1,6 +1,7 @@
 // The message list as a sliding window over a room's history (§7.5).
 // Pure functions: every operation returns a new window (or the same object when nothing changed).
 
+import * as S from "../strings/lib-messages.ts";
 import { PAGE_SIZE } from "./cursor.ts";
 import { parsePb } from "./time.ts";
 import type { Message, Quoted } from "./types.ts";
@@ -132,10 +133,10 @@ export function quoteOf(m: Message): Quoted {
 
 /** One line of a quoted message: its text on one line, or what it holds when it has none (§19). */
 export function quoteText(q: Pick<Quoted, "text" | "deleted" | "files">): string {
-  if (q.deleted) return "Message deleted";
+  if (q.deleted) return S.MESSAGE_DELETED;
   const text = q.text.replace(/\s+/g, " ").trim();
   if (text) return text;
   const n = q.files?.length ?? 0;
-  if (!n) return "Message deleted"; // a forward whose original was deleted (§21.3)
-  return n === 1 ? "Attachment" : `${n} attachments`;
+  if (!n) return S.MESSAGE_DELETED; // a forward whose original was deleted (§21.3)
+  return n === 1 ? S.ATTACHMENT : S.attachments(n);
 }

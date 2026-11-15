@@ -2,6 +2,8 @@
 // you follow, one at a time as a grid; pick up to what the message still takes and they join the composer's tray.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -71,11 +73,11 @@ fun CollectionPickerSheet(max: Int, onPick: (List<CollectionItem>) -> Unit, onDi
     ChirkleSheet(onDismiss) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(ChirkleIcons.Collection, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text("Attach from collections", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.room_attach_from_collections), style = MaterialTheme.typography.titleMedium)
         }
         if (all.isEmpty()) {
             Text(
-                if (app.collections == null) "Loading…" else "You have no collections yet. Save images and videos from the chat to one first.",
+                if (app.collections == null) stringResource(R.string.room_loading) else stringResource(R.string.room_you_have_no_collections_yet),
                 color = Chirkle.colors.muted,
                 modifier = Modifier.padding(20.dp),
             )
@@ -97,22 +99,23 @@ fun CollectionPickerSheet(max: Int, onPick: (List<CollectionItem>) -> Unit, onDi
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when {
-                    picked.isNotEmpty() -> "${picked.size} picked" + if (picked.size >= max) " (the most a message takes)" else ""
-                    max == 0 -> "The message has all the files it can take."
+                    picked.isNotEmpty() -> stringResource(R.string.room_picked, picked.size) + if (picked.size >= max) stringResource(R.string.room_the_most_a_message_takes) else ""
+                    max == 0 -> stringResource(R.string.room_the_message_has_all_the)
                     else -> ""
                 },
                 color = Chirkle.colors.muted,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
             )
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-            Button(onClick = { onPick(picked.toList()) }, enabled = picked.isNotEmpty()) { Text(if (picked.isEmpty()) "Attach" else "Attach ${picked.size}") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.room_cancel)) }
+            Button(onClick = { onPick(picked.toList()) }, enabled = picked.isNotEmpty()) { Text(if (picked.isEmpty()) stringResource(R.string.room_attach_2) else stringResource(R.string.room_attach, picked.size)) }
         }
     }
 }
 
 @Composable
 private fun PickGrid(collection: String, picked: MutableList<CollectionItem>, max: Int, modifier: Modifier) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     // On the main thread, as the services are: the sheet is another window, and its state must reach it.
     val scope = rememberCoroutineScope { services.main }
@@ -154,7 +157,7 @@ private fun PickGrid(collection: String, picked: MutableList<CollectionItem>, ma
                     .toggleable(on, role = Role.Checkbox) { now ->
                         if (!now) picked.removeAll { p -> p.id == it.id } else if (picked.size < max) picked += it
                     }
-                    .semantics { contentDescription = it.name + if (it.video) ", video" else "" },
+                    .semantics { contentDescription = it.name + if (it.video) res.getString(R.string.room_video) else "" },
             ) {
                 ItemPicture(it, Modifier.fillMaxSize())
                 if (on) {
@@ -171,10 +174,10 @@ private fun PickGrid(collection: String, picked: MutableList<CollectionItem>, ma
                 when {
                     loading -> CircularProgressIndicator(Modifier.size(24.dp))
                     failed -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Couldn't load the collection.", color = Chirkle.colors.muted)
-                        TextButton(onClick = ::load) { Text("Retry") }
+                        Text(stringResource(R.string.room_couldnt_load_the_collection), color = Chirkle.colors.muted)
+                        TextButton(onClick = ::load) { Text(stringResource(R.string.room_retry)) }
                     }
-                    items.isEmpty() -> Text("Nothing in this collection yet.", color = Chirkle.colors.muted, textAlign = TextAlign.Center)
+                    items.isEmpty() -> Text(stringResource(R.string.room_nothing_in_this_collection_yet), color = Chirkle.colors.muted, textAlign = TextAlign.Center)
                 }
             }
         }

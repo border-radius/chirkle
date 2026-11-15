@@ -9,6 +9,7 @@ import type { MessageWindow } from "../../lib/messages.ts";
 import { formatFull, parsePb } from "../../lib/time.ts";
 import type { Message, Room } from "../../lib/types.ts";
 import type { Scope } from "../../scope.ts";
+import * as S from "../../strings/room-gallery.ts";
 import type { ViewerImage } from "./viewer.ts";
 
 /** What the viewer and the grid use of the room view. */
@@ -107,7 +108,7 @@ export function createGallery({ api, roomId, room, win, goTo, saveFile, signedIn
             follow: (fn) => (gridding = fn),
             signal: screen(),
           }),
-        () => scope.active && say("Couldn't open media. Check your connection."),
+        () => scope.active && say(S.COULDNT_OPEN_MEDIA_CHECK_YOUR_CONNECTION),
       );
     },
     changed(m, gone) {

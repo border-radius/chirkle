@@ -15,6 +15,7 @@ import { HOVER_MS } from "../prefetch.ts";
 import type { View } from "../router.ts";
 import { createScope, type Scope } from "../scope.ts";
 import { mentioned, roomSections, unreadCount } from "../store.ts";
+import * as S from "../strings/rooms.ts";
 import { avatar } from "../ui/avatar.ts";
 import { collectionIcon } from "../ui/icon.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
@@ -32,7 +33,7 @@ try {
 } catch {}
 
 function nameError(err: unknown): string {
-  if (err instanceof ApiError && err.codes.name === "validation_not_unique") return "A room with this name already exists.";
+  if (err instanceof ApiError && err.codes.name === "validation_not_unique") return S.A_ROOM_WITH_THIS_NAME_ALREADY;
   if (err instanceof ApiError && err.fields.name) return err.fields.name;
   return errorMessage(err);
 }
@@ -72,7 +73,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   const collRows = new Map<string, { sig: unknown[]; el: HTMLElement }>();
 
   const alert = h("p", { role: "alert", class: "list-error" });
-  const nav = h("nav", { "aria-label": "Rooms" });
+  const nav = h("nav", { "aria-label": S.ROOMS });
   const shell = h("section", { class: "rooms", "aria-busy": "true" });
   const top = h("div", { class: "side-top" });
   const foot = h("div", { class: "side-foot" });
@@ -89,16 +90,16 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     foot.replaceChildren(
       ...(user
         ? [
-            h("a", { href: "/me", class: "me-link", title: "Your profile", "aria-current": location.pathname === "/me" ? "page" : null }, [
+            h("a", { href: "/me", class: "me-link", title: S.YOUR_PROFILE, "aria-current": location.pathname === "/me" ? "page" : null }, [
               avatar(user, 32, api.avatarUrl),
               h("span", { class: "who" }, user.name),
             ]),
-            h("a", { href: "/me", class: "icon-button ic i-gear", "aria-label": "Settings", title: "Settings" }),
+            h("a", { href: "/me", class: "icon-button ic i-gear", "aria-label": S.SETTINGS, title: S.SETTINGS }),
           ]
         : [
-            h("p", {}, "You're reading as a guest. Only Open Air rooms are listed."),
-            h("a", { href: "/login", class: "button" }, "Log in"),
-            h("a", { href: "/signup", class: "button primary" }, "Sign up"),
+            h("p", {}, S.YOURE_READING_AS_A_GUEST_ONLY),
+            h("a", { href: "/login", class: "button" }, S.LOG_IN),
+            h("a", { href: "/signup", class: "button primary" }, S.SIGN_UP),
           ]),
     );
   }
@@ -107,7 +108,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     clear(alert);
     if (store.get().roomsStatus === "error") {
       alert.append(
-        "Couldn't load rooms. Check your connection. ",
+        S.COULDNT_LOAD_ROOMS_CHECK_YOUR_CONNECTION,
         h(
           "button",
           {
@@ -121,7 +122,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             },
             signal: scope.signal,
           },
-          "Retry",
+          S.RETRY,
         ),
       );
     } else {
@@ -131,13 +132,13 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
 
   const title = (r: Room) => roomTitle(r, store.get().user);
 
-  async function act(label: string, room: Room, fn: () => Promise<void>) {
+  async function act(failed: (room: string, why: string) => string, room: Room, fn: () => Promise<void>) {
     try {
       await fn();
       actionError = "";
     } catch (e) {
       // Say why: network trouble, rate limiting or the server's reason (QA BUG-39).
-      actionError = `Couldn't ${label} “${room.kind === "dm" ? title(room) : room.name}”. ${errorMessage(e)}`;
+      actionError = failed(room.kind === "dm" ? title(room) : room.name, errorMessage(e));
     }
     if (scope.active) renderAlert();
   }
@@ -175,7 +176,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
         searchChunk = null;
         if (!opening) return;
         opening = false;
-        actionError = "Couldn't open the people search. Check your connection.";
+        actionError = S.COULDNT_OPEN_THE_PEOPLE_SEARCH_CHECK;
         if (scope.active) renderAlert();
       },
     );
@@ -226,7 +227,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
           onCreated: (cid) => navigate(`/c/${cid}`),
         }),
       () => {
-        actionError = "Couldn't open collections. Check your connection.";
+        actionError = S.COULDNT_OPEN_COLLECTIONS_CHECK_YOUR_CONNECTION;
         if (scope.active) renderAlert();
       },
     );
@@ -249,8 +250,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
         c.owner ? h("span", { class: "owner" }, c.owner.name) : null,
         c.public ? null : visibilityMark("private"),
         n
-          ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")])
-          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, c.items === 1 ? " item" : " items")]),
+          ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.NEW)])
+          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, c.items === 1 ? S.ITEM : S.ITEMS)]),
       ]),
     );
     collRows.set(c.id, { sig, el });
@@ -265,13 +266,18 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       toggleSearch(false);
       navigate(`/r/${room.id}`);
     } catch (e) {
-      actionError = `Couldn't open the conversation with “${user.name}”. ${errorMessage(e)}`;
+      actionError = S.couldntOpenTheConversationWith(user.name, errorMessage(e));
     }
     if (scope.active) renderAlert();
   }
 
-  const unhide = (r: Room) => act("unhide", r, () => actions.unhide(r.id));
-  const setArchived = (r: Room, archived: boolean) => act(archived ? "archive" : "unarchive", r, () => actions.setArchived(r.id, archived));
+  const unhide = (r: Room) => act(S.couldntUnhide, r, () => actions.unhide(r.id));
+  const setArchived = (r: Room, archived: boolean) =>
+    act(
+      (name, why) => S.couldntArchive(archived, name, why),
+      r,
+      () => actions.setArchived(r.id, archived),
+    );
 
   // ---- rendering ----
 
@@ -282,8 +288,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   function rowAction(r: Room, section: Section): MenuItem | null {
     if (guest() || section === "rooms" || section === "dms") return null;
     // An archived room you had hidden is listed under Archived; it can still be unhidden from there.
-    if (section === "hidden" || store.get().hidden.has(r.id)) return { label: "Unhide", run: () => void unhide(r) };
-    if (canManage(r, store.get().user)) return { label: "Unarchive", run: () => void setArchived(r, false) };
+    if (section === "hidden" || store.get().hidden.has(r.id)) return { label: S.UNHIDE, run: () => void unhide(r) };
+    if (canManage(r, store.get().user)) return { label: S.UNARCHIVE, run: () => void setArchived(r, false) };
     return null;
   }
 
@@ -307,8 +313,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       h("span", {}, other ? other.name : r.kind === "dm" ? title(r) : r.name),
       r.kind === "dm" ? null : visibilityMark(visibilityOf(r)),
       // Unread mentions of you or replies to you (§41).
-      at ? h("span", { class: "badge", title: "Mentions you" }, ["@", h("span", { class: "visually-hidden" }, " mentions you,")]) : null,
-      n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " unread")]) : null,
+      at
+        ? h("span", { class: "badge", title: S.MENTIONS_YOU }, ["@", h("span", { class: "visually-hidden" }, S.MENTIONS_YOU_HIDDEN)])
+        : null,
+      n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.UNREAD)]) : null,
     ];
     const el = h("li", { class: r.kind === "dm" ? "dm" : "", dataset: { roomId: r.id } }, [
       h("a", { href: `/r/${r.id}`, class: n ? "unread" : "", "aria-current": current ? "page" : null }, label),
@@ -327,15 +335,15 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   /** Hidden & archived (§7.1): folded, with how many there are; inside, a part for each. */
   function collapsible() {
     const count = h("span", { class: "count" });
-    const summary = h("summary", { class: "ic i-chev" }, [h("span", {}, "Hidden & archived"), count]);
+    const summary = h("summary", { class: "ic i-chev" }, [h("span", {}, S.HIDDEN_ARCHIVED), count]);
     const part = (section: "hidden" | "archived", title: string, icon: string) => {
       const list = h("ul");
       const el = h("div", { class: "more-part", dataset: { section } }, [h("h3", { class: `ic ${icon}` }, title), list]);
       return { el, list };
     };
-    const hidden = part("hidden", "Hidden", "i-eyeoff");
-    const archived = part("archived", "Archived", "i-archive");
-    const empty = h("p", { class: "empty" }, "Nothing hidden or archived");
+    const hidden = part("hidden", S.HIDDEN, "i-eyeoff");
+    const archived = part("archived", S.ARCHIVED, "i-archive");
+    const empty = h("p", { class: "empty" }, S.NOTHING_HIDDEN_OR_ARCHIVED);
     const body = h("div", { class: "more-body" });
     const el = h(
       "details",
@@ -359,24 +367,24 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const newRoomToggle = h("button", {
       type: "button",
       class: "icon-button ic i-plus new-room-toggle",
-      "aria-label": "New room",
-      title: "New room",
+      "aria-label": S.NEW_ROOM,
+      title: S.NEW_ROOM,
       on: { click: () => toggleNewRoom(!creating) },
       signal: scope.signal,
     });
     const newDm = h("button", {
       type: "button",
       class: "icon-button ic i-plus new-dm",
-      "aria-label": "New message",
-      title: "New message",
+      "aria-label": S.NEW_MESSAGE,
+      title: S.NEW_MESSAGE,
       on: { click: () => toggleSearch(!(search || opening)) },
       signal: scope.signal,
     });
     const newColl = h("button", {
       type: "button",
       class: "icon-button ic i-plus new-coll",
-      "aria-label": "New collection",
-      title: "New collection",
+      "aria-label": S.NEW_COLLECTION,
+      title: S.NEW_COLLECTION,
       "aria-haspopup": "dialog",
       on: { click: () => newCollection(newColl) },
       signal: scope.signal,
@@ -413,14 +421,14 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       newRoomToggle,
       newDm,
       main: h("div", { class: "room-section", dataset: { section: "rooms" } }),
-      mainHead: head("rooms", "Rooms", newRoomToggle),
+      mainHead: head("rooms", S.ROOMS, newRoomToggle),
       rooms: h("ul"),
       empty: h("p", { class: "empty" }),
       direct: h("div", { class: "room-section", dataset: { section: "dms" } }),
-      directHead: head("dms", "Direct messages", newDm),
+      directHead: head("dms", S.DIRECT_MESSAGES, newDm),
       dms: h("ul"),
       newColl,
-      collHead: head("collections", "Collections", newColl),
+      collHead: head("collections", S.COLLECTIONS, newColl),
       colls: h("div", { class: "room-section", dataset: { section: "collections" } }),
       collList: h("ul"),
       more: collapsible(),
@@ -439,8 +447,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       "li",
       {},
       h("a", { href: "/inbox", class: n ? "unread" : "", "aria-current": location.pathname === "/inbox" ? "page" : null }, [
-        h("span", {}, "Mentions & replies"),
-        n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, " new")]) : null,
+        h("span", {}, S.MENTIONS_REPLIES),
+        n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.NEW)]) : null,
       ]),
     );
   }
@@ -463,10 +471,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       shown("rooms", rooms, keep).map((r) => roomRow(r, "rooms")),
     );
     // Rooms you hid (or that were archived) are still there, under their own sections (QA BUG-44).
-    p.empty.textContent =
-      hidden.length || archived.length
-        ? "No other rooms. Hidden and archived ones are listed below."
-        : "No rooms yet. Create the first one.";
+    p.empty.textContent = hidden.length || archived.length ? S.NO_OTHER_ROOMS_HIDDEN_AND_ARCHIVED : S.NO_ROOMS_YET_CREATE_THE_FIRST;
     const mainList = rooms.length ? p.rooms : s.roomsStatus === "ready" ? p.empty : null;
     reconcile(
       p.main,
@@ -554,7 +559,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     nav.replaceChildren(
       h("div", { class: "room-section", dataset: { section: "jump" } }, h("ul", {}, parts.jump)),
       h("div", { class: "room-section", dataset: { section: "rooms" } }, [
-        h("div", { class: "section-head" }, h("h2", { class: "section-title" }, "Open Air rooms")),
+        h("div", { class: "section-head" }, h("h2", { class: "section-title" }, S.OPEN_AIR_ROOMS)),
         rooms.length
           ? h(
               "ul",
@@ -562,7 +567,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
               rooms.map((r) => roomRow(r, "rooms")),
             )
           : s.roomsStatus === "ready"
-            ? h("p", { class: "empty" }, "No Open Air rooms yet. Log in to see the others.")
+            ? h("p", { class: "empty" }, S.NO_OPEN_AIR_ROOMS_YET_LOG)
             : null,
       ]),
     );
@@ -582,7 +587,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       placeholder: "room-name",
       "aria-describedby": errId,
     });
-    const submit = h("button", { type: "submit" }, "Create room");
+    const submit = h("button", { type: "submit" }, S.CREATE_ROOM);
     // Who can see it (§23.1): public unless chosen otherwise; members of a private room are added from the room.
     const hint = h("p", { class: "hint" });
     const choices = (["public", "private", "open"] as const).map((v) =>
@@ -597,7 +602,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       showHint();
     };
     const seg = h("fieldset", { class: "seg", on: { change: showHint }, signal: scope.signal }, [
-      h("legend", { class: "visually-hidden" }, "Who can see it"),
+      h("legend", { class: "visually-hidden" }, S.WHO_CAN_SEE_IT),
       ...choices.map((c) =>
         h("label", { class: c.value === "public" ? "" : `ic ${c.value === "private" ? "i-lock" : "i-globe"}` }, [
           c,
@@ -623,7 +628,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             e.preventDefault();
             if (submit.disabled) return;
             if (textLength(input.value.trim()) > LIMITS.roomName) {
-              setError(`Must be no more than ${LIMITS.roomName} characters.`);
+              setError(S.mustBeNoMoreThanCharacters(LIMITS.roomName));
               return;
             }
             submit.disabled = true;
@@ -645,14 +650,14 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       [
         h("label", { class: "name-field" }, [
           h("span", { "aria-hidden": "true" }, "#"),
-          h("span", { class: "visually-hidden" }, "Room name"),
+          h("span", { class: "visually-hidden" }, S.ROOM_NAME),
           input,
         ]),
         err,
         seg,
         hint,
         h("div", { class: "form-buttons" }, [
-          h("button", { type: "button", class: "cancel", on: { click: () => toggleNewRoom(false) }, signal: scope.signal }, "Cancel"),
+          h("button", { type: "button", class: "cancel", on: { click: () => toggleNewRoom(false) }, signal: scope.signal }, S.CANCEL),
           submit,
         ]),
       ],

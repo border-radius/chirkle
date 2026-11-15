@@ -9,6 +9,7 @@
 import { h } from "../dom.ts";
 import { rememberEmoji } from "../lib/emoji.ts";
 import { emojiNamed, findEmoji, type NamedEmoji } from "../lib/emoji-names.ts";
+import * as S from "../strings/ui-emoji-suggest.ts";
 
 /** How many emoji the list offers at most. */
 export const SUGGEST_MAX = 8;
@@ -35,7 +36,7 @@ export interface EmojiSuggest {
 export function createEmojiSuggest(opts: { textarea: HTMLTextAreaElement; signal: AbortSignal }): EmojiSuggest {
   const { textarea, signal } = opts;
   const id = `${textarea.id}-emoji`;
-  const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": "Emoji", hidden: true });
+  const el = h("ul", { class: "emoji-suggest", id, role: "listbox", "aria-label": S.EMOJI, hidden: true });
   document.body.append(el);
   signal.addEventListener("abort", () => el.remove(), { once: true });
 

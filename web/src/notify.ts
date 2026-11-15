@@ -15,6 +15,7 @@ import type { Api, MessageActivity } from "./api.ts";
 import { h } from "./dom.ts";
 import type { Message, Room, User } from "./lib/types.ts";
 import type { AppState, Store } from "./store.ts";
+import * as S from "./strings/notify.ts";
 
 /** This device's choices, in localStorage; absent when everything is off. Must match app.ts's. */
 export const NOTIFY_KEY = "chat.notify";
@@ -84,8 +85,8 @@ function alertKind(p: NotifyPrefs, room: Room, s: AppState, reply: boolean): Kin
 export function bodyOf(m: Pick<Message, "text" | "files" | "forward_of">): string {
   const text = m.text.replace(/\s+/g, " ").trim();
   if (text) return text.length > 140 ? `${text.slice(0, 139)}…` : text;
-  if (m.files?.length) return m.files.length === 1 ? "Sent an attachment" : `Sent ${m.files.length} attachments`;
-  return m.forward_of ? "Forwarded a message" : "";
+  if (m.files?.length) return m.files.length === 1 ? S.SENT_AN_ATTACHMENT : S.sentAttachments(m.files.length);
+  return m.forward_of ? S.FORWARDED_A_MESSAGE : "";
 }
 
 // ---------------------------------------------------------------- the sound
@@ -203,7 +204,7 @@ export function startNotify({ api, store, title, navigate }: NotifyOptions): () 
 
   async function popup(room: Room, m: Message, kind: Kind, sound: boolean) {
     const s = store.get();
-    const author = m.expand?.author?.name ?? "Someone";
+    const author = m.expand?.author?.name ?? S.SOMEONE;
     const opts = {
       body: bodyOf(m),
       tag: room.id,
@@ -212,8 +213,8 @@ export function startNotify({ api, store, title, navigate }: NotifyOptions): () 
       icon: "/icons/icon-192.png",
       data: { url: `/r/${room.id}/m/${m.id}` },
     } as NotificationOptions;
-    const did = kind !== "reply" ? "in" : m.expand?.reply_to?.author === s.user?.id ? "replied in" : "mentioned you in";
-    const head = kind === "dm" ? author : `${author} ${did} ${title(room, s.user)}`;
+    const did = kind !== "reply" ? "in" : m.expand?.reply_to?.author === s.user?.id ? "replied" : "mentioned";
+    const head = kind === "dm" ? author : S.heading(author, did, title(room, s.user));
     const reg = await navigator.serviceWorker?.getRegistration().catch(() => undefined);
     if (reg?.active) return reg.showNotification(head, opts);
     const n = new Notification(head, opts);
@@ -302,8 +303,8 @@ export interface SettingsOptions {
   signal: AbortSignal;
 }
 
-const BLOCKED = "Your browser blocks notifications from this site. Allow them in its settings for this site.";
-const UNSUPPORTED = "This browser can't show notifications here: choose the sound.";
+const BLOCKED = S.YOUR_BROWSER_BLOCKS_NOTIFICATIONS_FROM_THIS;
+const UNSUPPORTED = S.THIS_BROWSER_CANT_SHOW_NOTIFICATIONS_HERE;
 
 /** The Notifications fieldset of the profile page (§34). */
 export function notifySettings({ id, onChange, signal }: SettingsOptions): HTMLElement {
@@ -312,10 +313,10 @@ export function notifySettings({ id, onChange, signal }: SettingsOptions): HTMLE
     return { input, el: h("label", { class: "notify-choice" }, [input, label]) };
   };
   const boxes = {
-    dms: box("dms", "Direct messages"),
-    replies: box("replies", "Mentions and replies"),
-    popup: box("popup", "Show a pop-up"),
-    sound: box("sound", "Play a sound"),
+    dms: box("dms", S.DIRECT_MESSAGES),
+    replies: box("replies", S.MENTIONS_AND_REPLIES),
+    popup: box("popup", S.SHOW_A_POP_UP),
+    sound: box("sound", S.PLAY_A_SOUND),
   };
   const read = (): NotifyPrefs => ({
     rooms: loadPrefs().rooms,
@@ -350,16 +351,12 @@ export function notifySettings({ id, onChange, signal }: SettingsOptions): HTMLE
   }
 
   const el = h("fieldset", { class: "profile-theme profile-notify", "aria-describedby": `${id}-notify-hint ${id}-notify-status` }, [
-    h("legend", {}, "Notifications"),
+    h("legend", {}, S.NOTIFICATIONS),
     boxes.dms.el,
     boxes.replies.el,
     boxes.popup.el,
     boxes.sound.el,
-    h(
-      "p",
-      { id: `${id}-notify-hint`, class: "field-status" },
-      "For DMs, replies to you and the rooms you choose in their menu, while this app is open in a tab, even in the background. Saved on this device.",
-    ),
+    h("p", { id: `${id}-notify-hint`, class: "field-status" }, S.FOR_DMS_REPLIES_TO_YOU_AND),
     status,
   ]);
   el.addEventListener("change", (e) => void change(e), { signal });

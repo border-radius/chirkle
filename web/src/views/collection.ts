@@ -7,6 +7,7 @@ import { clear, h } from "../dom.ts";
 import { formatFull, parsePb } from "../lib/time.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
+import * as S from "../strings/collection.ts";
 import type * as Lazy from "./collection/lazy.ts";
 
 /** The chunk, loaded once (a failed load is tried again next time). */
@@ -40,14 +41,14 @@ export function createCollectionView(ctx: Pick<Ctx, "api" | "store" | "collectio
       root = el;
       const id = params.id ?? "";
       ctx.store.set({ activeCollectionId: id });
-      const status = h("p", { class: "empty", role: "status" }, "Loading…");
+      const status = h("p", { class: "empty", role: "status" }, S.LOADING);
       el.replaceChildren(status);
       collectionChunk().then(
         (m) => {
           if (scope.active) void m.mountCollection(el, { ...chunkContext(ctx), id, navigate: ctx.navigate, signal: scope.signal });
         },
         () => {
-          if (scope.active) status.textContent = "Couldn't open the collection. Check your connection.";
+          if (scope.active) status.textContent = S.COULDNT_OPEN_THE_COLLECTION_CHECK_YOUR;
         },
       );
     },

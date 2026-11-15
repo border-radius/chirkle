@@ -91,13 +91,13 @@ fun Message.quote(): Quoted = Quoted(id, author, text, deleted, files, expand?.a
 
 /** One line of a quoted message: its text on one line, or what it holds when it has none (§19). */
 fun quoteText(text: String, deleted: Boolean, files: Int): String {
-    if (deleted) return "Message deleted"
+    if (deleted) return Strings.MESSAGE_DELETED
     val one = text.replace(Regex("\\s+"), " ").trim()
     if (one.isNotEmpty()) return one
     return when (files) {
-        0 -> "Message deleted" // a forward whose original was deleted (§21.3)
-        1 -> "Attachment"
-        else -> "$files attachments"
+        0 -> Strings.MESSAGE_DELETED // a forward whose original was deleted (§21.3)
+        1 -> Strings.ATTACHMENT
+        else -> Strings.attachments(files)
     }
 }
 

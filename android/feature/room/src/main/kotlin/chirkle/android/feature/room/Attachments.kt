@@ -2,6 +2,7 @@
 // to four, the last saying "+N"), audio as a player, other files as chips that download. Thumbnails only in the list.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.res.stringResource
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.background
@@ -91,7 +92,7 @@ fun Attachments(m: Message, actions: RowActions) {
                         }
                         if (f.local == null) {
                             m.fileSources[f.name]?.let { from -> actions.badge(from)?.let { b -> SourceBadge(b, Modifier.align(Alignment.BottomStart)) { actions.onCollection(from) } } }
-                            if (more == 0) actions.onSave?.let { save -> chirkle.android.ui.SaveToCollectionButton("Save ${f.label} to collection", { save(m, f.name) }, Modifier.align(Alignment.TopEnd)) }
+                            if (more == 0) actions.onSave?.let { save -> chirkle.android.ui.SaveToCollectionButton(stringResource(R.string.room_save_to_collection, f.label), { save(m, f.name) }, Modifier.align(Alignment.TopEnd)) }
                         }
                     }
                 }
@@ -109,6 +110,7 @@ private fun ratioOf(m: Message, f: Item): Float? =
 
 @Composable
 private fun MediaTile(m: Message, f: Item, height: Int, thumb: String, more: Int, onOpen: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val context = LocalContext.current
     val video = isVideo(f.label)
@@ -122,8 +124,8 @@ private fun MediaTile(m: Message, f: Item, height: Int, thumb: String, more: Int
             .then(width ?: Modifier)
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = f.local == null, onClickLabel = "Open") { onOpen() }
-            .semantics { contentDescription = f.label + if (more > 0) ", $more more" else "" },
+            .clickable(enabled = f.local == null, onClickLabel = stringResource(R.string.room_open)) { onOpen() }
+            .semantics { contentDescription = f.label + if (more > 0) res.getString(R.string.room_more, more) else "" },
         contentAlignment = Alignment.Center,
     ) {
         when {
@@ -164,6 +166,7 @@ private fun MediaTile(m: Message, f: Item, height: Int, thumb: String, more: Int
  */
 @Composable
 private fun SingleImage(m: Message, f: Item, onOpen: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val context = LocalContext.current
     val video = isVideo(f.label)
@@ -186,8 +189,8 @@ private fun SingleImage(m: Message, f: Item, onOpen: () -> Unit) {
             .then(size)
             .clip(shape)
             .background(if (video) Color(0xFF13111D) else MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(enabled = f.local == null, onClickLabel = "Open") { onOpen() }
-            .semantics { contentDescription = f.label + if (video) ", video" else "" },
+            .clickable(enabled = f.local == null, onClickLabel = stringResource(R.string.room_open)) { onOpen() }
+            .semantics { contentDescription = f.label + if (video) res.getString(R.string.room_video) else "" },
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
@@ -225,21 +228,22 @@ private fun itemThumb(services: chirkle.android.data.repo.ChirkleServices, it: c
  */
 @Composable
 private fun SourceBadge(b: chirkle.android.data.model.Badge, modifier: Modifier, onOpen: () -> Unit) {
+    val res = LocalContext.current.resources
     val shape = RoundedCornerShape(8.dp)
     Row(
         modifier
             .padding(6.dp)
             .clip(shape)
             .background(Color.Black.copy(alpha = 0.6f))
-            .then(if (b.private) Modifier else Modifier.clickable(onClickLabel = "Open the collection", onClick = onOpen))
+            .then(if (b.private) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.room_open_the_collection), onClick = onOpen))
             .padding(horizontal = 6.dp, vertical = 3.dp)
             .widthIn(max = 160.dp)
-            .semantics(mergeDescendants = true) { contentDescription = if (b.private) "From a private collection" else "From the collection ${b.name}" + if (b.public) "" else ", private" },
+            .semantics(mergeDescendants = true) { contentDescription = if (b.private) res.getString(R.string.room_from_a_private_collection) else res.getString(R.string.room_from_the_collection, b.name) + if (b.public) "" else res.getString(R.string.room_private) },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(ChirkleIcons.Collection, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-        Text(if (b.private) "Private collection" else b.name, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text(if (b.private) stringResource(R.string.room_private_collection) else b.name, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         if (!b.private && !b.public) Icon(ChirkleIcons.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
     }
 }
@@ -253,7 +257,7 @@ private fun FileChip(label: String, onClick: () -> Unit) {
             .heightIn(min = 40.dp)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, Chirkle.colors.border, RoundedCornerShape(10.dp))
-            .clickable(onClickLabel = "Download", onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.room_download), onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
             .widthIn(max = 320.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -332,11 +336,11 @@ private fun AudioPlayer(m: Message, name: String, label: String) {
             },
             modifier = Modifier.padding(6.dp).size(36.dp),
         ) {
-            Icon(if (playing) ChirkleIcons.Pause else ChirkleIcons.Play, contentDescription = if (playing) "Pause $label" else "Play $label", modifier = Modifier.size(20.dp))
+            Icon(if (playing) ChirkleIcons.Pause else ChirkleIcons.Play, contentDescription = if (playing) stringResource(R.string.room_pause, label) else stringResource(R.string.room_play, label), modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(6.dp))
         Column(Modifier.weight(1f, fill = false)) {
-            Text(if (failed) "Couldn't play $label" else label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+            Text(if (failed) stringResource(R.string.room_couldnt_play, label) else label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             if (duration > 0) {
                 androidx.compose.material3.LinearProgressIndicator(
                     progress = { (position.toFloat() / duration).coerceIn(0f, 1f) },
@@ -346,7 +350,7 @@ private fun AudioPlayer(m: Message, name: String, label: String) {
                 )
                 Text("${clock(position)} / ${clock(duration)}", style = MaterialTheme.typography.labelSmall, color = Chirkle.colors.muted, modifier = Modifier.padding(top = 2.dp))
             } else if (preparing) {
-                Text("Loading…", style = MaterialTheme.typography.labelSmall, color = Chirkle.colors.muted)
+                Text(stringResource(R.string.room_loading), style = MaterialTheme.typography.labelSmall, color = Chirkle.colors.muted)
             }
         }
     }

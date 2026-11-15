@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This module's text (docs/REFACTOR.md item 56): one strings.xml per module, as the web's web/src/strings/.
+     Copy changes here; a translation sits beside it (values-xx/). -->
+<resources>
+    <string name="viewer_position">Position</string>
+    <string name="viewer_pause">Pause</string>
+    <string name="viewer_play">Play</string>
+    <string name="viewer_couldnt_play_this_video">Couldn\'t play this video.</string>
+    <string name="viewer_couldnt_load_image">Couldn\'t load image.</string>
+    <string name="viewer_close">Close</string>
+    <string name="viewer_download">Download</string>
+    <string name="viewer_save_to_collection">Save to collection</string>
+    <string name="viewer_of">%1$s of %2$s</string>
+    <string name="viewer_added">"Added "</string>
+    <string name="viewer_that_message_isnt_available_any">That message isn\'t available any more.</string>
+</resources>

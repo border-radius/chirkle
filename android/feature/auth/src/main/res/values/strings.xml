@@ -30,4 +30,10 @@
     <string name="auth_created_not_logged_in">Your account was created, but logging in failed: %1$s Log in to continue.</string>
     <string name="auth_email_taken">There is already an account with this email. Log in instead.</string>
     <string name="auth_wrong_login">Wrong email or password.</string>
+    <string name="auth_cancel">Cancel</string>
+    <string name="auth_continue">Continue</string>
+    <string name="auth_checking">Checking…</string>
+    <string name="auth_server_address">Server address</string>
+    <string name="auth_the_address_of_the_chat">The address of the chat you use, as you would open it in a browser.</string>
+    <string name="auth_choose_your_server">Choose your server</string>
 </resources>

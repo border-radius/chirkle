@@ -5,6 +5,7 @@
 import type { Ctx } from "../../context.ts";
 import type { Badge, LocalFile, Message } from "../../lib/types.ts";
 import type { Scope } from "../../scope.ts";
+import * as S from "../../strings/room-badges.ts";
 import { chunkContext, collectionChunk } from "../collection.ts";
 
 /** What the room's collections use of the room view. */
@@ -71,7 +72,7 @@ export function createRoomCollections({ api, store, collections, scope, rerender
   }
 
   const lazy = () => ({ ...chunkContext({ api, store, collections }), signal });
-  const failed = () => scope.active && say("Couldn't open collections. Check your connection.");
+  const failed = () => scope.active && say(S.COULDNT_OPEN_COLLECTIONS_CHECK_YOUR_CONNECTION);
 
   return {
     badge,

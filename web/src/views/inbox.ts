@@ -9,6 +9,7 @@ import type { Api } from "../api.ts";
 import { h } from "../dom.ts";
 import type { InboxItem, User } from "../lib/types.ts";
 import type { AppState, Store } from "../store.ts";
+import * as S from "../strings/inbox.ts";
 
 /** The stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
 declare const INBOX_CSS: string;
@@ -47,14 +48,14 @@ function loadStylesheet(): Promise<void> {
 
 /** What a row says happened, after who did it. */
 function what(item: InboxItem, room: string): string {
-  const where = room ? ` in ${room}` : "";
-  if (item.kind === "reaction") return ` reacted ${item.emoji} to your message${where}`;
-  return item.kind === "reply" ? ` replied to you${where}` : ` mentioned you${where}`;
+  const where = room ? S.inRoom(room) : "";
+  if (item.kind === "reaction") return S.reactedToYourMessage(item.emoji, where);
+  return item.kind === "reply" ? S.repliedToYou(where) : S.mentionedYou(where);
 }
 
 /** A message's words on one line, or what it has instead. */
 const words = (m: { text: string; files: number }) =>
-  m.text || (m.files ? (m.files === 1 ? "Attachment" : `${m.files} attachments`) : "Message deleted");
+  m.text || (m.files ? (m.files === 1 ? S.ATTACHMENT : S.attachments(m.files)) : S.MESSAGE_DELETED);
 
 export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<void> {
   const { api, store, signal } = o;
@@ -62,13 +63,13 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
   if (signal.aborted) return;
 
   const list = h("ul", { class: "inbox-list" });
-  const status = h("p", { class: "inbox-status", role: "status" }, "Loading…");
-  const more = h("button", { type: "button", class: "inbox-more", hidden: true }, "Show older");
+  const status = h("p", { class: "inbox-status", role: "status" }, S.LOADING);
+  const more = h("button", { type: "button", class: "inbox-more", hidden: true }, S.SHOW_OLDER);
   root.replaceChildren(
     h("section", { class: "inbox", "aria-labelledby": "inbox-title" }, [
       h("header", { class: "room-header" }, [
-        h("a", { href: "/", class: "back ic i-back", "aria-label": "Back to rooms" }),
-        h("h1", { id: "inbox-title" }, "Mentions & replies"),
+        h("a", { href: "/", class: "back ic i-back", "aria-label": S.BACK_TO_ROOMS }),
+        h("h1", { id: "inbox-title" }, S.MENTIONS_REPLIES),
       ]),
       list,
       status,
@@ -112,9 +113,7 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
 
   function render() {
     list.replaceChildren(...shown.map(row));
-    status.textContent = shown.length
-      ? ""
-      : "Nothing here yet. When someone mentions you, replies to you or reacts to your message, it shows here.";
+    status.textContent = shown.length ? "" : S.NOTHING_HERE_YET_WHEN_SOMEONE_MENTIONS;
     more.hidden = !cursor;
   }
 
@@ -141,7 +140,7 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
       render();
       seeAll();
     } catch {
-      if (!signal.aborted) status.textContent = "Couldn't load your mentions and replies. Check your connection.";
+      if (!signal.aborted) status.textContent = S.COULDNT_LOAD_YOUR_MENTIONS_AND_REPLIES;
     } finally {
       loading = false;
     }

@@ -1,3 +1,4 @@
+import * as S from "../strings/lib-emoji.ts";
 // The emoji the picker offers (§20.4), for the composer and for reactions. Reactions are limited to exactly these:
 // pb_hooks/lib/emoji.js holds the same set for the server, and tests/unit/lib/emoji.test.ts fails if they drift.
 // Emoji 12 and older, so every current system font has them. No names: buttons are read out by the emoji itself.
@@ -13,7 +14,7 @@ const list = (s: string) => s.split(" ");
 
 export const CATEGORIES: readonly EmojiCategory[] = [
   {
-    name: "Smileys",
+    name: S.SMILEYS,
     icon: "😀",
     emoji: list(
       "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 " +
@@ -22,7 +23,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "People",
+    name: S.PEOPLE,
     icon: "👋",
     emoji: list(
       "👋 🤚 🖐️ ✋ 🖖 👌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 💪 🧠 👀 👅 👄 " +
@@ -30,7 +31,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Nature",
+    name: S.NATURE,
     icon: "🐶",
     emoji: list(
       "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 🦋 🐌 🐞 🐜 🐢 🐍 🦎 🐙 🦑 " +
@@ -39,7 +40,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Food",
+    name: S.FOOD,
     icon: "🍕",
     emoji: list(
       "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🥑 🍆 🥔 🥕 🌽 🌶️ 🥒 🥦 🧄 🧅 🍄 🥜 🍞 🥐 🥖 🥨 🥯 🥞 🧇 " +
@@ -48,7 +49,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Activities",
+    name: S.ACTIVITIES,
     icon: "⚽",
     emoji: list(
       "⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🥅 ⛳ 🏹 🎣 🥊 🥋 🎽 🛹 ⛸️ 🎿 🏂 🏆 🥇 🥈 🥉 🏅 🎖️ 🎫 🎪 🎭 🎨 🎬 🎤 " +
@@ -56,7 +57,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Travel",
+    name: S.TRAVEL,
     icon: "🚗",
     emoji: list(
       "🚗 🚕 🚙 🚌 🏎️ 🚓 🚑 🚒 🚚 🚜 🛵 🏍️ 🚲 🛴 🚨 🚃 🚄 🚂 ✈️ 🛫 🛬 🚀 🛸 🚁 ⛵ 🚤 🚢 ⚓ 🗺️ 🗽 🗼 🏰 🏯 🏟️ 🎡 🎢 " +
@@ -64,7 +65,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Objects",
+    name: S.OBJECTS,
     icon: "💡",
     emoji: list(
       "⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 🖱️ 💾 💿 📷 📸 🎥 📞 ☎️ 📺 📻 🎙️ ⏰ ⏳ 🔋 🔌 💡 🔦 🕯️ 💸 💵 💰 💳 💎 ⚖️ 🔧 🔨 🛠️ ⚙️ 🔩 🧲 " +
@@ -73,7 +74,7 @@ export const CATEGORIES: readonly EmojiCategory[] = [
     ),
   },
   {
-    name: "Symbols",
+    name: S.SYMBOLS,
     icon: "❤️",
     emoji: list(
       "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 💢 💥 💫 💦 💨 💬 💭 💤 ✅ ❌ ❓ ❗ ‼️ ⁉️ ⚠️ 🚫 ⭕ " +

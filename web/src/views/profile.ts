@@ -11,18 +11,19 @@ import { LIMITS, textLength } from "../lib/limits.ts";
 import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
+import * as S from "../strings/profile.ts";
 import { savedTheme, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
 import { avatar } from "../ui/avatar.ts";
 
 /** Longest edge of an uploaded avatar (§15.3). */
 const AVATAR_EDGE = 512;
 
-const NOT_AN_IMAGE = "Choose a JPEG, PNG, WebP or GIF image.";
+const NOT_AN_IMAGE = S.CHOOSE_A_JPEG_PNG_WEBP_OR;
 
 /** Why `file` can't be an avatar (after preparation), or "". */
 export function avatarProblem(file: File, limits = LIMITS): string {
   if (!(limits.avatarTypes as readonly string[]).includes(file.type)) return NOT_AN_IMAGE;
-  if (file.size > limits.avatarBytes) return `That image is too large (max ${limits.avatarBytes / 1024 / 1024} MB).`;
+  if (file.size > limits.avatarBytes) return S.thatImageIsTooLargeMax(limits.avatarBytes / 1024 / 1024);
   return "";
 }
 
@@ -33,10 +34,10 @@ export function passwordProblem(
   confirm: string,
   limits = LIMITS,
 ): Partial<Record<"current" | "next" | "confirm", string>> {
-  if (!current) return { current: "Enter your current password." };
-  if (next.length < limits.passwordMin) return { next: `Must be at least ${limits.passwordMin} characters.` };
-  if (next === current) return { next: "That is your current password. Choose a new one." };
-  if (confirm !== next) return { confirm: "The passwords don't match." };
+  if (!current) return { current: S.ENTER_YOUR_CURRENT_PASSWORD };
+  if (next.length < limits.passwordMin) return { next: S.mustBeAtLeastCharacters(limits.passwordMin) };
+  if (next === current) return { next: S.THAT_IS_YOUR_CURRENT_PASSWORD_CHOOSE };
+  if (confirm !== next) return { confirm: S.THE_PASSWORDS_DONT_MATCH };
   return {};
 }
 
@@ -58,15 +59,15 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     accept: LIMITS.avatarTypes.join(","),
     class: "visually-hidden",
   });
-  const changeLabel = h("label", { for: `${vid}-file`, class: "button" }, "Change picture");
-  const removeBtn = h("button", { type: "button" }, "Remove");
+  const changeLabel = h("label", { for: `${vid}-file`, class: "button" }, S.CHANGE_PICTURE);
+  const removeBtn = h("button", { type: "button" }, S.REMOVE);
   const avatarError = h("p", { class: "field-error", role: "alert" });
 
   const signedIn = h("p", { class: "field-status" });
-  const showSignedIn = () => (signedIn.textContent = `Signed in as ${me()?.name ?? ""} on this device.`);
+  const showSignedIn = () => (signedIn.textContent = S.signedInAsOnThisDevice(me()?.name ?? ""));
   showSignedIn();
   const nameInput = h("input", { id: `${vid}-name`, name: "name", autocomplete: "nickname", "aria-describedby": `${vid}-name-status` });
-  const saveBtn = h("button", { type: "submit", class: "primary" }, "Save");
+  const saveBtn = h("button", { type: "submit", class: "primary" }, S.SAVE);
   const nameStatus = h("p", { id: `${vid}-name-status`, class: "field-status", role: "status" });
   // The handle (§41): what "@handle" names in messages.
   const handleInput = h("input", {
@@ -77,8 +78,8 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     spellcheck: false,
     "aria-describedby": `${vid}-handle-status`,
   });
-  const handleBtn = h("button", { type: "submit", class: "primary" }, "Save");
-  const handleStatus = h("p", { id: `${vid}-handle-status`, class: "field-status", role: "status" }, "People mention you by it: @handle.");
+  const handleBtn = h("button", { type: "submit", class: "primary" }, S.SAVE);
+  const handleStatus = h("p", { id: `${vid}-handle-status`, class: "field-status", role: "status" }, S.PEOPLE_MENTION_YOU_BY_IT_HANDLE);
 
   // Password (§22.2): each field with its own error under it.
   const pwField = (key: "current" | "next" | "confirm", label: string, autocomplete: string) => {
@@ -97,15 +98,15 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     return { input, error, el };
   };
   const pw = {
-    current: pwField("current", "Current password", "current-password"),
-    next: pwField("next", "New password", "new-password"),
-    confirm: pwField("confirm", "Confirm new password", "new-password"),
+    current: pwField("current", S.CURRENT_PASSWORD, "current-password"),
+    next: pwField("next", S.NEW_PASSWORD, "new-password"),
+    confirm: pwField("confirm", S.CONFIRM_NEW_PASSWORD, "new-password"),
   };
-  const pwBtn = h("button", { type: "submit", class: "primary" }, "Change password");
+  const pwBtn = h("button", { type: "submit", class: "primary" }, S.CHANGE_PASSWORD);
   const pwStatus = h("p", { class: "field-status", role: "status" });
 
   // Appearance (§7.8): this device's theme, not the account's.
-  const THEME_LABELS: Record<Theme, string> = { auto: "Auto", light: "Light", dark: "Dark" };
+  const THEME_LABELS: Record<Theme, string> = { auto: S.AUTO, light: S.LIGHT, dark: S.DARK };
   const themeRadios = new Map<Theme, HTMLInputElement>();
   const themeChoices = h("div", { class: "segmented" }, [
     ...THEMES.map((t) => {
@@ -194,11 +195,11 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
       key === "handle"
         ? /^[a-z0-9_]{3,24}$/.test(value)
           ? ""
-          : "Use 3 to 24 letters a–z, digits or underscores."
+          : S.USE_3_TO_24_LETTERS_A
         : !value
-          ? "A display name can't be empty."
+          ? S.A_DISPLAY_NAME_CANT_BE_EMPTY
           : textLength(value) > LIMITS.userName
-            ? `Must be no more than ${LIMITS.userName} characters.`
+            ? S.mustBeNoMoreThanCharacters(LIMITS.userName)
             : "";
     if (problem) {
       status.textContent = problem;
@@ -216,7 +217,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
       if (!scope.active) return;
       store.set({ user });
       input.value = user[key] ?? "";
-      status.textContent = "Saved.";
+      status.textContent = S.SAVED;
     } catch (err) {
       if (!scope.active) return;
       status.textContent = fieldMessage(err, key);
@@ -253,7 +254,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
       if (!scope.active) return;
       store.set({ user });
       for (const f of Object.values(pw)) f.input.value = "";
-      pwStatus.textContent = "Password changed. You were logged out everywhere else.";
+      pwStatus.textContent = S.PASSWORD_CHANGED_YOU_WERE_LOGGED_OUT;
     } catch (err) {
       if (!scope.active) return;
       const fields = err instanceof ApiError ? err.fields : {};
@@ -299,34 +300,34 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
 
       const shell = h("section", { class: "profile", "aria-labelledby": `${vid}-title` }, [
         h("header", { class: "room-header" }, [
-          h("a", { href: "/", class: "back ic i-back", "aria-label": "Back to rooms" }),
-          h("h1", { id: `${vid}-title` }, "Settings"),
+          h("a", { href: "/", class: "back ic i-back", "aria-label": S.BACK_TO_ROOMS }),
+          h("h1", { id: `${vid}-title` }, S.SETTINGS),
         ]),
         // A card for each: the picture and name, Appearance, Notifications, Password, Session.
         h("div", { class: "profile-body" }, [
-          h("section", { class: "card", "aria-label": "Profile" }, [
+          h("section", { class: "card", "aria-label": S.PROFILE }, [
             h("div", { class: "profile-avatar" }, [
               picture,
               h("div", {}, [
-                h("h2", {}, "Profile picture"),
+                h("h2", {}, S.PROFILE_PICTURE),
                 h("div", { class: "profile-avatar-actions" }, [fileInput, changeLabel, removeBtn]),
               ]),
             ]),
             avatarError,
             h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "name") }, signal }, [
-              h("label", { for: `${vid}-name` }, "Display name"),
+              h("label", { for: `${vid}-name` }, S.DISPLAY_NAME),
               h("div", { class: "row" }, [nameInput, saveBtn]),
               nameStatus,
             ]),
             h("form", { class: "profile-name", on: { submit: (e) => void saveField(e, "handle") }, signal }, [
-              h("label", { for: `${vid}-handle` }, "Handle"),
+              h("label", { for: `${vid}-handle` }, S.HANDLE),
               h("div", { class: "row" }, [handleInput, handleBtn]),
               handleStatus,
             ]),
           ]),
           h("fieldset", { class: "card profile-theme", "aria-describedby": `${vid}-theme-hint` }, [
-            h("legend", {}, "Appearance"),
-            h("p", { id: `${vid}-theme-hint`, class: "field-status" }, "Auto follows your system. Saved on this device."),
+            h("legend", {}, S.APPEARANCE),
+            h("p", { id: `${vid}-theme-hint`, class: "field-status" }, S.AUTO_FOLLOWS_YOUR_SYSTEM_SAVED_ON),
             themeChoices,
           ]),
           notifyBox,
@@ -339,21 +340,21 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
               on: { submit: (e) => void changePassword(e) },
               signal,
             },
-            [h("h2", { id: `${vid}-pw-title` }, "Password"), pw.current.el, pw.next.el, pw.confirm.el, pwBtn, pwStatus],
+            [h("h2", { id: `${vid}-pw-title` }, S.PASSWORD), pw.current.el, pw.next.el, pw.confirm.el, pwBtn, pwStatus],
           ),
           // Moderators see the usage statistics (§40), a page of its own.
           store.get().user?.moderator
             ? h("section", { class: "card profile-session", "aria-labelledby": `${vid}-stats-title` }, [
                 h("div", {}, [
-                  h("h2", { id: `${vid}-stats-title` }, "Moderation"),
-                  h("p", { class: "field-status" }, "How many people are online and use the app, as counts."),
+                  h("h2", { id: `${vid}-stats-title` }, S.MODERATION),
+                  h("p", { class: "field-status" }, S.HOW_MANY_PEOPLE_ARE_ONLINE_AND),
                 ]),
-                h("a", { href: "/stats" }, "Usage statistics"),
+                h("a", { href: "/stats" }, S.USAGE_STATISTICS),
               ])
             : null,
           h("section", { class: "card profile-session", "aria-labelledby": `${vid}-session-title` }, [
-            h("div", {}, [h("h2", { id: `${vid}-session-title` }, "Session"), signedIn]),
-            h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, "Log out"),
+            h("div", {}, [h("h2", { id: `${vid}-session-title` }, S.SESSION), signedIn]),
+            h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, S.LOG_OUT),
           ]),
         ]),
       ]);

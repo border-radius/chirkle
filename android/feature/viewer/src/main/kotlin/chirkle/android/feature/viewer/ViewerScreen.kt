@@ -3,6 +3,8 @@
 // carries (ANDROID.md §4.1, §11).
 package chirkle.android.feature.viewer
 
+import android.content.res.Resources
+import androidx.compose.ui.res.stringResource
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -189,7 +191,7 @@ private fun Viewer(items: List<Item>?, startKey: String, onClose: () -> Unit) {
         val list = items
         when {
             list == null -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
-            list.isEmpty() -> Text("That message isn't available any more.", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            list.isEmpty() -> Text(stringResource(R.string.viewer_that_message_isnt_available_any), color = Color.White, modifier = Modifier.align(Alignment.Center))
             else -> {
                 val start = list.indexOfFirst { it.key.startsWith(startKey) }.coerceAtLeast(0)
                 val pager = rememberPagerState(initialPage = start) { list.size }
@@ -213,7 +215,7 @@ private fun Viewer(items: List<Item>?, startKey: String, onClose: () -> Unit) {
                     ) {
                         current.m.expand?.author?.let { Text(it.name, color = Color.White, style = MaterialTheme.typography.titleSmall) }
                         Text(
-                            (if (current.item != null) "Added " else "") + Formats.time(current.m.created) + " · " + current.name,
+                            (if (current.item != null) stringResource(R.string.viewer_added) else "") + Formats.time(current.m.created) + " · " + current.name,
                             color = Color.White.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
@@ -230,20 +232,20 @@ private fun Viewer(items: List<Item>?, startKey: String, onClose: () -> Unit) {
                             .padding(horizontal = 4.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = onClose) { Icon(ChirkleIcons.Back, contentDescription = "Close", tint = Color.White) }
+                        IconButton(onClick = onClose) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.viewer_close), tint = Color.White) }
                         Text(
-                            if (list.size > 1) "${pager.currentPage.coerceAtMost(list.lastIndex) + 1} of ${list.size}" else "",
+                            if (list.size > 1) stringResource(R.string.viewer_of, pager.currentPage.coerceAtMost(list.lastIndex) + 1, list.size) else "",
                             color = Color.White,
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f),
                         )
                         if (signedIn) {
                             IconButton(onClick = { saving = current.from }) {
-                                Icon(ChirkleIcons.Collection, contentDescription = "Save to collection", tint = Color.White)
+                                Icon(ChirkleIcons.Collection, contentDescription = stringResource(R.string.viewer_save_to_collection), tint = Color.White)
                             }
                         }
                         IconButton(onClick = { scope.launch { download(context, services, current) } }) {
-                            Icon(ChirkleIcons.Download, contentDescription = "Download", tint = Color.White)
+                            Icon(ChirkleIcons.Download, contentDescription = stringResource(R.string.viewer_download), tint = Color.White)
                         }
                     }
                 }
@@ -252,7 +254,7 @@ private fun Viewer(items: List<Item>?, startKey: String, onClose: () -> Unit) {
         saving?.let { from -> chirkle.android.ui.SaveToCollectionSheet(from) { saving = null } }
         if (list.isNullOrEmpty()) {
             IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp)) {
-                Icon(ChirkleIcons.Back, contentDescription = "Close", tint = Color.White)
+                Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.viewer_close), tint = Color.White)
             }
         }
     }
@@ -313,7 +315,7 @@ private fun Picture(item: Item, active: Boolean, onTap: () -> Unit) {
         contentDescription = item.name,
         contentScale = ContentScale.Fit,
         loading = { Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White) } },
-        error = { Box(Modifier.fillMaxSize()) { Text("Couldn't load image.", color = Color.White, modifier = Modifier.align(Alignment.Center)) } },
+        error = { Box(Modifier.fillMaxSize()) { Text(stringResource(R.string.viewer_couldnt_load_image), color = Color.White, modifier = Modifier.align(Alignment.Center)) } },
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { size = it }
@@ -398,7 +400,7 @@ private fun Video(item: Item, active: Boolean, chrome: Boolean, onTap: () -> Uni
     LaunchedEffect(active) { player.playWhenReady = active }
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }, contentAlignment = Alignment.Center) {
         ContentFrame(player, Modifier.fillMaxSize().semantics { contentDescription = item.name }, contentScale = ContentScale.Fit)
-        if (failed) Text("Couldn't play this video.", color = Color.White)
+        if (failed) Text(stringResource(R.string.viewer_couldnt_play_this_video), color = Color.White)
         val playPause = rememberPlayPauseButtonState(player)
         AnimatedVisibility(chrome && !failed, enter = fadeIn(), exit = fadeOut()) {
             IconButton(
@@ -408,7 +410,7 @@ private fun Video(item: Item, active: Boolean, chrome: Boolean, onTap: () -> Uni
             ) {
                 Icon(
                     if (playPause.showPlay) ChirkleIcons.Play else ChirkleIcons.Pause,
-                    contentDescription = if (playPause.showPlay) "Play" else "Pause",
+                    contentDescription = if (playPause.showPlay) stringResource(R.string.viewer_play) else stringResource(R.string.viewer_pause),
                     tint = Color.White,
                     modifier = Modifier.size(40.dp),
                 )
@@ -423,6 +425,7 @@ private fun Video(item: Item, active: Boolean, chrome: Boolean, onTap: () -> Uni
 @Composable
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 private fun Seek(player: Player) {
+    val res = LocalContext.current.resources
     val progress = rememberProgressStateWithTickInterval(player, 250)
     var dragging by remember { mutableStateOf<Float?>(null) }
     val duration = progress.durationMs.coerceAtLeast(0)
@@ -442,7 +445,7 @@ private fun Seek(player: Player) {
             },
             enabled = duration > 0,
             colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.3f)),
-            modifier = Modifier.weight(1f).semantics { contentDescription = "Position" },
+            modifier = Modifier.weight(1f).semantics { contentDescription = res.getString(R.string.viewer_position) },
         )
         Text(clock(duration), color = Color.White, style = MaterialTheme.typography.labelMedium)
     }

@@ -1,0 +1,40 @@
+// The user-facing text of views/profile.ts (docs/REFACTOR.md item 56): one module per source file, so a lazy
+// screen's text stays in its own chunk. Copy changes here; a translation would replace these.
+
+export const CHOOSE_A_JPEG_PNG_WEBP_OR = "Choose a JPEG, PNG, WebP or GIF image.";
+export const thatImageIsTooLargeMax = (mb: string | number) => `That image is too large (max ${mb} MB).`;
+export const ENTER_YOUR_CURRENT_PASSWORD = "Enter your current password.";
+export const mustBeAtLeastCharacters = (passwordMin: string | number) => `Must be at least ${passwordMin} characters.`;
+export const THAT_IS_YOUR_CURRENT_PASSWORD_CHOOSE = "That is your current password. Choose a new one.";
+export const THE_PASSWORDS_DONT_MATCH = "The passwords don't match.";
+export const CHANGE_PICTURE = "Change picture";
+export const REMOVE = "Remove";
+export const signedInAsOnThisDevice = (name: string | number) => `Signed in as ${name} on this device.`;
+export const SAVE = "Save";
+export const PEOPLE_MENTION_YOU_BY_IT_HANDLE = "People mention you by it: @handle.";
+export const CURRENT_PASSWORD = "Current password";
+export const NEW_PASSWORD = "New password";
+export const CONFIRM_NEW_PASSWORD = "Confirm new password";
+export const CHANGE_PASSWORD = "Change password";
+export const DARK = "Dark";
+export const LIGHT = "Light";
+export const AUTO = "Auto";
+export const USE_3_TO_24_LETTERS_A = "Use 3 to 24 letters a–z, digits or underscores.";
+export const mustBeNoMoreThanCharacters = (userName: string | number) => `Must be no more than ${userName} characters.`;
+export const SAVED = "Saved.";
+export const PASSWORD_CHANGED_YOU_WERE_LOGGED_OUT = "Password changed. You were logged out everywhere else.";
+export const BACK_TO_ROOMS = "Back to rooms";
+export const SETTINGS = "Settings";
+export const PROFILE = "Profile";
+export const PROFILE_PICTURE = "Profile picture";
+export const DISPLAY_NAME = "Display name";
+export const HANDLE = "Handle";
+export const APPEARANCE = "Appearance";
+export const AUTO_FOLLOWS_YOUR_SYSTEM_SAVED_ON = "Auto follows your system. Saved on this device.";
+export const PASSWORD = "Password";
+export const MODERATION = "Moderation";
+export const HOW_MANY_PEOPLE_ARE_ONLINE_AND = "How many people are online and use the app, as counts.";
+export const USAGE_STATISTICS = "Usage statistics";
+export const SESSION = "Session";
+export const LOG_OUT = "Log out";
+export const A_DISPLAY_NAME_CANT_BE_EMPTY = "A display name can't be empty.";

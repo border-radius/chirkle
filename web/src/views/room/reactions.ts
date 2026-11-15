@@ -4,6 +4,7 @@
 
 import { h } from "../../dom.ts";
 import type { Reaction } from "../../lib/types.ts";
+import * as S from "../../strings/room-reactions.ts";
 
 /** A reaction as shown: with who reacted, in words. */
 export type ShownReaction = Reaction & { who: string };
@@ -20,7 +21,7 @@ export const reactionFocus = (emoji: string): readonly string[] => [
  * picker says whether it is open (`aria-expanded`).
  */
 export function addReactionButton(cls: string): HTMLButtonElement {
-  const label = "Add reaction";
+  const label = S.ADD_REACTION;
   return h("button", {
     type: "button",
     class: `${cls} ic i-react`,
@@ -41,7 +42,7 @@ export function reactionRow(reactions: readonly ShownReaction[], reactable: bool
     const mine = r.users.includes(me);
     const n = r.users.length;
     const content = [h("span", { class: "reaction-emoji" }, r.emoji), h("span", { class: "reaction-count" }, String(n))];
-    const attrs = { class: `reaction${mine ? " mine" : ""}`, title: `${r.who} reacted with ${r.emoji}`, dataset: { emoji: r.emoji } };
+    const attrs = { class: `reaction${mine ? " mine" : ""}`, title: S.reactedWith(r.who, r.emoji), dataset: { emoji: r.emoji } };
     if (!reactable) return h("span", attrs, content);
     return h(
       "button",
@@ -55,7 +56,7 @@ export function reactionRow(reactions: readonly ShownReaction[], reactable: bool
       content,
     );
   });
-  return h("div", { class: "reactions", role: "group", "aria-label": "Reactions" }, [
+  return h("div", { class: "reactions", role: "group", "aria-label": S.REACTIONS }, [
     ...chips,
     reactable ? addReactionButton("add-reaction") : null,
   ]);

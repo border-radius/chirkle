@@ -3,6 +3,7 @@
 // Keyboard: Escape closes it and returns focus to the toggle; a confirm step focuses Cancel.
 
 import { h } from "../dom.ts";
+import * as S from "../strings/ui-menu.ts";
 
 export interface MenuItem {
   label: string;
@@ -134,7 +135,7 @@ export function createActionMenu(opts: {
     const item = find(confirming);
     if (item?.confirm) {
       const cancel = button(
-        "Cancel",
+        S.CANCEL,
         () => {
           setConfirming(null);
           summary.focus();

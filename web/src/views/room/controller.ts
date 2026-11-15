@@ -22,6 +22,7 @@ import type { LocalFile, Message, Quoted, Reaction, Room } from "../../lib/types
 import type { EarlyPage } from "../../prefetch.ts";
 import type { Scope } from "../../scope.ts";
 import { type AppState, type Store, UNCOUNTED, upsertRoom } from "../../store.ts";
+import * as S from "../../strings/room-controller.ts";
 import { createWrites, revokeLocal, stray, takeStrays } from "./writes.ts";
 
 /** How long a message gone to (a quote, a link) stays highlighted; styles/app/messages.css fades it out over this time. */
@@ -359,7 +360,7 @@ export function createRoomController(opts: {
     if (g !== gen || !scope.active) return;
     if (!around) {
       return emit({
-        notice: around === null ? "That message isn't available any more." : "Couldn't load that message. Check your connection.",
+        notice: around === null ? S.THAT_MESSAGE_ISNT_AVAILABLE_ANY_MORE : S.COULDNT_LOAD_THAT_MESSAGE_CHECK_YOUR,
       });
     }
     gen++; // pages requested for the old window are stale now
@@ -450,7 +451,7 @@ export function createRoomController(opts: {
       setWin(merge(merge(loaded.win, meanwhile), loaded.win.items));
       setTarget(loaded.target);
       setUnread(loaded.unread);
-      change.notice = msgId && !loaded.target ? "That message isn't in this room. Showing the latest messages instead." : "";
+      change.notice = msgId && !loaded.target ? S.THAT_MESSAGE_ISNT_IN_THIS_ROOM : "";
       // Otherwise the jump has positioned the list. A stale window was already shown at the first unread message, or
       // you scrolled it: stay there (QA BUG-96), unless it was at the bottom and there is nothing unread.
       if (targetId || !stale || retarget) change.scroll = targetId || loaded.unread ? "target" : "bottom";

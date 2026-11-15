@@ -6,6 +6,7 @@
 
 import { h, uniqueId } from "../dom.ts";
 import type { User } from "../lib/types.ts";
+import * as S from "../strings/ui-user-search.ts";
 import { type AvatarUrl, avatar } from "./avatar.ts";
 
 /** How long typing pauses before people are searched. */
@@ -38,12 +39,12 @@ export function createUserSearch(opts: {
     id,
     type: "search",
     autocomplete: "off",
-    placeholder: "Find someone…",
+    placeholder: S.FIND_SOMEONE,
     "aria-controls": `${id}-results`,
     "aria-describedby": `${id}-status`,
   });
-  const status = h("p", { id: `${id}-status`, class: "search-status", role: "status" }, "Type a name.");
-  const results = h("ul", { id: `${id}-results`, class: "search-results", "aria-label": "People" });
+  const status = h("p", { id: `${id}-status`, class: "search-status", role: "status" }, S.TYPE_A_NAME);
+  const results = h("ul", { id: `${id}-results`, class: "search-results", "aria-label": S.PEOPLE });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inflight: AbortController | null = null;
   let shown: [User, HTMLButtonElement][] = [];
@@ -53,7 +54,7 @@ export function createUserSearch(opts: {
   const buttons = () => [...results.querySelectorAll<HTMLButtonElement>("button")];
 
   function show(users: User[]) {
-    status.textContent = users.length ? `${users.length === 20 ? "20+" : users.length} found` : "No one found.";
+    status.textContent = users.length ? S.found(users.length === 20 ? "20+" : users.length) : S.NO_ONE_FOUND;
     shown = users.map((u) => [
       u,
       h(
@@ -61,7 +62,7 @@ export function createUserSearch(opts: {
         {
           type: "button",
           class: "person",
-          title: u.instance ? `On ${u.instance}` : undefined,
+          title: u.instance ? S.on(u.instance) : undefined,
           on: { click: () => opts.onPick(u) },
           signal,
         },
@@ -79,7 +80,7 @@ export function createUserSearch(opts: {
   async function run(query: string) {
     inflight?.abort();
     if (!query) {
-      status.textContent = "Type a name.";
+      status.textContent = S.TYPE_A_NAME;
       shown = [];
       shownFor = "";
       results.replaceChildren();
@@ -87,7 +88,7 @@ export function createUserSearch(opts: {
     }
     const ac = new AbortController();
     inflight = ac;
-    status.textContent = "Searching…";
+    status.textContent = S.SEARCHING;
     try {
       const users = await opts.search(query, ac.signal);
       if (inflight === ac && !signal.aborted) {
@@ -96,7 +97,7 @@ export function createUserSearch(opts: {
       }
     } catch (e) {
       if (inflight !== ac || signal.aborted) return;
-      status.textContent = e instanceof SearchError ? e.message : "Couldn't search. Check your connection.";
+      status.textContent = e instanceof SearchError ? e.message : S.COULDNT_SEARCH_CHECK_YOUR_CONNECTION;
       shown = [];
       results.replaceChildren();
     }
@@ -151,7 +152,7 @@ export function createUserSearch(opts: {
       },
       signal,
     },
-    [h("label", { for: id, class: "visually-hidden" }, opts.label ?? "Find someone to message"), input, status, results],
+    [h("label", { for: id, class: "visually-hidden" }, opts.label ?? S.FIND_SOMEONE_TO_MESSAGE), input, status, results],
   );
   signal.addEventListener(
     "abort",

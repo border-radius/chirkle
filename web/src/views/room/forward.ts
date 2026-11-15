@@ -6,6 +6,7 @@
 import { h, uniqueId } from "../../dom.ts";
 import { otherMember, roomTitle } from "../../lib/rooms.ts";
 import type { Room, User } from "../../lib/types.ts";
+import * as S from "../../strings/room-forward.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
 import { SEARCH_DEBOUNCE_MS } from "../../ui/user-search.ts";
 
@@ -34,13 +35,13 @@ export function createForwardDialog(opts: {
   const input = h("input", {
     type: "search",
     autocomplete: "off",
-    placeholder: "Search rooms and people",
-    "aria-label": "Search rooms and people",
+    placeholder: S.SEARCH_ROOMS_AND_PEOPLE,
+    "aria-label": S.SEARCH_ROOMS_AND_PEOPLE,
     "aria-controls": `${id}-list`,
   });
   const status = h("p", { class: "search-status", role: "status" });
-  const list = h("ul", { id: `${id}-list`, class: "search-results forward-list", "aria-label": "Forward to" });
-  const cancel = h("button", { type: "button", class: "cancel", on: { click: () => close() }, signal }, "Cancel");
+  const list = h("ul", { id: `${id}-list`, class: "search-results forward-list", "aria-label": S.FORWARD_TO });
+  const cancel = h("button", { type: "button", class: "cancel", on: { click: () => close() }, signal }, S.CANCEL);
   const el = h("dialog", { class: "forward", "aria-labelledby": title.id }, [title, input, status, list, cancel]);
 
   let people: User[] = [];
@@ -79,7 +80,7 @@ export function createForwardDialog(opts: {
       ),
     ];
     list.replaceChildren(...items);
-    if (!busy) status.textContent = items.length ? "" : searching ? "Searching…" : "Nothing found.";
+    if (!busy) status.textContent = items.length ? "" : searching ? S.SEARCHING : S.NOTHING_FOUND;
   }
 
   async function search(q: string) {
@@ -111,7 +112,7 @@ export function createForwardDialog(opts: {
   async function pick(to: ForwardTo) {
     if (busy) return;
     setBusy(true);
-    status.textContent = "Forwarding…";
+    status.textContent = S.FORWARDING;
     const problem = await opts.onPick(to);
     setBusy(false);
     if (signal.aborted) return;
@@ -154,7 +155,7 @@ export function createForwardDialog(opts: {
   return {
     el,
     open(count) {
-      title.textContent = count === 1 ? "Forward message" : `Forward ${count} messages`;
+      title.textContent = count === 1 ? S.FORWARD_MESSAGE : S.forwardMessages(count);
       input.value = "";
       people = [];
       searching = false;

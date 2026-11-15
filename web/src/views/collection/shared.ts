@@ -5,6 +5,7 @@ import type { Api } from "../../api.ts";
 import type { CollectionsService } from "../../collections.ts";
 import { h } from "../../dom.ts";
 import type { CollectionItem, Collections, Message, User } from "../../lib/types.ts";
+import * as S from "../../strings/collection-shared.ts";
 import { calls } from "./calls.ts";
 
 /** The stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
@@ -61,8 +62,8 @@ export function changed(o: Base, ms: number): Promise<void> {
 /** Why a request failed, in words: the server's reason for a field when it gave one. */
 export function reason(e: unknown): string {
   const err = e as { fields?: Record<string, string>; message?: string; status?: number };
-  if (err?.status === 0) return "Can't reach the server. Check your connection.";
-  return Object.values(err?.fields ?? {})[0] || err?.message || "Something went wrong.";
+  if (err?.status === 0) return S.CANT_REACH_THE_SERVER_CHECK_YOUR;
+  return Object.values(err?.fields ?? {})[0] || err?.message || S.SOMETHING_WENT_WRONG;
 }
 
 export const icon = () => h("span", { class: "ci", "aria-hidden": "true" });

@@ -2,6 +2,7 @@
 // file URLs. A port of web/src/pb.ts; the realtime half is Realtime.kt. Calls suspend and are main-safe.
 package chirkle.android.data.pb
 
+import chirkle.android.data.lib.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -39,7 +40,7 @@ val PbJson = Json {
  * `{ message, data: { field: { code, message } } }`.
  */
 class PbError(val status: Int, val response: JsonObject = JsonObject(emptyMap()), cause: Throwable? = null) :
-    IOException(response.str("message") ?: "Something went wrong.", cause) {
+    IOException(response.str("message") ?: Strings.SOMETHING_WENT_WRONG, cause) {
     /** Per-field validation messages, e.g. email → "Must be a valid email." */
     val fields: Map<String, String> get() = data("message")
     /** Per-field validation codes, e.g. name → "validation_not_unique". Match on these, not on messages. */

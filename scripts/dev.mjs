@@ -2,6 +2,7 @@
 // Ctrl-C stops both. Reload the browser manually after changes.
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import * as esbuild from "esbuild";
 import {
@@ -11,6 +12,7 @@ import {
   EMOJI,
   INBOX,
   injectAssets,
+  inlineStringsPlugin,
   MEDIA,
   OUTDIR,
   STATIC_DIR,
@@ -65,7 +67,7 @@ const ctx = await esbuild.context({
   sourcemap: "inline",
   entryNames: "assets/[name]",
   logLevel: "info",
-  plugins: [writeIndex],
+  plugins: [inlineStringsPlugin((p) => readFileSync(p, "utf8")), writeIndex],
 });
 await ctx.watch();
 await cp(STATIC_DIR, OUTDIR, { recursive: true });
@@ -76,7 +78,13 @@ await writeFile(
   `${OUTDIR}/stats.html`,
   injectAssets(await readFile(STATS.html, "utf8"), { js: "assets/stats.js", css: "assets/stats.css" }),
 );
-const statsCtx = await esbuild.context({ ...STATS_OPTIONS, sourcemap: "inline", entryNames: "assets/[name]", logLevel: "info" });
+const statsCtx = await esbuild.context({
+  ...STATS_OPTIONS,
+  plugins: [inlineStringsPlugin((p) => readFileSync(p, "utf8"))],
+  sourcemap: "inline",
+  entryNames: "assets/[name]",
+  logLevel: "info",
+});
 await statsCtx.watch();
 
 const pb = spawn(

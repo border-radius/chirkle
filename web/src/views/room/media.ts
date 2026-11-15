@@ -13,6 +13,7 @@
 import type { Api } from "../../api.ts";
 import { h } from "../../dom.ts";
 import type { MediaItem, Message, User } from "../../lib/types.ts";
+import * as S from "../../strings/room-media.ts";
 import type { ViewerImage } from "./viewer.ts";
 
 export interface MediaOptions {
@@ -69,7 +70,7 @@ export function openMedia(o: MediaOptions): void {
   const { signal } = scope;
   o.signal.addEventListener("abort", () => close(false), { signal });
 
-  const title = h("h2", { id: "media-title" }, o.label ? ["Media in ", h("span", { class: "hash" }, "#"), o.label] : "Media");
+  const title = h("h2", { id: "media-title" }, o.label ? [S.MEDIA_IN, h("span", { class: "hash" }, "#"), o.label] : S.MEDIA);
   const grid = h("div", { class: "media-grid" });
   const status = h("p", { class: "media-status", role: "status" });
   const body = h("div", { class: "media-body" }, [grid, status]);
@@ -79,7 +80,7 @@ export function openMedia(o: MediaOptions): void {
       h("button", {
         type: "button",
         class: "icon-button ic i-x",
-        "aria-label": "Close",
+        "aria-label": S.CLOSE,
         autofocus: true,
         on: { click: () => close(true) },
         signal,
@@ -103,7 +104,7 @@ export function openMedia(o: MediaOptions): void {
   async function more() {
     if (loading || done || closed) return;
     loading = true;
-    status.textContent = "Loading…";
+    status.textContent = S.LOADING;
     try {
       const page = await api.media(o.room, last && { sent: last.sent, message: last.message, pos: last.pos }, signal);
       if (closed) return;
@@ -111,14 +112,14 @@ export function openMedia(o: MediaOptions): void {
       last = page.items.at(-1) ?? last;
       // Newest first, so a message's files last to first: reversed for the viewer, they are in their own order.
       for (const it of page.items) add(it);
-      status.textContent = done ? (items.length ? "" : "No photos or videos here yet.") : "";
+      status.textContent = done ? (items.length ? "" : S.NO_PHOTOS_OR_VIDEOS_HERE_YET) : "";
     } catch {
       if (closed) return;
       // Until Retry: observed again, the end (still in view) would ask again at once, over and over (QA BUG-116).
       seen.unobserve(status);
       status.replaceChildren(
-        "Couldn't load media. ",
-        h("button", { type: "button", class: "link", on: { click: () => void more() }, signal }, "Retry"),
+        S.COULDNT_LOAD_MEDIA,
+        h("button", { type: "button", class: "link", on: { click: () => void more() }, signal }, S.RETRY),
       );
       return;
     } finally {
@@ -161,7 +162,7 @@ export function openMedia(o: MediaOptions): void {
     const pic = (!video || row.poster) && h("img", { src: src(), alt: "", loading: "lazy", decoding: "async" });
     // A poster that fails leaves the plain tile.
     if (pic && video) pic.addEventListener("error", () => pic.remove(), { signal });
-    const label = `${name}${video ? ", video" : ""}, ${m.expand?.author?.name ?? "Unknown"}, ${d.toLocaleDateString()}`;
+    const label = S.tileLabel(name, video, m.expand?.author?.name, d.toLocaleDateString());
     const tile: HTMLElement = h(
       "button",
       { type: "button", class: "media-tile", "aria-label": label, title: label, on: { click: () => open(item) }, signal },
@@ -189,7 +190,7 @@ export function openMedia(o: MediaOptions): void {
       it.tile.remove();
       if (heading?.tagName === "H3" && (!heading.nextElementSibling || heading.nextElementSibling.tagName === "H3")) heading.remove();
     }
-    if (done && !items.length) status.textContent = "No photos or videos here yet.";
+    if (done && !items.length) status.textContent = S.NO_PHOTOS_OR_VIDEOS_HERE_YET;
   });
 
   const seen = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && void more(), {

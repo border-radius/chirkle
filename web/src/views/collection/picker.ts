@@ -2,6 +2,7 @@
 
 import { h } from "../../dom.ts";
 import type { CollectionItem } from "../../lib/types.ts";
+import * as S from "../../strings/collection-picker.ts";
 import { type Base, icon, lists, loadStylesheet, pager, picture } from "./shared.ts";
 
 export interface PickOptions extends Base {
@@ -18,7 +19,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
   o.signal.addEventListener("abort", () => close(), { signal });
   const { mine, subs } = lists(o);
   const all = [...mine, ...subs];
-  const title = h("h2", { id: "coll-pick-title" }, [icon(), " Attach from collections"]);
+  const title = h("h2", { id: "coll-pick-title" }, [icon(), S.ATTACH_FROM_COLLECTIONS]);
   /** The collection shown: a row of chips, as the app's. */
   let chosen = all[0]?.id ?? "";
   const chips = all.map((c) =>
@@ -34,16 +35,16 @@ export async function openPicker(o: PickOptions): Promise<void> {
       c.owner ? `${c.name} · ${c.owner.name}` : c.name,
     ),
   );
-  const row = h("div", { class: "coll-chips", role: "group", "aria-label": "Collection" }, chips);
+  const row = h("div", { class: "coll-chips", role: "group", "aria-label": S.COLLECTION }, chips);
   const grid = h("div", { class: "media-grid coll-grid" });
   const status = h("p", { class: "media-status", role: "status" });
   const count = h("span", { class: "coll-count", "aria-live": "polite" });
-  const attach = h("button", { type: "button", disabled: true, on: { click: () => done() }, signal }, "Attach");
+  const attach = h("button", { type: "button", disabled: true, on: { click: () => done() }, signal }, S.ATTACH);
   const body = h("div", { class: "coll-body" }, [grid, status]);
   const dialog = h("dialog", { class: "coll-dialog coll-pick", "aria-labelledby": title.id }, [
     h("header", { class: "media-bar" }, [
       title,
-      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": "Close", on: { click: () => close() }, signal }),
+      h("button", { type: "button", class: "icon-button ic i-x", "aria-label": S.CLOSE, on: { click: () => close() }, signal }),
     ]),
     all.length ? row : null,
     body,
@@ -54,13 +55,9 @@ export async function openPicker(o: PickOptions): Promise<void> {
   let pages = pager(o, "", signal);
 
   function update() {
-    count.textContent = picked.size
-      ? `${picked.size} picked${picked.size >= o.max ? " (the most a message takes)" : ""}`
-      : o.max
-        ? ""
-        : "The message has all the files it can take.";
+    count.textContent = picked.size ? S.picked(picked.size, picked.size >= o.max) : o.max ? "" : S.THE_MESSAGE_HAS_ALL_THE_FILES;
     attach.disabled = !picked.size;
-    attach.textContent = picked.size ? `Attach ${picked.size}` : "Attach";
+    attach.textContent = picked.size ? S.attach(picked.size) : S.ATTACH;
   }
 
   function tile(it: CollectionItem) {
@@ -90,18 +87,18 @@ export async function openPicker(o: PickOptions): Promise<void> {
   async function more() {
     if (pages.done || !chosen) return;
     const p = pages;
-    status.textContent = "Loading…";
+    status.textContent = S.LOADING;
     try {
       const got = await p.next();
       if (signal.aborted || p !== pages) return;
       grid.append(...got.map(tile));
-      status.textContent = p.done && !p.items.length ? "Nothing in this collection yet." : "";
+      status.textContent = p.done && !p.items.length ? S.NOTHING_IN_THIS_COLLECTION_YET : "";
     } catch {
       if (signal.aborted || p !== pages) return;
       seen.unobserve(status);
       status.replaceChildren(
-        "Couldn't load the collection. ",
-        h("button", { type: "button", class: "link", on: { click: () => void more() }, signal }, "Retry"),
+        S.COULDNT_LOAD_THE_COLLECTION,
+        h("button", { type: "button", class: "link", on: { click: () => void more() }, signal }, S.RETRY),
       );
       return;
     }
@@ -146,7 +143,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
   dialog.showModal();
   update();
   if (!all.length) {
-    status.textContent = "You have no collections yet. Save images and videos from the chat to one first.";
+    status.textContent = S.YOU_HAVE_NO_COLLECTIONS_YET_SAVE;
     return;
   }
   show();

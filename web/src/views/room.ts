@@ -19,6 +19,7 @@ import { formatTime, parsePb } from "../lib/time.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import { roomSections } from "../store.ts";
+import * as S from "../strings/room.ts";
 import { avatar } from "../ui/avatar.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
 import type { AccessDialog } from "./room/access.ts";
@@ -133,7 +134,7 @@ export function createRoomView({
       }
       if (r) accessDialog.open(r, canManage(r, me()), me());
     } catch {
-      if (scope.active) say("Couldn't open room access. Check your connection.");
+      if (scope.active) say(S.COULDNT_OPEN_ROOM_ACCESS_CHECK_YOUR);
     }
   }
   const newAccessDialog = (create: typeof import("./room/access.ts").createAccessDialog) => {
@@ -146,7 +147,7 @@ export function createRoomView({
           await actions.setAccess(roomId, visibility, members, posting, writers);
           return null;
         } catch (e) {
-          return `Couldn't save. ${errorMessage(e)}`;
+          return S.couldntSave(errorMessage(e));
         }
       },
       signal,
@@ -157,8 +158,8 @@ export function createRoomView({
   /** "Beginning of #general" / "Beginning of your conversation with Bob". */
   const beginningLabel = () => {
     const r = room();
-    if (!r) return "Beginning of the room";
-    return isDm(r) ? `Beginning of your conversation with ${otherMember(r, me())?.name ?? "Unknown"}` : `Beginning of #${r.name}`;
+    if (!r) return S.BEGINNING_OF_THE_ROOM;
+    return isDm(r) ? S.beginningOfYourConversationWith(otherMember(r, me())?.name) : S.beginningOf(r.name);
   };
   const messages = createMessageList({
     state: () => {
@@ -218,7 +219,7 @@ export function createRoomView({
     },
     onStepReply: (dir) => reply.step(dir),
     onCancelReply: () => reply.set(null),
-    onEmoji: (opener, insert) => void pickers.open(opener, { label: "Insert emoji", onPick: insert, restoreFocus: () => composer.focus() }),
+    onEmoji: (opener, insert) => void pickers.open(opener, { label: S.INSERT_EMOJI, onPick: insert, restoreFocus: () => composer.focus() }),
     onEmojiName: (textarea) => pickers.suggestEmoji(textarea),
     onMention: (textarea) => pickers.suggestPeople(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).
@@ -246,17 +247,17 @@ export function createRoomView({
           const m = ctl.find(id);
           return !m || !(m.deleted || emptyForward(m));
         });
-        if (!ids.length) return "Couldn't forward. A message was deleted.";
+        if (!ids.length) return S.COULDNT_FORWARD_A_MESSAGE_WAS_DELETED;
         try {
           const target = "room" in to ? to.room : await actions.openDm(to.user.id);
           const n = (await api.forward(ids, target.id)).length;
           if (!scope.active) return null;
           selection.end();
           if (target.id !== roomId) navigate(`/r/${target.id}`);
-          else notice.flash(n === 1 ? "Message forwarded." : `${n} messages forwarded.`);
+          else notice.flash(n === 1 ? S.MESSAGE_FORWARDED : S.messagesForwarded(n));
           return null;
         } catch (e) {
-          return `Couldn't forward. ${reasonOf(e)}`;
+          return S.couldntForward(reasonOf(e));
         }
       },
       signal,
@@ -342,7 +343,7 @@ export function createRoomView({
   async function deleteSelected(ids: string[]) {
     const failed = await now(() => ctl.removeMany(ids));
     // Say why: network trouble, rate limiting or the server's reason (QA BUG-58).
-    if (failed && scope.active) say(`Couldn't delete those messages. ${reasonOf(failed)}`);
+    if (failed && scope.active) say(S.couldntDeleteThoseMessages(reasonOf(failed)));
   }
 
   async function openForward(ids: string[]) {
@@ -358,7 +359,7 @@ export function createRoomView({
       }
       forwardDialog.open(ids.length);
     } catch {
-      if (scope.active) say("Couldn't open Forward. Check your connection.");
+      if (scope.active) say(S.COULDNT_OPEN_FORWARD_CHECK_YOUR_CONNECTION);
     }
   }
 
@@ -442,12 +443,12 @@ export function createRoomView({
     pill.hidden = s.pill === null && !away && !back;
     pill.classList.toggle("jump", back || s.pill === null);
     pill.textContent = back
-      ? "Back to reply"
+      ? S.BACK_TO_REPLY
       : s.pill === "history"
-        ? "New messages · Jump to latest"
+        ? S.NEW_MESSAGES_JUMP_TO_LATEST
         : s.pill === "below"
-          ? "New messages"
-          : "Jump to latest";
+          ? S.NEW_MESSAGES
+          : S.JUMP_TO_LATEST;
   }
 
   function scrollToBottom() {
@@ -467,7 +468,7 @@ export function createRoomView({
       const dm = await actions.openDm(userId);
       if (scope.active) navigate(`/r/${dm.id}`);
     } catch (e) {
-      if (scope.active) say(`Couldn't open that conversation. ${errorMessage(e)}`);
+      if (scope.active) say(S.couldntOpenThatConversation(errorMessage(e)));
     }
   }
 
@@ -475,9 +476,9 @@ export function createRoomView({
   async function setBanned(userId: string, banned: boolean) {
     try {
       await api.setBanned(userId, banned);
-      if (scope.active) say(banned ? "Banned. They can't sign in until unbanned." : "Unbanned.");
+      if (scope.active) say(banned ? S.BANNED_THEY_CANT_SIGN_IN_UNTIL : S.UNBANNED);
     } catch (e) {
-      if (scope.active) say(`Couldn't ${banned ? "ban" : "unban"} them. ${errorMessage(e)}`);
+      if (scope.active) say(S.couldntBan(banned, errorMessage(e)));
     }
   }
 
@@ -499,9 +500,9 @@ export function createRoomView({
   function renderNotFound() {
     awaitReturn();
     // A guest may have followed a link to a room that needs an account (§23.3).
-    const why = me() ? [] : [h("a", { href: "/login" }, "Log in"), " to see more rooms, or "];
-    const back = h("a", { href: "/" }, me() ? "Back to rooms" : "go back to the Open Air rooms");
-    shell.replaceChildren(notFound("This room doesn't exist.", [...why, back]));
+    const why = me() ? [] : [h("a", { href: "/login" }, S.LOG_IN), S.TO_SEE_MORE_ROOMS_OR];
+    const back = h("a", { href: "/" }, me() ? S.BACK_TO_ROOMS : S.GO_BACK_TO_THE_OPEN_AIR);
+    shell.replaceChildren(notFound(S.THIS_ROOM_DOESNT_EXIST, [...why, back]));
   }
 
   /**
@@ -514,8 +515,8 @@ export function createRoomView({
     pickers.close();
     forwardDialog?.close();
     accessDialog?.close();
-    const back = h("a", { href: "/" }, "Back to rooms");
-    shell.replaceChildren(notFound("You can't see this room any more.", [back]));
+    const back = h("a", { href: "/" }, S.BACK_TO_ROOMS);
+    shell.replaceChildren(notFound(S.YOU_CANT_SEE_THIS_ROOM_ANY, [back]));
     scope.dispose();
   }
 
@@ -537,7 +538,7 @@ export function createRoomView({
       const r = room();
       search = createSearch({
         room: roomId,
-        label: r ? roomTitle(r, me()) : "this room",
+        label: r ? roomTitle(r, me()) : S.THIS_ROOM,
         page: (q, sig) => api.page(q, sig),
         pageSize: PAGE_SIZE,
         when: (m) => formatTime(parsePb(m.created)),
@@ -555,7 +556,7 @@ export function createRoomView({
       search.focus();
       typeInto(search.el.querySelector("input"), held.take());
     } catch {
-      if (scope.active) say("Couldn't open search. Check your connection.");
+      if (scope.active) say(S.COULDNT_OPEN_SEARCH_CHECK_YOUR_CONNECTION);
     } finally {
       held.take();
     }
@@ -573,14 +574,14 @@ export function createRoomView({
     if (!saving) render(); // nothing to save: just close the box
     composer.focus();
     if ((await saving) !== false || !scope.active) return;
-    messages.setError(id, { text: "Couldn't save your edit.", retry: () => void saveEdit(id, text) });
+    messages.setError(id, { text: S.COULDNT_SAVE_YOUR_EDIT, retry: () => void saveEdit(id, text) });
     render({ anchor: true });
   }
 
   async function doDelete(id: string) {
     messages.setError(id, null);
     if ((await now(() => ctl.remove(id))) !== false || !scope.active) return;
-    messages.setError(id, { text: "Couldn't delete this message.", retry: () => void doDelete(id) });
+    messages.setError(id, { text: S.COULDNT_DELETE_THIS_MESSAGE, retry: () => void doDelete(id) });
     render({ anchor: true });
   }
 
@@ -595,7 +596,7 @@ export function createRoomView({
     const done = await saving;
     if (done === true || !scope.active) return;
     messages.setError(id, {
-      text: done || (on ? `Couldn't add your ${emoji} reaction.` : `Couldn't remove your ${emoji} reaction.`),
+      text: done || (on ? S.couldntAddYourReaction(emoji) : S.couldntRemoveYourReaction(emoji)),
       ...(done ? {} : { retry: () => void react(id, emoji, on) }),
     });
     render({ anchor: true });
@@ -610,7 +611,7 @@ export function createRoomView({
     void pickers.open(
       opener,
       {
-        label: "Add reaction",
+        label: S.ADD_REACTION,
         chosen: mine,
         onPick: (emoji) => void react(id, emoji, !mine.has(emoji)),
         restoreFocus: () => messages.focusIn(id, [".actions .react", ".reactions .add-reaction"]),

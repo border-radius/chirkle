@@ -9,6 +9,7 @@ import { checkFiles, formatBytes, isVideo } from "../../lib/files.ts";
 import { prepareImage } from "../../lib/image.ts";
 import { LIMITS, textLength } from "../../lib/limits.ts";
 import type { LocalFile } from "../../lib/types.ts";
+import * as S from "../../strings/room-composer.ts";
 import { collectionIcon } from "../../ui/icon.ts";
 import { createActionMenu } from "../../ui/menu.ts";
 
@@ -47,8 +48,8 @@ const previewable = (f: File) => f.type.startsWith("image/") && f.type !== "imag
  */
 export function editProblem(raw: string, hasFiles = false): string {
   const len = textLength(raw.trim());
-  if (isBlank(raw) && !hasFiles) return "A message can't be empty. Use Delete to remove it.";
-  return len > MAX_LEN ? `Too long: ${len - MAX_LEN} characters over the ${MAX_LEN} limit.` : "";
+  if (isBlank(raw) && !hasFiles) return S.A_MESSAGE_CANT_BE_EMPTY_USE;
+  return len > MAX_LEN ? S.tooLongCharactersOverTheLimit(len - MAX_LEN, MAX_LEN) : "";
 }
 
 /**
@@ -145,41 +146,41 @@ export function createComposer(opts: {
     signal.addEventListener("abort", () => resizes.disconnect());
   }
   const counter = h("span", { class: "counter", "aria-live": "polite" });
-  const sendBtn = h("button", { type: "submit", class: "send ic i-send", "aria-label": "Send", title: "Send", disabled: true });
+  const sendBtn = h("button", { type: "submit", class: "send ic i-send", "aria-label": S.SEND, title: S.SEND, disabled: true });
   const fileInput = h("input", {
     id: `${opts.id}-files`,
     type: "file",
     multiple: true,
     class: "visually-hidden",
     tabindex: -1,
-    "aria-label": "Attach files",
+    "aria-label": S.ATTACH_FILES,
   });
   const { onCollections } = opts;
   // With collections (§31) the paperclip offers both; without, it opens the file chooser.
-  const attachMenu = onCollections && createActionMenu({ label: "Attach", icon: "i-clip", className: "attach", signal });
+  const attachMenu = onCollections && createActionMenu({ label: S.ATTACH, icon: "i-clip", className: "attach", signal });
   attachMenu?.update([
-    { label: "Upload file", hint: "Photo, video or document", icon: "i-upload", run: () => fileInput.click() },
+    { label: S.UPLOAD_FILE, hint: S.PHOTO_VIDEO_OR_DOCUMENT, icon: "i-upload", run: () => fileInput.click() },
     {
-      label: "From collection",
-      hint: "Pick from your saved media",
+      label: S.FROM_COLLECTION,
+      hint: S.PICK_FROM_YOUR_SAVED_MEDIA,
       icon: "i-media",
       run: () => onCollections!(attachMenu.el.firstElementChild as HTMLElement, Math.max(0, LIMITS.attachments - files.length)),
     },
   ]);
   const attach =
     attachMenu?.el ??
-    h("button", { type: "button", class: "icon-button attach ic i-clip", title: "Attach files", "aria-label": "Attach files" });
+    h("button", { type: "button", class: "icon-button attach ic i-clip", title: S.ATTACH_FILES, "aria-label": S.ATTACH_FILES });
   const emojiBtn = h("button", {
     type: "button",
     class: "icon-button emoji-button ic i-smile",
-    title: "Emoji",
-    "aria-label": "Emoji",
+    title: S.EMOJI,
+    "aria-label": S.EMOJI,
     "aria-haspopup": "dialog",
     "aria-expanded": "false",
     on: { click: () => opts.onEmoji(emojiBtn, insertEmoji) },
     signal,
   });
-  const tray = h("ul", { class: "tray", "aria-label": "Attachments" });
+  const tray = h("ul", { class: "tray", "aria-label": S.ATTACHMENTS });
   const trayError = h("p", { class: "tray-error", role: "alert" });
   const replyLabel = h("span", { class: "replying-label" });
   const replyBar = h("div", { class: "replying ic i-reply", hidden: true }, [
@@ -187,8 +188,8 @@ export function createComposer(opts: {
     h("button", {
       type: "button",
       class: "icon-button remove ic i-x",
-      "aria-label": "Cancel reply",
-      title: "Cancel reply",
+      "aria-label": S.CANCEL_REPLY,
+      title: S.CANCEL_REPLY,
       on: { click: () => cancelReply() },
       signal,
     }),
@@ -219,7 +220,7 @@ export function createComposer(opts: {
   function onInput() {
     // Count what would be sent (trimmed, in code points), so the counter agrees with the Send button.
     const len = textLength(textarea.value.trim());
-    counter.textContent = len <= COUNTER_FROM ? "" : len <= MAX_LEN ? `${MAX_LEN - len} left` : `${len - MAX_LEN} over`;
+    counter.textContent = len <= COUNTER_FROM ? "" : len <= MAX_LEN ? S.left(MAX_LEN - len) : S.over(len - MAX_LEN);
     fitRows(textarea);
     sendBtn.disabled = preparing > 0 || sendable() === null;
     opts.onChange?.(textarea.value);
@@ -241,10 +242,10 @@ export function createComposer(opts: {
                   alt: "",
                 }),
           h("span", { class: "tray-name" }, f.file.name),
-          h("span", { class: "tray-size" }, f.item ? "From a collection" : formatBytes(f.file.size)),
+          h("span", { class: "tray-size" }, f.item ? S.FROM_A_COLLECTION : formatBytes(f.file.size)),
           h(
             "button",
-            { type: "button", class: "remove", "aria-label": `Remove ${f.file.name}`, on: { click: () => removeFile(f) }, signal },
+            { type: "button", class: "remove", "aria-label": S.remove(f.file.name), on: { click: () => removeFile(f) }, signal },
             "×",
           ),
         ]),
@@ -287,7 +288,7 @@ export function createComposer(opts: {
     const fresh = items.filter((it) => !files.some((f) => f.item?.id === it.item?.id));
     const room = Math.max(0, LIMITS.attachments - files.length);
     files = [...files, ...fresh.slice(0, room)];
-    trayError.textContent = fresh.length > room ? `At most ${LIMITS.attachments} files per message.` : "";
+    trayError.textContent = fresh.length > room ? S.atMostFilesPerMessage(LIMITS.attachments) : "";
     renderTray();
     textarea.focus();
   }
@@ -381,9 +382,9 @@ export function createComposer(opts: {
       h("div", { class: "composer-row" }, [
         fileInput,
         attach,
-        h("label", { for: opts.id, class: "visually-hidden" }, "Message"),
+        h("label", { for: opts.id, class: "visually-hidden" }, S.MESSAGE),
         textarea,
-        h("kbd", { class: "focus-key", "aria-hidden": "true", title: "Focus the message box" }, mac ? "⌘/" : "Ctrl /"),
+        h("kbd", { class: "focus-key", "aria-hidden": "true", title: S.FOCUS_THE_MESSAGE_BOX }, mac ? "⌘/" : S.CTRL),
         counter,
         emojiBtn,
         sendBtn,
@@ -411,7 +412,7 @@ export function createComposer(opts: {
     setReply(reply) {
       replyBar.hidden = !reply;
       replyLabel.replaceChildren(
-        ...(reply ? ["Replying to ", h("strong", {}, reply.name), h("span", { class: "replying-text" }, reply.text)] : []),
+        ...(reply ? [S.REPLYING_TO, h("strong", {}, reply.name), h("span", { class: "replying-text" }, reply.text)] : []),
       );
     },
   };

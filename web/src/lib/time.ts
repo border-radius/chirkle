@@ -1,3 +1,4 @@
+import * as S from "../strings/lib-time.ts";
 // Time parsing and display (§7.5, §7.6.1). Intl formatters are created once per locale and reused.
 
 /** "2026-10-10 12:34:56.789Z" → epoch ms (NaN for ""). */
@@ -47,10 +48,10 @@ export function formatTime(ms: number, now = Date.now(), locale?: string): strin
 
 /** Date divider label: "Today", "Yesterday", or a weekday + date. */
 export function dayLabel(ms: number, now = Date.now(), locale?: string): string {
-  if (sameDay(ms, now)) return "Today";
+  if (sameDay(ms, now)) return S.TODAY;
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (sameDay(ms, yesterday.getTime())) return "Yesterday";
+  if (sameDay(ms, yesterday.getTime())) return S.YESTERDAY;
   return fmt(sameYear(ms, now) ? "day" : "dayYear", locale, ms);
 }
 

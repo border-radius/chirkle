@@ -54,8 +54,8 @@ fun <T> checkFiles(existing: Int, added: List<T>, name: (T) -> String, size: (T)
     val rejected = mutableListOf<Pair<String, String>>()
     for (f in added) {
         when {
-            size(f) > Limits.ATTACHMENT_BYTES -> rejected += name(f) to "larger than ${formatBytes(Limits.ATTACHMENT_BYTES)}"
-            existing + accepted.size >= Limits.ATTACHMENTS -> rejected += name(f) to "at most ${Limits.ATTACHMENTS} files per message"
+            size(f) > Limits.ATTACHMENT_BYTES -> rejected += name(f) to Strings.largerThan(formatBytes(Limits.ATTACHMENT_BYTES))
+            existing + accepted.size >= Limits.ATTACHMENTS -> rejected += name(f) to Strings.atMostFilesPerMessage(Limits.ATTACHMENTS)
             else -> accepted += f
         }
     }

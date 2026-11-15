@@ -2,6 +2,7 @@
 // it never pulls anyone's email.
 package chirkle.android.data.api
 
+import chirkle.android.data.lib.Strings
 import chirkle.android.data.lib.PAGE_SIZE
 import chirkle.android.data.lib.FilterQuery
 import chirkle.android.data.lib.PageQuery
@@ -96,10 +97,10 @@ const val SIGNUP_LOGIN_FAILED = "signup_login_failed"
 
 /** A sentence to show for a failed request: network trouble, rate limiting, or the server's own message. */
 fun errorMessage(e: Throwable): String = when {
-    e !is ApiError -> "Something went wrong. Please try again."
-    e.status == 0 -> "Can't reach the server. Check your connection."
-    e.status == 429 -> "Too many attempts. Wait a few seconds and try again."
-    else -> e.message ?: "Something went wrong. Please try again."
+    e !is ApiError -> Strings.SOMETHING_WENT_WRONG_PLEASE_TRY_AGAIN
+    e.status == 0 -> Strings.CANT_REACH_THE_SERVER_CHECK_YOUR
+    e.status == 429 -> Strings.TOO_MANY_ATTEMPTS_WAIT_A_FEW
+    else -> e.message ?: Strings.SOMETHING_WENT_WRONG_PLEASE_TRY_AGAIN
 }
 
 /** errorMessage, or the server's reason when it gave one (e.g. "A message was deleted." for a forward, §21). */
@@ -142,7 +143,7 @@ class ChirkleApi(val pb: PbClient) {
     /** The one who is logged in, or null. */
     fun currentUser(): User? = userOf(pb.authStore.session.value)
 
-    private fun me(): String = currentUser()?.id ?: throw ApiError("Not logged in.", 401)
+    private fun me(): String = currentUser()?.id ?: throw ApiError(Strings.NOT_LOGGED_IN, 401)
 
     private suspend fun call(
         path: String,
@@ -203,7 +204,7 @@ class ChirkleApi(val pb: PbClient) {
     /** Log in (or renew `renewing`, a token: saved only over that same session, not one ended or changed meanwhile). */
     private suspend fun auth(path: String, body: JsonObject, renewing: String? = null): User {
         // Not a session (another server's answer, a proxy's): like network trouble, never a crash (QA BUG-158).
-        val unreadable = { ApiError("The server's answer couldn't be read.", 0) }
+        val unreadable = { ApiError(Strings.THE_SERVERS_ANSWER_COULDNT_BE_READ, 0) }
         val json = call(path, "POST", body = Body.Json(body)) as? JsonObject ?: throw unreadable()
         val record = json["record"] as? JsonObject ?: throw unreadable()
         val token = (json["token"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw unreadable()
@@ -256,7 +257,7 @@ class ChirkleApi(val pb: PbClient) {
 
     /** Re-validate the stored session, which renews it. Throws when it is no longer valid. */
     suspend fun refreshAuth(): User {
-        if (currentUser() == null) throw ApiError("Not logged in.", 401)
+        if (currentUser() == null) throw ApiError(Strings.NOT_LOGGED_IN, 401)
         // A logout (or another login) while it is on its way stays so (as the web, PERF.md §5).
         return auth("/api/collections/users/auth-refresh", JsonObject(emptyMap()), renewing = pb.authStore.session.value.token)
     }

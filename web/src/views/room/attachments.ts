@@ -5,6 +5,7 @@
 import { type Child, h } from "../../dom.ts";
 import { attachmentName, isAudio, isGif, isMedia, isVideo } from "../../lib/files.ts";
 import type { Badge, LocalFile, Message } from "../../lib/types.ts";
+import * as S from "../../strings/room-attachments.ts";
 import { collectionIcon } from "../../ui/icon.ts";
 
 /** Most image and video tiles a message shows; the last one says how many more there are, which the viewer shows. */
@@ -68,7 +69,7 @@ export function createAttachments(opts: {
     /** The last tile shown, when more are left out: it says how many. */
     const more = (tile: HTMLElement) => {
       if (images.childElementCount === MAX_TILES && imageCount > MAX_TILES) {
-        tile.append(h("span", { class: "att-more" }, [`+${imageCount - MAX_TILES}`, h("span", { class: "visually-hidden" }, " more")]));
+        tile.append(h("span", { class: "att-more" }, [`+${imageCount - MAX_TILES}`, h("span", { class: "visually-hidden" }, S.MORE)]));
       }
     };
     const thumb = imageCount === 1 ? "800x480f" : "480x240f";
@@ -118,7 +119,7 @@ export function createAttachments(opts: {
     }
     const progress =
       local.length && m.status === "pending"
-        ? h("progress", { class: "att-progress", max: "1", value: String(opts.uploadProgress(m.id)), "aria-label": "Uploading" })
+        ? h("progress", { class: "att-progress", max: "1", value: String(opts.uploadProgress(m.id)), "aria-label": S.UPLOADING })
         : null;
     return h("div", { class: "attachments" }, [
       images.childElementCount ? images : null,
@@ -142,8 +143,8 @@ export function createAttachments(opts: {
         {
           type: "button",
           class: "att-save",
-          "aria-label": `Save ${attachmentName(m, name)} to collection`,
-          title: "Save to collection",
+          "aria-label": S.saveToCollection(attachmentName(m, name)),
+          title: S.SAVE_TO_COLLECTION,
           "aria-haspopup": "dialog",
           on: { click: () => onSave(m, name, save!) },
           signal,
@@ -153,11 +154,11 @@ export function createAttachments(opts: {
     const badge =
       b &&
       ("private" in b
-        ? h("span", { class: "att-src" }, [collectionIcon(), "Private collection"])
-        : h("a", { class: "att-src", href: `/c/${from}`, title: `From the collection “${b.name}”` }, [
+        ? h("span", { class: "att-src" }, [collectionIcon(), S.PRIVATE_COLLECTION])
+        : h("a", { class: "att-src", href: `/c/${from}`, title: S.fromTheCollection(b.name) }, [
             collectionIcon(),
             h("span", {}, b.name),
-            b.public ? null : h("span", { class: "ic i-lock", title: "Private" }, h("span", { class: "visually-hidden" }, " (private)")),
+            b.public ? null : h("span", { class: "ic i-lock", title: S.PRIVATE }, h("span", { class: "visually-hidden" }, " (private)")),
           ]));
     return h("span", { class: "att-cell" }, [tile, badge, save]);
   }
@@ -232,8 +233,8 @@ export function createAttachments(opts: {
         return;
       }
       const broken = h("span", { class: "att-tile att-broken" }, [
-        `Couldn't load ${video ? "video" : "image"} `,
-        btn("Retry", () => {
+        S.couldntLoad(video),
+        btn(S.RETRY, () => {
           broken.replaceWith(tile);
           load();
         }),

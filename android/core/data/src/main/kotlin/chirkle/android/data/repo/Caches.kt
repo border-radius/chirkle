@@ -1,6 +1,7 @@
 // Small services: file tokens for older servers (§17.3, §37.3), the room cache (§7.5), drafts (§22.3), the site record (§24).
 package chirkle.android.data.repo
 
+import chirkle.android.data.lib.Strings
 import chirkle.android.data.api.ChirkleApi
 import chirkle.android.data.db.ChirkleDatabase
 import chirkle.android.data.db.DraftEntity
@@ -204,7 +205,7 @@ class NotifyRooms(private val db: ChirkleDatabase, private val scope: CoroutineS
 
 /** The app's theme (the web's Appearance choice, DESIGN.md §7.8): the system's, or always light or dark. */
 enum class ThemeChoice(val label: String) {
-    System("System"), Light("Light"), Dark("Dark");
+    System(Strings.SYSTEM), Light(Strings.LIGHT), Dark(Strings.DARK);
 
     companion object {
         fun of(v: String?) = entries.firstOrNull { it.name.equals(v, ignoreCase = true) } ?: System

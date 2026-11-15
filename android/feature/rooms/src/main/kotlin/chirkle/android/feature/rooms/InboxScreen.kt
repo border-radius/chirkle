@@ -3,6 +3,9 @@
 // the screen sees it. Something new while it is open comes in at the top.
 package chirkle.android.feature.rooms
 
+import android.content.res.Resources
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,22 +62,23 @@ import chirkle.android.ui.swipeAway
 import kotlinx.coroutines.launch
 
 /** What a row says happened, after who did it ("mentioned you in #room"). */
-internal fun inboxWhat(item: InboxItem, room: String): String {
-    val where = if (room.isEmpty()) "" else " in $room"
+internal fun inboxWhat(res: Resources, item: InboxItem, room: String): String {
+    val where = if (room.isEmpty()) "" else res.getString(R.string.rooms_in, room)
     return when (item.kind) {
-        "reaction" -> " reacted ${item.emoji} to your message$where"
-        "reply" -> " replied to you$where"
-        else -> " mentioned you$where"
+        "reaction" -> res.getString(R.string.rooms_reacted_to_your_message, item.emoji, where)
+        "reply" -> res.getString(R.string.rooms_replied_to_you, where)
+        else -> res.getString(R.string.rooms_mentioned_you, where)
     }
 }
 
 /** A message's words on one line, or what it has instead. */
-internal fun inboxWords(m: InboxMessage): String =
-    m.text.ifEmpty { if (m.files == 1) "Attachment" else if (m.files > 1) "${m.files} attachments" else "Message deleted" }
+internal fun inboxWords(res: Resources, m: InboxMessage): String =
+    m.text.ifEmpty { if (m.files == 1) res.getString(R.string.rooms_attachment) else if (m.files > 1) res.getString(R.string.rooms_attachments, m.files) else res.getString(R.string.rooms_message_deleted) }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val app by services.store.flow.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -137,8 +141,8 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
 
     Scaffold(modifier = Modifier.swipeAway(enabled = true, toRight = true, onSwipe = onBack), topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back to rooms") } },
-            title = { Text("Mentions & replies") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.rooms_back_to_rooms)) } },
+            title = { Text(stringResource(R.string.rooms_mentions_replies)) },
         )
     }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -150,7 +154,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
                         .background(if (new) Chirkle.colors.tint else Color.Transparent)
-                        .clickable(onClickLabel = "Open") { onOpen(item.room, item.message.id) }
+                        .clickable(onClickLabel = stringResource(R.string.rooms_open)) { onOpen(item.room, item.message.id) }
                         .padding(12.dp)
                         .semantics(mergeDescendants = true) {},
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -162,7 +166,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                             buildAnnotatedString {
                                 withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(item.actor.name) }
                                 withStyle(SpanStyle(color = muted)) {
-                                    append(inboxWhat(item, room))
+                                    append(inboxWhat(res, item, room))
                                     append("  ")
                                 }
                                 withStyle(SpanStyle(color = Chirkle.colors.dim, fontSize = 12.sp)) { append(Formats.time(item.created)) }
@@ -172,10 +176,10 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                         item.quote?.let {
                             Row(Modifier.padding(top = 4.dp)) {
                                 Box(Modifier.size(width = 3.dp, height = 18.dp).background(Chirkle.colors.border, RoundedCornerShape(2.dp)))
-                                Text(inboxWords(it), color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+                                Text(inboxWords(res, it), color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
                             }
                         }
-                        Text(inboxWords(item.message), maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
+                        Text(inboxWords(res, item.message), maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
                     }
                 }
             }
@@ -184,12 +188,12 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                     when {
                         loading -> CircularProgressIndicator(Modifier.size(28.dp))
                         failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Couldn't load your mentions and replies.", color = Chirkle.colors.muted)
-                            TextButton(onClick = { load(items.isEmpty()) }) { Text("Retry") }
+                            Text(stringResource(R.string.rooms_couldnt_load_your_mentions_and), color = Chirkle.colors.muted)
+                            TextButton(onClick = { load(items.isEmpty()) }) { Text(stringResource(R.string.rooms_retry)) }
                         }
-                        cursor.isNotEmpty() -> TextButton(onClick = { load(false) }) { Text("Show older") }
+                        cursor.isNotEmpty() -> TextButton(onClick = { load(false) }) { Text(stringResource(R.string.rooms_show_older)) }
                         items.isEmpty() && seenAt != null -> Text(
-                            "Nothing here yet. When someone mentions you, replies to you or reacts to your message, it shows here.",
+                            stringResource(R.string.rooms_nothing_here_yet_when_someone),
                             color = Chirkle.colors.muted,
                             textAlign = TextAlign.Center,
                         )

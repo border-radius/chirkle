@@ -117,6 +117,7 @@ chat/
 │       │   ├── emoji.ts        # the picker's emoji, recently used (§20.4)
 │       │   ├── emoji-names.ts  # their names, finding emoji by name (§20.6)
 │       │   ├── reactions.ts    # optimistic reaction changes, who reacted (§20.3)
+│       ├── strings/            # the user-facing text, one module per source file (REFACTOR item 56; inlined by the build)
 │       ├── ui/                 # small reusable components
 │       │   ├── menu.ts, avatar.ts, user-search.ts, emoji-picker.ts + emoji-suggest.ts (a lazy chunk: §20.4, §20.6)
 │       └── views/

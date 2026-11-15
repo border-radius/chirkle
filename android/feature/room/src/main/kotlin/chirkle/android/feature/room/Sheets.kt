@@ -3,6 +3,8 @@
 // field over its rooms and DMs that also finds people you have no DM with yet, as the web's forward dialog).
 package chirkle.android.feature.room
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.getValue
@@ -72,6 +74,7 @@ fun MessageSheet(
     onMoreEmoji: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val res = LocalContext.current.resources
     chirkle.android.ui.ChirkleSheet(onDismiss) {
         // Which message this is about: its author and first line.
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -80,7 +83,7 @@ fun MessageSheet(
                     m.expand?.author?.let { a ->
                         append(a.name)
                         // Someone on a linked instance says which (§33.4).
-                        if (a.instance.isNotEmpty()) append(" (on ").append(a.instance).append(")")
+                        if (a.instance.isNotEmpty()) append(stringResource(R.string.room_on_2)).append(a.instance).append(")")
                         append(": ")
                     }
                     append(m.quote().line())
@@ -100,12 +103,12 @@ fun MessageSheet(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     for (e in quick) {
                         Box(
-                            Modifier.size(48.dp).clip(CircleShape).clickable { onReact(e) }.semantics { contentDescription = "React with $e" },
+                            Modifier.size(48.dp).clip(CircleShape).clickable { onReact(e) }.semantics { contentDescription = res.getString(R.string.room_react_with, e) },
                             contentAlignment = Alignment.Center,
                         ) { Text(e, fontSize = 26.sp) }
                     }
                     Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onMoreEmoji), contentAlignment = Alignment.Center) {
-                        Icon(ChirkleIcons.Add, contentDescription = "Add reaction")
+                        Icon(ChirkleIcons.Add, contentDescription = stringResource(R.string.room_add_reaction))
                     }
                 }
             }
@@ -128,6 +131,7 @@ fun MessageSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmojiSheet(title: String, recent: List<String>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val res = LocalContext.current.resources
     chirkle.android.ui.ChirkleSheet(onDismiss) {
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
         val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
@@ -146,14 +150,14 @@ fun EmojiSheet(title: String, recent: List<String>, onPick: (String) -> Unit, on
         androidx.compose.material3.OutlinedTextField(
             query,
             { query = it; scope.launch { grid.scrollToItem(0) } },
-            placeholder = { Text("Search emoji") },
+            placeholder = { Text(stringResource(R.string.room_search_emoji)) },
             leadingIcon = { Icon(ChirkleIcons.Search, contentDescription = null) },
             singleLine = true,
             shape = CircleShape,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
             // Done picks the first found, as Enter on the web.
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { found.firstOrNull()?.let(onPick) }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = "Search emoji" },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).semantics { contentDescription = res.getString(R.string.room_search_emoji) },
         )
         val searching = query.isNotBlank()
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -171,12 +175,12 @@ fun EmojiSheet(title: String, recent: List<String>, onPick: (String) -> Unit, on
         }
         LazyVerticalGrid(GridCells.Adaptive(48.dp), Modifier.fillMaxWidth().height(360.dp).padding(horizontal = 8.dp), state = grid) {
             if (searching) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "found") { CategoryTitle(if (found.isEmpty()) "No emoji found" else "Found") }
+                item(span = { GridItemSpan(maxLineSpan) }, key = "found") { CategoryTitle(if (found.isEmpty()) stringResource(R.string.room_no_emoji_found) else stringResource(R.string.room_found_2)) }
                 items(found, key = { "f$it" }) { e -> EmojiCell(e, onPick) }
                 return@LazyVerticalGrid
             }
             if (recent.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) { CategoryTitle("Recent") }
+                item(span = { GridItemSpan(maxLineSpan) }) { CategoryTitle(stringResource(R.string.room_recent)) }
                 items(recent, key = { "r$it" }) { e -> EmojiCell(e, onPick) }
             }
             for ((c, list) in categories) {
@@ -224,6 +228,7 @@ private fun holds(name: String, q: String) = jumpFold(name).contains(q)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForwardSheet(count: Int, rooms: List<Room>, me: String?, onPick: (ForwardTo) -> Unit, onDismiss: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = chirkle.android.ui.LocalServices.current
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var people by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<User>>(emptyList()) }
@@ -249,21 +254,21 @@ fun ForwardSheet(count: Int, rooms: List<Room>, me: String?, onPick: (ForwardTo)
             people.filter { it.id !in inDms && holds(it.name, q) }.map { ForwardTo.ToUser(it) }
     }
     chirkle.android.ui.ChirkleSheet(onDismiss) {
-        Text(if (count == 1) "Forward message" else "Forward $count messages", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
+        Text(if (count == 1) stringResource(R.string.room_forward_message) else stringResource(R.string.room_forward_messages, count), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() })
         androidx.compose.material3.OutlinedTextField(
             query,
             { query = it },
-            placeholder = { Text("Search rooms and people") },
+            placeholder = { Text(stringResource(R.string.room_search_rooms_and_people)) },
             leadingIcon = { Icon(ChirkleIcons.Search, contentDescription = null) },
             singleLine = true,
             shape = CircleShape,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
             // Done forwards to the first found, as the emoji search's Done picks the first emoji.
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (q.isNotEmpty()) targets.firstOrNull()?.let(onPick) }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).semantics { contentDescription = "Search rooms and people" },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).semantics { contentDescription = res.getString(R.string.room_search_rooms_and_people) },
         )
         if (targets.isEmpty()) {
-            Text(if (searching) "Searching…" else "Nothing found.", color = Chirkle.colors.muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            Text(if (searching) stringResource(R.string.room_searching) else stringResource(R.string.room_nothing_found), color = Chirkle.colors.muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
         // As tall as the whole list, so the sheet doesn't shrink under your finger as you type.
         val full = (rooms.size.coerceAtLeast(1) * 56).coerceAtMost(420)
@@ -274,7 +279,7 @@ fun ForwardSheet(count: Int, rooms: List<Room>, me: String?, onPick: (ForwardTo)
                     headlineContent = {
                         Text(when (t) { is ForwardTo.ToRoom -> t.room.title(me); is ForwardTo.ToUser -> t.user.name }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
-                    supportingContent = (t as? ForwardTo.ToUser)?.user?.instance?.takeIf { it.isNotEmpty() }?.let { inst -> { Text("On $inst", color = Chirkle.colors.muted) } },
+                    supportingContent = (t as? ForwardTo.ToUser)?.user?.instance?.takeIf { it.isNotEmpty() }?.let { inst -> { Text(stringResource(R.string.room_on, inst), color = Chirkle.colors.muted) } },
                     leadingContent = {
                         when (t) {
                             is ForwardTo.ToRoom -> chirkle.android.ui.RoomPicture(t.room, me)

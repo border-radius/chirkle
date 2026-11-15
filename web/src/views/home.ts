@@ -5,6 +5,7 @@ import type { Ctx } from "../context.ts";
 import { clear, h } from "../dom.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
+import * as S from "../strings/home.ts";
 
 const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? "";
 
@@ -16,15 +17,15 @@ export function createHomeView({ store }: Pick<Ctx, "store">): View {
   const render = () => {
     const user = store.get().user;
     const name = firstName(user?.name ?? "");
-    title.textContent = name ? `Welcome, ${name}!` : "Welcome!";
-    if (user) text.replaceChildren("Pick a room or a conversation from the list, or start a new one.");
+    title.textContent = name ? S.welcome(name) : S.WELCOME;
+    if (user) text.replaceChildren(S.PICK_A_ROOM_OR_A_CONVERSATION);
     else
       text.replaceChildren(
-        "Read any of the Open Air rooms in the list, no account needed. ",
-        h("a", { href: "/login" }, "Log in"),
-        " or ",
-        h("a", { href: "/signup" }, "sign up"),
-        " to join the conversation.",
+        S.READ_ANY_OF_THE_OPEN_AIR,
+        h("a", { href: "/login" }, S.LOG_IN),
+        S.OR,
+        h("a", { href: "/signup" }, S.SIGN_UP),
+        S.TO_JOIN,
       );
   };
 

@@ -14,10 +14,10 @@ class ServerProblem(message: String) : Exception(message)
  */
 fun serverAddress(input: String, allowHttp: Boolean): String {
     val raw = input.trim()
-    if (raw.isEmpty()) throw ServerProblem("Enter your server's address.")
+    if (raw.isEmpty()) throw ServerProblem(Strings.ENTER_YOUR_SERVERS_ADDRESS)
     val withScheme = if ("://" in raw) raw else "https://$raw"
-    val url = withScheme.toHttpUrlOrNull() ?: throw ServerProblem("That isn't a web address.")
-    if (url.scheme == "http" && !allowHttp) throw ServerProblem("Use an https:// address.")
+    val url = withScheme.toHttpUrlOrNull() ?: throw ServerProblem(Strings.THAT_ISNT_A_WEB_ADDRESS)
+    if (url.scheme == "http" && !allowHttp) throw ServerProblem(Strings.USE_AN_HTTPS_ADDRESS)
     val path = url.pathSegments.takeWhile { it !in APP_PATHS }.filter { it.isNotEmpty() }
     return url.newBuilder().query(null).fragment(null).username("").password("")
         .encodedPath("/" + path.joinToString("/") { it.encodeSegment() }).build().toString().trimEnd('/')

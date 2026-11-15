@@ -3,6 +3,7 @@
 // is going.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -102,10 +103,11 @@ fun MessageRow(
     selected: Boolean,
     actions: RowActions,
 ) {
+    val res = LocalContext.current.resources
     if (m.isService) return ServiceRow(m)
     val context = LocalContext.current
     val highlight by animateColorAsState(if (target) Chirkle.colors.highlight else Color.Transparent, tween(if (target) 150 else 1200), label = "target")
-    val author = m.expand?.author ?: User(m.author, "Unknown")
+    val author = m.expand?.author ?: User(m.author, stringResource(R.string.room_unknown))
     val accent = MaterialTheme.colorScheme.primary
     // A reply to one of my messages or a mention of me (DESIGN.md §41), by someone else: a tinted card (the web's .to-me).
     val toMe = me != null && m.author != me && ((m.replyTo.isNotEmpty() && m.expand?.replyTo?.author == me) || me in m.mentions)
@@ -118,10 +120,10 @@ fun MessageRow(
                 .combinedClickable(
                     onClick = { actions.onTap(m) },
                     onLongClick = { actions.onLongPress(m) },
-                    onLongClickLabel = "Message actions",
+                    onLongClickLabel = stringResource(R.string.room_message_actions),
                 )
                 .padding(start = if (toMe) 4.dp else 12.dp, end = if (toMe) 4.dp else 12.dp, top = if (first || toMe) 10.dp else 1.dp, bottom = if (toMe) 10.dp else 1.dp)
-                .semantics { if (selecting) stateDescription = if (selected) "Selected" else "Not selected" },
+                .semantics { if (selecting) stateDescription = if (selected) res.getString(R.string.room_selected) else res.getString(R.string.room_not_selected) },
         ) {
             if (selecting) {
                 Checkbox(selected, onCheckedChange = null, modifier = Modifier.padding(end = 4.dp))
@@ -135,7 +137,7 @@ fun MessageRow(
                     }
                 }
                 if (m.forwardedFrom.isNotEmpty()) {
-                    Text("Forwarded from ${m.expand?.forwardedFrom?.name ?: "Unknown"}", color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium, fontStyle = FontStyle.Italic)
+                    Text(stringResource(R.string.room_forwarded_from, m.expand?.forwardedFrom?.name ?: stringResource(R.string.room_unknown)), color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium, fontStyle = FontStyle.Italic)
                 }
                 m.expand?.replyTo?.takeIf { m.replyTo.isNotEmpty() }?.let { q ->
                     val name = q.expand?.author?.name.orEmpty()
@@ -144,9 +146,9 @@ fun MessageRow(
                             .padding(vertical = 2.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable(onClickLabel = "Show the original message") { actions.onQuote(q.id, m.id) }
+                            .clickable(onClickLabel = stringResource(R.string.room_show_the_original_message)) { actions.onQuote(q.id, m.id) }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
-                            .semantics(mergeDescendants = true) { contentDescription = "Quoting ${name.ifEmpty { "a message" }}: ${q.line()}" },
+                            .semantics(mergeDescendants = true) { contentDescription = res.getString(R.string.room_quoting, name.ifEmpty { res.getString(R.string.room_a_message) }, q.line()) },
                     ) {
                         Box(Modifier.width(3.dp).height(32.dp).background(accent, RoundedCornerShape(2.dp)))
                         Spacer(Modifier.width(8.dp))
@@ -157,8 +159,8 @@ fun MessageRow(
                     }
                 }
                 when {
-                    m.deleted -> Text("Message deleted", color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
-                    m.isEmptyForward() -> Text("The original message was deleted", color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
+                    m.deleted -> Text(stringResource(R.string.room_message_deleted), color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
+                    m.isEmptyForward() -> Text(stringResource(R.string.room_the_original_message_was_deleted), color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
                     else -> {
                         if (m.text.isNotEmpty()) {
                             val muted = Chirkle.colors.muted
@@ -174,12 +176,12 @@ fun MessageRow(
                                 if (!edited) t else androidx.compose.ui.text.buildAnnotatedString {
                                     append(t)
                                     append(" ")
-                                    withStyle(androidx.compose.ui.text.SpanStyle(color = muted, fontSize = 12.sp)) { append("(edited)") }
+                                    withStyle(androidx.compose.ui.text.SpanStyle(color = muted, fontSize = 12.sp)) { append(res.getString(R.string.room_edited_2)) }
                                 }
                             }
-                            Text(text, style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 21.sp), modifier = if (edited) Modifier.semantics { stateDescription = "Edited ${Formats.full(m.editedAt)}" } else Modifier)
+                            Text(text, style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 21.sp), modifier = if (edited) Modifier.semantics { stateDescription = res.getString(R.string.room_edited, Formats.full(m.editedAt)) } else Modifier)
                         } else if (m.editedAt.isNotEmpty()) {
-                            Text("(edited)", color = Chirkle.colors.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.semantics { contentDescription = "Edited ${Formats.full(m.editedAt)}" })
+                            Text(stringResource(R.string.room_edited_2), color = Chirkle.colors.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.semantics { contentDescription = res.getString(R.string.room_edited, Formats.full(m.editedAt)) })
                         }
                         Attachments(m, actions)
                         for (p in m.previews) LinkPreviewRow(p.url, p.title, p.icon)
@@ -200,8 +202,8 @@ fun MessageRow(
                                     .clickable(enabled = me != null) { actions.onReact(m, r.emoji) }
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
                                     .semantics(mergeDescendants = true) {
-                                        contentDescription = "$who reacted with ${r.emoji}"
-                                        stateDescription = if (mine) "Yours" else ""
+                                        contentDescription = res.getString(R.string.room_reacted_with, who, r.emoji)
+                                        stateDescription = if (mine) res.getString(R.string.room_yours) else ""
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -219,7 +221,7 @@ fun MessageRow(
                                     .border(1.dp, Chirkle.colors.border, RoundedCornerShape(16.dp))
                                     .clickable { add(m) }
                                     .padding(horizontal = 10.dp)
-                                    .semantics { contentDescription = "Add reaction" },
+                                    .semantics { contentDescription = res.getString(R.string.room_add_reaction) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(ChirkleIcons.AddReaction, contentDescription = null, tint = Chirkle.colors.muted, modifier = Modifier.size(18.dp))
@@ -235,14 +237,15 @@ fun MessageRow(
 
 @Composable
 private fun SendState(m: Message, actions: RowActions) {
+    val res = LocalContext.current.resources
     when (m.status) {
         SendStatus.Pending -> {
             val p = actions.progress(m.id)
             if (m.localFiles.isNotEmpty() && p != null) {
-                LinearProgressIndicator(progress = { p }, modifier = Modifier.padding(top = 4.dp).widthIn(max = 240.dp).fillMaxWidth().semantics { contentDescription = "Uploading" })
+                LinearProgressIndicator(progress = { p }, modifier = Modifier.padding(top = 4.dp).widthIn(max = 240.dp).fillMaxWidth().semantics { contentDescription = res.getString(R.string.room_uploading) })
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                    Icon(ChirkleIcons.Pending, contentDescription = "Sending", tint = Chirkle.colors.muted, modifier = Modifier.size(14.dp))
+                    Icon(ChirkleIcons.Pending, contentDescription = stringResource(R.string.room_sending), tint = Chirkle.colors.muted, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -252,13 +255,13 @@ private fun SendState(m: Message, actions: RowActions) {
                 Icon(ChirkleIcons.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    if (replyGone) "Not sent: the message you replied to was deleted." else "Not sent.",
+                    if (replyGone) stringResource(R.string.room_not_sent_the_message_you) else stringResource(R.string.room_not_sent),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                TextButton(onClick = { actions.onRetry(m) }) { Text(if (replyGone) "Send without quote" else "Retry") }
-                TextButton(onClick = { actions.onDiscard(m) }) { Text("Discard") }
+                TextButton(onClick = { actions.onRetry(m) }) { Text(if (replyGone) stringResource(R.string.room_send_without_quote) else stringResource(R.string.room_retry)) }
+                TextButton(onClick = { actions.onDiscard(m) }) { Text(stringResource(R.string.room_discard)) }
             }
         }
         null -> {}

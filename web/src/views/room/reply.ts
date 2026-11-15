@@ -3,6 +3,7 @@
 
 import { quoteText } from "../../lib/messages.ts";
 import type { Message } from "../../lib/types.ts";
+import * as S from "../../strings/room-reply.ts";
 import type { Composer } from "./composer.ts";
 
 export interface Reply {
@@ -34,7 +35,7 @@ export function createReply(opts: {
 
   function set(m: Message | null) {
     to = m;
-    composer.setReply(m && { name: m.expand?.author?.name ?? "Unknown", text: quoteText(m) });
+    composer.setReply(m && { name: m.expand?.author?.name ?? S.UNKNOWN, text: quoteText(m) });
   }
 
   return {

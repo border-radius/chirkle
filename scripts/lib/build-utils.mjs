@@ -134,6 +134,120 @@ export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, 
 });
 
 /**
+ * Puts the text of web/src/strings/ (docs/REFACTOR.md item 56) back where it is used, as the code read before it moved,
+ * so the move costs the bundles nothing (esbuild doesn't inline across modules: each would be a variable and a
+ * reference). `S.LOG_IN` becomes `"Log in"`; `S.welcome(name)` becomes \`Welcome, ${name}!\` when the function is a
+ * template of its parameters alone. Other functions (with conditions in them) stay calls.
+ * @param {string} source a web/src module
+ * @param {(path: string) => string} read a strings module's source, by the path the import names
+ * @returns {string}
+ */
+export function inlineStrings(source, read) {
+  let out = source;
+  for (const m of source.matchAll(/^import \* as (\w+) from "([^"]*\/strings\/[\w-]+\.ts)";$/gm)) {
+    const alias = /** @type {string} */ (m[1]);
+    const mod = read(/** @type {string} */ (m[2]));
+    /** @type {Map<string, string>} */
+    const values = new Map();
+    for (const c of mod.matchAll(/^export const (\w+) =\s*("(?:[^"\\\n]|\\.)*");$/gm)) values.set(String(c[1]), String(c[2]));
+    /** @type {Map<string, { params: string[], body: string }>} */
+    const templates = new Map();
+    for (const c of mod.matchAll(/^export const (\w+) = \(([^)]*)\) =>\s*`((?:[^`\\$]|\\.|\$(?!\{)|\$\{\w+\})*)`;$/gm)) {
+      const [, name = "", list = "", body = ""] = c;
+      const params = list
+        .split(",")
+        .map((x) => String(x.split(":")[0]).trim())
+        .filter(Boolean);
+      const used = [...body.matchAll(/\$\{(\w+)\}/g)].map((u) => u[1]);
+      // Each parameter once, in order: the arguments are then evaluated as the call would.
+      if (used.join() === params.join()) templates.set(name, { params, body });
+    }
+    out = out.replace(new RegExp(`\\b${alias}\\.(\\w+)\\b(?!\\s*\\()`, "g"), (all, name) => values.get(name) ?? all);
+    out = replaceCalls(out, alias, templates);
+  }
+  return out;
+}
+
+/**
+ * [alias].name(a, b) → the template with the arguments in it, for the [templates] known.
+ * @param {string} src
+ * @param {string} alias
+ * @param {Map<string, { params: string[], body: string }>} templates
+ */
+function replaceCalls(src, alias, templates) {
+  const re = new RegExp(`\\b${alias}\\.(\\w+)\\(`, "g");
+  let out = "";
+  let last = 0;
+  for (let m = re.exec(src); m; m = re.exec(src)) {
+    const t = templates.get(/** @type {string} */ (m[1]));
+    if (!t) continue;
+    const args = splitArgs(src, m.index + m[0].length);
+    if (!args || args.list.length !== t.params.length) continue;
+    let i = 0;
+    const body = t.body.replace(/\$\{\w+\}/g, () => `\${${args.list[i++]}}`);
+    out += `${src.slice(last, m.index)}\`${body}\``;
+    last = args.end;
+    re.lastIndex = args.end;
+  }
+  return out + src.slice(last);
+}
+
+/**
+ * The arguments of a call whose "(" is just before [at]: each as written, and the index after its ")"; undefined when
+ * they hold what this scanner doesn't follow (a template literal, a regex, a comment).
+ * @param {string} src
+ * @param {number} at
+ */
+function splitArgs(src, at) {
+  const list = [];
+  let depth = 0;
+  let start = at;
+  for (let i = at; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'") {
+      const q = c;
+      for (i++; i < src.length && src[i] !== q; i++) if (src[i] === "\\") i++;
+      continue;
+    }
+    if (c === "`" || c === "/" || c === "\n") return undefined;
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) {
+        if (c !== ")") return undefined;
+        const last = src.slice(start, i).trim();
+        if (last) list.push(last);
+        return { list, end: i + 1 };
+      }
+      depth--;
+    } else if (c === "," && depth === 0) {
+      list.push(src.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The esbuild plugin of [inlineStrings], for every web/src module but the strings modules themselves.
+ * @param {(path: string) => string} readFile
+ * @returns {import("esbuild").Plugin}
+ */
+export function inlineStringsPlugin(readFile) {
+  return {
+    name: "inline-strings",
+    setup(build) {
+      // Go regular expressions (esbuild's filters) have no lookahead: the strings modules are left out here.
+      build.onLoad({ filter: /[\\/]web[\\/]src[\\/].*\.ts$/ }, (args) => {
+        if (/[\\/]strings[\\/][^\\/]+$/.test(args.path)) return undefined;
+        const dir = args.path.replace(/[\\/][^\\/]+$/, "");
+        const source = readFile(args.path);
+        return { contents: inlineStrings(source, (rel) => readFile(`${dir}/${rel}`)), loader: "ts" };
+      });
+    },
+  };
+}
+
+/**
  * esbuild options shared by `build` and `dev`; each adds its own minify/sourcemap/naming.
  * @satisfies {import("esbuild").BuildOptions}
  */

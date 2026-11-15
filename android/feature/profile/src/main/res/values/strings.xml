@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This module's text (docs/REFACTOR.md item 56): one strings.xml per module, as the web's web/src/strings/.
+     Copy changes here; a translation sits beside it (values-xx/). -->
+<resources>
+    <string name="profile_add_account">Add account</string>
+    <string name="profile_in_use">In use</string>
+    <string name="profile_youre_not_logged_in_to">You\'re not logged in to any account.</string>
+    <string name="profile_accounts">Accounts</string>
+    <string name="profile_back_to_rooms">Back to rooms</string>
+    <string name="profile_for_android">%1$s for Android %2$s</string>
+    <string name="profile_log_out">Log out</string>
+    <string name="profile_session">Session</string>
+    <string name="profile_change_password">Change password</string>
+    <string name="profile_password_changed_you_were_logged">Password changed. You were logged out everywhere else.</string>
+    <string name="profile_confirm_new_password">Confirm new password</string>
+    <string name="profile_new_password">New password</string>
+    <string name="profile_current_password">Current password</string>
+    <string name="profile_password">Password</string>
+    <string name="profile_screens_with_messages_cant_be">Screens with messages can\'t be captured, and are blank in recent apps.</string>
+    <string name="profile_hide_messages_from_screenshots">Hide messages from screenshots</string>
+    <string name="profile_this_device">This device</string>
+    <string name="profile_appearance">Appearance</string>
+    <string name="profile_save">Save</string>
+    <string name="profile_save_handle">Save handle</string>
+    <string name="profile_saved">Saved.</string>
+    <string name="profile_use_3_to_24_letters">Use 3 to 24 letters a–z, digits or underscores.</string>
+    <string name="profile_handle">Handle</string>
+    <string name="profile_people_mention_you_as">People mention you as @%1$s.</string>
+    <string name="profile_must_be_no_more_than">Must be no more than %1$d characters.</string>
+    <string name="profile_a_display_name_cant_be">A display name can\'t be empty.</string>
+    <string name="profile_display_name">Display name</string>
+    <string name="profile_remove">Remove</string>
+    <string name="profile_change_picture">Change picture</string>
+    <string name="profile_profile">Profile</string>
+    <string name="profile_your_profile">Your profile</string>
+    <string name="profile_that_image_is_too_large">That image is too large (max %1$d MB).</string>
+    <string name="profile_couldnt_read_that_image">Couldn\'t read that image.</string>
+    <string name="profile_choose_a_jpeg_png_webp">Choose a JPEG, PNG, WebP or GIF image.</string>
+    <string name="profile_the_passwords_dont_match">The passwords don\'t match.</string>
+    <string name="profile_that_is_your_current_password">That is your current password. Choose a new one.</string>
+    <string name="profile_must_be_at_least_characters">Must be at least %1$d characters.</string>
+    <string name="profile_enter_your_current_password">Enter your current password.</string>
+</resources>

@@ -1,3 +1,4 @@
+import * as S from "./strings/pb.ts";
 // A minimal PocketBase client: only what api.ts uses (REST requests, the auth store, realtime over SSE, file URLs).
 // It replaces the official JS SDK, whose admin services, OAuth2/OTP/MFA flows and cookie helpers the app never used
 // but always shipped (§7.7). The wire behavior follows SDK 0.28: same storage key, query and realtime protocol.
@@ -29,7 +30,7 @@ export class PbError extends Error {
   readonly isAbort: boolean;
 
   constructor(status: number, response: PbError["response"] = {}, isAbort = false) {
-    super(response.message || "Something went wrong.");
+    super(response.message || S.SOMETHING_WENT_WRONG);
     this.name = "PbError";
     this.status = status;
     this.response = response;
@@ -334,7 +335,7 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
 
   function initConnect() {
     disconnect(true);
-    connectTimer = setTimeout(() => connectError(new Error("EventSource connect took too long.")), CONNECT_TIMEOUT_MS);
+    connectTimer = setTimeout(() => connectError(new Error(S.EVENTSOURCE_CONNECT_TOOK_TOO_LONG)), CONNECT_TIMEOUT_MS);
     const source = new EventSource(url);
     es = source;
     bound = new Set();
@@ -342,7 +343,7 @@ function createRealtime(url: string, send: PbClient["send"]): Realtime & { resub
     // A connection closed meanwhile (a restart for another user, a reconnect) must leave the current one alone: its
     // late answers would otherwise settle or fail the new connection's pending subscribes.
     const current = () => es === source;
-    source.onerror = () => current() && connectError(new Error("Failed to establish realtime connection."));
+    source.onerror = () => current() && connectError(new Error(S.FAILED_TO_ESTABLISH_REALTIME_CONNECTION));
     source.addEventListener("PB_CONNECT", (e) => {
       if (!current()) return;
       clientId = (e as MessageEvent).lastEventId;

@@ -4,6 +4,9 @@
 // bridge adds them itself; they stay members and writers when it is saved.
 package chirkle.android.feature.room
 
+import android.content.res.Resources
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
@@ -69,27 +72,28 @@ import chirkle.android.ui.UserSearchDialog
 import kotlinx.coroutines.launch
 
 /** What a change of visibility does that may not be obvious, or "". */
-fun accessWarning(from: Visibility, to: Visibility, mine: Boolean = true): String = when {
+fun accessWarning(res: Resources, from: Visibility, to: Visibility, mine: Boolean = true): String = when {
     from == to -> ""
-    to == Visibility.Open -> "Everything ever written here, and everything to come, becomes readable by anyone on the web."
-    from == Visibility.Private -> "Everyone with an account will be able to read the whole history."
+    to == Visibility.Open -> res.getString(R.string.room_everything_ever_written_here_and)
+    from == Visibility.Private -> res.getString(R.string.room_everyone_with_an_account_will)
     to == Visibility.Private ->
-        "Only ${if (mine) "you and the people you add" else "its creator and the people added"} will see this room. Everyone else loses it from their list."
-    else -> "People without an account won't see this room any more."
+        res.getString(if (mine) R.string.room_only_you_will_see else R.string.room_only_its_creator_will_see)
+    else -> res.getString(R.string.room_people_without_an_account_wont)
 }
 
 /** The people [ids] names, as expanded, the creator first (as the server keeps them). */
-private fun users(r: Room, ids: List<String>, expanded: List<User>, me: User?): List<User> {
+private fun users(r: Room, ids: List<String>, expanded: List<User>, me: User?, unknown: String): List<User> {
     val known = (r.expand?.members.orEmpty() + expanded).associateBy { it.id }.toMutableMap()
     if (me != null && me.id !in known) known[me.id] = me
     // A moderator making someone else's room private (or choosing who posts) starts with themselves (DESIGN.md §36),
     // or they would lose it.
-    return (ids.ifEmpty { listOfNotNull(r.createdBy, me?.id).distinct() }).map { known[it] ?: User(it, "Unknown") }.sortedByDescending { it.id == r.createdBy }
+    return (ids.ifEmpty { listOfNotNull(r.createdBy, me?.id).distinct() }).map { known[it] ?: User(it, unknown) }.sortedByDescending { it.id == r.createdBy }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val s by services.store.flow.collectAsStateWithLifecycle()
     val room = s.rooms[roomId] ?: return
@@ -98,15 +102,15 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var visibility by remember(roomId) { mutableStateOf(room.visibilityOrDefault) }
     var posting by remember(roomId) { mutableStateOf(room.postingOrDefault) }
-    var members by remember(roomId) { mutableStateOf(users(room, room.members, emptyList(), me)) }
-    var writers by remember(roomId) { mutableStateOf(users(room, room.writers, room.expand?.writers.orEmpty(), me)) }
+    var members by remember(roomId) { mutableStateOf(users(room, room.members, emptyList(), me, res.getString(R.string.room_unknown))) }
+    var writers by remember(roomId) { mutableStateOf(users(room, room.writers, room.expand?.writers.orEmpty(), me, res.getString(R.string.room_unknown))) }
     var adding by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     // A moderator's in someone else's room (DESIGN.md §36): its creator by name, who isn't expanded unless a member.
     LaunchedEffect(roomId) {
         if (me == null || room.createdBy == me.id || room.createdBy.isEmpty()) return@LaunchedEffect
-        if (members.none { it.id == room.createdBy && it.name == "Unknown" } && writers.none { it.id == room.createdBy && it.name == "Unknown" }) return@LaunchedEffect
+        if (members.none { it.id == room.createdBy && it.name == res.getString(R.string.room_unknown) } && writers.none { it.id == room.createdBy && it.name == res.getString(R.string.room_unknown) }) return@LaunchedEffect
         val creator = runCatching { services.api.usersById(listOf(room.createdBy)) }.getOrNull()?.firstOrNull() ?: return@LaunchedEffect
         members = members.map { if (it.id == creator.id) creator else it }
         writers = writers.map { if (it.id == creator.id) creator else it }
@@ -121,8 +125,8 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
 
     Scaffold(topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = if (editable) "Cancel" else "Close") } },
-            title = { Text(if (editable) "Who can see #${room.name}?" else "Members of #${room.name}") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = if (editable) stringResource(R.string.room_cancel) else stringResource(R.string.room_close)) } },
+            title = { Text(if (editable) stringResource(R.string.room_who_can_see, room.name) else stringResource(R.string.room_members_of, room.name)) },
             actions = {
                 if (editable) TextButton(enabled = !busy, onClick = {
                     busy = true
@@ -133,7 +137,7 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
                             .onFailure { error = reasonOf(it) }
                         busy = false
                     }
-                }) { Text("Save") }
+                }) { Text(stringResource(R.string.room_save)) }
             },
         )
     }) { padding ->
@@ -153,22 +157,22 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
             val hosts = room.shared?.with.orEmpty()
             if (hosts.isNotEmpty()) {
                 Text(
-                    if (room.shared?.home.orEmpty().isNotEmpty()) "This room's home is ${room.shared?.home}: who is in it is decided there."
-                    else "Shared with ${hosts.joinToString(", ")}: its messages are kept there too." + if (editable) " Add people there by their address, like ann@${hosts[0]}." else "",
+                    if (room.shared?.home.orEmpty().isNotEmpty()) stringResource(R.string.room_this_rooms_home_is_who, room.shared?.home.orEmpty())
+                    else stringResource(if (editable) R.string.room_shared_with_add_there else R.string.room_shared_with_its_messages_are, hosts.joinToString(", "), hosts[0]),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.fillMaxWidth().background(Chirkle.colors.tint, MaterialTheme.shapes.medium).padding(12.dp),
                 )
             }
-            if (visibility == Visibility.Private) People("Members", members, room, editable, onAdd = { adding = "members" }, onRemove = { remove("members", it) })
+            if (visibility == Visibility.Private) People(stringResource(R.string.room_members), members, room, editable, onAdd = { adding = "members" }, onRemove = { remove("members", it) })
             if (editable) {
-                Text("Who can post?", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                Text(stringResource(R.string.room_who_can_post_2), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Card(posting == Posting.Everyone, ChirkleIcons.People, "Everyone who can see it", "Guests of an Open Air room only read.") { posting = Posting.Everyone }
-                    Card(posting == Posting.Selected, ChirkleIcons.Edit, "Only people you choose", "Everyone else reads and reacts, but can't post.") { posting = Posting.Selected }
+                    Card(posting == Posting.Everyone, ChirkleIcons.People, stringResource(R.string.room_everyone_who_can_see_it), stringResource(R.string.room_guests_of_an_open_air)) { posting = Posting.Everyone }
+                    Card(posting == Posting.Selected, ChirkleIcons.Edit, stringResource(R.string.room_only_people_you_choose), stringResource(R.string.room_everyone_else_reads_and_reacts)) { posting = Posting.Selected }
                 }
             }
-            if (posting == Posting.Selected) People("Who can post", writers, room, editable, onAdd = { adding = "writers" }, onRemove = { remove("writers", it) })
-            val warn = if (editable) accessWarning(room.visibilityOrDefault, visibility, room.createdBy == me?.id) else ""
+            if (posting == Posting.Selected) People(stringResource(R.string.room_who_can_post), writers, room, editable, onAdd = { adding = "writers" }, onRemove = { remove("writers", it) })
+            val warn = if (editable) accessWarning(res, room.visibilityOrDefault, visibility, room.createdBy == me?.id) else ""
             if (warn.isNotEmpty()) Text(warn, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
@@ -177,12 +181,12 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
     adding?.let { which ->
         val list = if (which == "members") members else writers
         UserSearchDialog(
-            title = if (which == "members") "Add members" else "Add people who post",
+            title = if (which == "members") stringResource(R.string.room_add_members) else stringResource(R.string.room_add_people_who_post),
             onPick = { u ->
                 when {
                     u.noDms && u.instance.isEmpty() -> {}
                     list.any { it.id == u.id } -> remove(which, u.id)
-                    list.size >= Limits.ROOM_MEMBERS -> error = "A room can have up to ${Limits.ROOM_MEMBERS} ${if (which == "members") "members" else "people who post"}."
+                    list.size >= Limits.ROOM_MEMBERS -> error = res.getString(if (which == "members") R.string.room_up_to_members else R.string.room_up_to_writers, Limits.ROOM_MEMBERS)
                     which == "members" -> members = members + u
                     visibility != Visibility.Private || members.any { it.id == u.id } -> writers = writers + u
                 }
@@ -191,7 +195,7 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
             // The creator is always in; the others are shown checked, and a tap takes them out again.
             exclude = setOf(room.createdBy),
             selected = list.map { it.id }.toSet(),
-            confirm = "Done",
+            confirm = stringResource(R.string.room_done),
             // People on the instances it is shared with, by address (§33.5).
             remote = room.shared?.with.orEmpty().isNotEmpty(),
             room = room.id,
@@ -229,14 +233,14 @@ private fun People(label: String, list: List<User>, room: Room, editable: Boolea
     // Not Telegram's stand-ins; people on linked instances are, with theirs (§33.4).
     val shown = list.filter { !it.noDms || it.instance.isNotEmpty() }
     Text("$label (${shown.size})", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-    if (editable) TextButton(onClick = onAdd, enabled = list.size < Limits.ROOM_MEMBERS) { Text("+ Add people") }
+    if (editable) TextButton(onClick = onAdd, enabled = list.size < Limits.ROOM_MEMBERS) { Text(stringResource(R.string.room_add_people)) }
     for (u in shown) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Avatar(u, 28.dp)
             Text(u.name, Modifier.weight(1f))
             if (u.instance.isNotEmpty()) Text(u.instance, color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium)
             if (u.id == room.createdBy) Text("creator", color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium)
-            else if (editable) TextButton(onClick = { onRemove(u.id) }) { Text("Remove") }
+            else if (editable) TextButton(onClick = { onRemove(u.id) }) { Text(stringResource(R.string.room_remove_2)) }
         }
     }
 }

@@ -1,5 +1,6 @@
 // Room helpers that depend on who is looking (§16.5): a DM is titled after the other member.
 
+import * as S from "../strings/lib-rooms.ts";
 import type { Posting, Room, User, Visibility } from "./types.ts";
 
 export const isDm = (room: Room): boolean => room.kind === "dm";
@@ -10,9 +11,9 @@ export const isDm = (room: Room): boolean => room.kind === "dm";
  */
 export function dmClosed(room: Room, me: User | null): string {
   if (!me || !isDm(room)) return "";
-  if (me.no_dms) return "You've turned off direct messages.";
+  if (me.no_dms) return S.YOUVE_TURNED_OFF_DIRECT_MESSAGES;
   const other = otherMember(room, me);
-  return other?.no_dms ? `${other.name} doesn't take direct messages.` : "";
+  return other?.no_dms ? S.doesntTakeDirectMessages(other.name) : "";
 }
 
 /** Who can see the room (§23.1); rooms from before visibility existed are public. */
@@ -38,12 +39,12 @@ export function canManage(room: Room, me: User | null): boolean {
 
 /** How each visibility is called and explained (§23.1). */
 export const VISIBILITY: Record<Visibility, { label: string; icon: string; hint: string }> = {
-  private: { label: "Private", icon: "🔒", hint: "Only the people you add can read and post." },
-  public: { label: "Public", icon: "#", hint: "Everyone with an account can read and post." },
+  private: { label: S.PRIVATE, icon: "🔒", hint: S.ONLY_THE_PEOPLE_YOU_ADD_CAN },
+  public: { label: S.PUBLIC, icon: "#", hint: S.EVERYONE_WITH_AN_ACCOUNT_CAN_READ },
   open: {
-    label: "Open Air",
+    label: S.OPEN_AIR,
     icon: "🌐",
-    hint: "Anyone can read it, even without an account. Everyone with an account can post.",
+    hint: S.ANYONE_CAN_READ_IT_EVEN_WITHOUT,
   },
 };
 
@@ -54,8 +55,8 @@ export const VISIBILITY: Record<Visibility, { label: string; icon: string; hint:
 export function sharedNote(room: Room): string {
   const hosts = room.shared?.with ?? [];
   if (!hosts.length) return "";
-  const down = room.shared?.down && room.shared.home ? ` · ${room.shared.home} can't be reached right now` : "";
-  return `Shared with ${hosts.join(", ")}${down}`;
+  const down = room.shared?.down && room.shared.home ? S.cantBeReachedRightNow(room.shared.home) : "";
+  return S.sharedWith(hosts.join(", "), down);
 }
 
 /** Is this an address on another instance, "ann@b.example" (§33.5)? Its host has a dot or a port. */
@@ -68,10 +69,10 @@ export function isAddress(q: string): boolean {
 export function otherMember(room: Room, me: User | null): User | undefined {
   if (!isDm(room)) return undefined;
   const otherId = room.members?.find((id) => id !== me?.id);
-  return room.expand?.members?.find((u) => u.id === otherId) ?? (otherId ? { id: otherId, name: "Unknown" } : undefined);
+  return room.expand?.members?.find((u) => u.id === otherId) ?? (otherId ? { id: otherId, name: S.UNKNOWN } : undefined);
 }
 
 /** What to call a room: "#name" for public rooms, the other member's name for a DM. */
 export function roomTitle(room: Room, me: User | null): string {
-  return isDm(room) ? (otherMember(room, me)?.name ?? "Unknown") : `#${room.name}`;
+  return isDm(room) ? (otherMember(room, me)?.name ?? S.UNKNOWN) : `#${room.name}`;
 }

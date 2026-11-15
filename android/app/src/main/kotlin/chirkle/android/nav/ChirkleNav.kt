@@ -3,6 +3,8 @@
 // Without any account, it asks for a server first (§17.2). An app too old for the server says so (§12.4).
 package chirkle.android.nav
 
+import androidx.compose.ui.res.stringResource
+import chirkle.android.R
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -196,13 +198,13 @@ private fun UpdateRequired() {
     val context = LocalContext.current
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.padding(32.dp), verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Update required", style = MaterialTheme.typography.headlineSmall)
-            Text("This version of the app is too old for the server. Update it to go on.")
+            Text(stringResource(R.string.app_update_required), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.app_this_version_of_the_app))
             Button(onClick = {
                 runCatching {
                     context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=${context.packageName}")))
                 }
-            }) { Text("Update") }
+            }) { Text(stringResource(R.string.app_update)) }
         }
     }
 }

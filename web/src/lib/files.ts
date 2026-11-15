@@ -1,5 +1,6 @@
 // Attachment helpers (§17.4, §17.5). Pure, so the naming and limit rules are unit-tested.
 
+import * as S from "../strings/lib-files.ts";
 import { LIMITS } from "./limits.ts";
 
 /** Extensions shown inline as images (through server thumbnails, except GIFs: see isGif). */
@@ -51,9 +52,9 @@ export function checkFiles(existing: readonly File[], added: readonly File[]): F
   const out: FileCheck = { accepted: [], rejected: [] };
   for (const f of added) {
     if (f.size > LIMITS.attachmentBytes) {
-      out.rejected.push({ name: f.name, reason: `larger than ${formatBytes(LIMITS.attachmentBytes)}` });
+      out.rejected.push({ name: f.name, reason: S.largerThan(formatBytes(LIMITS.attachmentBytes)) });
     } else if (existing.length + out.accepted.length >= LIMITS.attachments) {
-      out.rejected.push({ name: f.name, reason: `at most ${LIMITS.attachments} files per message` });
+      out.rejected.push({ name: f.name, reason: S.atMostFilesPerMessage(LIMITS.attachments) });
     } else {
       out.accepted.push(f);
     }

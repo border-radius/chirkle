@@ -87,14 +87,14 @@ fun jumpTargets(
     fun later(at: String, id: String) = opened(id).let { if (it > at) it else at }
     fun t(r: Room, note: String): JumpTarget {
         val active = later(r.lastMessageAt, r.id)
-        val name = if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name
+        val name = if (r.isDm) r.otherMember(me)?.name ?: Strings.UNKNOWN else r.name
         return JumpTarget(r, name, note, active.ifEmpty { r.created }, made = active.isEmpty(), current = r.id == current)
     }
     // Nothing in it and never opened: no activity either, so with the rooms only made (QA BUG-268).
     fun c(c: MediaCollection) = later(c.lastAdded, c.id).let {
-        JumpTarget(null, c.name, c.owner?.name ?: "Collection", it, c, made = it.isEmpty(), current = c.id == current)
+        JumpTarget(null, c.name, c.owner?.name ?: Strings.COLLECTION, it, c, made = it.isEmpty(), current = c.id == current)
     }
-    return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, "Hidden") } + s.archived.map { t(it, "Archived") } +
+    return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, Strings.HIDDEN) } + s.archived.map { t(it, Strings.ARCHIVED) } +
         (collections?.mine.orEmpty() + collections?.subs.orEmpty()).map(::c)
 }
 

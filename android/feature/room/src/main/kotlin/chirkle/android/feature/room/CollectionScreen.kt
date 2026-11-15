@@ -4,6 +4,8 @@
 // takes items out; others subscribe. The page follows the store: what is added meanwhile comes in at the top.
 package chirkle.android.feature.room
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
@@ -94,7 +96,6 @@ import java.io.File
 /** What can be uploaded into a collection: images and videos (lib/files.ts), at most 20 MB. */
 private val MEDIA = Regex("\\.(jpe?g|png|gif|webp|avif|mp4|m4v|webm|mov|ogv)$", RegexOption.IGNORE_CASE)
 private const val MAX_BYTES = 20L * 1024 * 1024
-private fun count(n: Int) = "$n ${if (n == 1) "item" else "items"}"
 
 /** A picked file, streamed from its content URI when it is sent. */
 private class Picked(val uri: Uri, val name: String, val type: String, val size: Long) {
@@ -108,6 +109,7 @@ private class Skip(why: String) : Exception(why)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () -> Unit) {
+    val res = LocalContext.current.resources
     val services = LocalServices.current
     val context = LocalContext.current
     val app by services.store.flow.collectAsStateWithLifecycle()
@@ -168,7 +170,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
         try {
             info = services.api.collection(id)
         } catch (e: Exception) {
-            if ((e as? ApiError)?.status == 404 || (e as? ApiError)?.status == 403) gone = true else notice = "Couldn't open the collection. ${reasonOf(e)}"
+            if ((e as? ApiError)?.status == 404 || (e as? ApiError)?.status == 403) gone = true else notice = res.getString(R.string.room_couldnt_open_the_collection, reasonOf(e))
             return@LaunchedEffect
         }
         loading = true
@@ -248,15 +250,15 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
     fun upload(picked: List<Picked>) {
         for (f in picked) {
             when {
-                !MEDIA.containsMatchIn(f.name) -> failures += "${f.name}: not an image or video"
+                !MEDIA.containsMatchIn(f.name) -> failures += res.getString(R.string.room_not_an_image_or_video, f.name)
                 // A video may be bigger: it is compressed first (VideoPrep).
-                f.size > (if (f.type.startsWith("video/")) VideoPrep.MAX_SOURCE_BYTES else MAX_BYTES) -> failures += "${f.name}: larger than 20 MB"
+                f.size > (if (f.type.startsWith("video/")) VideoPrep.MAX_SOURCE_BYTES else MAX_BYTES) -> failures += res.getString(R.string.room_larger_than_20_mb_2, f.name)
                 else -> queue.addLast(f)
             }
         }
         if (uploading) return
         if (queue.isEmpty()) {
-            notice = if (failures.isEmpty()) "" else "Couldn't upload ${failures.joinToString("; ")}"
+            notice = if (failures.isEmpty()) "" else res.getString(R.string.room_couldnt_upload, failures.joinToString("; "))
             failures.clear()
             return
         }
@@ -265,24 +267,24 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
             var sent = 0
             while (queue.isNotEmpty()) {
                 val f = queue.first()
-                val at = "Uploading ${sent + 1} of ${sent + queue.size}…"
+                val at = res.getString(R.string.room_uploading_of, sent + 1, sent + queue.size)
                 notice = at
                 try {
                     // A video is compressed first (VideoPrep), once: a 429 sends the same file again.
                     if (f.type.startsWith("video/") && f.prepared == null) {
                         val out = File(context.cacheDir, "upload-${java.util.UUID.randomUUID()}.mp4")
-                        val doing = "Compressing ${sent + 1} of ${sent + queue.size}…"
+                        val doing = res.getString(R.string.room_compressing_of, sent + 1, sent + queue.size)
                         notice = doing
                         when (val r = VideoPrep.prepare(context, f.uri, f.name, f.size, out) { x -> notice = "$doing $x%" }) {
                             is VideoPrep.Result.Done -> f.prepared = r
-                            VideoPrep.Result.TooLong -> throw Skip("too long to send (about ${VideoPrep.maxMinutes()} minutes at most)")
+                            VideoPrep.Result.TooLong -> throw Skip(res.getString(R.string.room_too_long_to_send_about, VideoPrep.maxMinutes()))
                             VideoPrep.Result.Failed -> Unit
                         }
                         notice = at
                     }
                     val p = f.prepared
                     val size = p?.file?.length() ?: f.size
-                    if (size > MAX_BYTES) throw Skip("larger than 20 MB")
+                    if (size > MAX_BYTES) throw Skip(res.getString(R.string.room_larger_than_20_mb))
                     val body = object : RequestBody() {
                         override fun contentType() = (if (p != null) "video/mp4" else f.type).toMediaTypeOrNull()
                         override fun contentLength() = size
@@ -298,7 +300,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                     }
                     // Too many at once (the server's rate limit): wait, then the same one again.
                     if ((e as? ApiError)?.status == 429) {
-                        notice = "Waiting for the server…"
+                        notice = res.getString(R.string.room_waiting_for_the_server)
                         delay(10_000)
                         continue
                     }
@@ -310,7 +312,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                 services.collections.refresh()
             }
             uploading = false
-            notice = if (failures.isEmpty()) "" else "Couldn't upload ${failures.joinToString("; ")}"
+            notice = if (failures.isEmpty()) "" else res.getString(R.string.room_couldnt_upload, failures.joinToString("; "))
             failures.clear()
         }
     }
@@ -327,7 +329,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                 services.collections.refresh()
                 then()
             } catch (e: Exception) {
-                notice = "Couldn't save. ${reasonOf(e)}"
+                notice = res.getString(R.string.room_couldnt_save, reasonOf(e))
             }
         }
     }
@@ -335,7 +337,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
     // Dragged to the right, the collection goes back, as a room does (§40, §52).
     Scaffold(modifier = Modifier.swipeBack(enabled = true, onBack = onBack), topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back") } },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_back)) } },
             title = {
                 val i = info
                 if (i != null && !gone) {
@@ -343,32 +345,32 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                         Text(i.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                         val owner = i.expand?.owner?.name.orEmpty()
                         Text(
-                            listOfNotNull(if (mine) "Yours" else owner.takeIf { it.isNotEmpty() }?.let { "By $it" }, if (i.public) "Public" else "Private", count(i.items)).joinToString(" · "),
+                            listOfNotNull(if (mine) stringResource(R.string.room_yours) else owner.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.room_by, it) }, if (i.public) stringResource(R.string.room_public) else stringResource(R.string.room_private_2), pluralStringResource(R.plurals.room_items, i.items, i.items)).joinToString(" · "),
                             style = MaterialTheme.typography.labelMedium,
                             color = Chirkle.colors.muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                } else Text("Collection")
+                } else Text(stringResource(R.string.room_collection))
             },
             actions = {
                 val i = info
                 if (i != null && !gone && mine) {
                     IconButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !uploading) {
-                        Icon(ChirkleIcons.Upload, contentDescription = "Upload")
+                        Icon(ChirkleIcons.Upload, contentDescription = stringResource(R.string.room_upload))
                     }
                     Box {
-                        IconButton(onClick = { menu = true }) { Icon(ChirkleIcons.More, contentDescription = "Collection actions") }
+                        IconButton(onClick = { menu = true }) { Icon(ChirkleIcons.More, contentDescription = stringResource(R.string.room_collection_actions)) }
                         DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Rename") }, leadingIcon = { Icon(ChirkleIcons.Edit, contentDescription = null) }, onClick = { menu = false; renaming = true })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.room_rename)) }, leadingIcon = { Icon(ChirkleIcons.Edit, contentDescription = null) }, onClick = { menu = false; renaming = true })
                             DropdownMenuItem(
-                                text = { Text(if (i.public) "Make private" else "Make public") },
+                                text = { Text(if (i.public) stringResource(R.string.room_make_private) else stringResource(R.string.room_make_public)) },
                                 leadingIcon = { Icon(if (i.public) ChirkleIcons.Lock else ChirkleIcons.Globe, contentDescription = null) },
                                 onClick = { menu = false; change(public = !i.public) },
                             )
                             DropdownMenuItem(
-                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                text = { Text(stringResource(R.string.room_delete), color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = { Icon(ChirkleIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                                 onClick = { menu = false; deleting = true },
                             )
@@ -381,9 +383,9 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
         if (gone) {
             Column(Modifier.fillMaxSize().padding(padding).padding(32.dp), verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(ChirkleIcons.Collection, contentDescription = null, tint = Chirkle.colors.muted, modifier = Modifier.size(40.dp))
-                Text("This collection doesn't exist.", style = MaterialTheme.typography.titleMedium)
-                Text("It may be private, or deleted.", color = Chirkle.colors.muted)
-                TextButton(onClick = onBack) { Text("Back") }
+                Text(stringResource(R.string.room_this_collection_doesnt_exist), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.room_it_may_be_private_or), color = Chirkle.colors.muted)
+                TextButton(onClick = onBack) { Text(stringResource(R.string.room_back)) }
             }
             return@Scaffold
         }
@@ -410,7 +412,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val i = info
                     if (i != null && !mine && me != null && (i.public || subscribed)) {
-                        val label = if (subscribed) "Unsubscribe" else "Subscribe"
+                        val label = if (subscribed) stringResource(R.string.room_unsubscribe) else stringResource(R.string.room_subscribe)
                         val run = {
                             following = true
                             scope.launch {
@@ -418,7 +420,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                                     services.api.follow(id, !subscribed)
                                     services.collections.reload()
                                 } catch (e: Exception) {
-                                    notice = "Couldn't ${label.lowercase()}. ${reasonOf(e)}"
+                                    notice = res.getString(if (subscribed) R.string.room_couldnt_unsubscribe else R.string.room_couldnt_subscribe, reasonOf(e))
                                 }
                                 following = false
                             }
@@ -428,7 +430,7 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                         else FilledTonalButton(onClick = run, enabled = !following) { Text(label) }
                     }
                     if (notice.isNotEmpty()) Text(notice, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                    if (fresh > 0) Text("${if (fresh >= 60) "60+" else fresh} new since your last visit", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                    if (fresh > 0) Text(stringResource(R.string.room_new_since_your_last_visit, if (fresh >= 60) "60+" else fresh), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
                 }
             }
             items(rows, key = { if (it is CollectionItem) it.id else "m-$it" }, span = { if (it is String) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { row ->
@@ -443,14 +445,14 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                         it,
                         Modifier
                             .fillMaxSize()
-                            .clickable(onClickLabel = "Open") { onOpen(it.id) }
-                            .semantics { contentDescription = it.name + (if (it.video) ", video" else "") + if (new) ", new" else "" },
+                            .clickable(onClickLabel = stringResource(R.string.room_open)) { onOpen(it.id) }
+                            .semantics { contentDescription = it.name + (if (it.video) res.getString(R.string.room_video) else "") + if (new) res.getString(R.string.room_new) else "" },
                     )
                     if (new) {
                         Box(Modifier.matchParentSize().border(3.dp, MaterialTheme.colorScheme.primary))
                         Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                     }
-                    if (me != null) SaveToCollectionButton("Save ${it.name} to collection", { saving = SaveFrom.Item(it.id) }, Modifier.align(Alignment.TopEnd))
+                    if (me != null) SaveToCollectionButton(stringResource(R.string.room_save_to_collection, it.name), { saving = SaveFrom.Item(it.id) }, Modifier.align(Alignment.TopEnd))
                     if (mine) {
                         IconButton(
                             onClick = {
@@ -461,14 +463,14 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                                         info = info?.let { i -> i.copy(items = (i.items - 1).coerceAtLeast(0)) }
                                         services.collections.refresh()
                                     } catch (e: Exception) {
-                                        notice = "Couldn't remove it. ${reasonOf(e)}"
+                                        notice = res.getString(R.string.room_couldnt_remove_it, reasonOf(e))
                                     }
                                 }
                             },
                             modifier = Modifier.align(Alignment.TopStart).size(36.dp),
                         ) {
                             Box(Modifier.size(28.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
-                                Icon(ChirkleIcons.Close, contentDescription = "Remove ${it.name} from the collection", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_remove_from_the_collection, it.name), tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -479,11 +481,11 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                     when {
                         loading || info == null && notice.isEmpty() -> CircularProgressIndicator(Modifier.size(28.dp))
                         failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Couldn't load the collection.", color = Chirkle.colors.muted)
-                            TextButton(onClick = ::load) { Text("Retry") }
+                            Text(stringResource(R.string.room_couldnt_load_the_collection), color = Chirkle.colors.muted)
+                            TextButton(onClick = ::load) { Text(stringResource(R.string.room_retry)) }
                         }
                         items.isEmpty() && !more -> Text(
-                            if (mine) "Nothing here yet. Upload images and videos, or save them from the chat." else "Nothing here yet.",
+                            if (mine) stringResource(R.string.room_nothing_here_yet_upload_images) else stringResource(R.string.room_nothing_here_yet),
                             color = Chirkle.colors.muted,
                             textAlign = TextAlign.Center,
                         )
@@ -498,18 +500,18 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
         var name by remember { mutableStateOf(info?.name.orEmpty()) }
         AlertDialog(
             onDismissRequest = { renaming = false },
-            title = { Text("Rename collection") },
-            text = { OutlinedTextField(name, { name = it }, label = { Text("Collection name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
-            confirmButton = { Button(onClick = { change(name = name) { renaming = false } }, enabled = name.isNotBlank()) { Text("Save") } },
-            dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.room_rename_collection)) },
+            text = { OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.room_collection_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { Button(onClick = { change(name = name) { renaming = false } }, enabled = name.isNotBlank()) { Text(stringResource(R.string.room_save)) } },
+            dismissButton = { TextButton(onClick = { renaming = false }) { Text(stringResource(R.string.room_cancel)) } },
         )
     }
     if (deleting) {
         val i = info
         AlertDialog(
             onDismissRequest = { deleting = false },
-            title = { Text("Delete collection") },
-            text = { Text("Delete “${i?.name}”${if ((i?.items ?: 0) > 0) " and its ${count(i!!.items)}" else ""}? This can't be undone.") },
+            title = { Text(stringResource(R.string.room_delete_collection)) },
+            text = { Text(if ((i?.items ?: 0) > 0) pluralStringResource(R.plurals.room_delete_collection_items, i!!.items, i.name, i.items) else stringResource(R.string.room_delete_collection_q, i?.name.orEmpty())) },
             confirmButton = {
                 TextButton(onClick = {
                     deleting = false
@@ -519,12 +521,12 @@ fun CollectionScreen(id: String, onOpen: (itemId: String) -> Unit, onBack: () ->
                             services.collections.refresh()
                             onBack()
                         } catch (e: Exception) {
-                            notice = "Couldn't delete it. ${reasonOf(e)}"
+                            notice = res.getString(R.string.room_couldnt_delete_it, reasonOf(e))
                         }
                     }
-                }) { Text("Delete collection", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.room_delete_collection), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.room_cancel)) } },
         )
     }
 }

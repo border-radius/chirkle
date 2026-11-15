@@ -3,6 +3,7 @@
 
 import { h } from "../../dom.ts";
 import type { CollectionItem, Message } from "../../lib/types.ts";
+import * as S from "../../strings/collection-page.ts";
 import type { ViewerImage } from "../room/viewer.ts";
 import { calls, type Meta } from "./calls.ts";
 import { openSave } from "./save.ts";
@@ -46,8 +47,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   function gone() {
     root.replaceChildren(
       h("section", { class: "collection not-found" }, [
-        h("h1", {}, [icon(), " This collection doesn't exist."]),
-        h("p", {}, ["It may be private, or deleted. ", h("a", { href: "/" }, "Back to rooms")]),
+        h("h1", {}, [icon(), S.THIS_COLLECTION_DOESNT_EXIST]),
+        h("p", {}, [S.IT_MAY_BE_PRIVATE_OR_DELETED, h("a", { href: "/" }, S.BACK_TO_ROOMS)]),
       ]),
     );
   }
@@ -70,7 +71,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
     h("section", { class: "collection", "aria-labelledby": "coll-title" }, [
       // The tile's tint is the sidebar row's (t0..t3, views/rooms.ts).
       h("header", { class: `coll-head t${id.charCodeAt(0) % 4}` }, [
-        h("a", { href: "/", class: "back ic i-back", "aria-label": "Back to rooms" }),
+        h("a", { href: "/", class: "back ic i-back", "aria-label": S.BACK_TO_ROOMS }),
         heading,
         metaLine,
         actions,
@@ -83,12 +84,11 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   );
 
   const fail = (what: string, e: unknown) => {
-    notice.textContent = `Couldn't ${what}. ${reason(e)}`;
+    notice.textContent = `${what} ${reason(e)}`;
   };
   const btn = (label: string, run: () => unknown, cls = "") =>
     h("button", { type: "button", class: cls, on: { click: () => void run() }, signal }, label);
-  const count = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
-  const empty = () => (mine ? "Nothing here yet. Upload images and videos, or save them from the chat." : "Nothing here yet.");
+  const empty = () => (mine ? S.NOTHING_HERE_YET_UPLOAD_IMAGES_AND : S.NOTHING_HERE_YET);
 
   /** Files waiting to be uploaded (the owner's), one at a time; each comes in at the top once the store hears of it. */
   const queue: File[] = [];
@@ -110,8 +110,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   });
   function upload(files: File[]) {
     for (const f of files) {
-      if (!MEDIA.test(f.name)) failed.push(`${f.name}: not an image or video`);
-      else if (f.size > MAX_BYTES) failed.push(`${f.name}: larger than 20 MB`);
+      if (!MEDIA.test(f.name)) failed.push(S.notAnImageOrVideo(f.name));
+      else if (f.size > MAX_BYTES) failed.push(S.largerThan20Mb(f.name));
       else queue.push(f);
     }
     if (busy) return;
@@ -120,14 +120,14 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
     void (async () => {
       while (queue.length && !signal.aborted) {
         const f = queue[0]!;
-        const at = `Uploading ${sent + 1} of ${sent + queue.length}…`;
+        const at = S.uploadingOf(sent + 1, sent + queue.length);
         notice.textContent = at;
         try {
           await call.upload(id, f, (x) => (notice.textContent = `${at} ${Math.round(x * 100)}%`));
         } catch (e) {
           // Too many at once (the server's rate limit): wait, then the same one again.
           if ((e as { status?: number }).status === 429) {
-            notice.textContent = "Waiting for the server…";
+            notice.textContent = S.WAITING_FOR_THE_SERVER;
             await new Promise((r) => setTimeout(r, 10_000));
             continue;
           }
@@ -144,7 +144,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   }
   /** After an upload: what didn't go, or nothing. */
   function report() {
-    notice.textContent = failed.length ? `Couldn't upload ${failed.join("; ")}` : "";
+    notice.textContent = failed.length ? S.couldntUpload(failed.join("; ")) : "";
     failed = [];
   }
 
@@ -169,15 +169,15 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
       doneEditing();
       return true;
     } catch (e) {
-      fail("save", e);
+      fail(S.COULDNT_SAVE, e);
       return false;
     }
   }
 
   function renameForm() {
     editing = true;
-    back = "Rename";
-    const input = h("input", { value: info.name, "aria-label": "Collection name", autocomplete: "off" });
+    back = S.RENAME;
+    const input = h("input", { value: info.name, "aria-label": S.COLLECTION_NAME, autocomplete: "off" });
     const form = h(
       "form",
       {
@@ -191,7 +191,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
         },
         signal,
       },
-      [input, h("button", { type: "submit" }, "Save"), btn("Cancel", doneEditing, "link")],
+      [input, h("button", { type: "submit" }, S.SAVE), btn(S.CANCEL, doneEditing, "link")],
     );
     actions.replaceChildren(form);
     input.focus();
@@ -200,23 +200,23 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
 
   function confirmDelete() {
     editing = true;
-    back = "Delete";
+    back = S.DELETE;
     actions.replaceChildren(
-      h("span", {}, `Delete “${info.name}”${info.items ? ` and its ${count(info.items)}` : ""}? This can't be undone.`),
+      h("span", {}, S.deleteCollection(info.name, info.items)),
       btn(
-        "Delete collection",
+        S.DELETE_COLLECTION,
         async () => {
           try {
             await call.remove(id);
             o.service.refresh();
             o.navigate("/");
           } catch (e) {
-            fail("delete it", e);
+            fail(S.COULDNT_DELETE_IT, e);
           }
         },
         "danger",
       ),
-      btn("Cancel", doneEditing, "link"),
+      btn(S.CANCEL, doneEditing, "link"),
     );
     actions.querySelector("button")?.focus();
   }
@@ -224,7 +224,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   function renderHead() {
     if (signal.aborted) return;
     heading.replaceChildren(icon(), " ", info.name);
-    metaLine.textContent = [mine ? "Yours" : ownerName && `By ${ownerName}`, info.public ? "Public" : "Private", count(info.items)]
+    metaLine.textContent = [mine ? S.YOURS : ownerName && S.by(ownerName), info.public ? S.PUBLIC : S.PRIVATE, S.items(info.items)]
       .filter(Boolean)
       .join(" · ");
     const following = lists(o).subs.some((c) => c.id === id);
@@ -234,13 +234,13 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
     const focused = [...actions.children].findIndex((c) => c.contains(document.activeElement));
     if (mine) {
       actions.replaceChildren(
-        btn("Upload", () => picker.click()),
-        btn("Rename", renameForm),
-        btn(info.public ? "Make private" : "Make public", () => change({ public: !info.public })),
-        btn("Delete", confirmDelete, "danger"),
+        btn(S.UPLOAD, () => picker.click()),
+        btn(S.RENAME, renameForm),
+        btn(info.public ? S.MAKE_PRIVATE : S.MAKE_PUBLIC, () => change({ public: !info.public })),
+        btn(S.DELETE, confirmDelete, "danger"),
       );
     } else if (me && (info.public || following)) {
-      const b = btn(following ? "Unsubscribe" : "Subscribe", async () => {
+      const b = btn(following ? S.UNSUBSCRIBE : S.SUBSCRIBE, async () => {
         b.disabled = true;
         try {
           await call.follow(id, !following);
@@ -353,8 +353,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
         {
           type: "button",
           class: "att-save",
-          "aria-label": `Save ${it.name} to collection`,
-          title: "Save to collection",
+          "aria-label": S.saveToCollection(it.name),
+          title: S.SAVE_TO_COLLECTION,
           on: { click: () => openSave({ ...o, from: { item: it.id }, opener: save }) },
           signal,
         },
@@ -369,8 +369,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
           {
             type: "button",
             class: "coll-remove",
-            "aria-label": `Remove ${it.name} from the collection`,
-            title: "Remove from collection",
+            "aria-label": S.removeFromTheCollection(it.name),
+            title: S.REMOVE_FROM_COLLECTION,
             on: { click: () => void remove(it, cell) },
             signal,
           },
@@ -393,7 +393,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
     try {
       await call.unsave(it.id);
     } catch (e) {
-      return fail("remove it", e);
+      return fail(S.COULDNT_REMOVE_IT, e);
     }
     const cells = [...grid.querySelectorAll(".coll-cell")];
     const at = cells.indexOf(cell);
@@ -438,7 +438,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   async function more() {
     const p = pages;
     if (p.done) return;
-    status.textContent = "Loading…";
+    status.textContent = S.LOADING;
     try {
       const page = await p.next();
       if (signal.aborted || p !== pages) return;
@@ -448,8 +448,8 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
       if (signal.aborted || p !== pages) return;
       seen.unobserve(status);
       status.replaceChildren(
-        "Couldn't load the collection. ",
-        btn("Retry", () => void more(), "link"),
+        S.COULDNT_LOAD_THE_COLLECTION,
+        btn(S.RETRY, () => void more(), "link"),
       );
       return;
     }
@@ -496,7 +496,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
         },
         media: (m) => [{ message: m, file: m.files![0]!, video: p.items.find((x) => x.id === m.id)?.video ?? false }],
         name: (m, f) => m.file_names?.[f] ?? f,
-        when: (m) => `Added ${o.when(m.created)}`,
+        when: (m) => S.added(o.when(m.created)),
         fileUrl: (m, f) => api.itemUrl({ id: m.id, file: f }),
         ...(me ? { onSave: (m: Message, _f: string, b: HTMLElement) => openSave({ ...o, from: { item: m.id }, opener: b }) } : {}),
         opener,
@@ -514,7 +514,7 @@ export async function mountCollection(root: HTMLElement, o: PageOptions): Promis
   if (signal.aborted) return;
   if (fresh) {
     newLine.hidden = false;
-    newLine.textContent = `${fresh >= 60 ? "60+" : fresh} new since your last visit`;
+    newLine.textContent = S.newSinceYourLastVisit(fresh >= 60 ? "60+" : fresh);
   }
   // Seen once it is on screen in a visible tab: the sidebar's count goes.
   unseen = pages.items[0]?.created ?? "";

@@ -7,6 +7,7 @@
 import { h } from "../../dom.ts";
 import type { PageQuery } from "../../lib/cursor.ts";
 import type { Message, User } from "../../lib/types.ts";
+import * as S from "../../strings/room-search.ts";
 
 export interface SearchOptions {
   room: string;
@@ -92,8 +93,8 @@ export function createSearch(o: SearchOptions): Search {
     // Not type=search: browsers add a clear "×" of their own next to Close (QA BUG-114).
     type: "text",
     role: "searchbox",
-    "aria-label": "Search messages",
-    placeholder: `Search ${o.label}`,
+    "aria-label": S.SEARCH_MESSAGES,
+    placeholder: S.search(o.label),
     enterkeyhint: "search",
     autocomplete: "off",
     on: { input: () => schedule(), keydown: (e) => keydown(e), focus: () => (results.hidden = !results.childElementCount) },
@@ -102,16 +103,16 @@ export function createSearch(o: SearchOptions): Search {
   const close = h("button", {
     type: "button",
     class: "icon-button ic i-x",
-    "aria-label": "Close search",
+    "aria-label": S.CLOSE_SEARCH,
     on: { click: () => end() },
     signal,
   });
   const status = h("p", { class: "search-status", role: "status" });
-  const results = h("ul", { class: "search-results", "aria-label": "Search results", hidden: true });
+  const results = h("ul", { class: "search-results", "aria-label": S.SEARCH_RESULTS, hidden: true });
   const more = h(
     "li",
     {},
-    h("button", { type: "button", class: "link", on: { click: () => void run(true) }, signal }, "Show older results"),
+    h("button", { type: "button", class: "link", on: { click: () => void run(true) }, signal }, S.SHOW_OLDER_RESULTS),
   );
   const el = h("div", { class: "room-search ic i-search", role: "search", on: { keydown: (e) => e.key === "Escape" && end(e) }, signal }, [
     h("div", { class: "search-bar" }, [input, close]),
@@ -158,7 +159,7 @@ export function createSearch(o: SearchOptions): Search {
     const f = new AbortController();
     fetching = f;
     if (!next) words = w;
-    status.textContent = "Searching…";
+    status.textContent = S.SEARCHING;
     // "Show older results" hands focus to the first of them.
     const refocus = more.contains(document.activeElement);
     more.remove();
@@ -176,12 +177,10 @@ export function createSearch(o: SearchOptions): Search {
       if (page.length >= o.pageSize) results.append(more);
       results.hidden = !found.length;
       const n = found.length;
-      status.textContent = n
-        ? `${n}${page.length >= o.pageSize ? "+" : ""} ${n === 1 ? "message" : "messages"} found.`
-        : "No messages found.";
+      status.textContent = n ? S.found(n, page.length >= o.pageSize) : S.NO_MESSAGES_FOUND;
     } catch {
       if (f !== fetching) return;
-      status.textContent = "Couldn't search. Check your connection.";
+      status.textContent = S.COULDNT_SEARCH_CHECK_YOUR_CONNECTION;
       if (next) results.append(more); // to try again
     } finally {
       if (f === fetching) fetching = null;

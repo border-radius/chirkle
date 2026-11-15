@@ -2,6 +2,7 @@
 // render asks for. Looking people up needs an account (§23.3): a guest sees "3 people".
 
 import type { User } from "../../lib/types.ts";
+import * as S from "../../strings/room-names.ts";
 
 /** Most users one request asks for (`usersById`). */
 const BATCH = 50;
@@ -28,7 +29,7 @@ export function createNameLookup(opts: {
     try {
       const found = await opts.usersById(ids, signal);
       for (const u of found) people.set(u.id, u.name);
-      for (const id of ids) if (!people.has(id)) people.set(id, "Unknown"); // e.g. a deleted account
+      for (const id of ids) if (!people.has(id)) people.set(id, S.UNKNOWN); // e.g. a deleted account
     } catch {
       ok = false;
       for (const id of ids) asking.delete(id); // asked again by the next render (not this one: no retry loop offline)

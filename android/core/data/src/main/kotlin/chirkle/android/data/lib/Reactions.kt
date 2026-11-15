@@ -20,7 +20,7 @@ fun reactors(users: List<String>, me: String, names: (String) -> String?): Strin
     val known = ArrayDeque<String>()
     var others = 0
     for (id in users) {
-        val name = if (id == me) "You" else names(id)
+        val name = if (id == me) Strings.YOU else names(id)
         when {
             name == null -> others++
             id == me -> known.addFirst(name)
@@ -33,5 +33,5 @@ fun reactors(users: List<String>, me: String, names: (String) -> String?): Strin
         shown += if (others == 1 && shown.isEmpty()) "1 person" else "$others ${if (others == 1) "other" else if (shown.isNotEmpty()) "others" else "people"}"
     }
     if (shown.size == 1) return shown[0]
-    return "${shown.dropLast(1).joinToString(", ")} and ${shown.last()}"
+    return Strings.and(shown.dropLast(1).joinToString(", "), shown.last())
 }

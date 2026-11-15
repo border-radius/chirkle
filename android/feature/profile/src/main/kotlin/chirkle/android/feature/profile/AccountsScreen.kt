@@ -2,6 +2,7 @@
 // (§44): switch to another one, or add one on this server or another. Swiped left, it goes back to the rooms.
 package chirkle.android.feature.profile
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,8 +46,8 @@ fun AccountsScreen(onAddAccount: () -> Unit, onBack: () -> Unit) {
 
     Scaffold(modifier = Modifier.swipeAway(enabled = true, toRight = false, onSwipe = onBack), topBar = {
         TopAppBar(
-            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = "Back to rooms") } },
-            title = { Text("Accounts") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.profile_back_to_rooms)) } },
+            title = { Text(stringResource(R.string.profile_accounts)) },
         )
     }) { padding ->
         Column(
@@ -54,7 +55,7 @@ fun AccountsScreen(onAddAccount: () -> Unit, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (all.isEmpty()) Text("You're not logged in to any account.", color = Chirkle.colors.muted)
+                if (all.isEmpty()) Text(stringResource(R.string.profile_youre_not_logged_in_to), color = Chirkle.colors.muted)
                 for (a in all) {
                     val user = a.user ?: continue
                     val current = a.id == services.accountId
@@ -72,10 +73,10 @@ fun AccountsScreen(onAddAccount: () -> Unit, onBack: () -> Unit) {
                             Text(user.name)
                             Text(serverLabel(a.server), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                         }
-                        if (current) Text("In use", style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                        if (current) Text(stringResource(R.string.profile_in_use), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                     }
                 }
-                if (accounts != null) OutlinedButton(onClick = onAddAccount, modifier = Modifier.padding(top = 8.dp)) { Text("Add account") }
+                if (accounts != null) OutlinedButton(onClick = onAddAccount, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.profile_add_account)) }
             }
         }
     }

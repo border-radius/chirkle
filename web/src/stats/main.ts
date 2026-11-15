@@ -4,6 +4,7 @@
 // while the tab is visible. A superuser also sees the server's state (GET /api/chat/metrics, REFACTOR item 51).
 
 import { type Child, clear, h } from "../dom.ts";
+import * as S from "../strings/stats-main.ts";
 import { applyTheme, savedTheme } from "../theme.ts";
 import {
   ago,
@@ -105,7 +106,7 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
 
 /** A table of the chart's numbers, folded away: the values without hovering. */
 function table(caption: string, head: string[], rows: (string | number)[][]): HTMLElement {
-  return h("details", { class: "chart-table" }, [h("summary", {}, "Show as a table"), grid(caption, head, rows)]);
+  return h("details", { class: "chart-table" }, [h("summary", {}, S.SHOW_AS_A_TABLE), grid(caption, head, rows)]);
 }
 
 function grid(caption: string, head: string[], rows: (string | number)[][]): HTMLElement {
@@ -136,16 +137,16 @@ function grid(caption: string, head: string[], rows: (string | number)[][]): HTM
 
 /** The queues' and workers' names as people read them. */
 const LABELS: Record<string, string> = {
-  telegram: "Telegram",
-  federation: "Linked instances",
-  link_previews: "Link previews",
-  media_thumbs: "Thumbnails to make",
-  media_sizes: "Video shapes to read",
-  media_moves: "Files to move",
-  storage_cleanup: "Storage to clean up",
-  previews: "Link previews",
-  media: "Media",
-  retention: "Daily prune",
+  telegram: S.TELEGRAM,
+  federation: S.LINKED_INSTANCES,
+  link_previews: S.LINK_PREVIEWS,
+  media_thumbs: S.THUMBNAILS_TO_MAKE,
+  media_sizes: S.VIDEO_SHAPES_TO_READ,
+  media_moves: S.FILES_TO_MOVE,
+  storage_cleanup: S.STORAGE_TO_CLEAN_UP,
+  previews: S.LINK_PREVIEWS,
+  media: S.MEDIA,
+  retention: S.DAILY_PRUNE,
 };
 const named = (k: string) => LABELS[k] ?? k;
 
@@ -157,45 +158,41 @@ function serverSection(m: Metrics): HTMLElement {
   const queues = Object.entries(m.queues).sort(([a], [b]) => named(a).localeCompare(named(b)));
   const workers = Object.entries(m.workers).sort(([a], [b]) => named(a).localeCompare(named(b)));
   return section(
-    "Server",
+    S.SERVER,
     [
       h("div", { class: "tiles" }, [
-        tile("Up for", formatSpan(m.uptime_seconds), `Chirkle ${m.version}, PocketBase ${m.pocketbase}`),
-        tile("Connections", num.format(m.realtime.clients), "realtime, incl. guests"),
-        tile(
-          "Live events waiting",
-          num.format(m.realtime.queued),
-          `${num.format(m.realtime.dropped)} slow clients dropped since the start`,
-        ),
-        tile("Database", formatBytes(db), `logs ${formatBytes(logs)}`),
-        tile("Memory", formatBytes(m.process.heap_bytes), `${formatBytes(m.process.sys_bytes)} from the system`),
+        tile(S.UP_FOR, formatSpan(m.uptime_seconds), S.chirklePocketbase(m.version, m.pocketbase)),
+        tile(S.CONNECTIONS, num.format(m.realtime.clients), S.REALTIME_INCL_GUESTS),
+        tile(S.LIVE_EVENTS_WAITING, num.format(m.realtime.queued), S.slowClientsDroppedSinceTheStart(num.format(m.realtime.dropped))),
+        tile(S.DATABASE, formatBytes(db), S.logs(formatBytes(logs))),
+        tile(S.MEMORY, formatBytes(m.process.heap_bytes), S.fromTheSystem(formatBytes(m.process.sys_bytes))),
       ]),
-      h("h3", {}, "Queues"),
+      h("h3", {}, S.QUEUES),
       h(
         "div",
         { class: "chart-table" },
         grid(
-          "Rows waiting for a worker",
-          ["Queue", "Rows", "Failed once or more", "Oldest"],
+          S.ROWS_WAITING_FOR_A_WORKER,
+          [S.QUEUE, S.ROWS, S.FAILED_ONCE_OR_MORE, S.OLDEST],
           queues.map(([k, q]) => [named(k), q.rows, q.failing, q.rows ? formatSpan(q.oldest_seconds) : "–"]),
         ),
       ),
-      h("h3", {}, "Workers"),
+      h("h3", {}, S.WORKERS),
       h(
         "div",
         { class: "chart-table" },
         grid(
-          "When each worker last did its work",
-          ["Worker", "Last pass", "Last error"],
+          S.WHEN_EACH_WORKER_LAST_DID_ITS,
+          [S.WORKER, S.LAST_PASS, S.LAST_ERROR],
           workers.map(([k, w]) => [
             named(k),
-            `${ago(w.last_pass, now)}${w.running ? " (running)" : ""}`,
+            `${ago(w.last_pass, now)}${S.running(w.running)}`,
             w.last_error ? `${w.last_error} (${ago(w.last_error_at, now)})` : "–",
           ]),
         ),
       ),
     ],
-    "Only superusers see this. Also at /api/chat/metrics, in Prometheus's format with ?format=prometheus.",
+    S.ONLY_SUPERUSERS_SEE_THIS_ALSO_AT,
   );
 }
 
@@ -257,7 +254,7 @@ function onlineChart(s: Stats): HTMLElement {
   const yOf = (v: number) => PAD.top + plotH * (1 - v / top);
 
   const chart = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img" });
-  chart.setAttribute("aria-label", `People online over the last ${range === "day" ? "24 hours" : "7 days"}`);
+  chart.setAttribute("aria-label", S.peopleOnlineOverTheLast(range === "day"));
   const g = svg("g");
   chart.append(g);
   yAxis(g, top);
@@ -289,7 +286,7 @@ function onlineChart(s: Stats): HTMLElement {
   g.append(cross, mark);
 
   const box = h("div", { class: "chart-box" }, [chart]);
-  if (!shown.length) box.append(h("p", { class: "empty" }, s.history ? "No samples yet: one is taken every 5 minutes." : "Not recorded."));
+  if (!shown.length) box.append(h("p", { class: "empty" }, s.history ? S.NO_SAMPLES_YET_ONE_IS_TAKEN : S.NOT_RECORDED));
   const tip = tooltip(box);
   const nearest = (clientX: number): Sample | null => {
     const r = chart.getBoundingClientRect();
@@ -309,10 +306,10 @@ function onlineChart(s: Stats): HTMLElement {
     tip.show(
       cx / W,
       [
-        [num.format(x[1]), "people online"],
-        [num.format(x[3]), "on the web"],
-        [num.format(x[4]), "on Android"],
-        [num.format(x[2]), "guests"],
+        [num.format(x[1]), S.TIP_ONLINE],
+        [num.format(x[3]), S.TIP_WEB],
+        [num.format(x[4]), S.TIP_ANDROID],
+        [num.format(x[2]), S.TIP_GUESTS],
       ],
       (range === "day" ? time : dayTime).format(x[0]),
     );
@@ -356,18 +353,14 @@ function onlineChart(s: Stats): HTMLElement {
     }
   }
 
-  const picker = h("div", { class: "seg", role: "group", "aria-label": "Range" }, [
+  const picker = h("div", { class: "seg", role: "group", "aria-label": S.RANGE }, [
     rangeButton("day", "24 hours"),
     rangeButton("week", "7 days"),
   ]);
   return h("div", {}, [
     picker,
     box,
-    table(
-      range === "day" ? "Most people online, by hour" : "Most people online, by day",
-      [range === "day" ? "Hour" : "Day", "People"],
-      rows,
-    ),
+    table(range === "day" ? S.MOST_PEOPLE_ONLINE_BY_HOUR : S.MOST_PEOPLE_ONLINE_BY_DAY, [range === "day" ? S.HOUR : S.DAY, S.PEOPLE], rows),
   ]);
 }
 
@@ -398,7 +391,7 @@ function messagesChart(s: Stats): HTMLElement {
   const slot = plotW / days.length;
   const bw = Math.min(16, slot - 2);
   const chart = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "chart", role: "img" });
-  chart.setAttribute("aria-label", "Messages per day, the last 30 days");
+  chart.setAttribute("aria-label", S.MESSAGES_PER_DAY_THE_LAST_30);
   const g = svg("g");
   chart.append(g);
   yAxis(g, top);
@@ -421,7 +414,7 @@ function messagesChart(s: Stats): HTMLElement {
     const date = new Date(`${d.day}T12:00:00`);
     const every = narrow() ? 10 : 5;
     if (i % every === every - 1 || i === days.length - 1) {
-      xLabel(g, x + bw / 2, i === days.length - 1 ? "Today" : shortDay.format(date));
+      xLabel(g, x + bw / 2, i === days.length - 1 ? S.TODAY : shortDay.format(date));
     }
     // The hit target: the whole slot, top to bottom.
     const hit = svg("rect", { x: PAD.left + i * slot, y: PAD.top, width: slot, height: plotH, class: "hit" });
@@ -429,8 +422,8 @@ function messagesChart(s: Stats): HTMLElement {
       tip.show(
         (x + bw / 2) / W,
         [
-          [num.format(d.messages), d.messages === 1 ? "message" : "messages"],
-          [num.format(d.people), d.people === 1 ? "person posted" : "people posted"],
+          [num.format(d.messages), S.tipMessages(d.messages)],
+          [num.format(d.people), S.tipPosted(d.people)],
         ],
         dayName.format(date),
       );
@@ -441,8 +434,8 @@ function messagesChart(s: Stats): HTMLElement {
   return h("div", {}, [
     box,
     table(
-      "Messages per day",
-      ["Day", "Messages", "People who posted"],
+      S.MESSAGES_PER_DAY,
+      [S.DAY, S.MESSAGES, S.PEOPLE_WHO_POSTED],
       days.map((d) => [dayName.format(new Date(`${d.day}T12:00:00`)), d.messages, d.people]),
     ),
   ]);
@@ -467,65 +460,55 @@ function render(s: Stats) {
   const recorded = (v: string) => (s.history || s.samples.length ? v : "–");
 
   const sections = [
-    !s.history
-      ? h(
-          "p",
-          { class: "notice", role: "note" },
-          "Recording is off (site settings: no_stats). Live numbers and messages are still shown; what was recorded before is dropped as it ages.",
-        )
-      : null,
-    section("Now", [
+    !s.history ? h("p", { class: "notice", role: "note" }, S.RECORDING_IS_OFF_SITE_SETTINGS_NO) : null,
+    section(S.NOW, [
       h("div", { class: "tiles" }, [
-        tile("People online", num.format(s.now.online), undefined, true),
-        tile("On the web", num.format(s.now.web)),
-        tile("On Android", num.format(s.now.android)),
-        tile("Guests", num.format(s.now.guests), "open tabs, not signed in"),
+        tile(S.PEOPLE_ONLINE, num.format(s.now.online), undefined, true),
+        tile(S.ON_THE_WEB, num.format(s.now.web)),
+        tile(S.ON_ANDROID, num.format(s.now.android)),
+        tile(S.GUESTS, num.format(s.now.guests), S.GUESTS_NOTE),
         tile(
-          "Peak today",
+          S.PEAK_TODAY,
           recorded(peakToday ? num.format(peakToday.online) : "–"),
-          peakToday?.at ? `at ${time.format(peakToday.at)}` : undefined,
+          peakToday?.at ? S.at(time.format(peakToday.at)) : undefined,
         ),
-        tile(
-          "Peak, 7 days",
-          recorded(peakWeek ? num.format(peakWeek.online) : "–"),
-          peakWeek?.at ? dayTime.format(peakWeek.at) : undefined,
-        ),
+        tile(S.PEAK_7_DAYS, recorded(peakWeek ? num.format(peakWeek.online) : "–"), peakWeek?.at ? dayTime.format(peakWeek.at) : undefined),
       ]),
     ]),
     section(
-      "Usage",
+      S.USAGE,
       [
         h("div", { class: "tiles" }, [
-          tile("Active, 24 hours", num.format(s.active.day), `${percent(s.active.day, s.accounts.total)} of accounts`),
-          tile("Active, 7 days", num.format(s.active.week), `${percent(s.active.week, s.accounts.total)} of accounts`),
-          tile("Active, 30 days", num.format(s.active.month), `${percent(s.active.month, s.accounts.total)} of accounts`),
-          tile("Time online today", recorded(formatHours(hoursToday)), "all people together"),
-          tile("Time online, 7 days", recorded(formatHours(hoursWeek)), "all people together"),
-          tile("Per active person", recorded(s.active.week ? formatHours(hoursWeek / s.active.week) : "–"), "a week, on average"),
+          tile(S.ACTIVE_24_HOURS, num.format(s.active.day), S.ofAccounts(percent(s.active.day, s.accounts.total))),
+          tile(S.ACTIVE_7_DAYS, num.format(s.active.week), S.ofAccounts(percent(s.active.week, s.accounts.total))),
+          tile(S.ACTIVE_30_DAYS, num.format(s.active.month), S.ofAccounts(percent(s.active.month, s.accounts.total))),
+          tile(S.TIME_ONLINE_TODAY, recorded(formatHours(hoursToday)), S.ALL_PEOPLE),
+          tile(S.TIME_ONLINE_7_DAYS, recorded(formatHours(hoursWeek)), S.ALL_PEOPLE),
+          tile(S.PER_ACTIVE_PERSON, recorded(s.active.week ? formatHours(hoursWeek / s.active.week) : "–"), S.WEEK_AVERAGE),
         ]),
-        h("h3", {}, "People online"),
+        h("h3", {}, S.PEOPLE_ONLINE),
         onlineChart(s),
       ],
-      "Active: online at least once. Time online is counted every 5 minutes.",
+      S.ACTIVE_ONLINE_AT_LEAST_ONCE_TIME,
     ),
-    section("Messages", [
+    section(S.MESSAGES, [
       h("div", { class: "tiles" }, [
-        tile("Today", num.format(days.at(-1)?.messages ?? 0)),
-        tile("7 days", num.format(sum(7)), `${num.format(s.messages.people_week)} people posted`),
-        tile("30 days", num.format(month), `${num.format(s.messages.people_month)} people posted`),
-        tile("In DMs", percent(s.messages.dms_month, month), "of the 30 days'"),
-        tile("Files sent", num.format(s.messages.files_month), "30 days"),
-        tile("Reactions", num.format(s.messages.reactions_month), "on the 30 days' messages"),
+        tile(S.TODAY, num.format(days.at(-1)?.messages ?? 0)),
+        tile("7 days", num.format(sum(7)), S.peoplePosted(num.format(s.messages.people_week))),
+        tile("30 days", num.format(month), S.peoplePosted(num.format(s.messages.people_month))),
+        tile(S.IN_DMS, percent(s.messages.dms_month, month), S.OF_THE_30_DAYS),
+        tile(S.FILES_SENT, num.format(s.messages.files_month), "30 days"),
+        tile(S.REACTIONS, num.format(s.messages.reactions_month), S.ON_THE_30_DAYS_MESSAGES),
       ]),
-      h("h3", {}, "Messages per day"),
+      h("h3", {}, S.MESSAGES_PER_DAY),
       messagesChart(s),
     ]),
-    section("Accounts", [
+    section(S.ACCOUNTS, [
       h("div", { class: "tiles" }, [
-        tile("Accounts", num.format(s.accounts.total)),
-        tile("New, 7 days", num.format(s.accounts.new_week)),
-        tile("Moderators", num.format(s.accounts.moderators)),
-        tile("Banned", num.format(s.accounts.banned)),
+        tile(S.ACCOUNTS, num.format(s.accounts.total)),
+        tile(S.NEW_7_DAYS, num.format(s.accounts.new_week)),
+        tile(S.MODERATORS, num.format(s.accounts.moderators)),
+        tile(S.BANNED, num.format(s.accounts.banned)),
       ]),
     ]),
     metrics ? serverSection(metrics) : null,
@@ -540,17 +523,17 @@ function render(s: Stats) {
   // A range button was pressed: it is a new one now, focused as the old one was.
   if (refocus) root.querySelector<HTMLElement>(".seg [aria-pressed='true']")?.focus();
   refocus = false;
-  updated.textContent = `Updated ${new Date(now).toLocaleTimeString()}`;
+  updated.textContent = S.updated(new Date(now).toLocaleTimeString());
 }
 
 function denied() {
-  document.title = "Page not found";
+  document.title = S.PAGE_NOT_FOUND;
   clear(root);
   root.append(
     h("section", { class: "card missing" }, [
-      h("h2", {}, "Page not found"),
-      h("p", {}, "There is no such page, or you can't see it."),
-      h("a", { href: "/" }, "Back to the app"),
+      h("h2", {}, S.PAGE_NOT_FOUND),
+      h("p", {}, S.THERE_IS_NO_SUCH_PAGE_OR),
+      h("a", { href: "/" }, S.BACK_TO_THE_APP),
     ]),
   );
   updated.textContent = "";
@@ -563,7 +546,7 @@ async function refresh() {
   if (got === "denied") return denied();
   metrics = m;
   if (got) render(got);
-  else updated.textContent = last ? `Couldn't refresh: showing ${new Date(last.at).toLocaleTimeString()}` : "Couldn't load. Retrying…";
+  else updated.textContent = last ? S.couldntRefreshShowing(new Date(last.at).toLocaleTimeString()) : S.COULDNT_LOAD_RETRYING;
   if (!document.hidden) timer = window.setTimeout(refresh, REFRESH_MS);
 }
 
