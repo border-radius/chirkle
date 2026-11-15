@@ -19,6 +19,8 @@ data class JumpTarget(
     val collection: MediaCollection? = null,
     /** [at] is only when the room was made: after everything with activity or opened here (QA BUG-268). */
     val made: Boolean = false,
+    /** Where you are now: last with nothing typed (the web's Ctrl+K in a room; the room list has none). */
+    val current: Boolean = false,
 ) {
     val away: Boolean get() = room != null && note.isNotEmpty()
     val id: String get() = room?.id ?: collection!!.id
@@ -72,32 +74,46 @@ class RecentlyOpened {
 
 /**
  * Everything you can jump to, from the room list's sections and your collections and those you follow, as the web's
- * (QA BUG-245). [opened]: when a room or collection was last open, "" if not yet.
+ * (QA BUG-245). [opened]: when a room or collection was last open, "" if not yet. [current]: the room or collection you
+ * are in, if any.
  */
-fun jumpTargets(s: RoomSections, me: String?, collections: Collections? = null, opened: (String) -> String): List<JumpTarget> {
+fun jumpTargets(
+    s: RoomSections,
+    me: String?,
+    collections: Collections? = null,
+    opened: (String) -> String,
+    current: String? = null,
+): List<JumpTarget> {
     fun later(at: String, id: String) = opened(id).let { if (it > at) it else at }
     fun t(r: Room, note: String): JumpTarget {
         val active = later(r.lastMessageAt, r.id)
         val name = if (r.isDm) r.otherMember(me)?.name ?: "Unknown" else r.name
-        return JumpTarget(r, name, note, active.ifEmpty { r.created }, made = active.isEmpty())
+        return JumpTarget(r, name, note, active.ifEmpty { r.created }, made = active.isEmpty(), current = r.id == current)
     }
     // Nothing in it and never opened: no activity either, so with the rooms only made (QA BUG-268).
-    fun c(c: MediaCollection) = later(c.lastAdded, c.id).let { JumpTarget(null, c.name, c.owner?.name ?: "Collection", it, c, made = it.isEmpty()) }
+    fun c(c: MediaCollection) = later(c.lastAdded, c.id).let {
+        JumpTarget(null, c.name, c.owner?.name ?: "Collection", it, c, made = it.isEmpty(), current = c.id == current)
+    }
     return s.rooms.map { t(it, "") } + s.dms.map { t(it, "") } + s.hidden.map { t(it, "Hidden") } + s.archived.map { t(it, "Archived") } +
         (collections?.mine.orEmpty() + collections?.subs.orEmpty()).map(::c)
 }
 
 /**
  * What to show for [query]: the best matches first, then those not hidden or archived, then the most recent. With
- * nothing typed, everything but hidden and archived rooms, most recent first. A leading "#" or "@" is ignored.
+ * nothing typed, everything but hidden and archived rooms, most recent first, with where you are last. A leading "#"
+ * or "@" is ignored.
  */
 fun jumpMatches(all: List<JumpTarget>, query: String): List<JumpTarget> {
     val q = jumpFold(query.trim().removePrefix("#").removePrefix("@").trim())
-    val recent = compareBy<JumpTarget> { it.made }.thenByDescending { it.at }
-    if (q.isEmpty()) return all.filter { !it.away }.sortedWith(recent).take(MAX_TARGETS)
+    val recent = compareBy<JumpTarget> { it.current }.thenBy { it.made }.thenByDescending { it.at }
+    if (q.isEmpty()) {
+        // Where you are stays last when the rest is cut short (QA BUG-139).
+        val here = all.filter { it.current && !it.away }
+        return all.filter { !it.current && !it.away }.sortedWith(recent).take(MAX_TARGETS - here.size) + here
+    }
     return all.map { it to jumpScore(it.name, q) }
         .filter { it.second >= 0 }
-        .sortedWith(compareBy<Pair<JumpTarget, Int>> { it.second }.thenBy { it.first.away }.thenBy { it.first.made }.thenByDescending { it.first.at })
+        .sortedWith(compareBy<Pair<JumpTarget, Int>> { it.second }.thenBy { it.first.away }.thenComparing({ it.first }, recent))
         .take(MAX_TARGETS)
         .map { it.first }
 }

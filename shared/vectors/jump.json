@@ -1,64 +1,403 @@
 {
-  "$comment": "Jump to's matching (DESIGN.md \u00a732). `score` takes the query folded. Run by tests/unit/vectors.test.ts and android/\u2026/lib/VectorsTest.kt.",
-  "fold": [
-    {
-      "input": "\u00c9t\u00e9 \uff21\uff22\uff23",
-      "output": "ete abc"
-    },
-    {
-      "input": "\u00d1and\u00fa",
-      "output": "nandu"
-    },
-    {
-      "input": "\uff25\uff2c\uff21\uff2e",
-      "output": "elan"
-    }
-  ],
+  "$comment": "Jump to's matching and ordering (DESIGN.md \u00a732). `score` takes the query folded. `order`: targets() then matches(); `current` is where you are (null: none, as in the app's room list), `filler` adds that many rooms only made. Room times: rooms have only `created` (the server sends `last_message_at` for DMs only). Run by tests/unit/vectors.test.ts and android/\u2026/lib/VectorsTest.kt.",
+  "fold": [{"input":"\u00c9t\u00e9 \uff21\uff22\uff23","output":"ete abc"},{"input":"\u00d1and\u00fa","output":"nandu"},{"input":"\uff25\uff2c\uff21\uff2e","output":"elan"}],
   "score": [
+    {"name":"general","query":"general","output":0},
+    {"name":"general","query":"gen","output":1},
+    {"name":"old-general","query":"gen","output":2},
+    {"name":"dev-ops","query":"ops","output":2},
+    {"name":"general","query":"ner","output":3},
+    {"name":"general","query":"gnrl","output":4},
+    {"name":"general","query":"xyz","output":-1},
+    {"name":"\ud83c\udf55 pizza","query":"\ud83c\udf55z","output":4},
+    {"name":"\u00c9t\u00e9","query":"ete","output":0}
+  ],
+  "order": [
     {
-      "name": "general",
-      "query": "general",
-      "output": 0
+      "name": "nothing typed: activity first, then the rooms only made, newest first; nothing hidden or archived (QA BUG-268)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "",
+      "output": ["Cats","Bob \u00c9t\u00e9","random","general","dev-ops"]
     },
     {
-      "name": "general",
+      "name": "a room open a moment ago comes first (QA BUG-134)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"dev":"2026-10-23 09:00:00.000Z"},
+      "current": null,
+      "query": "",
+      "output": ["dev-ops","Cats","Bob \u00c9t\u00e9","random","general"]
+    },
+    {
+      "name": "a room opened long ago doesn't hide newer activity",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"gen":"2026-09-20 09:00:00.000Z"},
+      "current": null,
+      "query": "",
+      "output": ["Cats","Bob \u00c9t\u00e9","general","random","dev-ops"]
+    },
+    {
+      "name": "where you are is last with nothing typed",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"gen":"2026-10-23 09:00:00.000Z","ran":"2026-10-23 10:00:00.000Z","c1":"2026-10-23 08:00:00.000Z"},
+      "current": "ran",
+      "query": "",
+      "output": ["general","Cats","Bob \u00c9t\u00e9","dev-ops","random"]
+    },
+    {
+      "name": "a room someone made after you left one doesn't come before it (QA BUG-268)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"},
+          {"id":"new","name":"brand-new","created":"2026-10-23 11:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"gen":"2026-10-23 10:00:00.000Z","ran":"2026-10-23 09:30:00.000Z"},
+      "current": null,
+      "query": "",
+      "output": ["general","random","Cats","Bob \u00c9t\u00e9","brand-new","dev-ops"]
+    },
+    {
+      "name": "... and Ctrl+K Enter still goes back to the room before (QA BUG-268)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"},
+          {"id":"new","name":"brand-new","created":"2026-10-23 11:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"gen":"2026-10-23 10:00:00.000Z","ran":"2026-10-23 10:00:00.000Z"},
+      "current": "ran",
+      "query": "",
+      "output": ["general","Cats","Bob \u00c9t\u00e9","brand-new","dev-ops","random"]
+    },
+    {
+      "name": "... typed for, it is ranked by the match first",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"},
+          {"id":"new","name":"brand-new","created":"2026-10-23 11:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {"gen":"2026-10-23 10:00:00.000Z","ran":"2026-10-23 10:00:00.000Z"},
+      "current": "ran",
+      "query": "brand",
+      "output": ["brand-new"]
+    },
+    {
+      "name": "a collection with nothing in it, never opened, is with the rooms only made (QA BUG-268)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {
+        "mine": [{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],
+        "subs": [{"id":"c2","name":"General pics","last_added":"","owner":{"id":"bob","name":"Bob \u00c9t\u00e9"}}]
+      },
+      "opened": {},
+      "current": null,
+      "query": "",
+      "output": ["Cats","Bob \u00c9t\u00e9","random","general","dev-ops","General pics"]
+    },
+    {
+      "name": "... and after a room only made that matches as well (QA BUG-268)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {
+        "mine": [{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],
+        "subs": [{"id":"c2","name":"General pics","last_added":"","owner":{"id":"bob","name":"Bob \u00c9t\u00e9"}}]
+      },
+      "opened": {},
+      "current": null,
       "query": "gen",
-      "output": 1
+      "output": ["general","General pics","old-general"]
     },
     {
-      "name": "old-general",
+      "name": "with more than 50, where you are is still last (QA BUG-139)",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": "dev",
+      "query": "",
+      "filler": {"count":60,"created":"2026-10-22 12:00:00.000Z"},
+      "output": [
+        "Cats",
+        "Bob \u00c9t\u00e9",
+        "room 0",
+        "room 1",
+        "room 2",
+        "room 3",
+        "room 4",
+        "room 5",
+        "room 6",
+        "room 7",
+        "room 8",
+        "room 9",
+        "room 10",
+        "room 11",
+        "room 12",
+        "room 13",
+        "room 14",
+        "room 15",
+        "room 16",
+        "room 17",
+        "room 18",
+        "room 19",
+        "room 20",
+        "room 21",
+        "room 22",
+        "room 23",
+        "room 24",
+        "room 25",
+        "room 26",
+        "room 27",
+        "room 28",
+        "room 29",
+        "room 30",
+        "room 31",
+        "room 32",
+        "room 33",
+        "room 34",
+        "room 35",
+        "room 36",
+        "room 37",
+        "room 38",
+        "room 39",
+        "room 40",
+        "room 41",
+        "room 42",
+        "room 43",
+        "room 44",
+        "room 45",
+        "room 46",
+        "dev-ops"
+      ]
+    },
+    {
+      "name": "typed: best match first, archived after",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
       "query": "gen",
-      "output": 2
+      "output": ["general","old-general"]
     },
     {
-      "name": "dev-ops",
-      "query": "ops",
-      "output": 2
+      "name": "typed: a leading # is ignored, and case",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "#GEN",
+      "output": ["general","old-general"]
     },
     {
-      "name": "general",
-      "query": "ner",
-      "output": 3
+      "name": "typed: a leading @ is ignored, accents folded",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "@bob ete",
+      "output": ["Bob \u00c9t\u00e9"]
     },
     {
-      "name": "general",
-      "query": "gnrl",
-      "output": 4
+      "name": "typed: hidden rooms are found",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "go",
+      "output": ["gossip"]
     },
     {
-      "name": "general",
-      "query": "xyz",
-      "output": -1
+      "name": "typed: archived rooms are found",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "old",
+      "output": ["old-general"]
     },
     {
-      "name": "\ud83c\udf55 pizza",
-      "query": "\ud83c\udf55z",
-      "output": 4
+      "name": "typed: collections are found",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "ca",
+      "output": ["Cats"]
     },
     {
-      "name": "\u00c9t\u00e9",
-      "query": "ete",
-      "output": 0
+      "name": "typed: nothing",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": null,
+      "query": "zzz",
+      "output": []
+    },
+    {
+      "name": "typed: where you are comes after another as good a match",
+      "sections": {
+        "rooms": [
+          {"id":"dev","name":"dev-ops","created":"2026-09-01 10:00:00.000Z"},
+          {"id":"gen","name":"general","created":"2026-10-01 10:00:00.000Z"},
+          {"id":"ran","name":"random","created":"2026-10-02 10:00:00.000Z"},
+          {"id":"gen2","name":"general chat","created":"2026-10-05 10:00:00.000Z"}
+        ],
+        "dms": [{"id":"dm","dm":"Bob \u00c9t\u00e9","created":"2026-09-15 10:00:00.000Z","last_message_at":"2026-10-01 12:00:00.000Z"}],
+        "hidden": [{"id":"hid","name":"gossip","created":"2026-10-23 10:00:00.000Z"}],
+        "archived": [{"id":"old","name":"old-general","created":"2026-10-03 10:00:00.000Z"}]
+      },
+      "collections": {"mine":[{"id":"c1","name":"Cats","last_added":"2026-10-18 10:00:00.000Z"}],"subs":[]},
+      "opened": {},
+      "current": "gen",
+      "query": "gene",
+      "output": ["general chat","general","old-general"]
     }
   ]
 }

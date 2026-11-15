@@ -1,6 +1,13 @@
 package chirkle.android.data.lib
 
+import chirkle.android.data.model.CollectionOwner
+import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
+import chirkle.android.data.model.MediaCollection
+import chirkle.android.data.model.Room
+import chirkle.android.data.model.RoomExpand
+import chirkle.android.data.model.User
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -80,4 +87,38 @@ class VectorsTest {
     @Test fun jumpScore() {
         for (c in jump.cases("score")) assertEquals("${c.str("name")} / ${c.str("query")}", c.num("output"), jumpScore(c.str("name"), jumpFold(c.str("query"))))
     }
+
+    @Test fun jumpOrder() {
+        for (c in jump.cases("order")) assertEquals(c.str("name"), c.strings("output"), jumpNames(c))
+    }
+}
+
+/** A case of jump.json "order" through [jumpTargets] and [jumpMatches], as the room list's search does: the names shown. */
+private fun jumpNames(c: JsonObject): List<String> {
+    val me = User("me", "Me")
+    fun JsonObject.opt(name: String) = this[name]?.takeIf { it != JsonNull }?.jsonPrimitive?.content
+    fun room(r: JsonObject, archived: Boolean = false): Room {
+        val dm = r.opt("dm")
+        val other = User("u-${r.str("id")}", dm.orEmpty())
+        return Room(
+            r.str("id"),
+            r.opt("name").orEmpty(),
+            archived = archived,
+            kind = if (dm != null) "dm" else "room",
+            members = if (dm != null) listOf(me.id, other.id) else emptyList(),
+            lastMessageAt = r.opt("last_message_at").orEmpty(),
+            created = r.str("created"),
+            expand = if (dm != null) RoomExpand(members = listOf(me, other)) else null,
+        )
+    }
+    fun rooms(name: String, archived: Boolean = false) = c.getValue("sections").jsonObject.cases(name).map { room(it, archived) }
+    val filler = c["filler"]?.jsonObject?.let { f -> List(f.num("count")) { Room("f$it", "room $it", created = f.str("created")) } }.orEmpty()
+    val sections = RoomSections(rooms("rooms") + filler, rooms("dms"), rooms("hidden"), rooms("archived", archived = true))
+    fun colls(name: String) = c.getValue("collections").jsonObject.cases(name).map { x ->
+        val owner = x["owner"]?.jsonObject?.let { CollectionOwner(it.str("id"), it.str("name")) }
+        MediaCollection(x.str("id"), x.str("name"), lastAdded = x.str("last_added"), owner = owner)
+    }
+    val opened = c.getValue("opened").jsonObject.mapValues { it.value.jsonPrimitive.content }
+    val all = jumpTargets(sections, me.id, Collections(colls("mine"), colls("subs")), { opened[it].orEmpty() }, c.opt("current"))
+    return jumpMatches(all, c.str("query")).map { it.name }
 }

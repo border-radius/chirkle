@@ -844,11 +844,17 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written (50 
   `hold()`-ed call (it can't settle before `release()`: `sync.test.ts` ×2, `unread.test.ts` ×1 keep their
   "answered by the server, held here" sleeps), and `toBe(0)` checks.
 
-#### 64. Jump to's ordering in shared vectors (web, Android) — medium value, small
+#### 64. Jump to's ordering in shared vectors (web, Android) — medium value, small ✅ (2026-11-15)
 - `web/src/views/switcher.ts` and Android's `Jump.kt` are ports of each other, with hand-copied cases
   (`switcher.test.ts`, `JumpTest.kt`). BUG-268 had to be fixed and tested twice.
 - Suggestion: `shared/vectors/jump.json` (targets with `at`/`made`/`current`/`away`, queries, expected order), run by
   both, as `room.json` is for the room controller (item 40).
+- Done: `jump.json` has an `order` section (18 cases: sections, collections, open times, where you are, a query →
+  the names shown), run through `targets`/`matches` by `vectors.test.ts` and through `jumpTargets`/`jumpMatches` by
+  `VectorsTest.kt`. The hand-copied fold, score and ordering cases are gone from `switcher.test.ts` and
+  `JumpTest.kt` (each keeps what only it has: the web's paths and unread, the app's collection targets). To run the
+  same cases, the app's `jumpTargets` takes an optional `current` and `jumpMatches` puts it last, as the web does
+  (QA BUG-139); the room list passes none, so the app behaves as before.
 
 #### 65. One meaning of "superuser" for room access (server) — low value, small
 - `server/access.go callerID` returns "" for superusers ("whom no room is hidden from"), but `canSee(a, "")` treats ""

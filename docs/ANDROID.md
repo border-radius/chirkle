@@ -666,12 +666,12 @@ the accent; the app's version at the end of the profile.
 |---|---|
 | Appearance: System, Light, Dark (DESIGN.md §7.8) | Profile → Appearance; kept in the device settings (`DeviceSettings.theme`, the account index's `theme`), the system bars follow it |
 | Media grid (§30) | The room's 🖼 button → `MediaScreen`: `GET /api/chat/media/{room}`, month headings, 60 a page, posters, a tile opens the viewer |
-| Jump to (§32) | The room list's search button (or Ctrl+K / Ctrl+P): `lib/Jump.kt` ports `matches`/`score`; rooms you just had open come first (`ChirkleServices.opened`, per account, forgotten when the session changes: QA BUG-152) |
+| Jump to (§32) | The room list's search button (or Ctrl+K / Ctrl+P): `lib/Jump.kt` ports `targets`/`matches`/`score` (the same cases: `shared/vectors/jump.json`); rooms you just had open come first (`ChirkleServices.opened`, per account, forgotten when the session changes: QA BUG-152) |
 | Media collections (§31) | §19 |
 
 ### 18.5 Tests
 
-`JumpTest` (`:core:data`): the web's matching cases. `UiPortsTest` (`:app`): Jump to, the media grid and the viewer
+`VectorsTest` (`:core:data`): the web's Jump to cases (`jump.json`). `UiPortsTest` (`:app`): Jump to, the media grid and the viewer
 from it, an empty grid, Appearance, and sharing into a room. 63 JVM tests in `:core:data` and 27 in `:app` pass; Android
 lint adds no warning. The release APK is 3.48 MB (Nunito is most of the 0.24 MB added; budget 6 MB).
 
@@ -1096,7 +1096,7 @@ This section covers the app's side of the architecture review (docs/REFACTOR.md 
   file. docs/API.md lists what the app relies on from the server, and what a server change has to keep working for
   installed apps.
 - **Shared vectors:** `VectorsTest` runs `shared/vectors/` (folding, search queries, highlighting, lengths, blank text,
-  Jump to). The web and the server's `lib/text.js` run the same cases. Tests find the files through the build's
+  Jump to's matching and ordering). The web and the server's `lib/text.js` run the same cases. Tests find the files through the build's
   `chirkle.repoRoot`, and the test tasks take `shared/` as an input (a change to it runs them again).
 - **Writes split out:** `RoomController`'s sends, edits, deletes and reactions are `RoomWrites.kt` (as the web's
   `room/writes.ts`), reaching the window through a `RoomWrites.Host` the controller passes in. Its public methods are
@@ -1716,7 +1716,7 @@ of the latest messages, not of history).
   the server; the app reconnects after the server drops a client that fell 512 events behind, as after any drop.
   BUG-271 (a reply's quote 32px past the column) was web-only: the app's quote is inside the text column.
 
-Tests: `JumpTest` "QA BUG-268".
+Tests: `VectorsTest` jump.json "QA BUG-268" (§70).
 
 ## 69. QA pass 38 (2026-11-12)
 
@@ -1731,3 +1731,14 @@ Tests: `JumpTest` "QA BUG-268".
 
 Tests: `UiFeaturesTest` "Done in the people search opens a DM with the first person found (QA BUG-272)", "a public
 room's menu has no Members for anyone but its creator, a private one's counts them (QA BUG-274)".
+
+## 70. Jump to's ordering in the shared vectors (2026-11-15)
+
+- `shared/vectors/jump.json` has an `order` section, which `VectorsTest` runs through `jumpTargets` and `jumpMatches`,
+  as `vectors.test.ts` runs it through the web's `targets` and `matches` (REFACTOR §64). The cases copied by hand
+  into `JumpTest` are gone; it keeps what a collection target says.
+- To run the same cases, `jumpTargets` takes an optional `current` (the room or collection you are in) and
+  `jumpMatches` puts it last with nothing typed, and after another as good a match, as the web does (QA BUG-139).
+  The room list passes none, so nothing changes for the app's users.
+
+Tests: `VectorsTest` `jumpOrder`; `JumpTest`.

@@ -1,11 +1,11 @@
-// Jump to (§32): matching and ordering, and the dialog itself.
+// Jump to (§32): what each target says, and the dialog itself.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { h } from "../../../web/src/dom.ts";
 import { otherMember } from "../../../web/src/lib/rooms.ts";
 import type { Room, User } from "../../../web/src/lib/types.ts";
 import { type AppState, initialState, roomSections, unreadCount } from "../../../web/src/store.ts";
-import { createSwitcher, fold, matches, type SwitcherOptions, score, targets } from "../../../web/src/views/switcher.ts";
+import { createSwitcher, type SwitcherOptions, targets } from "../../../web/src/views/switcher.ts";
 
 const me: User = { id: "me", name: "Me" };
 const bob: User = { id: "bob", name: "Bob Été" };
@@ -44,84 +44,8 @@ const opts = (s: AppState, navigate = vi.fn(), opened: Record<string, string> = 
   opened: (id) => opened[id] ?? "",
 });
 
-const names = (s: AppState, q: string) => matches(targets(opts(s), s), q).map((t) => t.name);
-
-describe("jump to: matching", () => {
-  it("folds case, accents and width", () => {
-    expect(fold("Été ＡＢＣ")).toBe("ete abc");
-  });
-
-  it("ranks the whole name, its start, a word's start, inside a word, then letters in order", () => {
-    expect(score("general", "general")).toBe(0);
-    expect(score("general", "gen")).toBe(1);
-    expect(score("old-general", "gen")).toBe(2);
-    expect(score("dev-ops", "ops")).toBe(2);
-    expect(score("general", "ner")).toBe(3);
-    expect(score("general", "gnrl")).toBe(4);
-    expect(score("general", "xyz")).toBe(-1);
-    expect(score("🍕 pizza", "🍕z")).toBe(4); // QA BUG-138
-  });
-
-  it("with nothing typed: rooms, DMs and collections, most recent first, where you are last, no hidden or archived", () => {
-    expect(names(state(), "")).toEqual(["random", "general", "Bob Été", "Cats", "dev-ops"]);
-  });
-
-  it("without a latest message (public rooms have none), the most recently open first (QA BUG-134)", () => {
-    const s = state();
-    // As the server sends them: only DMs carry last_message_at.
-    for (const [id, r] of s.rooms) if (r.kind !== "dm") s.rooms.set(id, { ...r, last_message_at: "" });
-    s.activeRoomId = "ran";
-    const opened = { gen: "2026-10-23 09:00:00.000Z", ran: "2026-10-23 10:00:00.000Z", c1: "2026-10-23 08:00:00.000Z" };
-    const list = matches(targets(opts(s, vi.fn(), opened), s), "").map((t) => t.name);
-    // dev-ops was never opened and has only its creation: after the DM, whose message is activity (QA BUG-268).
-    expect(list).toEqual(["general", "Cats", "Bob Été", "dev-ops", "random"]);
-    // A room opened long ago doesn't hide a newer message.
-    const later = { ...opened, gen: "2026-10-01 09:00:00.000Z" };
-    expect(matches(targets(opts(s, vi.fn(), later), s), "")[0]?.name).toBe("Cats");
-  });
-
-  it("QA BUG-268: a room someone made after you left one doesn't come before it: Ctrl+K Enter still goes back", () => {
-    const s = state();
-    for (const [id, r] of s.rooms) if (r.kind !== "dm") s.rooms.set(id, { ...r, last_message_at: "" });
-    s.rooms.set("new", room("new", "brand-new", "2026-10-23 11:00:00.000Z", { last_message_at: "" }));
-    s.activeRoomId = "ran";
-    const opened = { gen: "2026-10-23 10:00:00.000Z", ran: "2026-10-23 10:00:00.000Z" };
-    const list = matches(targets(opts(s, vi.fn(), opened), s), "").map((t) => t.name);
-    expect(list[0]).toBe("general");
-    // Never opened, no activity: after those, newest made first.
-    expect(list.indexOf("brand-new")).toBeGreaterThan(list.indexOf("Bob Été"));
-    expect(list.at(-1)).toBe("random");
-    // Typed for, it is still ranked by the match first.
-    expect(matches(targets(opts(s, vi.fn(), opened), s), "brand")[0]?.name).toBe("brand-new");
-  });
-
-  it("QA BUG-268: a collection with nothing in it, never opened, is with the rooms only made (as on Android)", () => {
-    const s = state();
-    s.collections = {
-      ...s.collections!,
-      subs: [{ id: "c2", name: "General pics", public: true, items: 0, last_added: "", owner: { id: "bob", name: "Bob Été" } }],
-    };
-    // general has its creation only; the empty collection has no time at all: after it, not before.
-    expect(names(s, "gen")).toEqual(["general", "General pics", "old-general"]);
-    expect(names(s, "").at(-2)).toBe("General pics");
-  });
-
-  it("with more than 50, where you are is still last (QA BUG-139)", () => {
-    const s = state();
-    for (let i = 0; i < 60; i++) s.rooms.set(`r${i}`, room(`r${i}`, `room ${i}`, "2026-10-22 12:00:00.000Z"));
-    const list = names(s, "");
-    expect(list).toHaveLength(50);
-    expect(list.at(-1)).toBe("dev-ops");
-  });
-
-  it("with a query: best matches first, hidden and archived ones after, # and @ ignored", () => {
-    expect(names(state(), "gen")).toEqual(["general", "old-general"]);
-    expect(names(state(), "#GEN")).toEqual(["general", "old-general"]);
-    expect(names(state(), "@bob ete")).toEqual(["Bob Été"]);
-    expect(names(state(), "go")).toEqual(["gossip"]);
-    expect(names(state(), "zzz")).toEqual([]);
-  });
-
+// Matching and ordering: shared/vectors/jump.json (tests/unit/vectors.test.ts), which the app runs too.
+describe("jump to: targets", () => {
   it("says where each goes, and what is hidden, archived or unread", () => {
     const all = targets(opts(state()), state());
     expect(all.find((t) => t.name === "gossip")).toMatchObject({ path: "/r/hid", note: "Hidden" });

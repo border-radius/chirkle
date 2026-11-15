@@ -8,8 +8,10 @@ import mentions from "../../shared/vectors/mentions.json" with { type: "json" };
 import text from "../../shared/vectors/text.json" with { type: "json" };
 import { textLength } from "../../web/src/lib/limits.ts";
 import { splitMentions } from "../../web/src/lib/mentions.ts";
+import type { Collections, Room, User } from "../../web/src/lib/types.ts";
+import { type AppState, initialState } from "../../web/src/store.ts";
 import { foldKey, highlight, searchQuery, searchWords } from "../../web/src/views/room/search.ts";
-import { fold, score } from "../../web/src/views/switcher.ts";
+import { fold, matches, score, targets } from "../../web/src/views/switcher.ts";
 
 /** pb_hooks/lib/text.js: pure functions, a CommonJS module PocketBase loads (this package is ESM, so evaluated here). */
 function hooksText(): { searchKey: (s: string) => string; isBlank: (s: string) => boolean } {
@@ -79,4 +81,49 @@ describe("shared vectors: jump to (§32)", () => {
   it("score", () => {
     for (const c of jump.score) expect(score(c.name, fold(c.query))).toBe(c.output);
   });
+  it("order: targets, then matches", () => {
+    for (const c of jump.order) expect(jumpNames(c), c.name).toEqual(c.output);
+  });
 });
+
+type JumpRoom = { id: string; name?: string; dm?: string; created: string; last_message_at?: string };
+type JumpCase = (typeof jump.order)[number] & { filler?: { count: number; created: string } };
+
+/** A case of jump.order through targets() and matches(), as the switcher does: the names shown, in order. */
+function jumpNames(c: JumpCase): string[] {
+  const me: User = { id: "me", name: "Me" };
+  const others = new Map<string, User>();
+  const room = (r: JumpRoom, more: Partial<Room> = {}): Room => {
+    if (r.dm) others.set(r.id, { id: `u-${r.id}`, name: r.dm });
+    return {
+      id: r.id,
+      name: r.name ?? "",
+      kind: r.dm ? "dm" : "room",
+      created: r.created,
+      last_message_at: r.last_message_at ?? "",
+      members: r.dm ? ["me", `u-${r.id}`] : [],
+      created_by: "x",
+      ...more,
+    } as Room;
+  };
+  const filler = Array.from({ length: c.filler?.count ?? 0 }, (_, i) => ({ id: `f${i}`, name: `room ${i}`, created: c.filler!.created }));
+  const sections = {
+    rooms: [...c.sections.rooms, ...filler].map((r) => room(r)),
+    dms: c.sections.dms.map((r) => room(r)),
+    hidden: c.sections.hidden.map((r) => room(r)),
+    archived: c.sections.archived.map((r) => room(r, { archived: true })),
+  };
+  const s: AppState = {
+    ...initialState(),
+    user: me,
+    activeRoomId: c.current,
+    activeCollectionId: c.current,
+    collections: {
+      mine: c.collections.mine.map((x) => ({ public: true, items: 1, ...x })),
+      subs: c.collections.subs.map((x) => ({ public: true, items: 1, ...x })),
+    } as Collections,
+  };
+  const opened: Record<string, string> = c.opened;
+  const all = targets({ sections: () => sections, unread: () => 0, other: (r) => others.get(r.id), opened: (id) => opened[id] ?? "" }, s);
+  return matches(all, c.query).map((t) => t.name);
+}
