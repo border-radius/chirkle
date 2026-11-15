@@ -4,8 +4,7 @@
 // - POST /api/fed/inbox { events: [...] }: up to 50 events, each applied in a transaction of its own, in order. The
 //   answer gives each one's status: 200 (applied, or a repeat), 4xx (refused: the sender drops it and logs why), 5xx
 //   (failed for now: the sender tries it again).
-// - GET /api/fed/files/{message}/{file}: a message file, to a peer the message's room is shared with.
-// - GET /api/fed/avatars/{user}: the picture of someone the peer was told of.
+// - The downloads, GET /api/fed/files/{message}/{file} and /api/fed/avatars/{user}, are in Go (server/federation.go).
 // - GET /api/fed/users?name=&for=dm|member: one person by exact name, for a DM or to add to a shared private room.
 
 const { canSee, accessOf } = require(`${__hooks}/lib/access.js`);
@@ -147,72 +146,6 @@ function inbox(e) {
 }
 
 /**
- * GET /api/fed/files/{message}/{file}: a file of a message in a room shared with the peer (as the home, or as its
- * mirror's home). A forward's are its original's (§33.5).
- * @param {core.RequestEvent} e
- */
-function file(e) {
-  const { peer } = verify(e);
-  const id = e.request?.pathValue("message") ?? "";
-  const name = e.request?.pathValue("file") ?? "";
-  let msg;
-  try {
-    msg = e.app.findRecordById("messages", id);
-  } catch {
-    throw new NotFoundError();
-  }
-  const room = e.app.findRecordById("rooms", msg.getString("room"));
-  const shared =
-    room.getString("peer") === peer.id ||
-    e.app.findRecordsByFilter("fed_shares", "room = {:r} && peer = {:p} && state = 'active'", "", 1, 0, { r: room.id, p: peer.id }).length >
-      0;
-  if (!shared || msg.getBool("deleted")) throw new NotFoundError();
-  let src = msg;
-  if (msg.getString("forward_of")) {
-    try {
-      src = e.app.findRecordById("messages", msg.getString("forward_of"));
-    } catch {
-      throw new NotFoundError();
-    }
-  }
-  if (!src.getStringSlice("files").includes(name)) throw new NotFoundError();
-  // Its shared file (§37).
-  const files = require(`${__hooks}/lib/files.js`);
-  const row = files.byName(e.app, name);
-  if (!row) throw new NotFoundError();
-  const fs = e.app.newFilesystem();
-  try {
-    fs.serve(e.response, /** @type {any} */ (e.request), files.keyOf(row), name);
-  } finally {
-    fs.close();
-  }
-}
-
-/**
- * GET /api/fed/avatars/{user}: the picture of someone the peer was told of.
- * @param {core.RequestEvent} e
- */
-function avatar(e) {
-  const { peer } = verify(e);
-  const id = e.request?.pathValue("user") ?? "";
-  let user;
-  try {
-    user = e.app.findRecordById("users", id);
-    e.app.findFirstRecordByFilter("fed_people", "peer = {:p} && user = {:u} && kind = 'known'", { p: peer.id, u: id });
-  } catch {
-    throw new NotFoundError();
-  }
-  const name = user.getString("avatar");
-  if (!name) throw new NotFoundError();
-  const fs = e.app.newFilesystem();
-  try {
-    fs.serve(e.response, /** @type {any} */ (e.request), `${user.baseFilesPath()}/${name}`, name);
-  } finally {
-    fs.close();
-  }
-}
-
-/**
  * GET /api/fed/users?name=&for=dm|member: one of this instance's own people by their exact name (never a list, so
  * nobody can go through another instance's people, §33.5). For a DM, only while DMs with the peer are on and they take
  * DMs; to add to a room, only while a room is shared with the peer.
@@ -313,4 +246,4 @@ function remoteUser(e) {
   });
 }
 
-module.exports = { inbox, file, avatar, lookup, remoteUser };
+module.exports = { inbox, lookup, remoteUser };

@@ -41,6 +41,7 @@ function httpError(status, message) {
 /**
  * Check a server request (§33.6) and return its peer and body. Throws 401 for a request that isn't signed right, 403
  * for a peer that isn't paired, 503 for one suspended here (it keeps its queue and tries again later, §33.7).
+ * server/federation.go fedVerify is a Go copy for the GET downloads: change both, or neither (as `sign`).
  * @param {core.RequestEvent} e
  * @param {number} [max] body bytes
  * @returns {{ peer: core.Record, body: string }}

@@ -864,8 +864,11 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written (50 
   - Files: `server/files.go` serves `/api/files/messages/…`, `/api/files/collection_items/…` and both poster routes
     (`shownBy`, thumbnails, `download`, the poster's Cache-Control as before), and refuses PocketBase's own route for
     `files`; the JS routes, `files.serve`, `shownBy` and `media.poster`/`itemPoster` are gone. The federation's
-    file routes (`federation/inbox.js`, peers only) still serve in JS.
-  - No JS hook runs for a records read, a subscription or a download any more. `main.pb.js` has no `onRealtimeSubscribeRequest`.
+    downloads (`/api/fed/files/…`, `/api/fed/avatars/…`, peers only) followed on 2026-11-15: `server/federation.go`,
+    with Go copies of `config.js enabled` and `net.js verify` (GET only: the inbox, with a body, stays in JS). Tested
+    by `federation_test.go` (the signature, dates, origins) and `federation.test.ts` (served while shared or known, 401
+    unsigned, wrongly signed or old, 503 suspended, 403 unpaired, 404 off).
+  - No JS hook runs for a records read, a subscription or a download (a peer's too, since 2026-11-15) any more. `main.pb.js` has no `onRealtimeSubscribeRequest`.
   - Left: the stress run with many slow downloads (before/after) wasn't made. (`live.go`'s second queue: gone with
     item 26, 2026-11-13.)
 

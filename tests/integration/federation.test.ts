@@ -205,6 +205,8 @@ describe("pairing (§33.3)", () => {
       expect(res.status).toBe(403);
       // An instance with linking off answers as if it hadn't the module, and the row isn't kept.
       expect((await fetch(`${off.url}/api/fed/inbox`, { method: "POST" })).status).toBe(404);
+      expect((await fetch(`${off.url}/api/fed/files/m/f.png`)).status).toBe(404);
+      expect((await fetch(`${off.url}/api/fed/avatars/u`)).status).toBe(404);
       await expect(A.admin.collection("fed_peers").create({ origin: off.url, label: "O" })).rejects.toMatchObject({
         response: { data: { origin: { message: expect.stringMatching(/doesn't take links/) } } },
       });
@@ -276,17 +278,20 @@ async function fakePeer(i: Instance, origin: string, label: string) {
       params: { id, origin, label, secret },
     },
   ]);
-  const signed = async (method: string, path: string, json?: unknown, date = Math.floor(Date.now() / 1000)) => {
-    const body = json === undefined ? "" : JSON.stringify(json);
+  const headersFor = (method: string, path: string, body = "", date = Math.floor(Date.now() / 1000)) => {
     const hash = createHash("sha256").update(body).digest("hex");
     const sig = createHmac("sha256", secret).update(`${method}\n${path}\n${date}\n${hash}`).digest("hex");
+    return { "content-type": "application/json", "X-Fed-Origin": origin, "X-Fed-Date": String(date), "X-Fed-Signature": sig };
+  };
+  const signed = async (method: string, path: string, json?: unknown, date = Math.floor(Date.now() / 1000)) => {
+    const body = json === undefined ? "" : JSON.stringify(json);
     return fetch(`${i.url}${path}`, {
       method,
-      headers: { "content-type": "application/json", "X-Fed-Origin": origin, "X-Fed-Date": String(date), "X-Fed-Signature": sig },
+      headers: headersFor(method, path, body, date),
       ...(json === undefined ? {} : { body }),
     });
   };
-  return { id, signed };
+  return { id, signed, headersFor };
 }
 
 describe("signed requests (§33.6)", () => {
@@ -352,6 +357,68 @@ describe("signed requests (§33.6)", () => {
     expect((await fake.signed("GET", `/api/fed/users?name=${encodeURIComponent(ann.name)}&for=dm`)).status).toBe(200);
     expect((await fake.signed("GET", `/api/fed/users?name=${encodeURIComponent(ann.name.slice(0, 4))}&for=dm`)).status).toBe(404);
     await runSql(B.url, [{ sql: "DELETE FROM fed_peers WHERE id = {:id}", params: { id: fake.id } }]);
+  });
+
+  // The downloads are Go routes (server/federation.go), with their own copy of the signature check.
+  it("serves a shared room's files and a known person's avatar to the peer, signed, and only while active", async () => {
+    // Sharing queues events for it: an address that refuses at once, so the worker doesn't wait on it (curl's 20 s)
+    // and hold up the real peers' sends.
+    const fake = await fakePeer(B, "http://127.0.0.1:2", "H");
+    const ann = await signUp(B);
+    const room = await ann.pb.collection("rooms").create({ name: `r${uniq()}`, created_by: ann.user.id });
+    const msg = await ann.pb
+      .collection("messages")
+      .create({ room: room.id, author: ann.user.id, text: "", files: [new File([PNG], "a.png", { type: "image/png" })] });
+    const filePath = `/api/fed/files/${msg.id}/${msg.files[0]}`;
+    expect((await fake.signed("GET", filePath)).status).toBe(404);
+    const now = "2026-01-01 00:00:00.000Z";
+    await runSql(B.url, [
+      {
+        sql: "INSERT INTO fed_shares (id, room, peer, remote_id, state, accepted, name, kind, visibility, last_error, created, updated) VALUES ({:id}, {:room}, {:peer}, '', 'active', 1, '', '', '', '', {:now}, {:now})",
+        params: { id: uniq().slice(0, 15).padEnd(15, "0"), room: room.id, peer: fake.id, now },
+      },
+    ]);
+    const got = await fake.signed("GET", filePath);
+    expect(got.status).toBe(200);
+    expect(Buffer.from(await got.arrayBuffer()).equals(Buffer.from(PNG))).toBe(true);
+    // Signed for another path, or not at all.
+    const wrong = fake.headersFor("GET", `/api/fed/files/${msg.id}/other.png`);
+    expect((await fetch(`${B.url}${filePath}`, { headers: wrong })).status).toBe(401);
+    expect((await fetch(`${B.url}${filePath}`)).status).toBe(401);
+    expect((await fake.signed("GET", filePath, undefined, Math.floor(Date.now() / 1000) - 600)).status).toBe(401);
+    // Not after it is deleted.
+    const other = await ann.pb
+      .collection("messages")
+      .create({ room: room.id, author: ann.user.id, text: "", files: [new File([PNG], "b.png", { type: "image/png" })] });
+    await ann.pb.collection("messages").update(other.id, { deleted: true });
+    expect((await fake.signed("GET", `/api/fed/files/${other.id}/${other.files[0]}`)).status).toBe(404);
+
+    // An avatar: only of someone the peer was told of. Ann is, by the message sent once the room was shared
+    // (people.js marks her "known"); Bea never was.
+    const bea = await signUp(B);
+    for (const u of [ann, bea]) {
+      const pic = await u.pb.collection("users").update(u.user.id, { avatar: new File([PNG], "me.png", { type: "image/png" }) });
+      expect(pic.avatar).toBeTruthy();
+    }
+    expect((await fake.signed("GET", `/api/fed/avatars/${bea.user.id}`)).status).toBe(404);
+    const known = await B.admin
+      .collection("fed_people")
+      .getFullList({ filter: B.admin.filter("peer = {:p} && user = {:u} && kind = 'known'", { p: fake.id, u: ann.user.id }) });
+    expect(known).toHaveLength(1);
+    const avatarPath = `/api/fed/avatars/${ann.user.id}`;
+    const face = await fake.signed("GET", avatarPath);
+    expect(face.status).toBe(200);
+    expect(Buffer.from(await face.arrayBuffer()).equals(Buffer.from(PNG))).toBe(true);
+
+    // Suspended: 503, so it tries again later (§33.7).
+    await runSql(B.url, [{ sql: "UPDATE fed_peers SET status = 'suspended' WHERE id = {:id}", params: { id: fake.id } }]);
+    expect((await fake.signed("GET", filePath)).status).toBe(503);
+    expect((await fake.signed("GET", avatarPath)).status).toBe(503);
+    await runSql(B.url, [
+      { sql: "DELETE FROM fed_queue WHERE peer = {:id}", params: { id: fake.id } },
+      { sql: "DELETE FROM fed_peers WHERE id = {:id}", params: { id: fake.id } },
+    ]);
+    expect((await fake.signed("GET", filePath)).status).toBe(403);
   });
 });
 

@@ -2,7 +2,8 @@
 // migrations (pb_migrations/), plus the hot paths in Go: the messages enrich hook (enrich.go), live messages
 // (live.go), the room list and message pages (lists.go), the unread counts (unread.go), read positions (reads.go), and
 // what every request or subscription would otherwise take a JS runtime for: the anonymous rooms' probe checks
-// (anonymous.go), the subscriptions' statistics (stats.go) and file and poster downloads (files.go).
+// (anonymous.go), the subscriptions' statistics (stats.go), file and poster downloads (files.go) and linked instances' downloads
+// (federation.go).
 // Everything else stays in the JS hooks. Same flags, commands and routes as the stock `pocketbase` binary.
 package main
 
@@ -142,6 +143,9 @@ func register(app core.App, legacy bool, admit *admission) {
 			}
 			add(http.MethodGet, "/api/chat/unread/{room}", firstUnreadRoute, true)
 			for path, h := range fileRoutes {
+				add(http.MethodGet, path, h, false)
+			}
+			for path, h := range fedRoutes {
 				add(http.MethodGet, path, h, false)
 			}
 			return e.Next()

@@ -32,14 +32,7 @@ routerAdd("POST", "/api/fed/inbox", (e) => {
   require(`${__hooks}/federation/config.js`).requireOn(e.app);
   return require(`${__hooks}/federation/inbox.js`).inbox(e);
 });
-routerAdd("GET", "/api/fed/files/{message}/{file}", (e) => {
-  require(`${__hooks}/federation/config.js`).requireOn(e.app);
-  return require(`${__hooks}/federation/inbox.js`).file(e);
-});
-routerAdd("GET", "/api/fed/avatars/{user}", (e) => {
-  require(`${__hooks}/federation/config.js`).requireOn(e.app);
-  return require(`${__hooks}/federation/inbox.js`).avatar(e);
-});
+// GET /api/fed/files/{message}/{file} and /api/fed/avatars/{user} are in Go (server/federation.go).
 routerAdd("GET", "/api/fed/users", (e) => {
   require(`${__hooks}/federation/config.js`).requireOn(e.app);
   return require(`${__hooks}/federation/inbox.js`).lookup(e);

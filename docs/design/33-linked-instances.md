@@ -211,7 +211,9 @@ taken are kept 3 days in `fed_seen`). 4xx: refused, and the sender drops it and 
 bad signature (401), a peer not paired (403), one suspended here (503, §33.7), too many events (429).
 
 **Files:** `GET /api/fed/files/{message}/{file}`, signed, served only to a peer the message's room is shared with.
-Fetched by the worker, at most 10 files of 20 MB each (§17.1). **Avatars** are fetched the same way.
+Fetched by the worker, at most 10 files of 20 MB each (§17.1). **Avatars** are fetched the same way. Both download
+routes are in Go (`server/federation.go`), so a slow transfer holds no JS runtime; it checks signatures as
+`federation/net.js verify` does, and the two must stay in step.
 
 **Outgoing requests** go through the link previews' fetcher (§28.1, curl, `getent`): only the peer's paired origin,
 HTTPS, public addresses only, no redirects, size-capped bodies, and timeouts. `FEDERATION_ALLOW_PRIVATE=1` is for
