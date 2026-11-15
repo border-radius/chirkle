@@ -66,7 +66,7 @@ export async function openPicker(o: PickOptions): Promise<void> {
       {
         type: "button",
         class: "media-tile",
-        "aria-label": `${it.name}${it.video ? ", video" : ""}`,
+        "aria-label": S.tile(it.name, it.video),
         title: it.name,
         "aria-pressed": String(picked.has(it.id)),
         on: {

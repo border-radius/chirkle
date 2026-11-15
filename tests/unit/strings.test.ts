@@ -65,6 +65,15 @@ const CODE = [
 function readsAsText(body: string, before = ""): boolean {
   const t = body.replace(/\$\{[^}]*\}|\$[a-zA-Z_]\w*/g, "X");
   if (NOT_TEXT.has(body) || CODE.some((re) => re.test(body))) return false;
+  // Words a screen reader or the screen shows, by where they go: "private" as a description, "creator" in Text()
+  // (QA BUG-278: one lowercase word passed the rules below).
+  if (
+    /(contentDescription|textContent|ariaLabel|placeholder|title)\s*=\s*$|"aria-label":\s*$|\bText\($/.test(before) &&
+    /[A-Za-z]{2}/.test(t)
+  )
+    return true;
+  // A count and its noun: "1 item", "24 hours".
+  if (/^\d+ [a-z]{2,}/.test(t)) return true;
   // A class list (given to class, or the start of one: `avatar s${px}`), or a link's rel.
   if (/\b(class|cls|className|classList|rel)\b[^,;]*$/.test(before) || /^[a-z][\w-]* [a-z][\w-]*X/.test(t)) return false;
   if (/^[A-Z][a-z]{2,}$/.test(t)) return true; // one word: "Retry"

@@ -412,7 +412,9 @@ class UiFeaturesTest {
         longPress("find them")
         compose.onNodeWithText("Forward").performClick()
         ui.waitFor("Forward message")
-        ui.waitFor("#${other.name}")
+        // Brought into view: with the whole suite's public rooms on the shared server, a room just made (no messages)
+        // is listed below the rows the lazy list composes (QA pass 39: waited 15 s for it there).
+        ui.reveal(hasText("#${other.name}"))
         // Rooms narrow as you type; the person comes from the server.
         compose.onNodeWithContentDescription("Search rooms and people").performTextInput(b.user.name.uppercase())
         ui.waitGone("#${other.name}")

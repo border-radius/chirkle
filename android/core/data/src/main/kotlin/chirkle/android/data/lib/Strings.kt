@@ -25,6 +25,9 @@ object Strings {
     const val UNKNOWN = "Unknown"
     /** The last two of a list of names: "Ada and Bob" (the others before, comma-separated). */
     fun and(first: Any, last: Any) = "$first and $last"
+    /** The people reacted with no name known: after names, "and 2 others"; alone, "3 people". */
+    fun others(n: Int) = "$n ${if (n == 1) "other" else "others"}"
+    fun people(n: Int) = "$n ${if (n == 1) "person" else "people"}"
     const val YOU = "You"
     fun doesntTakeDirectMessages(name: Any) = "$name doesn't take direct messages."
     const val YOUVE_TURNED_OFF_DIRECT_MESSAGES = "You've turned off direct messages."

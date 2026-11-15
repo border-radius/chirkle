@@ -28,8 +28,7 @@ export function reactors(users: readonly string[], me: string, names: (id: strin
   // Long lists name the first few, then count the rest.
   const shown = known.slice(0, 5);
   others += known.length - shown.length;
-  if (others)
-    shown.push(others === 1 && !shown.length ? "1 person" : `${others} ${others === 1 ? "other" : shown.length ? "others" : "people"}`);
+  if (others) shown.push(shown.length ? S.others(others) : S.people(others));
   if (shown.length === 1) return shown[0]!;
   return S.and(shown.slice(0, -1).join(", "), shown.at(-1));
 }

@@ -239,7 +239,7 @@ private fun People(label: String, list: List<User>, room: Room, editable: Boolea
             Avatar(u, 28.dp)
             Text(u.name, Modifier.weight(1f))
             if (u.instance.isNotEmpty()) Text(u.instance, color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium)
-            if (u.id == room.createdBy) Text("creator", color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium)
+            if (u.id == room.createdBy) Text(stringResource(R.string.room_creator), color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium)
             else if (editable) TextButton(onClick = { onRemove(u.id) }) { Text(stringResource(R.string.room_remove_2)) }
         }
     }

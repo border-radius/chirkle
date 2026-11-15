@@ -232,9 +232,11 @@ class RoomViewModel(
         val u = people.getOrNull(i) ?: return
         val t = text
         val caret = t.selection.end
+        val at = peopleAt
+        // Only into the "@an" it was offered for (QA BUG-276: a list left over a changed text crashed here).
+        if (at < 0 || at >= caret || t.text.getOrNull(at) != '@') return suggest()
         val tail = Regex("^\\w*").find(t.text.substring(caret))?.value?.length ?: 0
         val put = "@${u.handle} "
-        val at = peopleAt
         people = emptyList()
         peopleAt = -1
         onText(TextFieldValue(t.text.substring(0, at) + put + t.text.substring(caret + tail), TextRange(at + put.length)))
@@ -246,6 +248,7 @@ class RoomViewModel(
         val e = suggestions.getOrNull(i)?.emoji ?: return
         val t = text
         val caret = t.selection.end
+        if (suggestAt < 0 || suggestAt >= caret || t.text.getOrNull(suggestAt) != ':') return suggest()
         val put = e + if (caret == t.text.length) " " else ""
         services.recentEmoji.remember(e)
         onText(TextFieldValue(t.text.substring(0, suggestAt) + put + t.text.substring(caret), TextRange(suggestAt + put.length)))
@@ -285,6 +288,7 @@ class RoomViewModel(
         editing = m
         text = TextFieldValue(m.text, TextRange(m.text.length))
         composerError = ""
+        suggest()
     }
 
     fun cancelEdit() {
@@ -292,6 +296,7 @@ class RoomViewModel(
         text = savedText ?: TextFieldValue("")
         savedText = null
         composerError = ""
+        suggest()
     }
 
     /** Edit my newest message (Up in an empty composer, as on the web). */
@@ -335,6 +340,8 @@ class RoomViewModel(
         tooLong(body)?.let { return run { composerError = it } }
         if (!controller.send(body.trim(), attachments, replyTo, items)) return
         text = TextFieldValue("")
+        // The ":name" or "@an" offered for what was sent goes with it (QA BUG-276).
+        suggest()
         attachments = emptyList()
         items = emptyList()
         replyTo = null

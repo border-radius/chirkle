@@ -13,3 +13,4 @@ export const RETRY = "Retry";
 export const YOU_HAVE_NO_COLLECTIONS_YET_SAVE = "You have no collections yet. Save images and videos from the chat to one first.";
 export const ATTACH_FROM_COLLECTIONS = " Attach from collections";
 export const picked = (n: number, full: boolean) => `${n} picked${full ? " (the most a message takes)" : ""}`;
+export const tile = (name: string, video: boolean) => `${name}${video ? ", video" : ""}`;

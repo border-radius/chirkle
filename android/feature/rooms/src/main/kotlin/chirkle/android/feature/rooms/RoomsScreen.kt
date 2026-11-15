@@ -8,6 +8,7 @@ package chirkle.android.feature.rooms
 
 import android.content.res.Resources
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -523,7 +524,7 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             // An empty one's lock in its corner; over pictures it covered the last quarter's play badge (QA BUG-248),
             // so then it follows the name.
             if (locked && c.preview.isEmpty()) {
-                Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
+                Icon(ChirkleIcons.Lock, contentDescription = stringResource(R.string.rooms_private), tint = Chirkle.colors.muted, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(14.dp))
             }
             if (c.new > 0) {
                 Box(
@@ -551,10 +552,10 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            if (locked && c.preview.isNotEmpty()) Icon(ChirkleIcons.Lock, contentDescription = "private", tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
+            if (locked && c.preview.isNotEmpty()) Icon(ChirkleIcons.Lock, contentDescription = stringResource(R.string.rooms_private), tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
         }
         Text(
-            c.owner?.name ?: if (c.items == 1) "1 item" else stringResource(R.string.rooms_items, c.items),
+            c.owner?.name ?: pluralStringResource(R.plurals.rooms_items, c.items, c.items),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 11.sp,

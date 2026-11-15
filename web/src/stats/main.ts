@@ -163,7 +163,11 @@ function serverSection(m: Metrics): HTMLElement {
       h("div", { class: "tiles" }, [
         tile(S.UP_FOR, formatSpan(m.uptime_seconds), S.chirklePocketbase(m.version, m.pocketbase)),
         tile(S.CONNECTIONS, num.format(m.realtime.clients), S.REALTIME_INCL_GUESTS),
-        tile(S.LIVE_EVENTS_WAITING, num.format(m.realtime.queued), S.slowClientsDroppedSinceTheStart(num.format(m.realtime.dropped))),
+        tile(
+          S.LIVE_EVENTS_WAITING,
+          num.format(m.realtime.queued),
+          S.slowClientsDroppedSinceTheStart(m.realtime.dropped, num.format(m.realtime.dropped)),
+        ),
         tile(S.DATABASE, formatBytes(db), S.logs(formatBytes(logs))),
         tile(S.MEMORY, formatBytes(m.process.heap_bytes), S.fromTheSystem(formatBytes(m.process.sys_bytes))),
       ]),
@@ -354,8 +358,8 @@ function onlineChart(s: Stats): HTMLElement {
   }
 
   const picker = h("div", { class: "seg", role: "group", "aria-label": S.RANGE }, [
-    rangeButton("day", "24 hours"),
-    rangeButton("week", "7 days"),
+    rangeButton("day", S.HOURS_24),
+    rangeButton("week", S.DAYS_7),
   ]);
   return h("div", {}, [
     picker,
@@ -494,10 +498,10 @@ function render(s: Stats) {
     section(S.MESSAGES, [
       h("div", { class: "tiles" }, [
         tile(S.TODAY, num.format(days.at(-1)?.messages ?? 0)),
-        tile("7 days", num.format(sum(7)), S.peoplePosted(num.format(s.messages.people_week))),
-        tile("30 days", num.format(month), S.peoplePosted(num.format(s.messages.people_month))),
+        tile(S.DAYS_7, num.format(sum(7)), S.peoplePosted(s.messages.people_week, num.format(s.messages.people_week))),
+        tile(S.DAYS_30, num.format(month), S.peoplePosted(s.messages.people_month, num.format(s.messages.people_month))),
         tile(S.IN_DMS, percent(s.messages.dms_month, month), S.OF_THE_30_DAYS),
-        tile(S.FILES_SENT, num.format(s.messages.files_month), "30 days"),
+        tile(S.FILES_SENT, num.format(s.messages.files_month), S.DAYS_30),
         tile(S.REACTIONS, num.format(s.messages.reactions_month), S.ON_THE_30_DAYS_MESSAGES),
       ]),
       h("h3", {}, S.MESSAGES_PER_DAY),

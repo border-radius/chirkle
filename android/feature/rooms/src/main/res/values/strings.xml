@@ -29,7 +29,11 @@
     <string name="rooms_actions_for">Actions for %1$s</string>
     <string name="rooms_expand">Expand</string>
     <string name="rooms_collapse">Collapse</string>
-    <string name="rooms_items">%1$s items</string>
+    <plurals name="rooms_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="rooms_private">private</string>
     <string name="rooms_new">%1$d new</string>
     <string name="rooms_no_collections_yet_save_images">No collections yet. Save images and videos from the chat to one.</string>
     <string name="rooms_new_collection">New collection</string>

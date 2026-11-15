@@ -30,7 +30,7 @@ fun reactors(users: List<String>, me: String, names: (String) -> String?): Strin
     val shown = known.take(5).toMutableList()
     others += known.size - shown.size
     if (others > 0) {
-        shown += if (others == 1 && shown.isEmpty()) "1 person" else "$others ${if (others == 1) "other" else if (shown.isNotEmpty()) "others" else "people"}"
+        shown += if (shown.isNotEmpty()) Strings.others(others) else Strings.people(others)
     }
     if (shown.size == 1) return shown[0]
     return Strings.and(shown.dropLast(1).joinToString(", "), shown.last())

@@ -1768,3 +1768,17 @@ From docs/REFACTOR.md round 5 (items 54–56). Nothing changes for the app's use
   says what the app got (`tests/unit/qa.test.ts`).
 
 Tests: `AnswersTest`, `UnreadScenariosTest`; `UiPasswordResetTest`, `UiAccountsTest`, `UiFlowTest` on the moved strings.
+
+## 72. QA pass 39 (2026-11-15)
+
+- **The composer's lists after a send (QA BUG-276):** `RoomViewModel.submit()`, `startEdit()` and `cancelEdit()` work
+  out the emoji and people offered again (`suggest()`) after replacing the text, so what was offered for a sent ":name"
+  or "@an" goes with it, as on the web. `pickSuggestion` and `pickPerson` put their pick only where the text still has
+  the ":" or "@" they were offered for; before, a pick from a list left over an emptied composer cut the text past its
+  end and crashed. Test: `UiPortsTest` "sending closes the emoji and people offered…".
+- **Text left inline (QA BUG-278):** the collection tiles' "1 item" is the plural `rooms_items`, their lock's
+  description `rooms_private`, Room access's "creator" `room_creator`, and the reaction list's "1 person" / "2 others"
+  `Strings.people` / `Strings.others`. `tests/unit/strings.test.ts` now takes anything given to `contentDescription`
+  or `Text(`, and any "number word" phrase, for text.
+
+Tests: `UiPortsTest`; `HelpersTest` (reactors, unchanged output); `strings.test.ts`.

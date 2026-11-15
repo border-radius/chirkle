@@ -325,4 +325,29 @@ class UiPortsTest {
         assertTrue(compose.onAllNodes(hasText("No emoji found")).fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodes(hasText("pizza")).fetchSemanticsNodes().isEmpty())
     }
+
+    @Test fun `sending closes the emoji and people offered for what was sent (QA BUG-276)`() {
+        // Before, the list stayed over the empty composer, and a tap on it put the emoji at where ":ta" had been:
+        // past the end of the text, which crashed the app.
+        val a = newUser()
+        val b = newUser()
+        val room = runBlocking { a.api.createRoom("es-${uniq()}") }
+        runBlocking { b.api.send(NewMessage(newId(), room.id, "here too")) }
+        ui.signedIn(a)
+        ui.openRoom(room.name)
+        val field = compose.onNode(hasContentDescription("Message"))
+        field.performTextInput("well :ta")
+        ui.waitFor(hasContentDescription("🎉 tada"))
+        compose.onNodeWithContentDescription("Send").performClick()
+        ui.until { a.api.page(chirkle.android.data.lib.Pages.latest(room.id)).any { it.text == "well :ta" } }
+        repeat(5) { ui.pump() }
+        assertTrue(compose.onAllNodes(hasContentDescription("🎉 tada")).fetchSemanticsNodes().isEmpty())
+
+        field.performTextInput("hi @${b.user.handle.take(6)}")
+        ui.waitFor(hasContentDescription("@${b.user.handle}", substring = true))
+        compose.onNodeWithContentDescription("Send").performClick()
+        ui.until { a.api.page(chirkle.android.data.lib.Pages.latest(room.id)).any { it.text == "hi @${b.user.handle.take(6)}" } }
+        repeat(5) { ui.pump() }
+        assertTrue(compose.onAllNodes(hasContentDescription("@${b.user.handle}", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
 }

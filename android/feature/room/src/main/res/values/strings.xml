@@ -235,4 +235,5 @@
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
     </plurals>
+    <string name="room_creator">creator</string>
 </resources>

@@ -85,11 +85,15 @@ export const ALL_PEOPLE = "all people together";
 export const WEEK_AVERAGE = "a week, on average";
 export const running = (busy: boolean) => (busy ? " (running)" : "");
 export const REALTIME_INCL_GUESTS = "realtime, incl. guests";
-export const slowClientsDroppedSinceTheStart = (n: string | number) => `${n} slow clients dropped since the start`;
+export const slowClientsDroppedSinceTheStart = (n: number, shown: string) =>
+  `${shown} slow ${n === 1 ? "client" : "clients"} dropped since the start`;
 export const logs = (size: string | number) => `logs ${size}`;
 export const fromTheSystem = (size: string | number) => `${size} from the system`;
 export const ofAccounts = (percent: string | number) => `${percent} of accounts`;
-export const peoplePosted = (n: string | number) => `${n} people posted`;
+export const peoplePosted = (n: number, shown: string) => `${shown} ${n === 1 ? "person" : "people"} posted`;
+export const HOURS_24 = "24 hours";
+export const DAYS_7 = "7 days";
+export const DAYS_30 = "30 days";
 export const OF_THE_30_DAYS = "of the 30 days'";
 export const ON_THE_30_DAYS_MESSAGES = "on the 30 days' messages";
 export const DAY = "Day";

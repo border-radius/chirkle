@@ -13,6 +13,7 @@ import {
   runs,
   type Sample,
 } from "../../web/src/stats/data.ts";
+import { peoplePosted, slowClientsDroppedSinceTheStart } from "../../web/src/strings/stats-main.ts";
 
 const T = Date.parse("2026-11-09T15:00:00Z");
 const MIN = 60_000;
@@ -76,5 +77,15 @@ describe("the server section's figures (REFACTOR item 51)", () => {
     expect(ago("2026-11-12T09:48:00Z", now)).toBe("12 min ago");
     expect(ago("", now)).toBe("not since the start");
     expect(ago("2026-11-12T10:00:05Z", now)).toBe("0 s ago");
+  });
+});
+
+describe("tile notes", () => {
+  it("count one person and one client as one (QA BUG-277)", () => {
+    expect(peoplePosted(1, "1")).toBe("1 person posted");
+    expect(peoplePosted(1200, "1,200")).toBe("1,200 people posted");
+    expect(peoplePosted(0, "0")).toBe("0 people posted");
+    expect(slowClientsDroppedSinceTheStart(1, "1")).toBe("1 slow client dropped since the start");
+    expect(slowClientsDroppedSinceTheStart(3, "3")).toBe("3 slow clients dropped since the start");
   });
 });

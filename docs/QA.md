@@ -2230,3 +2230,69 @@ makes no metrics request; a superuser's still shows the Server card.
 - `server/reads.go` commits read marks in batches of up to 256; if one save failed, every mark in that batch would
   get an error. Only a superuser deleting a room or an account while its mark waits (milliseconds) can make one fail,
   so it is left as it is.
+
+# QA pass 39 — heavy testing, 2026-11-15
+
+After the day's changes (every screen's text moved into strings modules and `strings.xml`, REFACTOR item 56; room
+access as one viewer type; `users.kind`; the federation's downloads in Go; the unread index). Suites first, all at nice
+19 with two workers: typecheck and lint, unit + component 878/878, Go, integration 546/546, Chromium e2e 91/91, Android
+unit and Robolectric all green. Then: the API probed on a throwaway server (`kind` sent on signup and profile changes;
+pages, reads, reactions, deletes, forwards, DMs, handles, the inbox, collections and the password route with bad and
+hostile input; 20 people reacting to one message at once, reactions racing an edit and a delete; read marks sent out of
+order); the Go federation downloads read against the JS checks they copy; the strings move diffed (old literals against
+the new resources, placeholders and plurals against each call); the web in headless Chromium at 1100 px light and
+390 px dark (every screen, text scanned for `undefined`/`NaN`/placeholders, sideways overflow, console errors; a guest
+in an Open Air room through live messages, edits, reactions, deletes, the room closed and archived); and the app walked
+screen by screen on Robolectric (room list, room, message sheets, room menu, search, media, the "@" and ":" lists,
+selection, Mentions & replies, Jump to, New room, New collection, accounts, profile), its text printed and read.
+Numbering continues from BUG-275.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-276 | Medium | Android | A message sent with ":name" or "@an" before the caret left its emoji or people over the empty composer; tapping one (or Enter on a keyboard) crashed the app | app, web n/a (its lists close on send) | Fixed |
+| BUG-277 | Low | Web | `/stats` said "1 people posted" and "1 slow clients dropped since the start" | web, app n/a (no statistics page) | Fixed |
+| BUG-278 | Low | Web, Android | Text left inline by the strings move, which the guard missed: `/stats`' "24 hours", "7 days", "30 days", the reaction list's "1 person" / "others" / "people" (both), the collection picker's ", video", the app's "creator", "private" (a screen-reader label) and "1 item" | web, app | Fixed |
+
+## BUG-276 — A sent ":name" or "@an" crashed the app on a tap (Medium, Android)
+
+**Steps:** in a room, type `lol :fir` (the emoji list shows), and tap Send without picking one. **Expected:** the
+message goes and the list closes, as on the web. **Actual:** the list stayed over the empty composer; tapping an emoji
+in it (or Enter with a hardware keyboard, which picks) threw `StringIndexOutOfBoundsException` and the app closed. The
+same for "hi @an" and its people, and after starting or cancelling an edit. **Cause:** `RoomViewModel.submit()`,
+`startEdit()` and `cancelEdit()` replace the text without working the lists out again, and `pickSuggestion` /
+`pickPerson` cut the text at where the ":" or "@" had been. **Fix:** the three work the lists out again (`suggest()`),
+and a pick goes only into the ":name" or "@an" it was offered for (ANDROID.md §72). Test: `UiPortsTest` "sending
+closes the emoji and people offered…" (fails without).
+
+## BUG-277, BUG-278 (Low)
+
+- **BUG-277:** `peoplePosted` and `slowClientsDroppedSinceTheStart` (strings/stats-main.ts) take the count as well as
+  its formatted text. From before the strings move. Test: `stats.test.ts` "tile notes".
+- **BUG-278:** `strings.test.ts` took one lowercase word (`"private"`, `"creator"`) and a count with its noun (`"1 item"`)
+  for code. It now counts as text anything given to `contentDescription`, `textContent`, `aria-label`, `title`,
+  `placeholder` or `Text(`, and any "number word" phrase; what it then found moved to the strings modules
+  (`lib-reactions.ts` `others`/`people`, `Strings.kt` the same, `stats-main.ts`, `collection-picker.ts` `tile`;
+  `rooms_items` is a plural now, `rooms_private`, `room_creator`).
+
+## Test fixed
+
+- `UiFeaturesTest` "the forward picker searches rooms…" timed out once in the full Android run (it passed alone and with
+  its class): with every test's public rooms on the shared server, the room it had just made was below the rows the
+  picker's lazy list composes. It now scrolls to it (`ui.reveal`). The full run passed after.
+
+## Checked and fine
+
+- `kind` from a client is dropped (a hidden field), on signup and on a profile change; stand-ins are made with theirs.
+- Concurrency: 20 reactions at once on one message (different and the same emoji), reactions racing an edit, reactions
+  racing a delete: nothing lost, the delete wins. A read mark older than the room's stays behind it.
+- Bulk routes: a forward into a room you may not post in, into a private room you aren't in, into an archived room;
+  500 copies of one id in a delete; edits, reactions and replies to a deleted message. Readers react in a "selected
+  posters" room by design (§23.6).
+- The Go federation downloads match `net.js verify` and `config.js enabled` (the date parse differs only for hex and
+  odd values no peer sends).
+- The strings move: no placeholder count off, no plural used without its count, the one leading space kept in quotes;
+  the build's inlining leaves calls with conditions alone.
+- Web: every screen in both themes and sizes; a guest gets live messages, edits, reactions and deletes in an Open Air
+  room, loses it the moment it stops being Open Air, and an archived one leaves the guest home live.
+- Not bugs: `POST /api/chat/password` takes no confirmation (the clients compare the two fields); the app's inbox row
+  puts two spaces before the time on purpose.
