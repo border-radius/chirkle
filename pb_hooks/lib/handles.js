@@ -3,7 +3,7 @@
 // "@handle" in a message names. The hooks resolve a message's mentions from its text (`messages.mentions`: those named
 // who can see its room); GET /api/chat/mentionable suggests people as "@" is typed.
 
-const { accessOf, canSee, visibleRoom } = require(`${__hooks}/lib/access.js`);
+const { accessOf, canSee, viewerOf, visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { fieldError } = require(`${__hooks}/lib/records.js`);
 const { nameKey } = require(`${__hooks}/lib/text.js`);
 
@@ -261,7 +261,7 @@ function mentionable(e) {
   const me = e.auth;
   if (!me) throw new UnauthorizedError("The request requires a logged-in user.");
   const q = e.requestInfo().query;
-  const room = visibleRoom(e.app, typeof q.room === "string" ? q.room : "", me.id);
+  const room = visibleRoom(e.app, typeof q.room === "string" ? q.room : "", viewerOf(me));
   if (!room) throw new NotFoundError("The room doesn't exist.");
   const typed = normalHandle(typeof q.q === "string" ? q.q : "").slice(0, 32);
   const key = nameKey(typed);

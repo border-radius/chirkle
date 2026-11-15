@@ -1,7 +1,8 @@
 // Room access (§23) as one table: every kind of room × every kind of viewer × every way in. The rule is written in four
 // places (the API rules of 1760000014_room_access.js, canSee in pb_hooks/lib/access.js, the unread SQL in
-// server/unread.go and the room list in server/lists.go, and the hooks that call canSee, live messages among them); this checks they all agree with `sees` below, and lists every
-// disagreement at once.
+// // server/unread.go and the room list in server/lists.go, and the hooks that call canSee, live messages among them); this
+// checks they all agree with `sees` below, and lists every disagreement at once. A superuser sees every room on every
+// way in (server/access.go `viewer`, lib/access.js `viewerOf`); the routes for users only and the writes leave them out.
 
 import type PocketBase from "pocketbase";
 import type { RecordModel } from "pocketbase";
@@ -9,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { adminClient, byName, client, eventually, newRoom, newUser, openDm, pngFile, post, status, type TestUser } from "./helpers.ts";
 
 type Visibility = "public" | "private" | "open";
-type ViewerName = "guest" | "creator" | "member" | "outsider";
+type ViewerName = "guest" | "creator" | "member" | "outsider" | "superuser";
 
 interface Fixture {
   name: string;
@@ -30,6 +31,7 @@ interface Viewer {
 
 /** The rule, as DESIGN §23.1 states it. */
 function sees(f: Fixture, v: ViewerName): boolean {
+  if (v === "superuser") return true;
   if (v === "guest") return f.visibility === "open" && !f.archived;
   return f.visibility !== "private" || v === "creator" || v === "member";
 }
@@ -74,6 +76,7 @@ async function setUp() {
     { name: "creator", pb: creator.pb, user: creator },
     { name: "member", pb: member.pb, user: member },
     { name: "outsider", pb: outsider.pb, user: outsider },
+    { name: "superuser", pb: await adminClient(), user: null },
   ];
   return { creator, fixtures, viewers };
 }
@@ -106,6 +109,8 @@ describe("room access matrix (§23.1)", () => {
             check(f, v, "GET /api/chat/rooms", can, listedHere.includes(roomId));
             const page = await v.pb.send<unknown[]>(`/api/chat/rooms/${roomId}/messages`, {}).catch(() => null);
             check(f, v, "GET /api/chat/rooms/{room}/messages", can, !!page && page.length > 0);
+            const grid = await v.pb.send<{ items: unknown[] }>(`/api/chat/media/${roomId}`, {}).catch(() => null);
+            check(f, v, "GET /api/chat/media/{room}", can, !!grid && grid.items.length > 0);
             if (v.user && v.name !== "creator") {
               // The creator wrote the probe; a check notifies of other people's messages only.
               const query = { rooms: roomId, every: roomId, since: "2000-01-01 00:00:00.000Z" };
@@ -143,30 +148,33 @@ describe("room access matrix (§23.1)", () => {
     }
 
     // Writes. A guest is always refused; a signed-in viewer only where `writes` (or, for hiding and reads, `sees`) says.
+    // A superuser's writes bypass the rules (they have no user to write as): not a question of room access.
     await Promise.all(
-      viewers.map(async (v) => {
-        const source = v.user ? await post(v.user, (await newRoom(v.user)).id, "to forward") : null;
-        for (const f of fixtures) {
-          const roomId = f.room.id;
-          const body = v.user ? { room: roomId, author: v.user.user.id, text: "hi" } : { room: roomId, text: "hi" };
-          const sent = await status(v.pb.collection("messages").create(body));
-          check(f, v, "posting", writes(f, v.name), ok(sent), ` (got ${sent})`);
-          const reacted = await status(
-            v.pb.send("/api/chat/reactions", { method: "POST", body: { message: f.probe.id, emoji: "👍", on: true } }),
-          );
-          check(f, v, "reacting", writes(f, v.name), ok(reacted), ` (got ${reacted})`);
-          if (source) {
-            const forwarded = await status(
-              v.pb.send("/api/chat/forward", { method: "POST", body: { messages: [source.id], room: roomId } }),
+      viewers
+        .filter((v) => v.name !== "superuser")
+        .map(async (v) => {
+          const source = v.user ? await post(v.user, (await newRoom(v.user)).id, "to forward") : null;
+          for (const f of fixtures) {
+            const roomId = f.room.id;
+            const body = v.user ? { room: roomId, author: v.user.user.id, text: "hi" } : { room: roomId, text: "hi" };
+            const sent = await status(v.pb.collection("messages").create(body));
+            check(f, v, "posting", writes(f, v.name), ok(sent), ` (got ${sent})`);
+            const reacted = await status(
+              v.pb.send("/api/chat/reactions", { method: "POST", body: { message: f.probe.id, emoji: "👍", on: true } }),
             );
-            check(f, v, "forwarding into", writes(f, v.name), ok(forwarded), ` (got ${forwarded})`);
+            check(f, v, "reacting", writes(f, v.name), ok(reacted), ` (got ${reacted})`);
+            if (source) {
+              const forwarded = await status(
+                v.pb.send("/api/chat/forward", { method: "POST", body: { messages: [source.id], room: roomId } }),
+              );
+              check(f, v, "forwarding into", writes(f, v.name), ok(forwarded), ` (got ${forwarded})`);
+            }
+            const read = await status(v.pb.send("/api/chat/reads", { method: "POST", body: { room: roomId } }));
+            check(f, v, "marking read", v.user !== null && sees(f, v.name), ok(read), ` (got ${read})`);
+            const hidden = await status(v.pb.collection("hidden_rooms").create({ user: v.user?.user.id ?? "", room: roomId }));
+            check(f, v, "hiding", v.user !== null && sees(f, v.name), ok(hidden), ` (got ${hidden})`);
           }
-          const read = await status(v.pb.send("/api/chat/reads", { method: "POST", body: { room: roomId } }));
-          check(f, v, "marking read", v.user !== null && sees(f, v.name), ok(read), ` (got ${read})`);
-          const hidden = await status(v.pb.collection("hidden_rooms").create({ user: v.user?.user.id ?? "", room: roomId }));
-          check(f, v, "hiding", v.user !== null && sees(f, v.name), ok(hidden), ` (got ${hidden})`);
-        }
-      }),
+        }),
     );
 
     expect(mismatches).toEqual([]);

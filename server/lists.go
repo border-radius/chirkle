@@ -43,15 +43,9 @@ var pageKinds = map[string]pageKind{
 
 // roomsRoute: GET /api/chat/rooms → every room the caller can see, by name. Guests: the Open Air rooms (§23.3).
 func roomsRoute(e *core.RequestEvent) error {
-	me := callerID(e.Auth)
-	where := "r.visibility = 'open' AND NOT r.archived"
-	if e.HasSuperuserAuth() {
-		where = "1"
-	} else if me != "" {
-		where = seesSQL
-	}
+	v := viewerOf(e.Auth)
 	var ids []string
-	if err := e.App.DB().NewQuery("SELECT r.id FROM rooms r WHERE " + where + " ORDER BY r.name, r.id").Bind(dbx.Params{"me": me}).Column(&ids); err != nil {
+	if err := e.App.DB().NewQuery("SELECT r.id FROM rooms r WHERE " + v.roomsWhere() + " ORDER BY r.name, r.id").Bind(dbx.Params{"me": v.id}).Column(&ids); err != nil {
 		return err
 	}
 	found, err := e.App.FindRecordsByIds("rooms", ids)
@@ -94,7 +88,7 @@ func messagesRoute(e *core.RequestEvent) error {
 	if !ok {
 		return e.BadRequestError("Unknown page kind.", nil)
 	}
-	if !e.HasSuperuserAuth() && visibleRoom(e.App, roomID, callerID(e.Auth)) == nil {
+	if visibleRoom(e.App, roomID, viewerOf(e.Auth)) == nil {
 		return e.JSON(http.StatusOK, []any{})
 	}
 	params := dbx.Params{"room": roomID}
@@ -203,7 +197,7 @@ func notifiableRoute(e *core.RequestEvent) error {
 	}
 	var rooms []string
 	for _, r := range asked {
-		if visibleRoom(e.App, r, me) != nil {
+		if visibleRoom(e.App, r, viewer{id: me}) != nil {
 			rooms = append(rooms, r)
 		}
 	}

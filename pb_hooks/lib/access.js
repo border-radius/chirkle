@@ -39,6 +39,32 @@ function canSee(a, userId) {
 }
 
 /**
+ * Who asks a route for a room: a guest, a signed-in user or a superuser, whom no room is hidden from. canSee is for users
+ * only (a mention's target, a member); a request's caller is a viewer. `id` is "" for a guest and for a superuser (a
+ * superuser's id is no user's). server/access.go has the same.
+ * @typedef {{ id: string, superuser: boolean }} Viewer
+ */
+
+/**
+ * @param {core.Record | null | undefined} auth
+ * @returns {Viewer}
+ */
+function viewerOf(auth) {
+  if (!auth) return { id: "", superuser: false };
+  if (auth.isSuperuser()) return { id: "", superuser: true };
+  return { id: auth.id, superuser: false };
+}
+
+/**
+ * canSee for a viewer.
+ * @param {Viewer} v
+ * @param {Access} a
+ */
+function sees(v, a) {
+  return v.superuser || canSee(a, v.id);
+}
+
+/**
  * Can `userId` post in the room (§23.6)? They must see it, signed in, and the room let everyone post or list them as a
  * writer (its creator always is). The messages create rule says the same.
  * @param {core.Record} room
@@ -57,19 +83,19 @@ function canWrite(room, userId) {
 const SEES_SQL = "(r.visibility != 'private' OR r.created_by = {:me} OR EXISTS (SELECT 1 FROM json_each(r.members) WHERE value = {:me}))";
 
 /**
- * The room if `userId` can see it, else null (also for a room that doesn't exist).
+ * The room if `v` can see it, else null (also for a room that doesn't exist).
  * @param {core.App} app
  * @param {string} roomId
- * @param {string} userId
+ * @param {Viewer} v
  */
-function visibleRoom(app, roomId, userId) {
+function visibleRoom(app, roomId, v) {
   let room;
   try {
     room = app.findRecordById("rooms", roomId);
   } catch {
     return null;
   }
-  return canSee(accessOf(room), userId) ? room : null;
+  return sees(v, accessOf(room)) ? room : null;
 }
 
 /**
@@ -90,13 +116,10 @@ function dropLostAccess(app, before, room) {
   for (const id of Object.keys(clients)) {
     const client = clients[id];
     if (!client || client.isDiscarded()) continue;
-    /** @type {core.Record | null | undefined} */
-    const auth = client.get("auth");
-    if (auth?.isSuperuser()) continue;
-    const userId = auth ? auth.id : "";
-    if (!canSee(before, userId) || canSee(after, userId)) continue;
+    const v = viewerOf(/** @type {core.Record | null | undefined} */ (client.get("auth")));
+    if (!sees(v, before) || sees(v, after)) continue;
     for (const name of Object.keys(client.subscriptions("rooms"))) client.send(new SubscriptionMessage({ name, data }));
   }
 }
 
-module.exports = { MAX_MEMBERS, SEES_SQL, accessOf, canSee, canWrite, visibleRoom, dropLostAccess };
+module.exports = { MAX_MEMBERS, SEES_SQL, accessOf, canSee, canWrite, viewerOf, sees, visibleRoom, dropLostAccess };

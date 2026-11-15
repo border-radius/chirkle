@@ -119,7 +119,7 @@ func (r *reads) route(e *core.RequestEvent) error {
 	}
 	roomID, _ := info.Body["room"].(string)
 	// Someone else's DM (or private room) gets the same answer as a room that doesn't exist.
-	if roomID == "" || visibleRoom(e.App, roomID, user.Id) == nil {
+	if roomID == "" || visibleRoom(e.App, roomID, viewer{id: user.Id}) == nil {
 		return e.NotFoundError("The room doesn't exist.", nil)
 	}
 	now := types.NowDateTime()

@@ -1,7 +1,8 @@
 // Every 2xx JSON answer of an /api/chat/* route that a test's SDK client gets is checked against the route's schema
 // (shared/schema/answers.json, docs/REFACTOR.md item 54). A mismatch doesn't change what the call returns (the test
 // goes on as it would); it is kept, and fails the test it happened in (tests/support/answers-setup.ts) with the route,
-// the path in the answer and why.
+// the path in the answer and why. Not a superuser's: PocketBase shows them hidden fields (e.g. remote_id), and no client
+// of the contract signs in as one.
 import type PocketBase from "pocketbase";
 import { checkAnswer } from "./schema.ts";
 
@@ -20,7 +21,12 @@ export function checkAnswers(pb: PocketBase): PocketBase {
     options.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const res = await base(input, init);
       const path = new URL(String(input)).pathname;
-      if (path.startsWith("/api/chat/") && res.ok && (res.headers.get("content-type") ?? "").includes("application/json")) {
+      if (
+        !pb.authStore.isSuperuser &&
+        path.startsWith("/api/chat/") &&
+        res.ok &&
+        (res.headers.get("content-type") ?? "").includes("application/json")
+      ) {
         try {
           checkAnswer(method, path, await res.clone().json());
         } catch (err) {

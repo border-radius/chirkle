@@ -17,7 +17,7 @@
 // - GET /api/chat/posters/{message}/{file}: a video's poster, for whoever has the video's URL (§37.3).
 
 const { gridAuthor } = require(`${__hooks}/lib/anonymous.js`);
-const { visibleRoom } = require(`${__hooks}/lib/access.js`);
+const { viewerOf, visibleRoom } = require(`${__hooks}/lib/access.js`);
 const { HEADER_BYTES, shownSize } = require(`${__hooks}/lib/images.js`);
 const { cleanupLater, ext, homeKeyOf, isMedia, isVideo, keyOf, posterKeyOf, thumbsDirOf } = require(`${__hooks}/lib/files.js`);
 
@@ -103,7 +103,7 @@ function drop(app, id) {
  */
 function list(e) {
   const room = e.request?.pathValue("room") ?? "";
-  if (!visibleRoom(e.app, room, e.auth?.id ?? "")) throw new NotFoundError();
+  if (!visibleRoom(e.app, room, viewerOf(e.auth))) throw new NotFoundError();
   const q = e.request?.url?.query();
   const sent = q?.get("sent") ?? "";
   const limit = Math.min(MAX_PAGE, Math.max(1, Number.parseInt(q?.get("limit") ?? "", 10) || PAGE));

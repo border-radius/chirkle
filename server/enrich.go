@@ -87,13 +87,13 @@ func setOriginal(rec, original *core.Record) {
 // keepToRoom: a message read only through a forward of it (the view rule grants that, §21.3) keeps to itself what
 // would say who is in its room: its reactions and the message it replies to. Most messages have neither.
 func keepToRoom(app core.App, info *core.RequestInfo, rec *core.Record) {
-	if info == nil || (info.Auth != nil && info.Auth.IsSuperuser()) {
+	if info == nil {
 		return
 	}
 	if rec.GetString("reply_to") == "" && !hasReactions(rec) {
 		return
 	}
-	if visibleRoom(app, rec.GetString("room"), callerID(info.Auth)) != nil {
+	if visibleRoom(app, rec.GetString("room"), viewerOf(info.Auth)) != nil {
 		return
 	}
 	rec.Set("reactions", []any{})

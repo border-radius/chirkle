@@ -142,11 +142,11 @@ func (l *live) send(record *core.Record, action string) error {
 
 	for _, c := range listening {
 		auth, _ := c.Get(apis.RealtimeClientAuthKey).(*core.Record)
-		superuser := auth != nil && auth.IsSuperuser()
-		userID := callerID(auth)
-		if !superuser && !canSee(acc, userID) {
+		v := viewerOf(auth)
+		if !v.sees(acc) {
 			continue
 		}
+		superuser, userID := v.superuser, v.id
 		hidesAuthor := anonymous && author != "" && author != userID
 		hidesFrom := forwardedAnonymous && from != "" && from != userID
 		key := "real"

@@ -182,7 +182,7 @@ func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
 func firstUnreadRoute(e *core.RequestEvent) error {
 	user := e.Auth
 	roomID := e.Request.PathValue("room")
-	if visibleRoom(e.App, roomID, user.Id) == nil {
+	if visibleRoom(e.App, roomID, viewer{id: user.Id}) == nil {
 		return e.NotFoundError("The room doesn't exist.", nil)
 	}
 	row := struct {

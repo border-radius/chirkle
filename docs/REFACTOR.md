@@ -916,11 +916,20 @@ value ÷ effort; items 48, 50 and 53–59 from round 5 stay open as written (50 
   same cases, the app's `jumpTargets` takes an optional `current` and `jumpMatches` puts it last, as the web does
   (QA BUG-139); the room list passes none, so the app behaves as before.
 
-#### 65. One meaning of "superuser" for room access (server) — low value, small
+#### 65. One meaning of "superuser" for room access (server) — low value, small ✅ (2026-11-15)
 - `server/access.go callerID` returns "" for superusers ("whom no room is hidden from"), but `canSee(a, "")` treats ""
   as a guest; every Go route then special-cases `e.HasSuperuserAuth()` itself (rooms, messages), and `lib/media.js list` passes `e.auth?.id` (a superuser sees no private room's
   media grid while seeing its messages). Suggestion: `access.canSee(viewer)` with a viewer type (`guest`, `user id`,
   `superuser`), used the same way by every route; the access matrix test gains a superuser column.
+- **Done (2026-11-15):** a `viewer` (guest, user or superuser; its `id` is "" for a guest and a superuser) in
+  `server/access.go` (`viewerOf`, `sees`, `roomsWhere`) and `lib/access.js` (`viewerOf`, `sees`); `visibleRoom` takes
+  one in both. `canSee(a, userID)` stays for users only (a mention's target, a member). `callerID` is gone, and so are
+  the routes' own `HasSuperuserAuth()` checks (room list, message pages, live messages, `keepToRoom`, `dropLostAccess`).
+  The media grid now shows a superuser every room's media. The access matrix has a superuser column (every read way in;
+  not the routes for users only, nor the writes) and the media grid as a way in. The answer-schema check
+  (`tests/support/answers.ts`) skips answers to a superuser: PocketBase shows them hidden fields (`remote_id`), and no
+  client of the contract signs in as one. `refuseProbes` (`server/anonymous.go`) keeps its own superuser check: it is
+  about message authors, not rooms.
 
 #### 66. Small ones ✅ (2026-11-12)
 - `server/enrich.go enrichInRooms`: the `checked` mark is deleted after `EnrichRecords` returns, not deferred; a panic
