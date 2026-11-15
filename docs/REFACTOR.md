@@ -314,8 +314,8 @@ Fine at today's size; the first things to break as usage grows.
 - [x] PocketBase's built-in backups (cron + S3) enabled or documented: already documented (README, "Backups").
       Turning them on needs the deployment's S3 bucket and keys: the owner's to do in the admin UI.
 - [ ] Client error reporting: a rate-limited `POST /api/chat/log`, so production failures (e.g. reconnect loops in
-      `pb.ts`) are visible. **Waiting on the owner:** it adds client code, and the JS budget has 0.66 KB left
-      (38.34 of 39 KB); also what may be logged about users is a decision.
+      `pb.ts`) are visible. **Waiting on the owner:** what may be logged about users is a decision. (The JS budget
+      it also waited on no longer blocks it: item 52 replaced the per-file caps with one critical-path budget.)
 - [x] CI: typecheck/lint, unit and integration as parallel jobs; e2e as a per-browser matrix. Done: a `static` job
       (typecheck, lint, sinks, build), then `unit`, `integration` and `e2e` (chromium / firefox / webkit,
       `fail-fast: false`, a report per browser) side by side; shared setup in `.github/actions/setup`. YAML checked with
@@ -386,12 +386,13 @@ Each looked like timing; the causes were four different things. 12 full runs sin
 - [x] `room-controller.test.ts` "runs one request per end at a time": a reconnect under load can refetch a page before
       the test's own requests; it counts from just before them now.
 
-### 32. The JS budget is nearly used up
+### 32. The JS budget is nearly used up ✅ (superseded by item 52)
 `app.js` is 38.34 of 39 KB gzipped, so the next feature won't fit. Biggest parts of the bundle (minified):
 `views/room.ts` 9.2 KB, `room/messages.ts` 8.6, `room/controller.ts` 7.9, `api.ts` 7.1, `lib/emoji.ts` 7.0, `views/rooms.ts`
 6.2. The emoji picker and its data (`ui/emoji-picker.ts` + `lib/emoji.ts`, ~4.1 KB gzipped) are only needed once the picker
 opens.
-- [ ] **Owner's call:** load the picker as a lazy chunk on first open, as the image viewer already is (§17.7): frees
+- [x] Done by item 52 (2026-11-12): the picker is a lazy feature, loaded on first use, under the new budgets.
+- ~~**Owner's call:** load the picker as a lazy chunk on first open,~~ as the image viewer already is (§17.7): frees
       about a tenth of the budget, but the first open needs the network (offline, the picker wouldn't open; the viewer
       falls back to a new tab, the picker has no such fallback). Or raise the budget on purpose, as §21 and §23 did.
 
@@ -523,11 +524,6 @@ and so do the Chromium e2e suite and the app's tests.
 ### Left open from the review
 - Scale (§26 above): `UNREAD_SQL` and realtime fan-out done 2026-11-13; queue polling not needed at the measured sizes.
 - ~~`cache.spec.ts` QA BUG-104 flake~~: a real loss of the write made as the page goes; fixed (item 42).
-- `keepToRoom` (enrich hook) looks up the room per message with reactions or a reply. Measured 2026-10-28: a page of 50
-  messages with reactions takes ~15 ms against ~7.5 ms without (the lookup is all of the difference, ~0.15 ms a message).
-  The same check as one SQL query only got it to ~13 ms: the cost is the hook's call into Go, not the record. Checking
-  each room once per request needs request-scoped state the JSVM hooks don't have; a cross-request cache would have to
-  be invalidated on every membership change of a privacy check. Left as it is.
 
 ## Round 5 (2026-11-11), architecture and product audit
 
@@ -542,7 +538,7 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 #### 47. Move the hot paths out of the JSVM (server) — high value, large ✅ (2026-11-11)
 - Most production incidents and perf work since 2026-10-14 trace back to the JS hook runtime, not to SQLite or to
   PocketBase: the hooks pool overflowing on message pages (`--hooksPool=100`, PERF.md §6), `routerUse` holding runtimes
-  across `e.next()` (BUG-250), ~0.15 ms of Go↔JS calls per enriched message (item 46's `keepToRoom` note), the 1 vCPU
+  across `e.next()` (BUG-250), ~0.15 ms of Go↔JS calls per enriched message (`keepToRoom`, measured 2026-10-28), the 1 vCPU
   collapse at ~1000 live listeners (PERF.md §8: `live.js` sends inline), goja regexes taking minutes on bad input
   (link previews), no request-scoped state.
 - Suggestion: build PocketBase as a Go framework (a `server/` Go module embedding `pocketbase.New()`, cross-built in
