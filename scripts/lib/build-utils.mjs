@@ -55,6 +55,9 @@ export const LOGIN = Object.freeze({ js: "web/src/views/login.ts" });
 export const FORWARD = Object.freeze({ js: "web/src/views/room/forward.ts" });
 export const PEOPLE = Object.freeze({ js: "web/src/ui/user-search.ts" });
 
+/** An invite link's page (§44): a lazy chunk with invite-api.ts, which the access dialog loads too. Its styles are in app.css. */
+export const INVITE = Object.freeze({ js: "web/src/views/invite.ts" });
+
 /** Jump to (§32): a lazy chunk. Its styles are in app.css. */
 export const JUMP = Object.freeze({ js: "web/src/views/switcher.ts" });
 
@@ -77,6 +80,7 @@ export const FEATURES = Object.freeze({
   forward: FORWARD,
   people: PEOPLE,
   jump: JUMP,
+  invite: INVITE,
 });
 
 /**

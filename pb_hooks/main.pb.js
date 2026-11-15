@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40, §43; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40, §43, §44; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -65,6 +65,13 @@ routerAdd("POST", "/api/chat/export", (e) => require(`${__hooks}/lib/account.js`
 routerAdd("GET", "/api/chat/export/file", (e) => require(`${__hooks}/lib/account.js`).exportFile(e));
 routerAdd("POST", "/api/account/tick", (e) => require(`${__hooks}/lib/account.js`).tick(e), $apis.requireSuperuserAuth());
 routerAdd("POST", "/api/chat/account/delete", (e) => require(`${__hooks}/lib/account.js`).deleteAccount(e), $apis.requireAuth("users"));
+// Room invite links (§44): a private room's managers make and revoke its link; anyone reads where a link goes, and
+// joins by it signed in.
+routerAdd("GET", "/api/chat/rooms/{room}/invite", (e) => require(`${__hooks}/lib/invites.js`).get(e), $apis.requireAuth("users"));
+routerAdd("POST", "/api/chat/rooms/{room}/invite", (e) => require(`${__hooks}/lib/invites.js`).create(e), $apis.requireAuth("users"));
+routerAdd("DELETE", "/api/chat/rooms/{room}/invite", (e) => require(`${__hooks}/lib/invites.js`).revoke(e), $apis.requireAuth("users"));
+routerAdd("GET", "/api/chat/invites/{token}", (e) => require(`${__hooks}/lib/invites.js`).preview(e));
+routerAdd("POST", "/api/chat/invites/{token}", (e) => require(`${__hooks}/lib/invites.js`).join(e), $apis.requireAuth("users"));
 
 // The core collections' hooks (messages, rooms, users) are all here, with the optional features' parts (lib/features.js)
 // called in order: the federation's first, then the core's, then the Telegram bridge's; after the save, the other way
@@ -166,6 +173,8 @@ onRecordUpdate((e) => {
   e.next();
   // Saved: whoever can't see it any more is told (§23.4).
   if (e.record) access.dropLostAccess(e.app, before, e.record);
+  // No longer private: its invite link goes (§44).
+  if (e.record) require(`${__hooks}/lib/invites.js`).dropInvites(e.app, before.visibility, e.record);
   // Its anonymous messages show its new name (§35).
   if (e.record) require(`${__hooks}/lib/anonymous.js`).forget(e.app, e.record.id);
   // A home room's changes go to its mirrors (§33).

@@ -20,6 +20,8 @@ import kotlinx.serialization.Serializable
 /** A media collection's page (DESIGN.md §31.3), and the viewer over its items. */
 @Serializable data class CollectionPage(val id: String) : NavKey
 @Serializable data class CollectionViewer(val collection: String, val item: String) : NavKey
+/** A private room's invite link, /invite/<token> (DESIGN.md §44). */
+@Serializable data class InviteLink(val token: String) : NavKey
 /** Shared files or text waiting for a room to go to (§9.3). */
 @Serializable data object SharePicker : NavKey
 
@@ -30,8 +32,8 @@ import kotlinx.serialization.Serializable
 data class Linked(val account: String, val room: NavKey)
 
 /**
- * The route of a link's path on its server (`/r/:id`, `/r/:id/m/:msgId` or a collection's `/c/:id`: pathOnServer), or
- * null.
+ * The route of a link's path on its server (`/r/:id`, `/r/:id/m/:msgId`, a collection's `/c/:id` or an invite link's
+ * `/invite/:token`: pathOnServer), or null.
  */
 fun routeOf(seg: List<String>): NavKey? {
     if (seg.size >= 2 && seg[0] == "r" && seg[1].matches(ID)) {
@@ -39,7 +41,9 @@ fun routeOf(seg: List<String>): NavKey? {
         return Room(seg[1], msg)
     }
     if (seg.size >= 2 && seg[0] == "c" && seg[1].matches(ID)) return CollectionPage(seg[1])
+    if (seg.size == 2 && seg[0] == "invite" && seg[1].matches(TOKEN)) return InviteLink(seg[1])
     return null
 }
 
 private val ID = Regex("[a-z0-9]{15}")
+private val TOKEN = Regex("[A-Za-z0-9]{24}")

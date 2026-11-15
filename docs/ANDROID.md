@@ -1809,3 +1809,32 @@ the link fetched without the session, a wrong password's field, no sign-in after
 prepared in the background, then offered to download" and "deleting your account asks your password, then logs you
 out". `AnswersTest` decodes both export routes' examples as `ExportStatus`. The download manager's fetch itself is by
 hand on the emulator, not yet tried.
+
+## 74. Room invite links (2026-11-16)
+
+The web's (DESIGN.md §44):
+
+- **Making one:** the access screen (`RoomAccessScreen`) has an **Invite link** section under the members
+  (`InviteSection`, in `InviteScreen.kt`), for whoever manages the room (`canManage`), while Private is chosen and the
+  room is saved as private, and not for a copy of another instance's room. It reads the room's link
+  (`ChirkleApi.invite()`) when shown. Without one: **Works for** (1, 7 or 30 days, chips) and **Create link**
+  (`makeInvite()`). With one: the address (selectable; the account's server + `/invite/<token>`), "Works until … ·
+  nobody has joined by it yet", **Copy link** (the clipboard), **Share** (the system's share sheet: a chat app is
+  where most links go on a phone; the web has no Share), **New link** and **Revoke** (`revokeInvite()`). Each acts at
+  once, not on Save, and says what it did.
+- **Opening one:** `/invite/<token>` is a route (`InviteLink`, `routeOf`), so a link on the account's server opens
+  the app (App Links: the manifest's `/invite/` path prefix; on another server's account, `Accounts.forLink` as for
+  rooms, §17.3). `InviteScreen` reads where it goes (`invitePreview()`): "Join #club", who made the link, how many
+  members, until when. **Join the room** (`joinInvite()`) adds you, reloads the room list (`RoomsSync.reload`, so the
+  room doesn't open as gone) and replaces the screen with the room. Someone in it already gets **Open the room**; a dead
+  link says "This invite link doesn't work", also when it stops working before Join is pressed.
+- **A guest** (a link opened with nobody signed in, §23.3) is asked to log in: **Log in** remembers the link
+  (`ChirkleNav`'s `inviteAfterLogin`, saved with the stack) and the screen comes back once they are signed in, as the
+  web's `lastPage` does.
+
+Tests: `ChirkleApiTest` "an invite link is made, read, joined, made again and revoked" (a non-member is told the room
+doesn't exist; a guest's preview; uses counted; the old token 404 after a new one), `UiInvitesTest` (the access
+screen's Create, New link and Revoke against the server; joining from the link lands in the room; a guest logs in from
+it and comes back to it; a link revoked while open says so), `RoutesTest` "an invite link", and `AnswersTest` decodes
+the four JSON routes' examples. Not tried on the emulator yet: App Links verification of the new path (the server's
+`assetlinks.json` is for the whole domain, so nothing changes there), and the share sheet.

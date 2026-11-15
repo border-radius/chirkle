@@ -799,7 +799,8 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   recovery codes. Moderators and superusers first.
 - **P8. Translations.** After item 56: Russian first (the Telegram and cyrillic users), via Weblate for the app's
   F-Droid listing.
-- **P9. Room invite links.** A private room's owner shares a link that adds whoever opens it (expiring, revocable),
+- **P9. Room invite links.** ✅ (2026-11-16, DESIGN.md §44: one link per private room, 1, 7 or 30 days, made, made
+  again and revoked from the access dialog in both clients; `/invite/<token>` asks a guest to log in and comes back.) A private room's owner shares a link that adds whoever opens it (expiring, revocable),
   instead of adding each member by name.
 - **P10. Storage quotas.** DESIGN.md §13 "Still open" #2: per-user stored bytes, now easy with the refcounted `files`
   table (§37): a sum per owner, checked on upload, shown on the profile.

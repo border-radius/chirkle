@@ -700,6 +700,39 @@
       ],
       "additionalProperties": false,
       "$comment": "The file GET /api/chat/export/file downloads (DESIGN.md §43.2). Checked by tests/integration/account_delete.test.ts, not by the answers check (it is a download)."
+    },
+    "invite": {
+      "$comment": "A private room's invite link (pb_hooks/lib/invites.js answer, DESIGN.md §44.1): its token (the link is /invite/<token>), when it was made and stops working, and how many people it added; null when the room has none that works.",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{24}$"
+            },
+            "created": {
+              "$ref": "#/$defs/time"
+            },
+            "expires": {
+              "$ref": "#/$defs/time"
+            },
+            "uses": {
+              "$ref": "#/$defs/count"
+            }
+          },
+          "required": [
+            "token",
+            "created",
+            "expires",
+            "uses"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "routes": {
@@ -1618,6 +1651,138 @@
           "finished": "2026-11-15 10:00:04.000Z",
           "expires": "2026-11-22 10:00:00.000Z",
           "size": 48213
+        }
+      ]
+    },
+    "GET /api/chat/rooms/{room}/invite": {
+      "$comment": "The room's invite link, for its creator or a moderator in it (DESIGN.md §44.1); null for none, or once the room isn't private. DELETE revokes it (204).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "invite": {
+            "$ref": "#/$defs/invite"
+          }
+        },
+        "required": [
+          "invite"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "invite": null
+        },
+        {
+          "invite": {
+            "token": "Qm3xT8kLp2Vw9ZrB4nHs7YdC",
+            "created": "2026-11-16 10:00:00.000Z",
+            "expires": "2026-11-23 10:00:00.000Z",
+            "uses": 2
+          }
+        }
+      ]
+    },
+    "POST /api/chat/rooms/{room}/invite": {
+      "$comment": "A new invite link for the private room ({ days: 1 | 7 | 30 }, 7 when not given), replacing its last one (DESIGN.md §44.1).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "invite": {
+            "$ref": "#/$defs/invite"
+          }
+        },
+        "required": [
+          "invite"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "invite": null
+        },
+        {
+          "invite": {
+            "token": "Qm3xT8kLp2Vw9ZrB4nHs7YdC",
+            "created": "2026-11-16 10:00:00.000Z",
+            "expires": "2026-11-23 10:00:00.000Z",
+            "uses": 2
+          }
+        }
+      ]
+    },
+    "GET /api/chat/invites/{token}": {
+      "$comment": "Where an invite link goes, for anyone who has it (guests too; DESIGN.md §44.2): the room, how many members it has, who made the link, until when it works, and whether you are in already. 404 when it doesn't work.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              },
+              "members": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "members"
+            ],
+            "additionalProperties": false
+          },
+          "by": {
+            "type": "string"
+          },
+          "expires": {
+            "$ref": "#/$defs/time"
+          },
+          "member": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "room",
+          "by",
+          "expires",
+          "member"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "room": {
+            "id": "r00000000000001",
+            "name": "book-club",
+            "members": 4
+          },
+          "by": "Ada",
+          "expires": "2026-11-23 10:00:00.000Z",
+          "member": false
+        }
+      ]
+    },
+    "POST /api/chat/invites/{token}": {
+      "$comment": "Join the room by its invite link, signed in (DESIGN.md §44.2): you are one of its members now (or were already). 404 when the link doesn't work, 400 when the room is full.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "required": [
+          "room"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "room": "r00000000000001"
         }
       ]
     },

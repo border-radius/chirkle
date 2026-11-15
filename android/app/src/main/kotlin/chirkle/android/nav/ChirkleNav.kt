@@ -45,6 +45,7 @@ import chirkle.android.feature.auth.AuthMode
 import chirkle.android.feature.auth.AuthScreen
 import chirkle.android.feature.profile.AccountsScreen
 import chirkle.android.feature.profile.ProfileScreen
+import chirkle.android.feature.room.InviteScreen
 import chirkle.android.feature.room.RoomAccessScreen
 import chirkle.android.feature.room.RoomNav
 import chirkle.android.feature.room.RoomScreen
@@ -84,12 +85,16 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
     if (s.site.minAndroidVersion > BuildConfig.VERSION_CODE) return UpdateRequired()
     val signedIn = s.user != null
     var guest by rememberSaveable { mutableStateOf(false) }
+    /** An invite link a guest went to log in from (DESIGN.md §44): shown again once signed in. */
+    var inviteAfterLogin by rememberSaveable { mutableStateOf<String?>(null) }
     val stack = rememberNavBackStack(if (signedIn) Rooms else Login)
 
     // Signed in or out: a fresh stack (nothing of the last session's screens stays).
     LaunchedEffect(signedIn) {
         if (signedIn) {
             if (stack.firstOrNull() !is Rooms) stack.reset(Rooms)
+            inviteAfterLogin?.let { stack += InviteLink(it) }
+            inviteAfterLogin = null
             onSignedIn()
         } else if (!guest && stack.firstOrNull() !is Login) stack.reset(Login)
         else if (guest && stack.any { it is Profile || it is Inbox }) stack.reset(Rooms)
@@ -158,6 +163,21 @@ fun ChirkleNav(linked: NavKey?, onLinkTaken: () -> Unit, onSignedIn: () -> Unit)
                 chirkle.android.feature.viewer.CollectionViewerScreen(key.collection, key.item) { stack.removeAt(stack.lastIndex) }
             }
             entry<RoomAccess> { key -> RoomAccessScreen(key.id) { stack.removeAt(stack.lastIndex) } }
+            entry<InviteLink> { key ->
+                InviteScreen(
+                    key.token,
+                    // The invite gives way to its room.
+                    onOpenRoom = { room ->
+                        stack.removeAt(stack.lastIndex)
+                        stack += Room(room)
+                    },
+                    onLogIn = {
+                        inviteAfterLogin = key.token
+                        guest = false
+                        stack.reset(Login)
+                    },
+                ) { stack.removeAt(stack.lastIndex) }
+            }
             entry<Viewer> { key -> ViewerScreen(key.roomId, key.msgId, key.file) { stack.removeAt(stack.lastIndex) } }
             entry<Profile> { ProfileScreen { stack.removeAt(stack.lastIndex) } }
             entry<Inbox> { chirkle.android.feature.rooms.InboxScreen(onOpen = { r, m -> stack += Room(r, m) }) { stack.removeAt(stack.lastIndex) } }

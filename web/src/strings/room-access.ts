@@ -30,3 +30,22 @@ export const upTo = (max: number, members: boolean) => `A room can have up to ${
 /** A linked room's hosts; who may add people is told how to add someone from there. */
 export const sharedWith = (hosts: string[], editable: boolean) =>
   `Shared with ${hosts.join(", ")}: its messages are kept there too.${editable ? ` Add people there by their address, like ann@${hosts[0]}.` : ""}`;
+
+// The invite link (§44).
+export const INVITE_LINK = "Invite link";
+export const ANYONE_WITH_THE_LINK_CAN_JOIN = "Anyone with the link who has an account here can join as a member.";
+export const WORKS_FOR = "Works for";
+export const days = (n: number) => (n === 1 ? "1 day" : `${n} days`);
+export const COPY_LINK = "Copy link";
+export const CREATE_LINK = "Create link";
+export const NEW_LINK = "New link";
+export const REVOKE = "Revoke";
+export const LINK_READY = "The link is ready to share.";
+export const NEW_LINK_READY = "A new link is ready. The old one no longer works.";
+export const LINK_REVOKED = "The link no longer works.";
+export const COPIED = "Copied.";
+export const PRESS_CTRL_C_TO_COPY = "Press Ctrl+C to copy it.";
+export const couldntChangeLink = (why: string) => `Couldn't change the link: ${why}`;
+export const couldntLoadLink = (why: string) => `Couldn't load the invite link: ${why}`;
+export const expiresUsed = (when: string, uses: number) =>
+  `Works until ${when} · ${uses === 0 ? "nobody has joined by it yet" : uses === 1 ? "1 person joined by it" : `${uses} people joined by it`}`;

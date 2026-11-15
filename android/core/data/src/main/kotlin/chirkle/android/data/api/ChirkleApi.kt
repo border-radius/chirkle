@@ -10,6 +10,10 @@ import chirkle.android.data.model.Badge
 import chirkle.android.data.model.CollectionItem
 import chirkle.android.data.model.CollectionMeta
 import chirkle.android.data.model.ExportStatus
+import chirkle.android.data.model.Invite
+import chirkle.android.data.model.InviteAnswer
+import chirkle.android.data.model.InvitePreview
+import chirkle.android.data.model.Joined
 import chirkle.android.data.model.InboxEvent
 import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
@@ -344,6 +348,33 @@ class ChirkleApi(val pb: PbClient) {
             put("password", password)
             put("messages", if (deleteMessages) "delete" else "keep")
         }))
+    }
+
+    // ---- invite links (DESIGN.md §44)
+
+    private fun invitePath(room: String) = "/api/chat/rooms/${java.net.URLEncoder.encode(room, "UTF-8")}/invite"
+    private fun linkPath(token: String) = "/api/chat/invites/${java.net.URLEncoder.encode(token, "UTF-8")}"
+
+    /** The room's working invite link, or null (its creator, or a moderator in it). */
+    suspend fun invite(room: String): Invite? = get<InviteAnswer>(invitePath(room)).invite
+
+    /** A new invite link working for [days] (1, 7 or 30), replacing the room's last one. */
+    suspend fun makeInvite(room: String, days: Int): Invite =
+        decode<InviteAnswer>(call(invitePath(room), "POST", body = Body.Json(buildJsonObject { put("days", days) }))).invite
+            ?: throw ApiError(Strings.SOMETHING_WENT_WRONG, 500)
+
+    /** The room's invite link stops working. */
+    suspend fun revokeInvite(room: String) {
+        call(invitePath(room), "DELETE")
+    }
+
+    /** Where an invite link goes; a 404 [ApiError] when it doesn't work. Guests too. */
+    suspend fun invitePreview(token: String): InvitePreview = get(linkPath(token))
+
+    /** Join the invite link's room (signed in): its id. */
+    suspend fun joinInvite(token: String): String {
+        me()
+        return decode<Joined>(call(linkPath(token), "POST")).room
     }
 
     fun avatarUrl(user: User, size: Int): String =

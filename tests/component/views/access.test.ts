@@ -215,7 +215,71 @@ describe("room access UI (§23)", () => {
       expect(dialog(el).querySelector(".remove-member")).toBeNull();
       expect(buttonIn(dialog(el), "Save")!.hidden).toBe(true);
       expect(dialog(el).querySelector<HTMLElement>(".add-member")!.hidden).toBe(true);
+      // No invite link for them (§44).
+      expect(dialog(el).querySelector<HTMLElement>(".invite")!.hidden).toBe(true);
       await bob.api.unsubscribeAll();
+    });
+  });
+
+  describe("invite link (§44)", () => {
+    const section = (el: Element) => dialog(el).querySelector<HTMLElement>(".invite")!;
+    const url = (el: Element) => section(el).querySelector<HTMLInputElement>(".invite-url")!;
+    const status = (el: Element) => section(el).querySelector(".invite-status")!.textContent;
+
+    it("the creator makes one, copies it, makes a new one and revokes it, each at once", async () => {
+      const room = await me.api.createRoom(`r-${uniq()}`, "private");
+      const el = await mountRoom(room);
+      await openDialog(el, "Room access…");
+      await vi.waitFor(() => expect(buttonIn(section(el), "Create link")!.disabled).toBe(false));
+      expect(section(el).hidden).toBe(false);
+      expect(section(el).querySelector<HTMLElement>(".invite-shown")!.hidden).toBe(true);
+      section(el).querySelector<HTMLSelectElement>("select")!.value = "30";
+      buttonIn(section(el), "Create link")!.click();
+      await vi.waitFor(() => expect(url(el).value).toMatch(/\/invite\/[A-Za-z0-9]{24}$/));
+      expect(url(el).value.startsWith(location.origin)).toBe(true);
+      expect(status(el)).toBe("The link is ready to share.");
+      expect(section(el).querySelector(".invite-meta")!.textContent).toContain("nobody has joined by it yet");
+      const token = url(el).value.split("/").pop()!;
+      const invites = await me.api.invites();
+      const made = await invites.get(room.id);
+      expect(made?.token).toBe(token);
+      expect((Date.parse(made!.expires.replace(" ", "T")) - Date.now()) / 86_400_000).toBeGreaterThan(29);
+
+      const writeText = vi.fn(() => Promise.resolve());
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      buttonIn(section(el), "Copy link")!.click();
+      await vi.waitFor(() => expect(status(el)).toBe("Copied."));
+      expect(writeText).toHaveBeenCalledWith(url(el).value);
+
+      buttonIn(section(el), "New link")!.click();
+      await vi.waitFor(() => expect(url(el).value.endsWith(token)).toBe(false));
+      expect(status(el)).toBe("A new link is ready. The old one no longer works.");
+      await expect(invites.preview(token)).rejects.toMatchObject({ status: 404 });
+
+      buttonIn(section(el), "Revoke")!.click();
+      await vi.waitFor(() => expect(status(el)).toBe("The link no longer works."));
+      expect(section(el).querySelector<HTMLElement>(".invite-shown")!.hidden).toBe(true);
+      expect(buttonIn(section(el), "Create link")!.hidden).toBe(false);
+      expect(await invites.get(room.id)).toBeNull();
+    });
+
+    it("shows the link made before, and only while the room is private", async () => {
+      const room = await me.api.createRoom(`r-${uniq()}`, "private");
+      const inv = await (await me.api.invites()).make(room.id, 7);
+      const el = await mountRoom(room);
+      await openDialog(el, "Room access…");
+      await vi.waitFor(() => expect(url(el).value.endsWith(inv.token)).toBe(true));
+      choose(el, "public");
+      expect(section(el).hidden).toBe(true);
+      choose(el, "private");
+      expect(section(el).hidden).toBe(false);
+
+      const pub = await me.api.createRoom(`p-${uniq()}`);
+      const other = await mountRoom(pub);
+      await openDialog(other, "Room access…");
+      // Not until it is saved as private.
+      choose(other, "private");
+      expect(dialog(other).querySelector<HTMLElement>(".invite")!.hidden).toBe(true);
     });
   });
 

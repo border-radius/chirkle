@@ -13,6 +13,8 @@ import chirkle.android.data.testing.MemoryAccountEnv
 import chirkle.android.data.testing.TestServer
 import chirkle.android.nav.AppRoot
 import chirkle.android.ui.ChirkleTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -23,6 +25,9 @@ import okhttp3.OkHttpClient
  */
 class UiHarness(private val compose: ComposeContentTestRule) {
     var accounts: Accounts? = null
+
+    /** A route a link asked for, as MainActivity passes it (open). */
+    private var linked by androidx.compose.runtime.mutableStateOf<chirkle.android.nav.Linked?>(null)
 
     /** The active account's services. */
     val services: ChirkleServices? get() = accounts?.active?.value
@@ -38,12 +43,18 @@ class UiHarness(private val compose: ComposeContentTestRule) {
         // In the foreground, as ChirkleApp makes it on a device (ProcessLifecycleOwner never starts here): away, the
         // realtime connection closes after ChirkleServices.BACKGROUND_CLOSE_MS and later live events never come.
         a.setVisible(true)
-        compose.setContent { ChirkleTheme { AppRoot(a, linked = null, onLinkTaken = {}, onSignedIn = {}) } }
+        compose.setContent { ChirkleTheme { AppRoot(a, linked = linked, onLinkTaken = { linked = null }, onSignedIn = {}) } }
         compose.waitUntil(15_000) { pump(); a.active.value != null }
         return a.active.value!!
     }
 
     fun signedIn(u: TestServer.TestUser) = start(u.api.pb.authStore.session.value)
+
+    /** Open [route] in the active account, as a link to it does (MainActivity). */
+    fun open(route: androidx.navigation3.runtime.NavKey) {
+        linked = chirkle.android.nav.Linked(services!!.accountId, route)
+        pump()
+    }
 
     fun stop() {
         accounts?.let { a -> a.scope.launch { a.close() } }

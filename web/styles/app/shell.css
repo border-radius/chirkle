@@ -356,6 +356,11 @@ a.button.primary,
   color: var(--muted);
 }
 
+/* An invite link's page (§44): the same greeting, with a line or two more. */
+.invite-page p + p {
+  margin-top: 0.75rem;
+}
+
 /* A fetch that takes a while (§7.9): a thin moving line over the room list or the room; takes no room itself. */
 .loadbar {
   position: relative;

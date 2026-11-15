@@ -30,6 +30,7 @@ describe("checkBudget (DESIGN.md §7.7)", () => {
       "forward",
       "people",
       "jump",
+      "invite",
     ]);
   });
 

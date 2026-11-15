@@ -142,6 +142,8 @@ export function createRoomView({
       searchUsers: (q, sig) => api.searchUsers(q, sig),
       remoteUser: (address, room) => api.remoteUser(address, room),
       avatarUrl: api.avatarUrl,
+      invites: () => api.invites(),
+      inviteUrl: (token) => `${location.origin}/invite/${encodeURIComponent(token)}`,
       onSave: async (visibility, members, posting, writers) => {
         try {
           await actions.setAccess(roomId, visibility, members, posting, writers);

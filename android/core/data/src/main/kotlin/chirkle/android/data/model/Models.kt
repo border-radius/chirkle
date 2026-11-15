@@ -333,3 +333,25 @@ enum class ExportState {
     @SerialName("done") Done,
     @SerialName("failed") Failed,
 }
+
+/**
+ * A private room's invite link (DESIGN.md §44.1, GET /api/chat/rooms/{room}/invite): its [token] (the link is
+ * `/invite/<token>`), until when it works and how many joined by it.
+ */
+@Serializable
+data class Invite(val token: String, val created: String = "", val expires: String = "", val uses: Int = 0)
+
+/** What the invite routes answer: the room's working link, or none. */
+@Serializable
+data class InviteAnswer(val invite: Invite? = null)
+
+/** Where an invite link goes (DESIGN.md §44.2, GET /api/chat/invites/{token}). */
+@Serializable
+data class InvitePreview(val room: InviteRoom, val by: String = "", val expires: String = "", val member: Boolean = false)
+
+@Serializable
+data class InviteRoom(val id: String, val name: String = "", val members: Int = 0)
+
+/** POST /api/chat/invites/{token}: the room joined. */
+@Serializable
+data class Joined(val room: String)

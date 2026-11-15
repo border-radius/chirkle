@@ -368,6 +368,9 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
   /** Settings (a lazy chunk). */
   const profilePage = () =>
     lazyView(() => import("./views/profile.ts").then((m) => m.createProfileView(ctx)), S.COULDNT_OPEN_SETTINGS_CHECK_YOUR_CONNECTION);
+  /** An invite link's page (§44, a lazy chunk). */
+  const invitePage = () =>
+    lazyView(() => import("./views/invite.ts").then((m) => m.createInviteView(ctx)), S.COULDNT_OPEN_THIS_PAGE_CHECK_YOUR);
   const router = createRouter({
     onNavigate,
     root: main,
@@ -382,6 +385,8 @@ export function startApp(deps: { api: Api; root: HTMLElement }): App {
       { pattern: "/r/:id", public: true, view: roomPage },
       { pattern: "/r/:id/m/:msgId", public: true, view: roomPage },
       { pattern: "/c/:id", public: true, view: withSidebar(panes, rooms, () => createCollectionView(ctx)) },
+      // A private room's invite link (§44): guests are asked to log in or sign up, and come back to it.
+      { pattern: "/invite/:token", public: true, view: withSidebar(panes, rooms, invitePage) },
       { pattern: "/me", view: withSidebar(panes, rooms, profilePage) },
       { pattern: "/inbox", view: withSidebar(panes, rooms, inboxPage) },
     ],

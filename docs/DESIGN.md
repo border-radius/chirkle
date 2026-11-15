@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | Draft |
 | **Date** | 2026-10-10 |
-| **Scope** | MVP (§1–§14); post-MVP features: avatars §15, direct messages §16, attachments §17, unread counts §18, replies §19, reactions and emoji §20, selecting, forwarding and deleting several messages §21, accounts and quality of life §22, room access (private rooms, Open Air rooms and guests) §23, site settings §24, measured scale §25, Telegram bridge §26, …, media grid §30, media collections §31, Jump to §32, linked instances §33 |
+| **Scope** | MVP (§1–§14); post-MVP features: avatars §15, direct messages §16, attachments §17, unread counts §18, replies §19, reactions and emoji §20, selecting, forwarding and deleting several messages §21, accounts and quality of life §22, room access (private rooms, Open Air rooms and guests) §23, site settings §24, measured scale §25, Telegram bridge §26, …, media grid §30, media collections §31, Jump to §32, linked instances §33, …, room invite links §44 |
 
 Code and tests cite this document by section number (e.g. `§7.5`). **Don't renumber sections:** append new ones, and
 mark obsolete ones as such instead of deleting them.
@@ -57,3 +57,4 @@ Each section is a file of its own in [`design/`](design/), named by its number: 
 | §41 | [Handles, mentions and "Mentions & replies" (2026-11-10)](design/41-handles-mentions-and-mentions-replies.md) |
 | §42 | [Retention and server metrics (2026-11-12)](design/42-retention-and-server-metrics.md) |
 | §43 | [Your data and deleting your account (2026-11-15)](design/43-your-data-and-deleting-your-account.md) |
+| §44 | [Room invite links (2026-11-16)](design/44-room-invite-links.md) |

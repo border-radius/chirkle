@@ -236,4 +236,44 @@
         <item quantity="other">%1$d items</item>
     </plurals>
     <string name="room_creator">creator</string>
+    <!-- Invite links (DESIGN.md §44) -->
+    <string name="room_invite_link">Invite link</string>
+    <string name="room_anyone_with_the_link_can_join">Anyone with the link who has an account here can join as a member.</string>
+    <string name="room_works_for">Works for</string>
+    <plurals name="room_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <string name="room_create_link">Create link</string>
+    <string name="room_new_link">New link</string>
+    <string name="room_revoke">Revoke</string>
+    <string name="room_copy_link">Copy link</string>
+    <string name="room_share_link">Share</string>
+    <string name="room_copied">Copied.</string>
+    <string name="room_link_ready">The link is ready to share.</string>
+    <string name="room_new_link_ready">A new link is ready. The old one no longer works.</string>
+    <string name="room_link_revoked">The link no longer works.</string>
+    <string name="room_couldnt_change_link">Couldn\'t change the link: %1$s</string>
+    <string name="room_couldnt_load_link">Couldn\'t load the invite link: %1$s</string>
+    <string name="room_works_until">Works until %1$s · %2$s</string>
+    <string name="room_nobody_joined_yet">nobody has joined by it yet</string>
+    <plurals name="room_people_joined">
+        <item quantity="one">%1$d person joined by it</item>
+        <item quantity="other">%1$d people joined by it</item>
+    </plurals>
+    <string name="room_this_link_doesnt_work">This invite link doesn\'t work</string>
+    <string name="room_it_has_expired_or_was_revoked">It has expired or was revoked. Ask whoever sent it for a new one.</string>
+    <string name="room_couldnt_open_invite">Couldn\'t open this invite: %1$s</string>
+    <string name="room_join_room">Join #%1$s</string>
+    <string name="room_youre_in_this_room_already">You\'re in this room already.</string>
+    <string name="room_open_the_room">Open the room</string>
+    <plurals name="room_invite_members">
+        <item quantity="one">%1$d member</item>
+        <item quantity="other">%1$d members</item>
+    </plurals>
+    <string name="room_invited_you">%1$s invited you to this private room. %2$s · the link works until %3$s.</string>
+    <string name="room_youre_invited">You\'re invited to this private room. %1$s · the link works until %2$s.</string>
+    <string name="room_log_in_to_join">To join, log in or sign up first.</string>
+    <string name="room_join_the_room">Join the room</string>
+    <string name="room_couldnt_join">Couldn\'t join: %1$s</string>
 </resources>

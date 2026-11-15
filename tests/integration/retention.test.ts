@@ -96,6 +96,7 @@ describe("the daily prune", () => {
     const a = await signUp("orph-a");
     const b = await signUp("orph-b");
     const room = await b.pb.collection("rooms").create({ name: "orph", created_by: b.id, visibility: "public" });
+    const room2 = await b.pb.collection("rooms").create({ name: "orph-2", created_by: b.id, visibility: "public" });
     const now = Date.now();
     const kept = newId();
     const gone = newId();
@@ -128,6 +129,11 @@ describe("the daily prune", () => {
         params: { r: room.id, m: kept, g: gone, t: toPb(now) },
       },
       { sql: "INSERT INTO link_queue (id, message, created) VALUES ('lqgone00000001', {:g}, {:t})", params: { g: gone, t: toPb(now) } },
+      // Invite links (§44): one that ran out two days ago goes, one that ran out an hour ago stays a day longer.
+      {
+        sql: "INSERT INTO room_invites (id, room, token, created_by, expires, uses, created) VALUES ('rigone00000001', {:r}, 'aaaaaaaaaaaaaaaaaaaaaaaa', {:u}, {:old}, 0, {:t}), ('rikeep00000001', {:r2}, 'bbbbbbbbbbbbbbbbbbbbbbbb', {:u}, {:recent}, 0, {:t})",
+        params: { r: room.id, r2: room2.id, u: b.id, old: toPb(now - 2 * 86_400_000), recent: toPb(now - 3_600_000), t: toPb(now) },
+      },
     ]);
     const deleted = await tick();
     expect(deleted).toMatchObject({
@@ -137,7 +143,9 @@ describe("the daily prune", () => {
       hidden_rooms_orphans: 1,
       media_orphans: 2,
       link_queue_orphans: 1,
+      room_invites_expired: 1,
     });
+    expect(count("SELECT COUNT(*) AS n FROM room_invites WHERE id = 'rikeep00000001'")).toBe(1);
     expect(count("SELECT COUNT(*) AS n FROM inbox WHERE user = :u", { u: a.id })).toBe(1);
     expect(count("SELECT COUNT(*) AS n FROM room_reads WHERE id = 'rrkeep00000001'")).toBe(1);
     expect(count("SELECT COUNT(*) AS n FROM media WHERE id = 'mdkeep00000001'")).toBe(1);

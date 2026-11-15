@@ -9,6 +9,7 @@
 //   person or room that is gone; media rows (§30) and link preview jobs (§28) of a soft-deleted or gone message (a
 //   forward's media rows go with its original, as lib/media.js drop() does). PocketBase's cascades only run for
 //   deletes it makes itself.
+// - `room_invites` (DESIGN.md §44): links that expired a day or more ago.
 //
 // Messages are never pruned: history is kept (DESIGN.md §2). A retention period for them would be the owner's choice.
 
@@ -47,6 +48,8 @@ const STEPS = [
   ],
   ["media_orphans", `DELETE FROM media WHERE NOT ${live("media.message")} OR (media.source != '' AND NOT ${live("media.source")})`],
   ["link_queue_orphans", `DELETE FROM link_queue WHERE NOT ${live("link_queue.message")}`],
+  // Invite links that ran out a day or more ago (DESIGN.md §44): they no longer work, and the room's managers see none.
+  ["room_invites_expired", "DELETE FROM room_invites WHERE expires < strftime('%Y-%m-%d %H:%M:%fZ', 'now', '-1 day')"],
 ];
 
 /** PocketBase's date text for `ms`. @param {number} ms */

@@ -1,6 +1,8 @@
 // Room access dialog (§23.2, §23.6): the creator (or a moderator, §36) chooses who can see the room (Private, Public or Open Air) and, for a
 // private room, who its members are; then who can post: everyone who can see it, or only the people they choose.
 // Anyone else in a private room gets the same dialog to see who is in it (and who can post), read-only.
+// Under a private room's members, those who manage it share an invite link (§44): made, copied, made again or revoked at
+// once, not on Save; its calls are invite-api.ts, loaded when the section is first shown.
 // Telegram stand-ins (no_dms, §26.3) are left out of it: the bridge adds them itself, so adding or removing one does
 // nothing. They stay members (and writers) when it is saved. People on linked instances (§33) are listed with their
 // instance; in a room shared with theirs, the creator adds them by address ("ann@b.example"), and the dialog says
@@ -10,10 +12,12 @@
 // A lazy chunk, like search (§29): the room view import()s it when the dialog is first opened, and it links its own
 // stylesheet (web/styles/access.css) before showing. Members are added with the people search (ui/user-search.ts).
 
-import { reasonOf } from "../../api.ts";
+import { errorMessage, reasonOf } from "../../api.ts";
 import { h, uniqueId } from "../../dom.ts";
+import { INVITE_DAYS, type Invite, type InviteApi, type InviteDays } from "../../invite-api.ts";
 import { LIMITS } from "../../lib/limits.ts";
 import { isAddress, postingOf, VISIBILITY, visibilityOf } from "../../lib/rooms.ts";
+import { formatFull, parsePb } from "../../lib/time.ts";
 import type { Posting, Room, User, Visibility } from "../../lib/types.ts";
 import * as S from "../../strings/room-access.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
@@ -80,6 +84,10 @@ export function createAccessDialog(opts: {
   /** Someone on a linked instance by address, to add to this shared room (§33.5). */
   remoteUser?: (address: string, room: string) => Promise<User>;
   avatarUrl: AvatarUrl;
+  /** The invite links' calls (§44), loaded when first needed. Without it, no invite link section. */
+  invites?: () => Promise<InviteApi>;
+  /** The full address of an invite link. */
+  inviteUrl?: (token: string) => string;
   /** Save. Resolves to what went wrong, or null once it is saved (the dialog then closes). */
   onSave: (visibility: Visibility, members: string[], posting: Posting, writers: string[]) => Promise<string | null>;
   signal: AbortSignal;
@@ -195,6 +203,7 @@ export function createAccessDialog(opts: {
 
   const members = people(S.MEMBERS, "members", () => true);
   const writers = people(S.WHO_CAN_POST, "writers", (u) => visibility !== "private" || has(members, u));
+  const invite = inviteSection();
   const warn = h("p", { class: "access-warning", role: "status" });
   const sharedEl = h("p", { class: "access-shared" });
   const error = h("p", { class: "field-error", role: "alert" });
@@ -212,7 +221,16 @@ export function createAccessDialog(opts: {
   });
   const head = h("div", { class: "dialog-head" }, [h("div", {}, [title, sub]), x]);
   // The body scrolls; the title and the buttons stay put.
-  const body = h("div", { class: "access-body" }, [sharedEl, choices.el, members.el, postingChoices.el, writers.el, warn, error]);
+  const body = h("div", { class: "access-body" }, [
+    sharedEl,
+    choices.el,
+    members.el,
+    invite.el,
+    postingChoices.el,
+    writers.el,
+    warn,
+    error,
+  ]);
   const el = h("dialog", { class: "access", "aria-labelledby": title.id }, [head, body, buttons]);
 
   let room: Room | null = null;
@@ -226,6 +244,142 @@ export function createAccessDialog(opts: {
   const sharedHosts = () => room?.shared?.with ?? [];
   let search: { ac: AbortController; ui: UserSearch; p: People } | null = null;
   let busy = false;
+
+  /**
+   * The invite link (§44): shown to those who manage a room saved as private (not a copy of another instance's room,
+   * whose members are changed there) while Private is chosen. Each button acts at once.
+   */
+  function inviteSection() {
+    const head = h("h3", {}, S.INVITE_LINK);
+    const hint = h("p", { class: "vis-hint" }, S.ANYONE_WITH_THE_LINK_CAN_JOIN);
+    const url = h("input", {
+      type: "text",
+      readOnly: true,
+      class: "invite-url",
+      "aria-label": S.INVITE_LINK,
+      on: { focus: () => url.select() },
+      signal,
+    });
+    const meta = h("p", { class: "invite-meta" });
+    const days = h(
+      "select",
+      { signal },
+      INVITE_DAYS.map((d) => h("option", { value: String(d), selected: d === 7 }, S.days(d))),
+    );
+    const btn = (label: string, run: () => void, cls = "") =>
+      h("button", { type: "button", class: cls, on: { click: run }, signal }, label);
+    const copy = btn(S.COPY_LINK, () => void copyLink(), "primary");
+    const make = btn(S.CREATE_LINK, () => void act((api) => api.make(room!.id, Number(days.value) as InviteDays)), "primary");
+    const again = btn(S.NEW_LINK, () => void act((api) => api.make(room!.id, Number(days.value) as InviteDays)));
+    const revoke = btn(
+      S.REVOKE,
+      () =>
+        void act(async (api) => {
+          await api.revoke(room!.id);
+          return null;
+        }),
+    );
+    const status = h("p", { class: "invite-status", role: "status" });
+    const shown = h("div", { class: "invite-shown" }, [h("div", { class: "invite-row" }, [url, copy]), meta]);
+    const choose = h("label", { class: "invite-days" }, [S.WORKS_FOR, days]);
+    const actions = h("div", { class: "invite-actions" }, [choose, make, again, revoke]);
+    const el = h("section", { class: "invite" }, [head, hint, shown, actions, status]);
+    /** undefined: not loaded yet; null: none. */
+    let current: Invite | null | undefined;
+    let loading: AbortController | null = null;
+    let api: Promise<InviteApi> | null = null;
+    let busy = false;
+    const loadApi = () => {
+      api ??= opts.invites!().catch((e: unknown) => {
+        api = null;
+        throw e;
+      });
+      return api;
+    };
+    const wanted = () =>
+      !!room && !!opts.invites && editable && visibility === "private" && visibilityOf(room) === "private" && !room.shared?.home;
+
+    async function act(run: (api: InviteApi) => Promise<Invite | null>) {
+      if (busy || !room) return;
+      const r = room;
+      const had = !!current;
+      busy = true;
+      status.textContent = "";
+      render();
+      try {
+        const next = await run(await loadApi());
+        if (signal.aborted || room !== r) return;
+        current = next;
+        status.textContent = next ? (had ? S.NEW_LINK_READY : S.LINK_READY) : S.LINK_REVOKED;
+      } catch (e) {
+        if (room === r) status.textContent = S.couldntChangeLink(errorMessage(e));
+      } finally {
+        busy = false;
+        render();
+      }
+    }
+
+    async function copyLink() {
+      url.select();
+      try {
+        await navigator.clipboard.writeText(url.value);
+        status.textContent = S.COPIED;
+      } catch {
+        status.textContent = S.PRESS_CTRL_C_TO_COPY;
+      }
+    }
+
+    function load() {
+      const r = room;
+      if (!r) return;
+      loading = new AbortController();
+      const ac = loading;
+      signal.addEventListener("abort", () => ac.abort(), { once: true });
+      loadApi()
+        .then((a) => a.get(r.id, ac.signal))
+        .then(
+          (inv) => {
+            if (ac.signal.aborted || room !== r) return;
+            current = inv;
+            render();
+          },
+          (e: unknown) => {
+            if (ac.signal.aborted || room !== r) return;
+            current = null;
+            status.textContent = S.couldntLoadLink(errorMessage(e));
+            render();
+          },
+        );
+    }
+
+    function render() {
+      el.hidden = !wanted();
+      if (el.hidden) return;
+      if (current === undefined && !loading) load();
+      const has = !!current;
+      shown.hidden = !has;
+      make.hidden = has;
+      again.hidden = revoke.hidden = !has;
+      make.disabled = again.disabled = revoke.disabled = busy || current === undefined;
+      if (current) {
+        url.value = opts.inviteUrl ? opts.inviteUrl(current.token) : current.token;
+        meta.textContent = S.expiresUsed(formatFull(parsePb(current.expires)), current.uses);
+      }
+    }
+
+    return {
+      el,
+      render,
+      /** A new room shown: what the last one had is forgotten. */
+      reset() {
+        loading?.abort();
+        loading = null;
+        current = undefined;
+        busy = false;
+        status.textContent = "";
+      },
+    };
+  }
 
   function changed() {
     error.textContent = "";
@@ -243,6 +397,7 @@ export function createAccessDialog(opts: {
     writers.el.hidden = posting !== "selected";
     members.render();
     writers.render();
+    invite.render();
     warn.textContent = editable ? warning(visibilityOf(room), visibility, room.created_by === myId) : "";
     const hosts = sharedHosts();
     sharedEl.hidden = !hosts.length;
@@ -384,6 +539,7 @@ export function createAccessDialog(opts: {
       sub.textContent = `#${r.name}`;
       error.textContent = "";
       toggleSearch(null);
+      invite.reset();
       render();
       void loadStylesheet(h).then(() => {
         if (signal.aborted || room !== r) return;

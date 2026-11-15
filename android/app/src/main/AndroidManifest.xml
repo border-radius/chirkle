@@ -32,7 +32,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Links to rooms and messages on the server's domain open here (ANDROID.md §9.4). -->
+            <!-- Links to rooms, messages, collections and invite links on the server's domain open here (ANDROID.md §9.4). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -42,6 +42,7 @@
                 <data android:host="${appLinksHost}" />
                 <data android:pathPrefix="/r/" />
                 <data android:pathPrefix="/c/" />
+                <data android:pathPrefix="/invite/" />
             </intent-filter>
             <!-- Sharing text and files into a room (ANDROID.md §9.3). -->
             <intent-filter>

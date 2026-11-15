@@ -71,6 +71,14 @@ in) answers 204 and ends every session of the account at once, which stays as "D
 these. Such an account has no handle, takes no DMs and isn't found by `GET /api/chat/users`. `POST /api/account/tick`
 (superusers, tests) runs the worker now.
 
+Since 2026-11-16 (room invite links, DESIGN.md §44): `GET`, `POST { days: 1 | 7 | 30 }` and `DELETE
+/api/chat/rooms/{room}/invite` (a private room's creator, or a moderator in it) read, make (replacing the last) and
+revoke the room's one link, `{ invite: { token, created, expires, uses } | null }`; `GET /api/chat/invites/{token}`
+(anyone) says where a link goes, `{ room: { id, name, members }, by, expires, member }`, and `POST` to it (signed in)
+joins the room as a member, `{ room }`. A link that doesn't work is a 404, whatever the reason. The link itself is
+`/invite/<token>` on the server (a web page; the app opens it too, App Links). `room_invites` has no API rules. Both
+clients use all of these.
+
 Since 2026-11-12 (DESIGN.md §42): `GET /api/chat/metrics` (superusers only; JSON, or Prometheus text with
 `?format=prometheus`) reports queues, workers, realtime, the database's size and memory; the `/stats` page shows it to
 a superuser, the app doesn't use it. `POST /api/retention/tick` (superusers, tests) runs the daily prune now. The
@@ -98,7 +106,7 @@ against a current server and one without the routes (or an old release's hooks, 
 **Custom routes** (`pb_hooks/main.pb.js`, `federation.pb.js`):
 `/api/chat/rooms`, `rooms/{room}/messages`, `notifiable`, `dms`, `unread`, `unread/{room}`, `reads`, `reactions`, `delete`, `ban`, `forward`, `media/{room}`,
 `posters/{message}/{file}`, `posters/items/{item}/{file}`, `collections`, `badges`, `items`, `items/{id}`, `saved`,
-`subs`, `subs/seen`, `users`, `password`, `export`, `export/file`, `account/delete`, `remote-users`, and since 2026-11-10 (DESIGN.md §41) `mentionable`, `inbox`, `inbox/seen` (`unread` also answers `inbox` and `mentions`). Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; by collection name, `/api/files/messages/…` and `/api/files/collection_items/…`, not by its id, since 2026-11-09; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
+`subs`, `subs/seen`, `users`, `password`, `export`, `export/file`, `account/delete`, `rooms/{room}/invite`, `invites/{token}`, `remote-users`, and since 2026-11-10 (DESIGN.md §41) `mentionable`, `inbox`, `inbox/seen` (`unread` also answers `inbox` and `mentions`). Also `/api/files/*` (messages' and items' files by URL alone since 2026-11-04, DESIGN.md §37.3: a token is ignored; by collection name, `/api/files/messages/…` and `/api/files/collection_items/…`, not by its id, since 2026-11-09; the app sends one only to a server from before, which lists `files` as 404), `/api/health` and
 `/.well-known/assetlinks.json`.
 
 **Realtime** (`/api/realtime`): `rooms`, `chat/messages` (since 2026-11-09, PERF.md §7: each message created, updated or

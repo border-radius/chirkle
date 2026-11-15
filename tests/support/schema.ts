@@ -119,6 +119,7 @@ export const NOT_JSON = [
   /^GET \/api\/chat\/posters\//,
   /^DELETE \/api\/chat\/items\/[^/]+$/,
   /^POST \/api\/chat\/account\/delete$/,
+  /^DELETE \/api\/chat\/rooms\/[^/]+\/invite$/,
   /^GET \/api\/chat\/export\/file$/,
 ];
 

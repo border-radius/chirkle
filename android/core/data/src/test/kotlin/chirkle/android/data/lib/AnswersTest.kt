@@ -2,6 +2,9 @@ package chirkle.android.data.lib
 
 import chirkle.android.data.model.Badge
 import chirkle.android.data.model.ExportStatus
+import chirkle.android.data.model.InviteAnswer
+import chirkle.android.data.model.InvitePreview
+import chirkle.android.data.model.Joined
 import chirkle.android.data.model.CollectionItem
 import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
@@ -56,6 +59,10 @@ class AnswersTest {
         "GET /api/chat/saved" to MapSerializer(String.serializer(), String.serializer()),
         "GET /api/chat/export" to ExportStatus.serializer(),
         "POST /api/chat/export" to ExportStatus.serializer(),
+        "GET /api/chat/rooms/{room}/invite" to InviteAnswer.serializer(),
+        "POST /api/chat/rooms/{room}/invite" to InviteAnswer.serializer(),
+        "GET /api/chat/invites/{token}" to InvitePreview.serializer(),
+        "POST /api/chat/invites/{token}" to Joined.serializer(),
     )
 
     /**

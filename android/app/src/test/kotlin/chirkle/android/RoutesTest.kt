@@ -23,6 +23,15 @@ class RoutesTest {
         assertNull(route("https://chat.example.org/c/short"))
     }
 
+    @Test fun `an invite link (§44)`() {
+        val token = "Qm3xT8kLp2Vw9ZrB4nHs7YdC"
+        assertEquals(chirkle.android.nav.InviteLink(token), route("https://chat.example.org/invite/$token"))
+        assertEquals(chirkle.android.nav.InviteLink(token), route("https://example.org/chat/invite/$token", "https://example.org/chat"))
+        assertNull(route("https://chat.example.org/invite/short"))
+        assertNull(route("https://chat.example.org/invite/$token/more"))
+        assertNull(route("https://chat.example.org/invite/${token.dropLast(1)}!"))
+    }
+
     @Test fun `on a server under a path, or on a port`() {
         assertEquals(Room("abcdefghij12345"), route("https://example.org/chat/r/abcdefghij12345", "https://example.org/chat"))
         assertNull(route("https://example.org/r/abcdefghij12345", "https://example.org/chat"))

@@ -1,7 +1,8 @@
 // Room access (DESIGN.md §23.2, §23.6; web/src/views/room/access.ts): the creator (or a moderator, §36) chooses who can see the room
 // (Private, Public or Open Air) and a private room's members, then who can post: everyone who can see it, or only the
 // people they choose. Anyone else sees who is in it, read-only. Telegram stand-ins (no_dms, §26.3) aren't listed: the
-// bridge adds them itself; they stay members and writers when it is saved.
+// bridge adds them itself; they stay members and writers when it is saved. Under a private room's members, its invite
+// link (DESIGN.md §44, InviteSection).
 package chirkle.android.feature.room
 
 import android.content.res.Resources
@@ -164,6 +165,8 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
                 )
             }
             if (visibility == Visibility.Private) People(stringResource(R.string.room_members), members, room, editable, onAdd = { adding = "members" }, onRemove = { remove("members", it) })
+            // Its invite link (DESIGN.md §44): once saved as private, and not a copy of another instance's room.
+            if (editable && visibility == Visibility.Private && room.visibilityOrDefault == Visibility.Private && room.shared?.home.isNullOrEmpty()) InviteSection(roomId)
             if (editable) {
                 Text(stringResource(R.string.room_who_can_post_2), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

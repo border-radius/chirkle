@@ -274,3 +274,52 @@ dialog.access {
   padding: 0;
   overflow: hidden;
 }
+
+/* The invite link (§44): the link and Copy on one line, what it does under them. */
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+dialog.access .invite h3 {
+  padding: 0;
+}
+
+.invite-row,
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.invite-url {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 0.8125rem;
+}
+
+.invite-days {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.invite-meta,
+.invite-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.invite-status:empty {
+  display: none;
+}

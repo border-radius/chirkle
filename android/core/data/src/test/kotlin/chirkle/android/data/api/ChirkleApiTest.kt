@@ -267,6 +267,36 @@ class ChirkleApiTest {
         val again = runCatching { TestServer.client().logIn(a.email, TestServer.PASSWORD) }
         assertTrue(again.isFailure)
     }
+
+    @Test fun `an invite link is made, read, joined, made again and revoked (§44)`() = runBlocking {
+        val a = newUser()
+        val b = newUser()
+        val room = a.api.createRoom("inv-${uniq()}", Visibility.Private)
+        assertNull(a.api.invite(room.id))
+        val made = a.api.makeInvite(room.id, 30)
+        assertEquals(24, made.token.length)
+        assertEquals(made, a.api.invite(room.id))
+        // Only its creator (or a moderator in it) manages it: to someone not in it, the room doesn't exist.
+        assertEquals(404, (runCatching { b.api.makeInvite(room.id, 7) }.exceptionOrNull() as ApiError).status)
+
+        // A guest reads where it goes; b joins and then sees the room.
+        val guest = TestServer.client().invitePreview(made.token)
+        assertEquals(room.id, guest.room.id)
+        assertEquals(room.name, guest.room.name)
+        assertEquals(a.user.name, guest.by)
+        assertFalse(guest.member)
+        assertEquals(room.id, b.api.joinInvite(made.token))
+        assertTrue(b.api.invitePreview(made.token).member)
+        assertTrue(b.api.listRooms().any { it.id == room.id })
+        assertEquals(1, a.api.invite(room.id)?.uses)
+
+        val again = a.api.makeInvite(room.id, 1)
+        assertNotEquals(made.token, again.token)
+        assertEquals(404, (runCatching { b.api.invitePreview(made.token) }.exceptionOrNull() as ApiError).status)
+        a.api.revokeInvite(room.id)
+        assertNull(a.api.invite(room.id))
+        assertEquals(404, (runCatching { newUser().api.joinInvite(again.token) }.exceptionOrNull() as ApiError).status)
+    }
 }
 
 private fun kotlinx.coroutines.CoroutineScope.launchCollect(api: ChirkleApi, into: Channel<Boolean>) =

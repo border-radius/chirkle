@@ -39,6 +39,8 @@ Mentions & replies, which load on first use).
 - Unread counts on every room and DM, live, and in sync across your tabs and devices; the total shows in the tab's favicon and title;
   a room with unread messages opens at the first of them, under a "New" line
 - What you were typing is kept per room, even across a reload; "Jump to latest" whenever you are scrolled up
+- Invite links for private rooms: share one link that adds whoever opens it (after logging in or signing up) as a
+  member; it works for 1, 7 or 30 days and can be revoked or replaced at any time (web and Android)
 - Moderators, chosen by the admin: they delete anyone's messages, change any room's access, archive rooms, and ban or
   unban people (a banned account can't log in); DMs and private rooms they aren't in stay out of their reach
 - Usage statistics at `/stats` for moderators and the admin: people online now, messages and active people over
