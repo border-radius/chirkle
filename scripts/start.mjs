@@ -7,6 +7,8 @@
 //   chirkle chat.example.com         serve with HTTPS (Let's Encrypt) on :80/:443; any other `pocketbase serve` flags
 //   chirkle superuser upsert <email> <password>
 //                                    the other PocketBase commands, on the same data directory
+//   sudo chirkle install-service chat.example.com
+//                                    install it under systemd (scripts/service.mjs); uninstall-service removes it
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -57,7 +59,11 @@ const exec = (argv) => {
   pb.on("error", (err) => fail(err.message));
   pb.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 };
-if (["--version", "-v", "--help", "-h", "help"].includes(args[0] ?? "")) {
+if (args[0] === "install-service" || args[0] === "uninstall-service") {
+  const service = await import("./service.mjs");
+  if (args[0] === "install-service") service.install(args.slice(1), { root: ROOT, bin });
+  else service.uninstall(args.slice(1));
+} else if (["--version", "-v", "--help", "-h", "help"].includes(args[0] ?? "")) {
   exec(args);
 } else {
   serve();

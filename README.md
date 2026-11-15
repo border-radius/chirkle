@@ -151,6 +151,32 @@ android/         the Android app (docs/ANDROID.md): core/data (API, realtime, da
 
 ## Deploying
 
+### systemd, in one command
+
+On a Linux server with Node 22+, with a domain pointing at it, this installs Chirkle as a systemd service that serves
+HTTPS itself (Let's Encrypt, on :80/:443):
+
+```sh
+sudo npx chirkle install-service chat.example.com
+sudo -u chirkle /opt/chirkle/chirkle-server superuser upsert you@example.com <password> --dir=/opt/chirkle/pb_data
+```
+
+It copies the server, `pb_public/`, `pb_migrations/` and `pb_hooks/` to `/opt/chirkle`, creates the system user
+`chirkle`, which owns the data directory `/opt/chirkle/pb_data` (and nothing else), writes
+`/etc/systemd/system/chirkle.service` (sandboxed: `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`), and enables and
+starts it. Run it again — `sudo npx chirkle@latest install-service chat.example.com` — to upgrade: the files are
+replaced and the service restarted, the data stays. `sudo npx chirkle uninstall-service` stops and removes the unit
+(files and data are left for you to delete).
+
+- Without a domain it listens on `127.0.0.1:8090` for a reverse proxy on the same machine, and sets
+  `TRUSTED_PROXY=X-Forwarded-For` (see below); `--http=<addr>` picks another address (trusted only on loopback).
+- `--prefix=<dir>`, `--data=<dir>`, `--user=<name>`, `--name=<unit>` (several instances side by side) change the
+  defaults; any other flag goes to `serve`.
+- `--dry-run` prints the unit file and what it would do, and changes nothing; use it to write the unit yourself.
+- More settings (`FFMPEG=`, other environment): `sudo systemctl edit chirkle`, which survives reinstalls.
+
+### By hand
+
 Build once, then copy `bin/chirkle-server`, `pb_public/`, `pb_migrations/` and `pb_hooks/` to the server. It is PocketBase
 with the hot paths in Go (`server/`): the same commands and flags as the `pocketbase` binary. Go builds it for another
 platform with `GOOS`/`GOARCH` (`node scripts/build-server.mjs --all` builds them all into `bin/release/`).
@@ -163,30 +189,10 @@ npm ci && npm run setup && npm run build
 rsync -a bin/chirkle-server pb_public pb_migrations pb_hooks server:/opt/chirkle/
 ```
 
-With a domain pointing at the server, PocketBase serves HTTPS itself (Let's Encrypt):
-
-```ini
-# /etc/systemd/system/chirkle.service
-[Unit]
-Description=Chirkle (PocketBase)
-After=network-online.target
-
-[Service]
-User=chirkle
-WorkingDirectory=/opt/chirkle
-ExecStart=/opt/chirkle/chirkle-server serve chat.example.com --hooksPool=100 --dir=/opt/chirkle/pb_data --publicDir=/opt/chirkle/pb_public --migrationsDir=/opt/chirkle/pb_migrations --hooksDir=/opt/chirkle/pb_hooks
-Restart=on-failure
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-LimitNOFILE=65536
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```sh
-sudo systemctl enable --now chirkle
-sudo -u chirkle /opt/chirkle/chirkle-server superuser upsert you@example.com <password> --dir=/opt/chirkle/pb_data
-```
+With a domain pointing at the server, PocketBase serves HTTPS itself (Let's Encrypt): run
+`chirkle-server serve chat.example.com --hooksPool=100 --dir=… --publicDir=… --migrationsDir=… --hooksDir=…` under your
+init system with `CAP_NET_BIND_SERVICE` (`npx chirkle install-service chat.example.com --dry-run` prints a systemd unit
+for it).
 
 Behind an existing reverse proxy instead, use `serve --http=127.0.0.1:8090` and proxy to it (keep
 `/api/realtime` unbuffered — it is a Server-Sent Events stream — and let request bodies through up to 210 MB, since a

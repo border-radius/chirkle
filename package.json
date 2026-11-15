@@ -23,6 +23,7 @@
     "pb_hooks/",
     "pb_migrations/",
     "scripts/start.mjs",
+    "scripts/service.mjs",
     "bin/release/"
   ],
   "engines": {
