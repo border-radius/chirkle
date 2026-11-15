@@ -22,6 +22,7 @@ import {
   MEDIA,
   OUTDIR,
   outputOf,
+  PROFILE,
   STATIC_DIR,
   STATS,
   STATS_OPTIONS,
@@ -55,6 +56,7 @@ const viewerCss = await esbuild.build({
     { in: ACCESS.css, out: "access" },
     { in: EMOJI.css, out: "emoji" },
     { in: INBOX.css, out: "inbox" },
+    { in: PROFILE.css, out: "account" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -65,11 +67,12 @@ const collCssPath = outputOf(viewerCss.metafile, OUTDIR, COLLECTIONS.css);
 const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
 const emojiCssPath = outputOf(viewerCss.metafile, OUTDIR, EMOJI.css);
 const inboxCssPath = outputOf(viewerCss.metafile, OUTDIR, INBOX.css);
+const accountCssPath = outputOf(viewerCss.metafile, OUTDIR, PROFILE.css);
 
 const result = await esbuild.build({
   ...BASE_OPTIONS,
   ...shared,
-  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath),
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath, accountCssPath),
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
@@ -98,6 +101,7 @@ const cssOf = {
   [ACCESS.css]: accessCssPath,
   [EMOJI.css]: emojiCssPath,
   [INBOX.css]: inboxCssPath,
+  [PROFILE.css]: accountCssPath,
 };
 
 /** @type {Record<string, number>} */

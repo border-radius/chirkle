@@ -9,6 +9,8 @@ import chirkle.android.data.testing.TestServer
 import chirkle.android.data.testing.TestServer.newUser
 import chirkle.android.data.testing.TestServer.uniq
 import kotlinx.coroutines.channels.Channel
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import kotlinx.coroutines.launch
@@ -235,6 +237,35 @@ class ChirkleApiTest {
         val e = PbError(400, chirkle.android.data.pb.PbJson.parseToJsonElement("""{"message":"x","data":{"name":{"code":"validation_not_unique","message":"taken"}}}""") as kotlinx.serialization.json.JsonObject)
         assertEquals(mapOf("name" to "validation_not_unique"), e.codes)
         assertEquals(mapOf("name" to "taken"), e.toApiError().fields)
+    }
+
+    @Test fun `your data downloads, and deleting the account takes your password and ends it (§43)`() = runBlocking {
+        val a = newUser()
+        val room = a.api.createRoom("ex-${uniq()}")
+        a.api.send(NewMessage(newId(), room.id, "for the export"))
+        assertEquals(chirkle.android.data.model.ExportState.None, a.api.exportStatus().state)
+        val queued = a.api.startExport()
+        assertEquals(chirkle.android.data.model.ExportState.Queued, queued.state)
+        TestServer.admin("POST", "/api/account/tick", "{}") // the worker, now
+        val done = a.api.exportStatus()
+        assertEquals(chirkle.android.data.model.ExportState.Done, done.state)
+        assertEquals(queued.id, done.id)
+        // The link works without the session, as the download manager fetches it.
+        val body = okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url(a.api.exportFileUrl()).build()).execute().use {
+            assertEquals(200, it.code)
+            it.body.string()
+        }
+        assertEquals(done.size, body.toByteArray().size.toLong())
+        val export = kotlinx.serialization.json.Json.parseToJsonElement(body).jsonObject
+        assertEquals("chirkle-export", export["format"]?.jsonPrimitive?.content)
+        assertEquals(a.email, export["account"]!!.jsonObject["email"]?.jsonPrimitive?.content)
+        assertTrue("for the export" in export["messages"].toString())
+
+        val wrong = runCatching { a.api.deleteAccount("not-my-password", deleteMessages = false) }.exceptionOrNull() as ApiError
+        assertEquals("That isn't your password.", wrong.fields["password"])
+        a.api.deleteAccount(TestServer.PASSWORD, deleteMessages = true)
+        val again = runCatching { TestServer.client().logIn(a.email, TestServer.PASSWORD) }
+        assertTrue(again.isFailure)
     }
 }
 

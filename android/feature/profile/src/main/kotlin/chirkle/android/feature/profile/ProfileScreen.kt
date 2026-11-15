@@ -1,5 +1,5 @@
 // Your profile (DESIGN.md §15, §22.1–2; web/src/views/profile.ts): picture, display name, the theme, this device's
-// setting for keeping messages out of screenshots (§10), password, log out. Your accounts (ANDROID.md §17) are on
+// setting for keeping messages out of screenshots (§10), password, log out, your data and deleting your account (§43). Your accounts (ANDROID.md §17) are on
 // their own screen (AccountsScreen), opened from the brand on the room list.
 package chirkle.android.feature.profile
 
@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +57,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import chirkle.android.data.api.ApiError
 import chirkle.android.data.api.errorMessage
 import chirkle.android.data.lib.Limits
+import chirkle.android.data.lib.formatBytes
+import chirkle.android.data.lib.parsePb
+import chirkle.android.data.model.ExportState
+import chirkle.android.data.model.ExportStatus
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import chirkle.android.data.lib.textLength
 import chirkle.android.data.pb.UploadFile
 import chirkle.android.ui.Avatar
@@ -81,6 +92,9 @@ fun passwordProblem(res: Resources, current: String, next: String, confirm: Stri
 
 private fun fieldMessage(e: Throwable, field: String) = (e as? ApiError)?.fields?.get(field) ?: errorMessage(e)
 
+/** How often the screen asks whether an export being made is made (DESIGN.md §43.2). */
+private const val EXPORT_POLL_MS = 3000L
+
 /** A handle as the server takes it (pb_hooks/lib/handles.js HANDLE). */
 private val HANDLE = Regex("^[a-z0-9_]{3,24}$")
 
@@ -107,6 +121,16 @@ fun ProfileScreen(onBack: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     var pwErrors by remember { mutableStateOf(emptyMap<String, String>()) }
     var pwStatus by remember { mutableStateOf("") }
+    // Your data (§43.2): where the newest export is, and an error of asking for or downloading it.
+    var export by remember { mutableStateOf<ExportStatus?>(null) }
+    var exportError by remember { mutableStateOf("") }
+    // Delete account (§43.3): null until chosen; true deletes the messages too.
+    var delMessages by remember { mutableStateOf<Boolean?>(null) }
+    var delChoiceError by remember { mutableStateOf("") }
+    var delPassword by remember { mutableStateOf("") }
+    var delPasswordError by remember { mutableStateOf<String?>(null) }
+    var delStatus by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf(false) }
 
     fun upload(uri: Uri?) {
         if (uri == null || busy) return
@@ -145,6 +169,40 @@ fun ProfileScreen(onBack: () -> Unit) {
         }
     }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { upload(it) }
+    // Asked when the screen opens, and again every 3 s while it is being made.
+    LaunchedEffect(me.id, export?.state == ExportState.Queued) {
+        if (export != null && export?.state != ExportState.Queued) return@LaunchedEffect
+        if (export != null) delay(EXPORT_POLL_MS)
+        while (true) {
+            // Not answered: as if never asked, so Prepare is there to try.
+            runCatching { services.api.exportStatus() }.onSuccess { export = it }.onFailure { if (export == null) export = ExportStatus() }
+            if (export?.state != ExportState.Queued) return@LaunchedEffect
+            delay(EXPORT_POLL_MS)
+        }
+    }
+
+    fun deleteAccount() {
+        val choice = delMessages
+        delStatus = ""
+        delChoiceError = if (choice == null) res.getString(R.string.profile_choose_what_happens) else ""
+        delPasswordError = if (delPassword.isEmpty()) res.getString(R.string.profile_enter_your_password) else null
+        if (choice == null || delPassword.isEmpty()) return
+        deleting = true
+        delStatus = res.getString(R.string.profile_deleting)
+        scope.launch {
+            runCatching { services.api.deleteAccount(delPassword, choice) }
+                .onSuccess { services.logOut() }
+                .onFailure { e ->
+                    delStatus = ""
+                    val f = (e as? ApiError)?.fields.orEmpty()
+                    if (f["password"] != null || f["messages"] != null) {
+                        delPasswordError = f["password"]
+                        delChoiceError = f["messages"].orEmpty()
+                    } else delStatus = errorMessage(e)
+                }
+            deleting = false
+        }
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -276,6 +334,74 @@ fun ProfileScreen(onBack: () -> Unit) {
 
                 Section(stringResource(R.string.profile_session))
                 TextButton(onClick = { scope.launch { services.logOut() } }) { Text(stringResource(R.string.profile_log_out), color = MaterialTheme.colorScheme.error) }
+                HorizontalDivider(color = Chirkle.colors.border)
+
+                Section(stringResource(R.string.profile_your_data))
+                Text(stringResource(R.string.profile_download_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                val ex = export
+                val exportLine = when {
+                    exportError.isNotEmpty() -> exportError
+                    ex?.state == ExportState.Queued -> stringResource(R.string.profile_preparing_your_data)
+                    ex?.state == ExportState.Done -> stringResource(
+                        R.string.profile_ready_to_download,
+                        formatBytes(ex.size),
+                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(parsePb(ex.expires))),
+                    )
+                    ex?.state == ExportState.Failed -> stringResource(R.string.profile_preparing_failed)
+                    else -> ""
+                }
+                if (exportLine.isNotEmpty()) {
+                    val bad = exportError.isNotEmpty() || ex?.state == ExportState.Failed
+                    Text(exportLine, color = if (bad) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (ex?.state == ExportState.Done) Button(onClick = {
+                        exportError = ""
+                        scope.launch {
+                            // The system's download manager fetches it as it comes, into Downloads (as attachments, §17).
+                            runCatching { services.api.exportFileUrl() }
+                                .onSuccess { url ->
+                                    val name = "chirkle-export-${ex.created.take(10)}.json"
+                                    chirkle.android.ui.download(context, url, name)
+                                }
+                                .onFailure { exportError = errorMessage(it) }
+                        }
+                    }) { Text(stringResource(R.string.profile_download)) }
+                    if (ex != null && ex.state != ExportState.Queued) OutlinedButton(onClick = {
+                        exportError = ""
+                        scope.launch {
+                            runCatching { services.api.startExport() }
+                                .onSuccess { export = it }
+                                .onFailure { exportError = errorMessage(it) }
+                        }
+                    }) { Text(stringResource(if (ex.state == ExportState.Done) R.string.profile_prepare_again else R.string.profile_prepare_my_data)) }
+                }
+                HorizontalDivider(color = Chirkle.colors.border)
+
+                Section(stringResource(R.string.profile_delete_account))
+                Text(stringResource(R.string.profile_delete_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                Column(Modifier.selectableGroup()) {
+                    for ((value, label) in listOf(false to R.string.profile_keep_my_messages, true to R.string.profile_delete_my_messages_too)) {
+                        Row(
+                            Modifier.fillMaxWidth().selectable(selected = delMessages == value, role = Role.RadioButton, onClick = {
+                                delMessages = value
+                                delChoiceError = ""
+                            }).padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = delMessages == value, onClick = null)
+                            Text(stringResource(label), Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+                if (delChoiceError.isNotEmpty()) Text(delChoiceError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                PasswordField(stringResource(R.string.profile_your_password), delPassword, delPasswordError) { delPassword = it; delPasswordError = null }
+                if (delStatus.isNotEmpty()) Text(delStatus, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                Button(
+                    onClick = { deleteAccount() },
+                    enabled = !deleting,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                ) { Text(stringResource(R.string.profile_delete_my_account)) }
                 val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty() }
                 Text(stringResource(R.string.profile_for_android, s.site.title, version), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted, modifier = Modifier.padding(top = 8.dp))
             }

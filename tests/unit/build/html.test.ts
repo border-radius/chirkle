@@ -121,7 +121,7 @@ describe("eagerChunks", () => {
 });
 
 describe("viewerDefine", () => {
-  it("defines the viewer's, the media grid's, the collections', the access dialog's, the emoji picker's and the inbox's stylesheet URLs as string literals", () => {
+  it("defines the viewer's, the media grid's, the collections', the access dialog's, the emoji picker's, the inbox's and Settings' account cards' stylesheet URLs as string literals", () => {
     expect(
       viewerDefine(
         "assets/viewer-AB12.css",
@@ -130,6 +130,7 @@ describe("viewerDefine", () => {
         "assets/access-GH78.css",
         "assets/emoji-IJ90.css",
         "assets/inbox-KL12.css",
+        "assets/account-MN34.css",
       ),
     ).toEqual({
       VIEWER_CSS: '"/assets/viewer-AB12.css"',
@@ -138,6 +139,7 @@ describe("viewerDefine", () => {
       ACCESS_CSS: '"/assets/access-GH78.css"',
       EMOJI_CSS: '"/assets/emoji-IJ90.css"',
       INBOX_CSS: '"/assets/inbox-KL12.css"',
+      ACCOUNT_CSS: '"/assets/account-MN34.css"',
     });
   });
 });

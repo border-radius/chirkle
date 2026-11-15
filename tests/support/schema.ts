@@ -115,7 +115,12 @@ export function routeOf(method: string, path: string): string | undefined {
 }
 
 /** Routes under /api/chat/ that answer no JSON (a file, or 204): not in answers.json. */
-export const NOT_JSON = [/^GET \/api\/chat\/posters\//, /^DELETE \/api\/chat\/items\/[^/]+$/];
+export const NOT_JSON = [
+  /^GET \/api\/chat\/posters\//,
+  /^DELETE \/api\/chat\/items\/[^/]+$/,
+  /^POST \/api\/chat\/account\/delete$/,
+  /^GET \/api\/chat\/export\/file$/,
+];
 
 /**
  * Checks a 2xx JSON answer of an /api/chat/* request against its route's schema; throws with what doesn't fit, or when

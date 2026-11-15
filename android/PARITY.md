@@ -17,6 +17,7 @@ decodes `shared/schema/answers.json`'s examples of each route's answer with the 
 | `signup` | `UiFeaturesTest`: signing up logs you in; `ChirkleApiTest`: sign up | Covered |
 | `session` | `UiFlowTest`: a wrong password says so; `ServicesTest`: logging out clears the session's data, and so does a session that ran out while the app was closed (QA BUG-145, web: `app.test.ts`); a session revoked elsewhere ends on coming back or when a room of yours "doesn't exist" (QA BUG-183) | Partial: two sessions |
 | `accounts` | `UiFeaturesTest`: renaming yourself | Partial: password change |
+| Your data and deleting your account (DESIGN.md §43, 2026-11-15): `tests/component/views/profile.test.ts` "your data", `tests/integration/account_delete.test.ts` | `ChirkleApiTest`: the export's states, its link without the session, a wrong password, no sign-in after; `UiFeaturesTest`: Prepare my data → Preparing → Ready with Download; Delete account asks for a choice and the password, then logs out (ANDROID.md §73) | Partial: the download manager's fetch (by hand on the emulator, not yet tried) |
 | `password_reset` | `UiPasswordResetTest`: "Forgot password?" only with mail settings, the form sends the link and says where it went; setting the new password is the web page's (the link opens in the browser) | Covered |
 | `avatar` | — | Not yet (the photo picker can't be driven on Robolectric; changed by hand on the emulator, ANDROID.md §22.3) |
 | `realtime` | `UiFlowTest`: a live message; `ServicesTest`, `ChirkleApiTest`: realtime events | Covered |

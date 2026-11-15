@@ -364,6 +364,39 @@ class UiFeaturesTest {
         ui.until { a.api.usersById(listOf(a.user.id)).single().name == name }
     }
 
+    @Test fun `your data is prepared in the background, then offered to download (§43)`() {
+        val a = newUser()
+        ui.signedIn(a)
+        ui.waitFor(hasContentDescription("Profile"))
+        compose.onNodeWithContentDescription("Profile").performClick()
+        ui.waitFor("Your profile")
+        compose.onNodeWithText("Prepare my data").performScrollTo().performClick()
+        ui.waitFor("Preparing your data")
+        TestServer.admin("POST", "/api/account/tick", "{}") // the worker, now
+        ui.waitFor("Ready: ")
+        compose.onNodeWithText("Download").performScrollTo().assertExists()
+        compose.onNodeWithText("Prepare again").performScrollTo().assertExists()
+    }
+
+    @Test fun `deleting your account asks your password, then logs you out (§43)`() {
+        val a = newUser()
+        ui.signedIn(a)
+        ui.waitFor(hasContentDescription("Profile"))
+        compose.onNodeWithContentDescription("Profile").performClick()
+        ui.waitFor("Your profile")
+        compose.onNodeWithText("Delete my account").performScrollTo().performClick()
+        ui.waitFor("Choose whether your messages stay or go.")
+        compose.onNodeWithText("Delete my messages too").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction() and hasText("Your password")).performScrollTo().performTextInput("not-my-password")
+        compose.onNodeWithText("Delete my account").performScrollTo().performClick()
+        ui.waitFor("That isn't your password.")
+        compose.onNode(hasSetTextAction() and hasText("Your password")).performTextClearance()
+        compose.onNode(hasSetTextAction() and hasText("Your password")).performTextInput(TestServer.PASSWORD)
+        compose.onNodeWithText("Delete my account").performScrollTo().performClick()
+        ui.until { ui.services?.store?.get()?.user == null }
+        assertTrue(runCatching { runBlocking { TestServer.client().logIn(a.email, TestServer.PASSWORD) } }.isFailure)
+    }
+
     @Test fun `signing up logs you in (signup spec)`() {
         ui.start()
         ui.waitFor("Just looking? Read the Open Air rooms")

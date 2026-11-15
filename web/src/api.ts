@@ -1,5 +1,6 @@
-// The only module that talks to PocketBase (§6). Views depend on the `Api` interface, never on the client.
+// The only module that talks to PocketBase (§6), with account-api.ts, its part only Settings loads (§43). Views depend on the `Api` interface, never on the client.
 
+import type { AccountApi } from "./account-api.ts";
 import { type Cursor, PAGE_SIZE, type PageQuery } from "./lib/cursor.ts";
 import {
   type Badge,
@@ -120,6 +121,8 @@ export interface Api {
    * a fresh token. Rejects with field errors on `oldPassword` or `password`.
    */
   changePassword(oldPassword: string, password: string): Promise<User>;
+  /** Your data and deleting your account (§43): loaded with Settings (account-api.ts), not with the app. */
+  account(): Promise<AccountApi>;
   /** Thumbnail URL of a user's avatar at `size` px (48 or 96), or "" when they have none. */
   avatarUrl(user: User, size: AvatarSize): string;
 
@@ -525,6 +528,7 @@ export function createApi(client: PbClient): Api {
       me();
       return toUser(await wrap(users.authAt("/api/chat/password", { oldPassword, password })));
     },
+    account: () => import("./account-api.ts").then((m) => m.createAccountApi(pb, wrap)),
     avatarUrl(user, size) {
       if (!user.avatar) return "";
       return pb.fileUrl("users", user.id, user.avatar, { thumb: `${size}x${size}` });

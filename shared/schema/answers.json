@@ -471,6 +471,235 @@
         "files"
       ],
       "additionalProperties": false
+    },
+    "exportFile": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "chirkle-export"
+        },
+        "version": {
+          "const": 1
+        },
+        "exported": {
+          "type": "string"
+        },
+        "account": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "name": {
+              "type": "string"
+            },
+            "handle": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "created": {
+              "$ref": "#/$defs/time"
+            },
+            "avatar": {
+              "type": "string"
+            },
+            "no_dms": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "handle",
+            "email",
+            "created",
+            "avatar",
+            "no_dms"
+          ],
+          "additionalProperties": false
+        },
+        "rooms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "room",
+                  "dm"
+                ]
+              },
+              "mine": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind",
+              "mine"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "room": {
+                "$ref": "#/$defs/id"
+              },
+              "created": {
+                "$ref": "#/$defs/time"
+              },
+              "edited": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "reply_to": {
+                "$ref": "#/$defs/idOrEmpty"
+              },
+              "forward_of": {
+                "$ref": "#/$defs/idOrEmpty"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "room",
+              "created",
+              "edited",
+              "text",
+              "reply_to",
+              "forward_of",
+              "files"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "collections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              },
+              "public": {
+                "type": "boolean"
+              },
+              "created": {
+                "$ref": "#/$defs/time"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "$ref": "#/$defs/time"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "created",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "public",
+              "created",
+              "items"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "following": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "hidden_rooms": {
+          "$ref": "#/$defs/ids"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "exported",
+        "account",
+        "rooms",
+        "messages",
+        "collections",
+        "following",
+        "hidden_rooms"
+      ],
+      "additionalProperties": false,
+      "$comment": "The file GET /api/chat/export/file downloads (DESIGN.md §43.2). Checked by tests/integration/account_delete.test.ts, not by the answers check (it is a download)."
     }
   },
   "routes": {
@@ -1257,6 +1486,138 @@
             "created": "2026-11-01 08:00:00.000Z",
             "updated": "2026-11-15 10:00:00.000Z"
           }
+        }
+      ]
+    },
+    "GET /api/chat/export": {
+      "$comment": "Where your newest export is (pb_hooks/lib/account.js exportStatus, DESIGN.md §43.2): \"none\" (never asked, or gone after 7 days), \"queued\" (the worker is making it), \"done\" (GET /api/chat/export/file downloads it until `expires`) or \"failed\". POST asks for one and answers the same.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/idOrEmpty"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "queued",
+              "done",
+              "failed"
+            ]
+          },
+          "created": {
+            "$ref": "#/$defs/time"
+          },
+          "finished": {
+            "$ref": "#/$defs/time"
+          },
+          "expires": {
+            "$ref": "#/$defs/time"
+          },
+          "size": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "created",
+          "finished",
+          "expires",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "id": "",
+          "state": "none",
+          "created": "",
+          "finished": "",
+          "expires": "",
+          "size": 0
+        },
+        {
+          "id": "j00000000000001",
+          "state": "queued",
+          "created": "2026-11-15 10:00:00.000Z",
+          "finished": "",
+          "expires": "",
+          "size": 0
+        },
+        {
+          "id": "j00000000000001",
+          "state": "done",
+          "created": "2026-11-15 10:00:00.000Z",
+          "finished": "2026-11-15 10:00:04.000Z",
+          "expires": "2026-11-22 10:00:00.000Z",
+          "size": 48213
+        }
+      ]
+    },
+    "POST /api/chat/export": {
+      "$comment": "Where your newest export is (pb_hooks/lib/account.js exportStatus, DESIGN.md §43.2): \"none\" (never asked, or gone after 7 days), \"queued\" (the worker is making it), \"done\" (GET /api/chat/export/file downloads it until `expires`) or \"failed\". POST asks for one and answers the same.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/idOrEmpty"
+          },
+          "state": {
+            "enum": [
+              "none",
+              "queued",
+              "done",
+              "failed"
+            ]
+          },
+          "created": {
+            "$ref": "#/$defs/time"
+          },
+          "finished": {
+            "$ref": "#/$defs/time"
+          },
+          "expires": {
+            "$ref": "#/$defs/time"
+          },
+          "size": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "created",
+          "finished",
+          "expires",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "id": "",
+          "state": "none",
+          "created": "",
+          "finished": "",
+          "expires": "",
+          "size": 0
+        },
+        {
+          "id": "j00000000000001",
+          "state": "queued",
+          "created": "2026-11-15 10:00:00.000Z",
+          "finished": "",
+          "expires": "",
+          "size": 0
+        },
+        {
+          "id": "j00000000000001",
+          "state": "done",
+          "created": "2026-11-15 10:00:00.000Z",
+          "finished": "2026-11-15 10:00:04.000Z",
+          "expires": "2026-11-22 10:00:00.000Z",
+          "size": 48213
         }
       ]
     },

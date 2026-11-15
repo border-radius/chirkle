@@ -1,5 +1,5 @@
 /// <reference path="../types/pocketbase.d.ts" />
-// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
+// Server-side hooks (DESIGN.md §5.6, §16, §18, §20, §21, §22, §23, §24, §28, §30, §31, §36, §37, §40, §43; docs/ANDROID.md §9.4). Logic lives in lib/, one module per collection
 // or route: PocketBase hook handlers can't see top-level variables, so each handler require()s its module.
 
 onBootstrap((e) => {
@@ -58,6 +58,13 @@ routerAdd("GET", "/api/chat/mentionable", (e) => require(`${__hooks}/lib/handles
 routerAdd("GET", "/api/chat/inbox", (e) => require(`${__hooks}/lib/inbox.js`).list(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/inbox/seen", (e) => require(`${__hooks}/lib/inbox.js`).markSeen(e), $apis.requireAuth("users"));
 routerAdd("POST", "/api/chat/password", (e) => require(`${__hooks}/lib/account.js`).changePassword(e), $apis.requireAuth("users"));
+// Your data, and deleting your account (§43).
+routerAdd("GET", "/api/chat/export", (e) => require(`${__hooks}/lib/account.js`).exportState(e), $apis.requireAuth("users"));
+routerAdd("POST", "/api/chat/export", (e) => require(`${__hooks}/lib/account.js`).startExport(e), $apis.requireAuth("users"));
+// Signed in or with a file token (a plain link), checked by the route.
+routerAdd("GET", "/api/chat/export/file", (e) => require(`${__hooks}/lib/account.js`).exportFile(e));
+routerAdd("POST", "/api/account/tick", (e) => require(`${__hooks}/lib/account.js`).tick(e), $apis.requireSuperuserAuth());
+routerAdd("POST", "/api/chat/account/delete", (e) => require(`${__hooks}/lib/account.js`).deleteAccount(e), $apis.requireAuth("users"));
 
 // The core collections' hooks (messages, rooms, users) are all here, with the optional features' parts (lib/features.js)
 // called in order: the federation's first, then the core's, then the Telegram bridge's; after the save, the other way
@@ -359,6 +366,12 @@ if ($os.getenv("STATS_CRON").trim().toLowerCase() !== "off") {
 
 // Retention (REFACTOR item 49): old inbox rows and rows left behind by raw deletes, daily (lib/retention.js).
 cronAdd("retention", "41 3 * * *", () => require(`${__hooks}/lib/retention.js`).prune($app));
+
+// Account jobs (§43.5): exports made and deleted accounts' collections and messages deleted, by a worker, a minute's run
+// at a time. ACCOUNT_CRON=off leaves them to POST /api/account/tick (tests).
+if ($os.getenv("ACCOUNT_CRON").trim().toLowerCase() !== "off") {
+  cronAdd("account", "* * * * *", () => require(`${__hooks}/lib/account.js`).run($app));
+}
 
 // The media grid's thumbnails and video posters (§30.1): made by a worker, a minute's run at a time. MEDIA_CRON=off
 // leaves them to POST /api/media/tick (tests).

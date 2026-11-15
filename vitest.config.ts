@@ -12,6 +12,7 @@ const define = {
   ACCESS_CSS: JSON.stringify("/assets/access.css"),
   EMOJI_CSS: JSON.stringify("/assets/emoji.css"),
   INBOX_CSS: JSON.stringify("/assets/inbox.css"),
+  ACCOUNT_CSS: JSON.stringify("/assets/account.css"),
 };
 
 export default defineConfig({

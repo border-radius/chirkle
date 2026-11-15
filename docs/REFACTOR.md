@@ -779,7 +779,7 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
 
 ### Product
 
-- **P1. Delete my account, export my data.** Users can't delete themselves (`users.deleteRule` is null), and
+- **P1. Delete my account, export my data.** ✅ (2026-11-15, DESIGN.md §43: `POST`/`GET /api/chat/export`, `GET /api/chat/export/file`, `POST /api/chat/account/delete`, on Settings in both clients; the account stays as a "Deleted account" tombstone. The export and what grows with a deleted account are a worker's jobs, §43.5.) Users can't delete themselves (`users.deleteRule` is null), and
   `beforeUserDelete` refuses even a superuser once the account wrote a message. Nobody can download what they wrote.
   A profile action that exports (messages, files list, collections as JSON) and deletes: the account's personal data
   goes (name → "Deleted account", avatar, e-mail, sessions, collections), its messages stay under that name, or are

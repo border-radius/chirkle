@@ -38,3 +38,22 @@ export const USAGE_STATISTICS = "Usage statistics";
 export const SESSION = "Session";
 export const LOG_OUT = "Log out";
 export const A_DISPLAY_NAME_CANT_BE_EMPTY = "A display name can't be empty.";
+export const YOUR_DATA = "Your data";
+export const DOWNLOAD_HINT =
+  "Your profile, the messages you wrote, your rooms and collections, as a JSON file. It is prepared in the background, then kept for 7 days.";
+export const PREPARE_MY_DATA = "Prepare my data";
+export const PREPARE_AGAIN = "Prepare again";
+export const DOWNLOAD = "Download";
+export const PREPARING_YOUR_DATA = "Preparing your data. On a big account this takes a while: you can leave this page and come back.";
+export const readyToDownload = (size: string, until: string) => `Ready: ${size}, to download until ${until}.`;
+export const PREPARING_FAILED = "Your data couldn't be prepared. Try again.";
+export const DELETE_ACCOUNT = "Delete account";
+export const DELETE_HINT =
+  "Your name, handle, picture, e-mail, collections and sessions are deleted, and nobody can sign in to the account again. This can't be undone.";
+export const KEEP_MY_MESSAGES = "Keep my messages, shown as by “Deleted account”";
+export const DELETE_MY_MESSAGES_TOO = "Delete my messages too";
+export const YOUR_PASSWORD = "Your password";
+export const DELETE_MY_ACCOUNT = "Delete my account";
+export const ENTER_YOUR_PASSWORD = "Enter your password.";
+export const CHOOSE_WHAT_HAPPENS_TO_YOUR_MESSAGES = "Choose whether your messages stay or go.";
+export const DELETING = "Deleting…";

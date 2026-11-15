@@ -11,7 +11,7 @@ const sizes = (over: Partial<Parameters<typeof checkBudget>[0]> = {}) => ({
 
 describe("checkBudget (DESIGN.md §7.7)", () => {
   it("matches the design doc budget", () => {
-    expect(BUDGET).toEqual({ critical: 62.5 * 1024, feature: 16 * 1024, stats: 10 * 1024 });
+    expect(BUDGET).toEqual({ critical: 63.5 * 1024, feature: 16 * 1024, stats: 10 * 1024 });
   });
 
   it("names every lazy feature the build has", () => {
@@ -48,7 +48,7 @@ describe("checkBudget (DESIGN.md §7.7)", () => {
 describe("formatSizes", () => {
   it("prints the critical path with its files, each feature and the stats page, and flags violations", () => {
     const out = formatSizes(sizes({ critical: 70 * 1024, features: { viewer: 1024, emoji: 20 * 1024 } }));
-    expect(out).toMatch(/^critical path\s+70\.00 KB \/ 62\.50 KB\s+OVER$/m);
+    expect(out).toMatch(/^critical path\s+70\.00 KB \/ 63\.50 KB\s+OVER$/m);
     expect(out).toMatch(/^ {2}assets\/app-AB12\.js\s+0\.68 KB$/m);
     expect(out).toMatch(/^ {2}viewer\s+1\.00 KB$/m);
     expect(out).toMatch(/^ {2}emoji\s+20\.00 KB {2}OVER$/m);

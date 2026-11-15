@@ -36,18 +36,25 @@ function checkPasswordLength(password) {
   }
 }
 
+/** What a deleted account is called (§43). Nobody else may take the name. */
+const DELETED_NAME = "Deleted account";
+
 /**
  * What kind of account `user` is (§5.1, `users.kind`): "person" (signs in here), "telegram" (a Telegram sender's
- * stand-in, §26.3) or "peer" (a linked instance's person, §33.4). Never set: a person.
+ * stand-in, §26.3), "peer" (a linked instance's person, §33.4) or "deleted" (its person deleted it, §43). Never set: a
+ * person.
  * @param {core.Record} user
- * @returns {"person" | "telegram" | "peer"}
+ * @returns {"person" | "telegram" | "peer" | "deleted"}
  */
 function kindOf(user) {
   const kind = user.getString("kind");
-  return kind === "telegram" || kind === "peer" ? kind : "person";
+  return kind === "telegram" || kind === "peer" || kind === "deleted" ? kind : "person";
 }
 
-/** A stand-in: an account nobody signs in to here (a Telegram sender's, another instance's person's). @param {core.Record} user */
+/**
+ * A stand-in: an account nobody signs in to here (a Telegram sender's, another instance's person's, a deleted one).
+ * @param {core.Record} user
+ */
 const isStandIn = (user) => kindOf(user) !== "person";
 
 /** @param {core.RequestEvent} e */
@@ -60,11 +67,19 @@ function searchUsers(e) {
   // `~` treats a % in the value as a wildcard (and then stops adding its own): escape it (QA BUG-34). `_` is escaped.
   // "@ann" finds Ann by her handle (§41) as well as by name.
   const handle = key.replace(/^@/, "");
-  const found = e.app.findRecordsByFilter("users", "(name_key ~ {:q} || handle ~ {:h}) && id != {:me}", "name", LIMIT, 0, {
-    q: key.replace(/%/g, "\\%"),
-    h: handle.replace(/%/g, "\\%"),
-    me: me.id,
-  });
+  // Not a deleted account (§43): there is nobody to message.
+  const found = e.app.findRecordsByFilter(
+    "users",
+    "(name_key ~ {:q} || handle ~ {:h}) && id != {:me} && kind != 'deleted'",
+    "name",
+    LIMIT,
+    0,
+    {
+      q: key.replace(/%/g, "\\%"),
+      h: handle.replace(/%/g, "\\%"),
+      me: me.id,
+    },
+  );
   // Only the public profile, never the email (§6).
   return e.json(
     200,
@@ -97,7 +112,20 @@ function beforeUserSave(e) {
   if (rec.isNew() || email !== rec.original().getString("email")) rec.set("email", email.trim().toLowerCase());
   // Signups and accounts a superuser makes are people; the bridges set their stand-ins' kind before saving.
   if (rec.isNew() && !rec.getString("kind")) rec.set("kind", "person");
+  if (kindOf(rec) === "deleted") {
+    // A deleted account (§43, lib/account.js erase): one name for all of them, each with a key of its own (no name
+    // is cleaned to a control character, so no one else's key is ever this), and no handle.
+    rec.set("name", DELETED_NAME);
+    rec.set("name_key", `\u0001deleted ${rec.id}`);
+    rec.set("handle", "");
+    return;
+  }
   cleanName(rec);
+  // "Deleted account" is what deleted accounts are called (§43): taken, by them.
+  const renamed = rec.isNew() || rec.getString("name") !== rec.original().getString("name");
+  if (renamed && nameKey(rec.getString("name")) === nameKey(DELETED_NAME)) {
+    throw fieldError("name", "This display name is taken. Choose another one.", "validation_not_unique");
+  }
   if (!rec.isNew() && rec.getString("name") === rec.original().getString("name")) {
     // Name unchanged: keep its key. Accounts named before name_key existed may share a name (the migration made
     // their keys unique), and must still be able to change their picture or password.
@@ -136,4 +164,4 @@ function skipStandInReset(e) {
   return e.next();
 }
 
-module.exports = { beforeUserSave, checkPasswordLength, findLoginByEmail, isStandIn, kindOf, searchUsers, skipStandInReset };
+module.exports = { DELETED_NAME, beforeUserSave, checkPasswordLength, findLoginByEmail, isStandIn, kindOf, searchUsers, skipStandInReset };

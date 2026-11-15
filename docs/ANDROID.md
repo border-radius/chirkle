@@ -1784,3 +1784,28 @@ Tests: `AnswersTest`, `UnreadScenariosTest`; `UiPasswordResetTest`, `UiAccountsT
   or `Text(`, and any "number word" phrase, for text.
 
 Tests: `UiPortsTest`; `HelpersTest` (reactors, unchanged output); `strings.test.ts`.
+
+## 73. Your data and deleting your account (2026-11-15)
+
+The web's (DESIGN.md §43), on the profile screen under Session:
+
+- **Your data**: the screen asks where the newest export is (`ChirkleApi.exportStatus()`, `GET /api/chat/export`) when
+  it opens. **Prepare my data** asks for one (`startExport()`); the server's worker makes it (§43.5) and the screen
+  says "Preparing your data…", asking again every 3 s while it is open (`LaunchedEffect` keyed on the state). Made, it
+  says its size and until when, with **Download** and **Prepare again**. Download hands the link
+  (`exportFileUrl()`: `/api/chat/export/file` with a fresh file token) to the system's download manager, as
+  attachments are (`chirkle.android.ui.download`, §26): the file goes to Downloads as it comes, never through the app's
+  memory.
+- **Delete account**: what it deletes, a choice of "Keep my messages, shown as by “Deleted account”" or "Delete my
+  messages too" (radio rows; neither chosen says so), the password, and **Delete my account**
+  (`ChirkleApi.deleteAccount()`, `POST /api/chat/account/delete`). A wrong password is said under the field. Done, the
+  app logs that account out (`ChirkleServices.logOut()`), as the web does; another signed-in account (§17) takes over
+  as after any log out. The messages, when they go, go after, by the server's worker.
+- Others see the account as "Deleted account" with initials, as any name: nothing in the app tells it apart, and its
+  DMs refuse new messages with the server's reason.
+
+Tests: `ChirkleApiTest` "your data downloads, and deleting the account…" (none, queued, done after the worker's tick,
+the link fetched without the session, a wrong password's field, no sign-in after), `UiFeaturesTest` "your data is
+prepared in the background, then offered to download" and "deleting your account asks your password, then logs you
+out". `AnswersTest` decodes both export routes' examples as `ExportStatus`. The download manager's fetch itself is by
+hand on the emulator, not yet tried.

@@ -162,10 +162,10 @@ describe("GET /api/chat/metrics", () => {
       process: { goroutines: number; heap_bytes: number };
     }>("/api/chat/metrics", {});
     expect(Object.keys(m.queues).sort()).toEqual(
-      ["federation", "link_previews", "media_moves", "media_sizes", "media_thumbs", "storage_cleanup", "telegram"].sort(),
+      ["account_jobs", "federation", "link_previews", "media_moves", "media_sizes", "media_thumbs", "storage_cleanup", "telegram"].sort(),
     );
     expect(m.queues.telegram).toEqual({ rows: 0, failing: 0, oldest_seconds: 0 });
-    expect(Object.keys(m.workers).sort()).toEqual(["federation", "media", "previews", "retention", "telegram"]);
+    expect(Object.keys(m.workers).sort()).toEqual(["account", "federation", "media", "previews", "retention", "telegram"]);
     expect(Date.now() - Date.parse(m.workers.retention!.last_pass)).toBeLessThan(60_000);
     expect(m.workers.retention!.last_error).toBe("");
     expect(m.realtime).toMatchObject({ clients: expect.any(Number), dropped: 0 });

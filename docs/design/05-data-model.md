@@ -11,7 +11,7 @@ All schema is defined in `pb_migrations/` so every environment gets the same sch
 | `id` | text (15) | PB default |
 | `email` | email | unique, required; `emailVisibility = false` |
 | `name` | text | required, 1–32 chars, trimmed |
-| `kind` | select, hidden | `person` (signs in here), `telegram` (a Telegram sender's stand-in, §26.3) or `peer` (a linked instance's person, §33.4). Set by hooks only: `person` on any other create (`lib/users.js`), the bridges set their stand-ins'; no client sets it (create/update rules). Hooks ask `isStandIn`/`kindOf` (`lib/users.js`) instead of the made-up e-mail's domain (REFACTOR item 50, migration 51). |
+| `kind` | select, hidden | `person` (signs in here), `telegram` (a Telegram sender's stand-in, §26.3), `peer` (a linked instance's person, §33.4) or `deleted` (its person deleted it, §43.3; migration 52). Set by hooks only: `person` on any other create (`lib/users.js`), the bridges set their stand-ins'; no client sets it (create/update rules). Hooks ask `isStandIn`/`kindOf` (`lib/users.js`) instead of the made-up e-mail's domain (REFACTOR item 50, migration 51). |
 | `created` / `updated` | autodate | |
 
 ## 5.2 `rooms`

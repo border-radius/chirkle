@@ -1,0 +1,25 @@
+/* Settings' "Your data" and "Delete account" cards (DESIGN.md §43): a stylesheet the profile chunk links
+   (ACCOUNT_CSS, views/profile.ts), so the critical path's app.css doesn't grow for them. */
+
+/* The choices one per line, the buttons at their width. */
+.profile-delete > * {
+  margin: 0;
+}
+
+.profile-delete-choice {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.profile-delete-choice label,
+.profile-export-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-delete button {
+  align-self: flex-start;
+}

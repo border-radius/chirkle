@@ -311,3 +311,25 @@ sealed interface SaveFrom {
     data class File(val message: String, val file: String) : SaveFrom
     data class Item(val item: String) : SaveFrom
 }
+
+/**
+ * Where your newest export is (DESIGN.md §43.2, GET /api/chat/export): `none`, `queued` (being made), `done` (to
+ * download until [expires]) or `failed`. A state the app doesn't know reads as [ExportState.None].
+ */
+@Serializable
+data class ExportStatus(
+    val id: String = "",
+    val state: ExportState = ExportState.None,
+    val created: String = "",
+    val finished: String = "",
+    val expires: String = "",
+    val size: Long = 0,
+)
+
+@Serializable
+enum class ExportState {
+    @SerialName("none") None,
+    @SerialName("queued") Queued,
+    @SerialName("done") Done,
+    @SerialName("failed") Failed,
+}

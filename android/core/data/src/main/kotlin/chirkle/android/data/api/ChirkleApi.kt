@@ -9,6 +9,7 @@ import chirkle.android.data.lib.PageQuery
 import chirkle.android.data.model.Badge
 import chirkle.android.data.model.CollectionItem
 import chirkle.android.data.model.CollectionMeta
+import chirkle.android.data.model.ExportStatus
 import chirkle.android.data.model.InboxEvent
 import chirkle.android.data.model.Collections
 import chirkle.android.data.model.Cursor
@@ -312,6 +313,37 @@ class ChirkleApi(val pb: PbClient) {
     suspend fun changePassword(oldPassword: String, password: String): User {
         me()
         return auth("/api/chat/password", buildJsonObject { put("oldPassword", oldPassword); put("password", password) })
+    }
+
+    /** Where your newest export is (DESIGN.md §43.2). */
+    suspend fun exportStatus(): ExportStatus {
+        me()
+        return get("/api/chat/export")
+    }
+
+    /** Ask for your data as a file (DESIGN.md §43.2): the server makes it in the background. Asked again soon, the same one. */
+    suspend fun startExport(): ExportStatus {
+        me()
+        return decode(call("/api/chat/export", "POST"))
+    }
+
+    /** A link that downloads your made export: with a fresh file token, as the download manager sends no session. */
+    suspend fun exportFileUrl(): String {
+        val token = newFileToken()
+        return pb.base.newBuilder().addPathSegments("api/chat/export/file").addQueryParameter("token", token).build().toString()
+    }
+
+    /**
+     * Delete your account (DESIGN.md §43.3), checked by your [password]: your messages stay under "Deleted account", or
+     * go too with [deleteMessages]. Every session ends, this one included (log out after). Refused with the reason on
+     * `password` or `messages`.
+     */
+    suspend fun deleteAccount(password: String, deleteMessages: Boolean) {
+        me()
+        call("/api/chat/account/delete", "POST", body = Body.Json(buildJsonObject {
+            put("password", password)
+            put("messages", if (deleteMessages) "delete" else "keep")
+        }))
     }
 
     fun avatarUrl(user: User, size: Int): String =

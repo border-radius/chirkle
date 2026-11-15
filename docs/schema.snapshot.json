@@ -1,6 +1,167 @@
 {
   "collections": [
     {
+      "name": "account_jobs",
+      "type": "base",
+      "listRule": null,
+      "viewRule": null,
+      "createRule": null,
+      "updateRule": null,
+      "deleteRule": null,
+      "fields": [
+        {
+          "autogeneratePattern": "[a-z0-9]{15}",
+          "help": "",
+          "hidden": false,
+          "max": 15,
+          "min": 15,
+          "name": "id",
+          "pattern": "^[a-z0-9]+$",
+          "presentable": false,
+          "primaryKey": true,
+          "required": true,
+          "system": true,
+          "type": "text"
+        },
+        {
+          "cascadeDelete": true,
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "minSelect": 0,
+          "name": "user",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "relation",
+          "collection": "users"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "name": "kind",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "select",
+          "values": [
+            "export",
+            "erase"
+          ]
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "name": "state",
+          "presentable": false,
+          "required": true,
+          "system": false,
+          "type": "select",
+          "values": [
+            "queued",
+            "done",
+            "failed"
+          ]
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSelect": 1,
+          "maxSize": 4294967296,
+          "mimeTypes": [],
+          "name": "file",
+          "presentable": false,
+          "protected": true,
+          "required": false,
+          "system": false,
+          "thumbs": [],
+          "type": "file"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "size",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "name": "messages",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "bool"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": null,
+          "min": 0,
+          "name": "tries",
+          "onlyInt": true,
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "number"
+        },
+        {
+          "autogeneratePattern": "",
+          "help": "",
+          "hidden": false,
+          "max": 500,
+          "min": 0,
+          "name": "error",
+          "pattern": "",
+          "presentable": false,
+          "primaryKey": false,
+          "required": false,
+          "system": false,
+          "type": "text"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": "",
+          "min": "",
+          "name": "finished",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "date"
+        },
+        {
+          "hidden": false,
+          "name": "created",
+          "onCreate": true,
+          "onUpdate": false,
+          "presentable": false,
+          "system": false,
+          "type": "autodate"
+        },
+        {
+          "hidden": false,
+          "name": "updated",
+          "onCreate": true,
+          "onUpdate": true,
+          "presentable": false,
+          "system": false,
+          "type": "autodate"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_account_jobs_state ON account_jobs (state, updated)",
+        "CREATE INDEX idx_account_jobs_user ON account_jobs (user, kind, created)"
+      ]
+    },
+    {
       "name": "collection_items",
       "type": "base",
       "listRule": "collection.public = true || collection.owner = @request.auth.id",
@@ -3333,7 +3494,8 @@
           "values": [
             "person",
             "telegram",
-            "peer"
+            "peer",
+            "deleted"
           ]
         }
       ],

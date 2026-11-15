@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, inject, it, vi } from "vitest";
 import { ApiError } from "../../../web/src/api.ts";
 import { LIMITS } from "../../../web/src/lib/limits.ts";
 import type { View } from "../../../web/src/router.ts";
@@ -6,6 +6,7 @@ import { type AppState, createStore, initialState, type Store } from "../../../w
 import { avatarProblem, createProfileView, passwordProblem } from "../../../web/src/views/profile.ts";
 import { instrument, newApi, type SignedUp, signedUp, viewContext } from "../../support/api.ts";
 import { pngFile } from "../../support/files.ts";
+import { SUPERUSER } from "../../support/sql.ts";
 
 describe("avatarProblem (§15.5)", () => {
   it("accepts the server's raster types up to 2 MB", () => {
@@ -252,5 +253,93 @@ describe("profile view (§15.5)", () => {
     const btn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Log out")!;
     btn.click();
     expect(logOut).toHaveBeenCalledOnce();
+  });
+
+  describe("your data (§43)", () => {
+    const delForm = () => root.querySelector<HTMLFormElement>("form.profile-delete")!;
+    const delPassword = () => delForm().querySelector<HTMLInputElement>('input[type="password"]')!;
+    const radio = (value: string) => delForm().querySelector<HTMLInputElement>(`input[value="${value}"]`)!;
+    const errorOf = (input: Element) => document.getElementById(input.getAttribute("aria-describedby")!)!.textContent;
+    const submit = () => delForm().dispatchEvent(new Event("submit", { cancelable: true }));
+
+    const exportStatus = () => root.querySelector(".profile-export [role=status]")!.textContent;
+    const button = (label: string) =>
+      [...root.querySelectorAll<HTMLButtonElement>(".profile-export button")].find((b) => b.textContent === label)!;
+
+    /** Every queued account job done now, as the server's worker would (ACCOUNT_CRON is off in tests). */
+    async function work() {
+      const url = inject("pbUrl");
+      const auth = await fetch(`${url}/api/collections/_superusers/auth-with-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: SUPERUSER.email, password: SUPERUSER.password }),
+      });
+      const { token } = (await auth.json()) as { token: string };
+      expect((await fetch(`${url}/api/account/tick`, { method: "POST", headers: { Authorization: token } })).status).toBe(204);
+    }
+
+    it("Prepare my data asks the server, says it is being prepared, and once made offers it to download by a plain link", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const clicks: string[] = [];
+        vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+          clicks.push(this.href);
+        });
+        mount();
+        await vi.waitFor(() => expect(button("Prepare my data").hidden).toBe(false));
+        expect(button("Download").hidden).toBe(true);
+        button("Prepare my data").click();
+        await vi.waitFor(() => expect(exportStatus()).toMatch(/^Preparing your data/));
+        expect(button("Prepare my data").hidden).toBe(true);
+
+        await work();
+        await vi.advanceTimersByTimeAsync(3000); // asked again while it is being made
+        await vi.waitFor(() => expect(exportStatus()).toMatch(/^Ready: .+, to download until .+\.$/));
+        expect(button("Prepare again").hidden).toBe(false);
+        button("Download").click();
+        await vi.waitFor(() => expect(clicks).toHaveLength(1));
+        const url = new URL(clicks[0]!);
+        expect(url.pathname).toBe("/api/chat/export/file");
+        // A plain link (relative: the app is served by its server): no session sent, the file token says who.
+        const res = await fetch(`${inject("pbUrl")}${url.pathname}${url.search}`);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ format: "chirkle-export", account: { id: me.user.id, email: me.email } });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("an export made earlier is shown as ready when the page opens", async () => {
+      await (await me.api.account()).startExport();
+      await work();
+      mount();
+      await vi.waitFor(() => expect(exportStatus()).toMatch(/^Ready: /));
+      expect(button("Download").hidden).toBe(false);
+    });
+
+    it("deleting asks what becomes of your messages and your password, and a wrong one is said next to it", async () => {
+      const ctl = instrument(me.api);
+      mount();
+      submit();
+      expect(errorOf(delForm().querySelector("fieldset")!)).toBe("Choose whether your messages stay or go.");
+      expect(errorOf(delPassword())).toBe("Enter your password.");
+      expect(ctl.calls("account")).toBe(1); // only Your data's status, asked when the page opens
+      radio("keep").checked = true;
+      delPassword().value = "not-my-password";
+      submit();
+      await vi.waitFor(() => expect(errorOf(delPassword())).toBe("That isn't your password."));
+      expect(errorOf(delForm().querySelector("fieldset")!)).toBe("");
+      expect(logOut).not.toHaveBeenCalled();
+      await newApi().logIn(me.email, me.password); // still there
+    });
+
+    it("deletes the account and logs out; nobody can sign in to it again", async () => {
+      mount();
+      radio("delete").checked = true;
+      delPassword().value = me.password;
+      submit();
+      await vi.waitFor(() => expect(logOut).toHaveBeenCalled());
+      await expect(newApi().logIn(me.email, me.password)).rejects.toThrow();
+    });
   });
 });

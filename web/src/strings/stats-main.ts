@@ -9,6 +9,7 @@ export const THUMBNAILS_TO_MAKE = "Thumbnails to make";
 export const VIDEO_SHAPES_TO_READ = "Video shapes to read";
 export const FILES_TO_MOVE = "Files to move";
 export const STORAGE_TO_CLEAN_UP = "Storage to clean up";
+export const ACCOUNT_JOBS = "Exports and deleted accounts";
 export const MEDIA = "Media";
 export const DAILY_PRUNE = "Daily prune";
 export const SERVER = "Server";

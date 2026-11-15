@@ -1,1 +1,1 @@
-Fixes.
+Forgot your password? Ask for a reset link from the login screen (when the server has email set up). After following a quote, "Back to reply" takes you back to each reply in turn. Mentions and replies count as read once seen in the room, and you can swipe back from Mentions & replies. Fixes a crash after sending ":name" or "@an" with its list open, and requests that sometimes failed with "Something went wrong."

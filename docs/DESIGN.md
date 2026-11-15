@@ -56,3 +56,4 @@ Each section is a file of its own in [`design/`](design/), named by its number: 
 | §40 | [Usage statistics (2026-11-09)](design/40-usage-statistics.md) |
 | §41 | [Handles, mentions and "Mentions & replies" (2026-11-10)](design/41-handles-mentions-and-mentions-replies.md) |
 | §42 | [Retention and server metrics (2026-11-12)](design/42-retention-and-server-metrics.md) |
+| §43 | [Your data and deleting your account (2026-11-15)](design/43-your-data-and-deleting-your-account.md) |

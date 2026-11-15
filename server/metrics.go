@@ -33,6 +33,7 @@ var metricWorkers = map[string]string{
 	"media":      "media.worker",
 	"telegram":   "telegram.worker",
 	"federation": "federation.worker",
+	"account":    "account.worker",
 	"retention":  "retention",
 }
 
@@ -48,6 +49,7 @@ var metricQueues = []struct {
 	{"media_sizes", "files", "ready = TRUE AND sized = FALSE AND src = ''", "", "created"},
 	{"media_moves", "files", "src != ''", "", "created"},
 	{"storage_cleanup", "storage_cleanup", "1", "", ""},
+	{"account_jobs", "account_jobs", "state = 'queued'", "tries > 0", "created"},
 }
 
 type queueMetric struct {

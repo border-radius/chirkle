@@ -40,4 +40,21 @@
     <string name="profile_that_is_your_current_password">That is your current password. Choose a new one.</string>
     <string name="profile_must_be_at_least_characters">Must be at least %1$d characters.</string>
     <string name="profile_enter_your_current_password">Enter your current password.</string>
+    <string name="profile_your_data">Your data</string>
+    <string name="profile_download_hint">Your profile, the messages you wrote, your rooms and collections, as a JSON file. It is prepared in the background, then kept for 7 days.</string>
+    <string name="profile_prepare_my_data">Prepare my data</string>
+    <string name="profile_prepare_again">Prepare again</string>
+    <string name="profile_download">Download</string>
+    <string name="profile_preparing_your_data">Preparing your data. On a big account this takes a while: you can leave this screen and come back.</string>
+    <string name="profile_ready_to_download">Ready: %1$s, to download until %2$s.</string>
+    <string name="profile_preparing_failed">Your data couldn\'t be prepared. Try again.</string>
+    <string name="profile_delete_account">Delete account</string>
+    <string name="profile_delete_hint">Your name, handle, picture, e-mail, collections and sessions are deleted, and nobody can sign in to the account again. This can\'t be undone.</string>
+    <string name="profile_keep_my_messages">Keep my messages, shown as by “Deleted account”</string>
+    <string name="profile_delete_my_messages_too">Delete my messages too</string>
+    <string name="profile_your_password">Your password</string>
+    <string name="profile_delete_my_account">Delete my account</string>
+    <string name="profile_enter_your_password">Enter your password.</string>
+    <string name="profile_choose_what_happens">Choose whether your messages stay or go.</string>
+    <string name="profile_deleting">Deleting…</string>
 </resources>

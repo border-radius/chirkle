@@ -15,6 +15,7 @@ import {
   inlineStringsPlugin,
   MEDIA,
   OUTDIR,
+  PROFILE,
   STATIC_DIR,
   STATS,
   STATS_OPTIONS,
@@ -55,6 +56,7 @@ const ctx = await esbuild.context({
     { in: ACCESS.css, out: "access" },
     { in: EMOJI.css, out: "emoji" },
     { in: INBOX.css, out: "inbox" },
+    { in: PROFILE.css, out: "account" },
   ],
   define: viewerDefine(
     "assets/viewer.css",
@@ -63,6 +65,7 @@ const ctx = await esbuild.context({
     "assets/access.css",
     "assets/emoji.css",
     "assets/inbox.css",
+    "assets/account.css",
   ),
   sourcemap: "inline",
   entryNames: "assets/[name]",

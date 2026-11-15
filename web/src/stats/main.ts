@@ -144,6 +144,8 @@ const LABELS: Record<string, string> = {
   media_sizes: S.VIDEO_SHAPES_TO_READ,
   media_moves: S.FILES_TO_MOVE,
   storage_cleanup: S.STORAGE_TO_CLEAN_UP,
+  account_jobs: S.ACCOUNT_JOBS,
+  account: S.ACCOUNT_JOBS,
   previews: S.LINK_PREVIEWS,
   media: S.MEDIA,
   retention: S.DAILY_PRUNE,

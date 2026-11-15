@@ -46,8 +46,11 @@ export const INBOX = Object.freeze({ js: "web/src/views/inbox.ts", css: "web/sty
 /** The composer's "@" suggestions (§41): a lazy chunk; its list is styled by the emoji picker's stylesheet, which it links. */
 export const MENTION = Object.freeze({ js: "web/src/ui/mention-suggest.ts" });
 
-/** Pages and dialogs out of app.js (2026-11-10): settings, log in and sign up, forward, the people search. */
-export const PROFILE = Object.freeze({ js: "web/src/views/profile.ts" });
+/**
+ * Pages and dialogs out of app.js (2026-11-10): settings, log in and sign up, forward, the people search. Settings links
+ * a stylesheet of its own for its §43 cards (`ACCOUNT_CSS`); the rest of its styles are in app.css.
+ */
+export const PROFILE = Object.freeze({ js: "web/src/views/profile.ts", css: "web/styles/account.css" });
 export const LOGIN = Object.freeze({ js: "web/src/views/login.ts" });
 export const FORWARD = Object.freeze({ js: "web/src/views/room/forward.ts" });
 export const PEOPLE = Object.freeze({ js: "web/src/ui/user-search.ts" });
@@ -123,14 +126,16 @@ export const STATIC_DIR = "web/public";
  * @param {string} accessCssPath the room access dialog's (§23.2)
  * @param {string} emojiCssPath the emoji picker's (§20.4)
  * @param {string} inboxCssPath the inbox's (§41)
+ * @param {string} accountCssPath Settings' "Your data" and "Delete account" cards' (§43)
  */
-export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath) => ({
+export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath, accountCssPath) => ({
   VIEWER_CSS: JSON.stringify(`/${cssPath}`),
   MEDIA_CSS: JSON.stringify(`/${mediaCssPath}`),
   COLLECTIONS_CSS: JSON.stringify(`/${collCssPath}`),
   ACCESS_CSS: JSON.stringify(`/${accessCssPath}`),
   EMOJI_CSS: JSON.stringify(`/${emojiCssPath}`),
   INBOX_CSS: JSON.stringify(`/${inboxCssPath}`),
+  ACCOUNT_CSS: JSON.stringify(`/${accountCssPath}`),
 });
 
 /**
@@ -288,7 +293,7 @@ export function latinFont(metafile, outdir) {
  * with app.js. How fast it feels is checked by scripts/profile-web.ts (CI).
  */
 export const BUDGET = Object.freeze({
-  critical: 62.5 * 1024,
+  critical: 63.5 * 1024,
   feature: 16 * 1024,
   stats: 10 * 1024,
 });

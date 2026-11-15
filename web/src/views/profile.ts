@@ -1,19 +1,35 @@
 // Profile (§15.5, §22.2): change or remove your avatar, change your display name (unique, §22.1), pick this
-// device's theme (§7.8) and notifications (§34, a lazy chunk), change your password, log out.
+// device's theme (§7.8) and notifications (§34, a lazy chunk), change your password, log out, download your data and
+// delete your account (§43).
 //
 // A lazy chunk: app.ts loads it for /me.
 
+import type { AccountApi, ExportStatus } from "../account-api.ts";
 import { ApiError, errorMessage } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, uniqueId } from "../dom.ts";
+import { formatBytes } from "../lib/files.ts";
 import { prepareImage } from "../lib/image.ts";
 import { LIMITS, textLength } from "../lib/limits.ts";
+import { formatFull, parsePb } from "../lib/time.ts";
 import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import * as S from "../strings/profile.ts";
 import { savedTheme, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
 import { avatar } from "../ui/avatar.ts";
+
+/** The §43 cards' stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
+declare const ACCOUNT_CSS: string;
+
+/** Link it once; the cards are at the page's end, so they are styled before anyone gets to them. */
+function linkStylesheet() {
+  if (document.querySelector(`link[href="${ACCOUNT_CSS}"]`)) return;
+  document.head.append(h("link", { rel: "stylesheet", href: ACCOUNT_CSS }));
+}
+
+/** How often a page that shows an export being made asks whether it is made (§43.2). */
+const EXPORT_POLL_MS = 3000;
 
 /** Longest edge of an uploaded avatar (§15.3). */
 const AVATAR_EDGE = 512;
@@ -104,6 +120,32 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   };
   const pwBtn = h("button", { type: "submit", class: "primary" }, S.CHANGE_PASSWORD);
   const pwStatus = h("p", { class: "field-status", role: "status" });
+
+  // Your data (§43): the export, and deleting the account (your password, and what becomes of your messages).
+  const prepareBtn = h("button", { type: "button" }, S.PREPARE_MY_DATA);
+  const downloadBtn = h("button", { type: "button", class: "primary", hidden: true }, S.DOWNLOAD);
+  const exportStatus = h("p", { class: "field-status", role: "status" });
+  let exportPoll: ReturnType<typeof setTimeout> | undefined;
+  /** The account part of the API (§43), loaded once, with the first card that needs it. */
+  let accountApi: Promise<AccountApi> | null = null;
+  const account = () => (accountApi ??= api.account());
+  const delChoice = (value: "keep" | "delete", label: string) => {
+    const input = h("input", { type: "radio", name: `${vid}-del-messages`, value });
+    return { input, el: h("label", {}, [input, label]) };
+  };
+  const keepRadio = delChoice("keep", S.KEEP_MY_MESSAGES);
+  const dropRadio = delChoice("delete", S.DELETE_MY_MESSAGES_TOO);
+  const delChoiceError = h("p", { id: `${vid}-del-choice-error`, class: "field-error" });
+  const delPassword = h("input", {
+    id: `${vid}-del-password`,
+    type: "password",
+    name: "delete-password",
+    autocomplete: "current-password",
+    "aria-describedby": `${vid}-del-password-error`,
+  });
+  const delPasswordError = h("p", { id: `${vid}-del-password-error`, class: "field-error" });
+  const delBtn = h("button", { type: "submit", class: "danger" }, S.DELETE_MY_ACCOUNT);
+  const delStatus = h("p", { class: "field-status", role: "status" });
 
   // Appearance (§7.8): this device's theme, not the account's.
   const THEME_LABELS: Record<Theme, string> = { auto: S.AUTO, light: S.LIGHT, dark: S.DARK };
@@ -272,9 +314,109 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
     }
   }
 
+  /**
+   * Your data (§43.2): where the newest export is. Being made, it is asked about again every EXPORT_POLL_MS while this
+   * page is open; made, it downloads.
+   */
+  function showExport(st: ExportStatus) {
+    clearTimeout(exportPoll);
+    exportStatus.classList.toggle("error", st.state === "failed");
+    exportStatus.textContent =
+      st.state === "queued"
+        ? S.PREPARING_YOUR_DATA
+        : st.state === "done"
+          ? S.readyToDownload(formatBytes(st.size), formatFull(parsePb(st.expires)))
+          : st.state === "failed"
+            ? S.PREPARING_FAILED
+            : "";
+    prepareBtn.hidden = st.state === "queued";
+    prepareBtn.textContent = st.state === "done" ? S.PREPARE_AGAIN : S.PREPARE_MY_DATA;
+    downloadBtn.hidden = st.state !== "done";
+    if (st.state === "queued") exportPoll = setTimeout(() => void refreshExport(), EXPORT_POLL_MS);
+  }
+
+  async function refreshExport() {
+    try {
+      const st = await (await account()).exportStatus(signal);
+      if (scope.active) showExport(st);
+    } catch {
+      // Asked again later while it is being made; otherwise what is shown stays.
+      if (scope.active && prepareBtn.hidden) exportPoll = setTimeout(() => void refreshExport(), EXPORT_POLL_MS);
+    }
+  }
+
+  /** Run an export button's action, with its error under the hint. */
+  async function exportAction(btn: HTMLButtonElement, act: () => Promise<void>) {
+    btn.disabled = true;
+    try {
+      await act();
+    } catch (err) {
+      if (!scope.active) return;
+      exportStatus.textContent = errorMessage(err);
+      exportStatus.classList.add("error");
+    } finally {
+      if (scope.active) btn.disabled = false;
+    }
+  }
+
+  const prepareExport = () =>
+    exportAction(prepareBtn, async () => {
+      const st = await (await account()).startExport();
+      if (scope.active) showExport(st);
+    });
+
+  /** A plain link to the file, so the browser downloads it as it comes (not held in the page first). */
+  const downloadExport = () =>
+    exportAction(downloadBtn, async () => {
+      const url = await (await account()).exportFileUrl();
+      if (!scope.active) return;
+      const a = h("a", { href: url, download: "", hidden: true });
+      document.body.append(a);
+      a.click();
+      a.remove();
+    });
+
+  /** Delete the account (§43.3); done, this device logs out. */
+  async function deleteAccount(e: Event) {
+    e.preventDefault();
+    const choice = keepRadio.input.checked ? "keep" : dropRadio.input.checked ? "delete" : null;
+    const password = delPassword.value;
+    const show = (choiceMsg: string, passwordMsg: string) => {
+      delChoiceError.textContent = choiceMsg;
+      delPasswordError.textContent = passwordMsg;
+      if (passwordMsg) delPassword.setAttribute("aria-invalid", "true");
+      else delPassword.removeAttribute("aria-invalid");
+      if (choiceMsg) keepRadio.input.focus();
+      else if (passwordMsg) delPassword.focus();
+    };
+    delStatus.textContent = "";
+    delStatus.classList.remove("error");
+    show(choice ? "" : S.CHOOSE_WHAT_HAPPENS_TO_YOUR_MESSAGES, password ? "" : S.ENTER_YOUR_PASSWORD);
+    if (!choice || !password) return;
+    delBtn.disabled = true;
+    delStatus.textContent = S.DELETING;
+    try {
+      await (await account()).deleteAccount(password, choice);
+      if (!scope.active) return;
+      logOut();
+    } catch (err) {
+      if (!scope.active) return;
+      delStatus.textContent = "";
+      const fields = err instanceof ApiError ? err.fields : {};
+      if (fields.password || fields.messages) show(fields.messages ?? "", fields.password ?? "");
+      else {
+        delStatus.textContent = errorMessage(err);
+        delStatus.classList.add("error");
+      }
+    } finally {
+      if (scope.active) delBtn.disabled = false;
+    }
+  }
+
   return {
     mount(el) {
       root = el;
+      linkStylesheet();
       nameInput.value = me()?.name ?? "";
       handleInput.value = me()?.handle ?? "";
       fileInput.addEventListener(
@@ -287,6 +429,10 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
         { signal },
       );
       removeBtn.addEventListener("click", () => void save(() => api.removeAvatar()), { signal });
+      prepareBtn.addEventListener("click", () => void prepareExport(), { signal });
+      downloadBtn.addEventListener("click", () => void downloadExport(), { signal });
+      scope.defer(() => clearTimeout(exportPoll));
+      void refreshExport();
       // Drag and drop an image onto the picture.
       picture.addEventListener("dragover", (e) => e.preventDefault(), { signal });
       picture.addEventListener(
@@ -356,6 +502,36 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
             h("div", {}, [h("h2", { id: `${vid}-session-title` }, S.SESSION), signedIn]),
             h("button", { type: "button", class: "danger", on: { click: () => logOut() }, signal }, S.LOG_OUT),
           ]),
+          h("section", { class: "card profile-session profile-export", "aria-labelledby": `${vid}-data-title` }, [
+            h("div", {}, [
+              h("h2", { id: `${vid}-data-title` }, S.YOUR_DATA),
+              h("p", { class: "field-status" }, S.DOWNLOAD_HINT),
+              exportStatus,
+            ]),
+            h("div", { class: "profile-export-actions" }, [downloadBtn, prepareBtn]),
+          ]),
+          h(
+            "form",
+            {
+              class: "card profile-delete",
+              "aria-labelledby": `${vid}-del-title`,
+              novalidate: true,
+              on: { submit: (e) => void deleteAccount(e) },
+              signal,
+            },
+            [
+              h("h2", { id: `${vid}-del-title` }, S.DELETE_ACCOUNT),
+              h("p", { class: "field-status" }, S.DELETE_HINT),
+              h("fieldset", { class: "profile-delete-choice", "aria-describedby": `${vid}-del-choice-error` }, [
+                keepRadio.el,
+                dropRadio.el,
+              ]),
+              delChoiceError,
+              h("div", { class: "field" }, [h("label", { for: `${vid}-del-password` }, S.YOUR_PASSWORD), delPassword, delPasswordError]),
+              delBtn,
+              delStatus,
+            ],
+          ),
         ]),
       ]);
       clear(root);

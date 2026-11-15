@@ -92,6 +92,12 @@ function postService(app, roomId, text) {
  */
 const CHECKED = "@checked";
 
+/**
+ * Set on a message by lib/account.js erase (a custom key, neither stored nor sent): deleted because its author deleted
+ * their account and its messages (§43), which archived rooms don't refuse.
+ */
+const ERASING = "@erasing";
+
 /** Was this message checked by its create request already (prepareCreate)? @param {core.Record} rec */
 const checked = (rec) => rec.get(CHECKED) === true;
 
@@ -331,7 +337,9 @@ function beforeMessageUpdate(e) {
   // A message deleted for good (by a superuser, or with its room) is already gone when PocketBase unsets the
   // reply_to of its replies (§19.1). Let that save through: the guards below would refuse it, and with it the delete.
   if (replyTargetRemoved(e.app, rec, orig) || forwardSourceRemoved(e.app, rec, orig) || originalRemoved(e.app, rec, orig)) return;
-  activeRoom(e.app, orig.getString("room"));
+  // A deleted account's messages, deleted with it at its person's wish (§43), go from archived rooms too.
+  const erasing = rec.get(ERASING) === true && rec.getBool("deleted");
+  if (!erasing) activeRoom(e.app, orig.getString("room"));
 
   if (orig.getBool("deleted")) {
     // Deletion is final; API rules already refuse this, so this only guards superuser edits.
@@ -452,6 +460,7 @@ function beforeUserDelete(e) {
 }
 
 module.exports = {
+  ERASING,
   checked,
   prepareCreate,
   isService,
