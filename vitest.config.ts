@@ -53,6 +53,8 @@ export default defineConfig({
           include: ["tests/integration/**/*.test.ts"],
           environment: "node",
           globalSetup,
+          // Each answer of an /api/chat/* route checked against shared/schema/answers.json (docs/REFACTOR.md item 54).
+          setupFiles: ["tests/support/answers-setup.ts"],
           // Run files serially so rate-limit and realtime tests don't interfere with each other.
           fileParallelism: false,
           // Node 22 ships EventSource behind a flag; the PocketBase SDK needs it for realtime.

@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import PocketBase, { ClientResponseError, type RecordModel } from "pocketbase";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { checkAnswers } from "../support/answers.ts";
 import { PNG } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
 import { disableRateLimits, enableFederation, freePort, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
@@ -93,7 +94,7 @@ interface User {
 }
 
 async function signUp(i: Instance, name = `u${uniq()}`): Promise<User> {
-  const pb = new PocketBase(i.url);
+  const pb = checkAnswers(new PocketBase(i.url));
   pb.autoCancellation(false);
   const email = `${uniq()}@test.local`;
   const password = "password-123";
@@ -652,7 +653,7 @@ describe("Open Air (§33.5)", () => {
     const room = await ann.pb.collection("rooms").create({ name: `open${uniq()}`, created_by: ann.user.id, visibility: "open" });
     const mirror = await share(A, B, room.id, ab.xPeer.id);
     await ann.pb.collection("messages").create({ room: room.id, author: ann.user.id, text: "open to all" });
-    const guest = new PocketBase(B.url);
+    const guest = checkAnswers(new PocketBase(B.url));
     await eventually(async () => {
       const list = await guest.collection("messages").getFullList({ filter: guest.filter("room = {:r}", { r: mirror.id }) });
       expect(list.map((m) => m.text)).toContain("open to all");

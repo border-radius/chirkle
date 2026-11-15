@@ -7,8 +7,9 @@ the spec's cases are. **Not yet**: no Android test.
 
 Test classes: `UiFlowTest`, `UiFeaturesTest`, `UiPortsTest`, `UiPasswordResetTest`, `UiCollectionsTest`, `UiNotifyTest`, `UiLinkedTest`, `RoutesTest` (`app/src/test`); `ServicesTest`, `ChirkleApiTest`, `CollectionsTest`, `NotifyCheckTest`, the
 `lib` tests (`core/data/src/test`), among them `ContractTest`, `VectorsTest`, `WindowVectorsTest` and `LegacyPagesTest`, which run the web's shared
-contract and vectors (`shared/`, docs/API.md); and `RoomScenariosTest` (`core/data`, repo), which replays the web room
-controller's recorded scenarios (`shared/vectors/room.json`).
+contract and vectors (`shared/`, docs/API.md); `RoomScenariosTest` and `UnreadScenariosTest` (`core/data`, repo), which replay the web room
+controller's and unread counts' recorded scenarios (`shared/vectors/room.json`, `unread.json`); and `AnswersTest`, which
+decodes `shared/schema/answers.json`'s examples of each route's answer with the app's models (ANDROID.md §71).
 
 | Web spec | Android | Status |
 |---|---|---|
@@ -21,7 +22,7 @@ controller's recorded scenarios (`shared/vectors/room.json`).
 | `realtime` | `UiFlowTest`: a live message; `ServicesTest`, `ChirkleApiTest`: realtime events | Covered |
 | `reconnect` | `ChirkleApiTest`: reconnect after a pause says events may have been missed | Partial: gap fill after it |
 | `history` | `ServicesTest`: opens around a message far back, jumps to the latest; `UiPortsTest`: Jump to beginning from the room menu (QA pass 32) | Partial: scrolling the edges |
-| `unread` | `ServicesTest`: live counts, read on the server; `UiPortsTest`: unread rooms listed first, a folded section lists only them; `UiFeaturesTest`: what came while the app was in the background is read on coming back (QA BUG-157); `UiPortsTest`: opening a room reads only what is on screen, scrolling down the rest (ANDROID.md §25); `ServicesTest`: a read that fails is sent again by itself (QA BUG-162); `ServicesTest`: an open room not read to the end keeps its count, coming down as it is read (ANDROID.md §41); `RoomSectionsTest` | Partial: the badge and the "New" line on screen |
+| `unread` | `ServicesTest`: live counts, read on the server; `UiPortsTest`: unread rooms listed first, a folded section lists only them; `UiFeaturesTest`: what came while the app was in the background is read on coming back (QA BUG-157); `UiPortsTest`: opening a room reads only what is on screen, scrolling down the rest (ANDROID.md §25); `ServicesTest`: a read that fails is sent again by itself (QA BUG-162); `ServicesTest`: an open room not read to the end keeps its count, coming down as it is read (ANDROID.md §41); `RoomSectionsTest`; `UnreadScenariosTest`: the web's counting, step by step (`shared/vectors/unread.json`) | Partial: the badge and the "New" line on screen |
 | `edit` | `UiFeaturesTest`: edit, delete, a message's menu closing when it is deleted meanwhile (QA BUG-156); `ServicesTest`: edit, delete | Covered |
 | `reactions` | `UiFeaturesTest`: quick reactions; `ServicesTest`; `HelpersTest`: the web's reaction cases; `UiPortsTest`: emoji by name, ":ta" offering 🎉 over the composer, a tap and a whole ":fire:" putting them in, the emoji sheet's search field (DESIGN.md §20.6, ANDROID.md §53); `EmojiTest`: the web's names, line by line, and its finding cases | Covered (what the sheet's search finds: on `EmojiTest` only, as Robolectric draws no emoji) |
 | `replies` | `UiFeaturesTest`: reply and its quote; `ServicesTest`: a live reply's quote from the window, kept through an edit, or fetched (ANDROID.md §34); `UiFeaturesTest`: quotes and the reply bar follow the original's edit and delete (QA BUG-181, BUG-182); `ServicesTest`: back to each reply after following quotes, forgotten at the bottom of the latest messages (DESIGN.md §19.5, ANDROID.md §67); `ChirkleApiTest` | Partial: going to the original |

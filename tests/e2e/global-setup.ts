@@ -7,14 +7,30 @@ import { execFileSync } from "node:child_process";
 import { rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { FullConfig } from "@playwright/test";
+import { doctor, report } from "../../scripts/doctor.mjs";
 import { disableRateLimits, startPocketBase } from "../support/pocketbase.ts";
 import { e2eDataDir, e2ePort } from "./paths.ts";
 
+/** Is this project in the run? `config.projects` lists them all, also under `--project` (CI's e2e jobs install one browser each). */
+function chosen(name: string): boolean {
+  const args = process.argv.slice(2);
+  const picked = args.flatMap((a, i) => (a.startsWith("--project=") ? [a.slice(10)] : a === "--project" ? [args[i + 1] ?? ""] : []));
+  return picked.length === 0 || picked.includes(name);
+}
+
 export default async function globalSetup(config: FullConfig): Promise<() => Promise<void>> {
+  const ports = Array.from({ length: Math.max(1, config.workers) }, (_, slot) => e2ePort(slot));
+  // The environment first (scripts/doctor.mjs, REFACTOR.md item 57): a browser without fonts, a full TMPDIR or a stray
+  // server on a port fails every test in ways that look like flakes. Only the browsers this run uses, before
+  // the build.
+  const browsers = [
+    ...new Set(config.projects.filter((p) => chosen(p.name)).map((p) => p.use.defaultBrowserType ?? p.use.browserName ?? "chromium")),
+  ];
+  const found = await doctor({ browsers, ports, tools: false });
+  if (found.some((f) => f.level === "fail")) throw new Error(`e2e: the environment isn't ready (npm run doctor):\n${report(found)}`);
   // Set when pb_public/ is already a fresh production build (CI's e2e jobs build just before).
   if (!process.env.E2E_SKIP_BUILD) execFileSync("npm", ["run", "build"], { stdio: "inherit" });
 
-  const ports = Array.from({ length: Math.max(1, config.workers) }, (_, slot) => e2ePort(slot));
   const started = await Promise.allSettled(
     ports.map(async (port) => {
       const dataDir = e2eDataDir(port);

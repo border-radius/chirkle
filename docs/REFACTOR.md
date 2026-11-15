@@ -585,13 +585,17 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
     ("0.40.4 (Chirkle 0.3.0)").
   - Measured: PERF.md §9.
 
-#### 48. Migrations: unique names, and a baseline for new installs
+#### 48. Migrations: unique names, and a baseline for new installs — first half ✅ (2026-11-15)
 - Two migrations share a timestamp (`1760000045_mentions.js`, `1760000045_password_reset.js`); PocketBase orders them by
   file name, which works only because they don't touch the same collection. Add a unit test that every
   `pb_migrations/*.js` has a distinct numeric prefix (cheap, catches merges of two branches).
 - 48 migrations run on every fresh install and every test server start. Once 1.0 is cut, add a squashed baseline for
   new databases (PocketBase's collections snapshot), keeping the chain for upgrades; `schema.snapshot.json` already pins
   the result.
+- **Done (2026-11-15):** `tests/unit/migrations.test.ts`: every migration is `<number>_<name>.js` with a prefix of its
+  own. The two `1760000045_*` stay, named in the test: PocketBase records a migration by its file name, so renaming
+  one would run it again on every database that has it. A third file may not join them, and the exception goes
+  if either goes. The baseline waits for 1.0, as written.
 
 #### 49. Retention for tables that only grow ✅ (2026-11-12)
 - `inbox` rows (one per mention, reply and reaction) are never pruned, nor `room_reads` of deleted rooms' users, nor the
@@ -684,42 +688,89 @@ risks are, ordered by value ÷ effort within each part. None of it is started; e
   No behaviour change (unit, component and Chromium e2e suites). Cost: the critical path 61.53 → 62.08 KB of 62.50
   (property names across module boundaries aren't minified).
 
-#### 54. One schema for the `/api/chat/*` answers
+#### 54. One schema for the `/api/chat/*` answers ✅ (2026-11-15)
 - `shared/contract.json` covers fields and limits, `docs/API.md` describes routes in prose. The routes' JSON shapes are
   written three times (hooks, `web/src/lib/types.ts`, Android's `Models.kt`) and checked only by the tests each side
   happens to have.
 - Suggestion: JSON Schemas in `shared/schema/` for each route's answer; the integration tests validate every answer
   they get against them (one helper in `tests/integration/helpers.ts`), and `ContractTest.kt` decodes the schemas'
   examples with the app's models. Generated types are optional; validation alone catches the drift.
+- **Done:** one file, `shared/schema/answers.json` (27 routes, shared `$defs` for messages, rooms, users, profiles),
+  checked by a small validator of the JSON Schema keywords it uses (`tests/support/schema.ts`; an unknown keyword
+  throws). The integration clients (`helpers.ts client()`, the federation tests' own) check every 2xx JSON answer of
+  an `/api/chat/*` route; a mismatch fails the test it happened in with the route, the path and why
+  (`tests/support/answers-setup.ts`), and a JSON answer of a route not in the file fails too.
+  `tests/unit/answers.test.ts`: the examples fit, the checker says what it should, and the file names exactly the
+  routes the hooks and the Go server define (posters and the item delete answer no JSON). `AnswersTest.kt` decodes
+  every example with the model ChirkleApi uses (ANDROID.md §71). The first full run found one real thing: a message
+  relayed from a linked server has `file_sources: null` (a JSON field never set), which both clients read as empty;
+  the schema allows `null` for messages' JSON fields now and says so. Checked that it catches drift: the schema
+  without `mentions` failed 9 tests of `reads.test.ts`.
 
-#### 55. Parity by construction (Android)
+#### 55. Parity by construction (Android) ✅ (2026-11-15)
 - QA pass 20 found six app bugs that were unported web fixes; PARITY.md tracks specs, not fixes.
 - Suggestion: every row of a QA table states where the fix went (`web`, `app`, `server`, or `n/a` with a reason), and a
   unit test fails on a row without it. Extend `shared/vectors/` to the unread counts and the inbox, as `room.json` did
   for the room controller.
+- **Done:** docs/QA.md's bug tables have a **Fix in** column from QA pass 35 on (19 rows filled from each fix's
+  notes, and the app's code where they said nothing of it). `tests/unit/qa.test.ts`: every bug table from the first
+  with the column on has it; each value is `web`, `app`, `server`, `<web|app> n/a (why)` or `—` while not fixed; naming
+  one client names the other. `shared/vectors/unread.json`: 7 scenarios of the unread counts, the rooms' "@" and the
+  inbox's count, recorded from the web's `unread.ts` (`tests/component/unread.scenarios.test.ts`) and replayed by the
+  app's `UnreadScenariosTest.kt`; the app passed them unchanged. Each starts once the module has counted and follows
+  live (before that, a first message could be missed by both: neither exposes when its subscription is in). The
+  inbox page itself is a server route, checked by its schema (item 54) and `mentions.test.ts`.
 
-#### 56. Strings in one place (web and Android)
+#### 56. Strings in one place (web and Android) — started (2026-11-15)
 - Every user-facing string is inline (web views; Android composables: `strings.xml` has 3 lines). That blocks
   translations (see P8) and makes copy changes a code search.
 - Suggestion: a `strings.ts` for the web (lazy chunks get theirs through their kit) and `strings.xml` resources for the
   app, moved screen by screen; no i18n framework until a second language exists.
+- **Started:** the web keeps one strings module per screen, `web/src/strings/<screen>.ts`, of exported constants (and
+  functions for text with values): one shared `strings.ts` would go into a chunk on the critical path with every lazy
+  screen's text in it, and esbuild shortens the names of exported constants, so a moved screen costs nothing (the
+  critical path stayed at 62.10 KB). The app keeps one `strings.xml` per feature module; a view model gets a resolver of
+  the application's resources from its screen. Moved: the login, signup and reset pages (`strings/login.ts`;
+  `feature/auth` strings.xml for `AuthScreen` and `AuthViewModel`). `tests/unit/strings.test.ts` keeps a moved file
+  free of inline text (literals that read as English).
+- **Left**, by inline literals (a rough count): web `stats/main.ts` (78), `views/rooms.ts` (45), `room/messages.ts` (42),
+  `views/room.ts` (37), `collection/page.ts` (37), `profile.ts` (33), `room/composer.ts` (29), `room/header.ts` (28),
+  `room/access.ts` (27), then about 30 files with fewer than 20 each (≈ 640 in all); the app's other feature modules
+  and `core/ui` (≈ 330). Each screen as its own change, adding its files to `MOVED`.
 
-#### 57. A doctor for the dev environment
+#### 57. A doctor for the dev environment ✅ (2026-11-15)
 - Many "flakes" in the QA notes were the environment: no fonts (FONTCONFIG_FILE), a full `/tmp`, stale PocketBase
   children holding a port, missing ffmpeg/versitygw silently skipping tests.
 - Suggestion: `npm run doctor` (`scripts/doctor.mjs`): checks `bin/pocketbase`'s version, ffmpeg, versitygw, the
   Playwright browsers and their libraries (launch one page with an `<input>`), free space in `TMPDIR`, ports in use by
   stray `pocketbase serve`; prints what is missing and how to fix it. `playwright.config.ts`'s global setup runs it.
+- **Done:** `npm run doctor` (`scripts/doctor.mjs`): Node and Go against `package.json` and `go.mod`,
+  `bin/chirkle-server` there and newer than `server/`, ffmpeg and versitygw (`FFMPEG`, `VERSITYGW`: a warning, their
+  tests are skipped), free space in `TMPDIR` (fails under 1 GB), stray test servers (Linux, from `/proc`), the e2e
+  ports, and each browser asked for launched to type into a page and draw text. A browser that can't start names the
+  missing library (`libnspr4.so`); one without fonts crashes on its first page, which Playwright reports only as
+  "closed", so `FONTCONFIG_FILE` naming a missing file is checked first and a crash says "most often: no fonts". The
+  e2e global setup runs it before the build for the run's own browsers (`--project`) and ports, without the tools.
 
-#### 58. Quarantine known flakes and measure them
+#### 58. Quarantine known flakes and measure them ✅ (2026-11-15)
 - Known flakes (`attachments.spec.ts:184` Ctrl-click tab, `cache.spec.ts:135` at 4 workers) are remembered, not
   recorded. Tag them `@flaky`, run them in a nightly job with `--repeat-each=20`, and record the failure rate; a fix
   removes the tag.
+- **Done:** both flakes named above were fixed meanwhile (item 42; QA pass 36), so nothing is tagged today.
+  `playwright.config.ts` leaves `@flaky` out of every run unless `FLAKY=1`; `.github/workflows/flaky.yml` runs them in
+  Chromium every night, 20 times each with no retries, and puts each one's failure rate in the job's summary
+  (`scripts/flaky-report.mjs`, from the JSON report). Tried with a throwaway spec failing every other run: left out
+  of a plain run, "2 of 4 · 50%" with `FLAKY=1 --repeat-each=4`. Not run on GitHub yet: watch the first night.
 
-#### 59. Docs that can be read
+#### 59. Docs that can be read ✅ (2026-11-15)
 - `DESIGN.md` is 3,839 lines, `QA.md` 2,801, `ANDROID.md` 1,670. Suggestion: `docs/design/NN-topic.md` per section
   with `DESIGN.md` as the index; QA passes older than a month move to `docs/history/QA-<month>.md` (bug numbers stay
   greppable). Long "raised for …" lists (§7.7) become one line plus the history file.
+- **Done:** `docs/DESIGN.md` is the index (58 lines); each section is `docs/design/NN-topic.md` (§1–§42, and the
+  post-MVP shared rules), headings one level up, numbers unchanged, relative links fixed (all resolve). §13's 46 budget
+  raises are `docs/history/BUDGETS.md`, one row in their place. QA passes before 2026-10-15 (to pass 11, BUG-24 …
+  BUG-96) are `docs/history/QA-2026-10.md`; `QA.md` (2,240 lines) says where. README's links to sections point at
+  their files. ANDROID.md stays one file.
 
 ### Product
 

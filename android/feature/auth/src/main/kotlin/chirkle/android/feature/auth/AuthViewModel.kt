@@ -18,7 +18,14 @@ import kotlinx.coroutines.launch
 
 enum class AuthMode { LogIn, SignUp, Forgot }
 
-class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : ViewModel() {
+/** [text]: a string of this module's strings.xml, with its arguments (AuthScreen passes the resources' getString). */
+class AuthViewModel(
+    private val services: ChirkleServices,
+    initial: AuthMode,
+    private val text: (Int, Array<out Any>) -> String,
+) : ViewModel() {
+    private fun s(id: Int, vararg args: Any) = text(id, args)
+
     var mode by mutableStateOf(initial)
         private set
     var name by mutableStateOf("")
@@ -59,15 +66,15 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
         formError = ""
         fieldErrors = emptyMap()
         if (mode == AuthMode.SignUp && textLength(name.trim()) > Limits.USER_NAME) {
-            fieldErrors = mapOf("name" to "Must be no more than ${Limits.USER_NAME} characters.")
+            fieldErrors = mapOf("name" to s(R.string.auth_name_too_long, Limits.USER_NAME))
             return
         }
         if (mode == AuthMode.SignUp && password.length < Limits.PASSWORD_MIN) {
-            fieldErrors = mapOf("password" to "Must be at least ${Limits.PASSWORD_MIN} characters.")
+            fieldErrors = mapOf("password" to s(R.string.auth_password_too_short, Limits.PASSWORD_MIN))
             return
         }
         if (mode == AuthMode.SignUp && password.toByteArray(Charsets.UTF_8).size > Limits.PASSWORD_MAX_BYTES) {
-            fieldErrors = mapOf("password" to "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation).")
+            fieldErrors = mapOf("password" to s(R.string.auth_password_too_long))
             return
         }
         busy = true
@@ -96,18 +103,18 @@ class AuthViewModel(private val services: ChirkleServices, initial: AuthMode) : 
         if (e is ApiError && e.codes["auth"] == SIGNUP_LOGIN_FAILED) {
             // The account exists now: signing up again would only say the email is taken.
             mode = AuthMode.LogIn
-            formError = "Your account was created, but logging in failed: ${errorMessage(e)} Log in to continue."
+            formError = s(R.string.auth_created_not_logged_in, errorMessage(e))
             return
         }
         val all = (e as? ApiError)?.fields.orEmpty()
         val shown = all.filterKeys { it in fields() }.toMutableMap()
         if (mode == AuthMode.SignUp && e is ApiError && e.codes["email"] == "validation_not_unique") {
-            shown["email"] = "There is already an account with this email. Log in instead." // QA BUG-49
+            shown["email"] = s(R.string.auth_email_taken) // QA BUG-49
         }
         // A refused login is a 400 without field errors; PocketBase's message doesn't say why (QA BUG-40).
         val badLogin = mode == AuthMode.LogIn && e is ApiError && e.status == 400
         val invite = if (shown["invite_code"] == null) all["invite_code"] else null
         fieldErrors = shown
-        formError = if (shown.isNotEmpty()) "" else invite ?: if (badLogin) "Wrong email or password." else errorMessage(e)
+        formError = if (shown.isNotEmpty()) "" else invite ?: if (badLogin) s(R.string.auth_wrong_login) else errorMessage(e)
     }
 }

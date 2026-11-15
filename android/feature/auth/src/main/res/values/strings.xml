@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Log in, sign up and forgot password (AuthScreen, AuthViewModel; DESIGN.md §22, §39). One file per screen's module
+     (docs/REFACTOR.md item 56), as the web's web/src/strings/login.ts: copy changes here, a translation sits beside it. -->
+<resources>
+    <string name="auth_on_server">on %1$s</string>
+    <string name="auth_change_server">Change server</string>
+    <string name="auth_log_in">Log in</string>
+    <string name="auth_sign_up">Sign up</string>
+    <string name="auth_logging_in">Logging in…</string>
+    <string name="auth_signing_up">Signing up…</string>
+    <string name="auth_display_name">Display name</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_invite_code">Invite code</string>
+    <string name="auth_forgot_password">Forgot password?</string>
+    <string name="auth_just_looking">Just looking? Read the Open Air rooms</string>
+    <string name="auth_other_accounts">Your other accounts</string>
+    <string name="auth_reset_password">Reset password</string>
+    <string name="auth_link_sent">If an account uses %1$s, a link to set a new password is on its way. It works for 30 minutes.</string>
+    <string name="auth_forgot_hint">Enter your account\'s email, and we\'ll send you a link to set a new password.</string>
+    <string name="auth_sending">Sending…</string>
+    <string name="auth_send_link">Send link</string>
+    <string name="auth_back_to_log_in">Back to log in</string>
+    <string name="auth_show_password">Show password</string>
+    <string name="auth_hide_password">Hide password</string>
+
+    <string name="auth_name_too_long">Must be no more than %1$d characters.</string>
+    <string name="auth_password_too_short">Must be at least %1$d characters.</string>
+    <string name="auth_password_too_long">Use at most 71 characters (fewer if some aren\'t plain Latin letters, digits or punctuation).</string>
+    <string name="auth_created_not_logged_in">Your account was created, but logging in failed: %1$s Log in to continue.</string>
+    <string name="auth_email_taken">There is already an account with this email. Log in instead.</string>
+    <string name="auth_wrong_login">Wrong email or password.</string>
+</resources>

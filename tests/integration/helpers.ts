@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import PocketBase, { ClientResponseError, type RecordModel, type RecordSubscription } from "pocketbase";
 import { expect, inject } from "vitest";
+import { checkAnswers } from "../support/answers.ts";
 import { uniq } from "../support/ids.ts";
 import { withName } from "../support/names.ts";
 import { SUPERUSER } from "../support/pocketbase.ts";
@@ -16,9 +17,12 @@ export { uniq } from "../support/ids.ts";
 export const byName = <T extends { collectionName: string }>(rec: T) => ({ ...rec, collectionId: rec.collectionName });
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Fresh SDK client with an in-memory auth store, so clients never share tokens. */
+/**
+ * Fresh SDK client with an in-memory auth store, so clients never share tokens. Its /api/chat/* answers are checked
+ * against shared/schema/answers.json (tests/support/answers.ts).
+ */
 export function client(): PocketBase {
-  const pb = new PocketBase(inject("pbUrl"));
+  const pb = checkAnswers(new PocketBase(inject("pbUrl")));
   pb.autoCancellation(false);
   return pb;
 }

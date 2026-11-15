@@ -10,6 +10,9 @@ export default defineConfig({
   // (tests/support/low-priority.ts). CI keeps Playwright's default.
   ...(LOCAL ? { workers: localWorkers(0.25) } : {}),
   forbidOnly: CI,
+  // Quarantined tests (tag "@flaky", docs/REFACTOR.md item 58) are left out of the regular runs; the nightly job
+  // (.github/workflows/flaky.yml) runs them alone, 20 times each, and reports their failure rate. FLAKY=1 runs them.
+  ...(process.env.FLAKY ? {} : { grepInvert: /@flaky/ }),
   retries: CI ? 1 : 0,
   reporter: CI ? [["github"], ["html", { open: "never" }]] : "list",
   // Builds, then starts one server per worker on E2E_PORT (default 8091) + the worker's slot; fixtures.ts points each

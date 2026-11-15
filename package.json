@@ -43,6 +43,7 @@
     "setup": "node scripts/build-server.mjs",
     "release": "node scripts/release.mjs",
     "dev": "node scripts/dev.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "node scripts/build-server.mjs && sh scripts/pb-types.sh && tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
     "lint": "biome check .",

@@ -1,0 +1,50 @@
+name: Flaky tests
+
+# The quarantined e2e tests (tag "@flaky", docs/REFACTOR.md item 58), each run 20 times in Chromium every night: the
+# job's summary gives each one's failure rate (scripts/flaky-report.mjs). It never fails on a test's failure; fixing a
+# test removes its tag, and docs/QA.md records the rate before and after.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: Runs of each test
+        default: "20"
+
+jobs:
+  flaky:
+    name: Quarantined tests (chromium)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - run: npm run build
+      - name: Run them
+        run: |
+          npx playwright test --project=chromium --grep @flaky --repeat-each=${{ inputs.repeat || '20' }} --retries=0 \
+            --pass-with-no-tests --reporter=json || true
+        env:
+          CI: "1"
+          FLAKY: "1"
+          PLAYWRIGHT_JSON_OUTPUT_FILE: flaky.json # the global setup logs to stdout too
+          E2E_SKIP_BUILD: "1"
+      - run: node scripts/flaky-report.mjs flaky.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-report
+          path: flaky.json
+          retention-days: 30

@@ -11,6 +11,7 @@ import { LIMITS, textLength } from "../lib/limits.ts";
 import { DEFAULT_SITE, type User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import type { AppState, Store } from "../store.ts";
+import * as S from "../strings/login.ts";
 
 type Mode = "login" | "signup" | "forgot" | "reset";
 type Field = "name" | "email" | "password" | "invite_code";
@@ -25,30 +26,30 @@ interface FieldSpec {
 
 const fieldSpecs = (): Record<Mode, FieldSpec[]> => ({
   login: [
-    { name: "email", label: "Email", type: "email", autocomplete: "email" },
-    { name: "password", label: "Password", type: "password", autocomplete: "current-password" },
+    { name: "email", label: S.EMAIL, type: "email", autocomplete: "email" },
+    { name: "password", label: S.PASSWORD, type: "password", autocomplete: "current-password" },
   ],
-  forgot: [{ name: "email", label: "Email", type: "email", autocomplete: "email" }],
+  forgot: [{ name: "email", label: S.EMAIL, type: "email", autocomplete: "email" }],
   reset: [
-    { name: "password", label: "New password", type: "password", autocomplete: "new-password", extra: { minlength: LIMITS.passwordMin } },
+    { name: "password", label: S.NEW_PASSWORD, type: "password", autocomplete: "new-password", extra: { minlength: LIMITS.passwordMin } },
   ],
   signup: [
     // No `maxlength`: it counts UTF-16 units (an emoji is 2), the server counts characters. Checked on submit.
-    { name: "name", label: "Display name", type: "text", autocomplete: "nickname" },
-    { name: "email", label: "Email", type: "email", autocomplete: "email" },
-    { name: "password", label: "Password", type: "password", autocomplete: "new-password", extra: { minlength: LIMITS.passwordMin } },
+    { name: "name", label: S.DISPLAY_NAME, type: "text", autocomplete: "nickname" },
+    { name: "email", label: S.EMAIL, type: "email", autocomplete: "email" },
+    { name: "password", label: S.PASSWORD, type: "password", autocomplete: "new-password", extra: { minlength: LIMITS.passwordMin } },
   ],
 });
 
 /** Asked for last on signup, while the site is invite-only (§24). */
-const INVITE: FieldSpec = { name: "invite_code", label: "Invite code", type: "text", autocomplete: "off" };
+const INVITE: FieldSpec = { name: "invite_code", label: S.INVITE_CODE, type: "text", autocomplete: "off" };
 
-const TITLES: Record<Mode, string> = { login: "Log in", signup: "Sign up", forgot: "Reset password", reset: "Set a new password" };
+const TITLES: Record<Mode, string> = { login: S.LOG_IN, signup: S.SIGN_UP, forgot: S.RESET_PASSWORD, reset: S.SET_NEW_PASSWORD };
 const TABS: Mode[] = ["login", "signup"];
-const BUTTONS: Partial<Record<Mode, string>> = { forgot: "Send link", reset: "Set password" };
+const BUTTONS: Partial<Record<Mode, string>> = { forgot: S.SEND_LINK, reset: S.SET_PASSWORD };
 const hints = (): Partial<Record<Mode, string>> => ({
-  forgot: "Enter your account's email, and we'll send you a link to set a new password.",
-  reset: `At least ${LIMITS.passwordMin} characters. Every device logged in to this account is logged out.`,
+  forgot: S.FORGOT_HINT,
+  reset: S.resetHint(LIMITS.passwordMin),
 });
 
 /** The email a reset token was made for (its claims), or "". */
@@ -111,7 +112,7 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
     const submit = h("button", { type: "submit", class: "primary", disabled: busy }, BUTTONS[mode] ?? TITLES[mode]);
     const forgot =
       mode === "login" && site().passwordReset
-        ? h("button", { type: "button", class: "link auth-forgot", on: { click: toMode("forgot") }, signal }, "Forgot password?")
+        ? h("button", { type: "button", class: "link auth-forgot", on: { click: toMode("forgot") }, signal }, S.FORGOT_PASSWORD)
         : null;
 
     const fields = fieldsOf(mode).map((f) => {
@@ -161,17 +162,11 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
       ],
     );
     // The link was sent: say where, in place of the form.
-    const sent = sentTo
-      ? h(
-          "p",
-          { role: "status", class: "auth-hint" },
-          `If an account uses ${sentTo}, a link to set a new password is on its way. It works for 30 minutes.`,
-        )
-      : null;
+    const sent = sentTo ? h("p", { role: "status", class: "auth-hint" }, S.linkSent(sentTo)) : null;
     const back =
       mode === "forgot"
-        ? h("button", { type: "button", class: "link auth-back", on: { click: toMode("login") }, signal }, "Back to log in")
-        : h("a", { href: "/login", class: "auth-back" }, "Back to log in");
+        ? h("button", { type: "button", class: "link auth-back", on: { click: toMode("login") }, signal }, S.BACK_TO_LOG_IN)
+        : h("a", { href: "/login", class: "auth-back" }, S.BACK_TO_LOG_IN);
 
     const { title, logo } = site();
     const tabbed = TABS.includes(mode);
@@ -185,7 +180,7 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
           { class: "auth-card" },
           tabbed ? [h("div", { role: "tablist", class: "tabs" }, tabs), form] : [h("h2", {}, TITLES[mode]), sent ?? form, back],
         ),
-        h("p", { class: "auth-skip" }, h("a", { href: "/" }, "Just looking? Read the Open Air rooms")),
+        h("p", { class: "auth-skip" }, h("a", { href: "/" }, S.JUST_LOOKING)),
       ]),
     );
   }
@@ -193,11 +188,11 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
   async function onSubmit(button: HTMLButtonElement) {
     if (busy) return;
     if (mode === "signup" && textLength(values.name.trim()) > LIMITS.userName) {
-      render({ fields: { name: `Must be no more than ${LIMITS.userName} characters.` } });
+      render({ fields: { name: S.nameTooLong(LIMITS.userName) } });
       return;
     }
     if (mode === "signup" && new TextEncoder().encode(values.password).length > LIMITS.passwordMaxBytes) {
-      render({ fields: { password: "Use at most 71 characters (fewer if some aren't plain Latin letters, digits or punctuation)." } });
+      render({ fields: { password: S.PASSWORD_TOO_LONG } });
       return;
     }
     busy = true;
@@ -222,7 +217,7 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
           busy = false;
           mode = "login";
           values.email = email;
-          render({ form: "Your password was changed. Log in with it." });
+          render({ form: S.PASSWORD_CHANGED });
         }
         return;
       }
@@ -244,7 +239,7 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
       if (e instanceof ApiError && e.codes.auth === SIGNUP_LOGIN_FAILED) {
         // The account exists now: signing up again would only say the email is taken.
         mode = "login";
-        render({ form: `Your account was created, but logging in failed: ${errorMessage(e)} Log in to continue.` });
+        render({ form: S.createdButNotLoggedIn(errorMessage(e)) });
         return;
       }
       // Errors for fields on screen go next to them; anything else (network, rate limit, …) above the button.
@@ -252,16 +247,15 @@ export function createLoginView(deps: { api: Api; onLogin: (user: User) => void;
       const fields = Object.fromEntries(Object.entries(all).filter(([k]) => fieldsOf(mode).some((f) => f.name === k)));
       // PocketBase says "Value must be unique." (QA BUG-49).
       if (mode === "signup" && e instanceof ApiError && e.codes.email === "validation_not_unique") {
-        fields.email = "There is already an account with this email. Log in instead.";
+        fields.email = S.EMAIL_TAKEN;
       }
       // A refused login is a 400 without field errors; PocketBase's "Failed to authenticate." doesn't say why (QA BUG-40).
       const badLogin = mode === "login" && e instanceof ApiError && e.status === 400;
       // The site became invite-only after this page loaded (§24): no code field on screen to put the error next to.
       const invite = e instanceof ApiError && !fields.invite_code ? all.invite_code : undefined;
       // A reset link that ran out (30 minutes) or was used already.
-      const expired =
-        mode === "reset" && e instanceof ApiError && e.codes.token ? "This link has expired or was already used. Ask for a new one." : "";
-      const form = Object.keys(fields).length ? "" : invite || expired || (badLogin ? "Wrong email or password." : errorMessage(e));
+      const expired = mode === "reset" && e instanceof ApiError && e.codes.token ? S.LINK_EXPIRED : "";
+      const form = Object.keys(fields).length ? "" : invite || expired || (badLogin ? S.WRONG_LOGIN : errorMessage(e));
       render({ form, fields });
     }
   }

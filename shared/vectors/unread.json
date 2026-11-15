@@ -1,0 +1,486 @@
+{
+  "$comment": "The unread counts and the inbox's count (DESIGN.md §18.3, §41.4): web/src/unread.ts and android/…/repo/Sync.kt (Unread), against a real PocketBase. Run by tests/component/unread.scenarios.test.ts and android/…/repo/UnreadScenariosTest.kt. Three people: `me` (whose counts these are, the module running), `ann` and `bob`; two public rooms by ann, `A` and `B`. Steps: say (who, room, label: the message's; mention: true for \"@me\" in it; replyTo: a label), react (who, at: a label), delete (who, at), open (room: a reader of it), seen (room, upTo: a label, caughtUp), close (room, caughtUp), readElsewhere (room, upTo: me's read sent by another device). Each scenario starts once the module has counted and is following live. After each step the counts must come to `expect`: unread and mentions by room (rooms at 0 left out), and the inbox's. Recorded from the web's module: RECORD=1 npx vitest run --project component tests/component/unread.scenarios.test.ts.",
+  "scenarios": [
+    {
+      "name": "others' messages count, your own don't",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "A",
+          "label": "a2",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "me",
+          "room": "A",
+          "label": "a3",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "B",
+          "label": "b1",
+          "expect": {
+            "unread": {
+              "A": 2,
+              "B": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "a mention and a reply count in their room's @ and in the inbox; a reaction in the inbox only",
+      "steps": [
+        {
+          "do": "say",
+          "who": "me",
+          "room": "A",
+          "label": "mine",
+          "expect": {
+            "unread": {},
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "reply",
+          "replyTo": "mine",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {
+              "A": 1
+            },
+            "inbox": 1
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "B",
+          "label": "hey",
+          "mention": true,
+          "expect": {
+            "unread": {
+              "A": 1,
+              "B": 1
+            },
+            "mentions": {
+              "A": 1,
+              "B": 1
+            },
+            "inbox": 2
+          }
+        },
+        {
+          "do": "react",
+          "who": "bob",
+          "at": "mine",
+          "expect": {
+            "unread": {
+              "A": 1,
+              "B": 1
+            },
+            "mentions": {
+              "A": 1,
+              "B": 1
+            },
+            "inbox": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "reading part of a room keeps the rest unread",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a2",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a3",
+          "expect": {
+            "unread": {
+              "A": 3
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "open",
+          "room": "A",
+          "expect": {
+            "unread": {
+              "A": 3
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "seen",
+          "room": "A",
+          "upTo": "a2",
+          "caughtUp": false,
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "close",
+          "room": "A",
+          "caughtUp": false,
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "caught up in a room, what comes there is read as it comes; elsewhere it counts",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "open",
+          "room": "A",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "seen",
+          "room": "A",
+          "upTo": "a1",
+          "caughtUp": true,
+          "expect": {
+            "unread": {},
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a2",
+          "expect": {
+            "unread": {},
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "B",
+          "label": "b1",
+          "expect": {
+            "unread": {
+              "B": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "seen",
+          "room": "A",
+          "upTo": "a2",
+          "caughtUp": true,
+          "expect": {
+            "unread": {
+              "B": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "close",
+          "room": "A",
+          "caughtUp": true,
+          "expect": {
+            "unread": {
+              "B": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "scrolled up in the open room, a new message there counts",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a2",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "open",
+          "room": "A",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "seen",
+          "room": "A",
+          "upTo": "a1",
+          "caughtUp": false,
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "A",
+          "label": "a3",
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "close",
+          "room": "A",
+          "caughtUp": false,
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "read on another device",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a2",
+          "mention": true,
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {
+              "A": 1
+            },
+            "inbox": 1
+          }
+        },
+        {
+          "do": "say",
+          "who": "bob",
+          "room": "B",
+          "label": "b1",
+          "expect": {
+            "unread": {
+              "A": 2,
+              "B": 1
+            },
+            "mentions": {
+              "A": 1
+            },
+            "inbox": 1
+          }
+        },
+        {
+          "do": "readElsewhere",
+          "room": "A",
+          "upTo": "a2",
+          "expect": {
+            "unread": {
+              "B": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "an unread message deleted isn't counted any more",
+      "steps": [
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a1",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        },
+        {
+          "do": "say",
+          "who": "ann",
+          "room": "A",
+          "label": "a2",
+          "mention": true,
+          "expect": {
+            "unread": {
+              "A": 2
+            },
+            "mentions": {
+              "A": 1
+            },
+            "inbox": 1
+          }
+        },
+        {
+          "do": "delete",
+          "who": "ann",
+          "at": "a2",
+          "expect": {
+            "unread": {
+              "A": 1
+            },
+            "mentions": {},
+            "inbox": 0
+          }
+        }
+      ]
+    }
+  ]
+}

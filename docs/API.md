@@ -11,11 +11,19 @@ client keeps its own copy, and tests compare those copies with the contract:
 - `android/…/lib/ContractTest.kt` checks the app's.
 - `tests/integration/schema.test.ts` checks the limits against the migrations.
 
+What each `/api/chat/*` route answers is [`shared/schema/answers.json`](../shared/schema/answers.json): a JSON Schema
+and examples per route (REFACTOR.md item 54). Every 2xx JSON answer the integration tests get is checked against it
+(`tests/support/answers.ts`), `tests/unit/answers.test.ts` checks that every route the server defines is in it, and
+the app's `AnswersTest.kt` decodes the examples with its models.
+
 Rules that more than one implementation must follow have test vectors in [`shared/vectors/`](../shared/vectors/):
 - `text.json`, `jump.json`: text folding, search queries, Jump to's ranking. The web, the hooks and the app run them.
 - `window.json`: the message window (merge, trim, pages, groups, page queries; DESIGN.md §7.5). The web
   (`tests/unit/lib/window-vectors.test.ts`) and the app (`WindowVectorsTest.kt`) run it. Messages in it are written out
   or generated as `tests/support/vectors.ts` says.
+- `unread.json`: the unread counts and the inbox's count (DESIGN.md §18.3, §41.4) against a real server, recorded from
+  the web's `unread.ts` (`RECORD=1 npx vitest run --project component tests/component/unread.scenarios.test.ts`) and
+  replayed by it and by the app's `UnreadScenariosTest.kt`, as `room.json` is.
 - `room.json`: the room controller against a real server (open, page, jump, go to, live messages, pill, unread line,
   deletes). Recorded from the web's controller (`RECORD=1 npx vitest run --project component
   tests/component/views/room/scenarios.test.ts`) and replayed by it and by the app's `RoomScenariosTest.kt`. A change to
@@ -98,7 +106,8 @@ Routes only the server or tests call: the `*/tick` routes (superusers, `keepaliv
 
 ## Changing it
 
-- **Adding** a field, a route or an optional parameter is safe. Clients ask for named fields (`fields=`), so they
+- **Adding** a field, a route or an optional parameter is safe. Add it to `shared/schema/answers.json` with it: the
+  integration tests fail on an answer with a field, or a route, it doesn't list. Clients ask for named fields (`fields=`), so they
   never see a new field until they ask for it.
 - **Renaming or removing** anything in the tables above: keep the old form working until no supported app version
   uses it. Then raise `site.min_android_version`, which tells older apps to update (ANDROID.md §12.4).

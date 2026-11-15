@@ -125,6 +125,7 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 | `npm run schema:snapshot` | Rewrite `docs/schema.snapshot.json` (every collection's API rules, fields and indexes, and the rate limits) after a migration changes them; `test:int` fails while it is out of date |
 | `npm run screenshots` | Rewrite the README screenshots (`docs/screenshot-*.png`, `docs/collections-*.png`): a throwaway server with made-up people, messages and collections, photographed in Chromium after `npm run build` |
 | `npm run check` | typecheck + lint + lint:sinks + test + test:int + build (what CI runs before e2e) |
+| `npm run doctor` | Is this machine ready for the tests? Go, the server binary, ffmpeg, versitygw, free space in `TMPDIR`, stray test servers, free e2e ports, and a browser that starts and draws text (`-- --browsers=chromium,firefox,webkit`). The e2e setup runs it first |
 
 Every test run starts its own PocketBase on a free port with a temp data dir — nothing to clean up, and no fakes
 except a stub Telegram Bot API for the bridge's tests. CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
@@ -298,20 +299,20 @@ stages `chirkle@0.2.0` on npm; approve it on npmjs.com (2FA) to publish it. Setu
 
 ## Link previews
 
-Messages show a line under them for each link: the page's favicon and title ([`docs/DESIGN.md` §28](docs/DESIGN.md)).
+Messages show a line under them for each link: the page's favicon and title ([`docs/DESIGN.md` §28](docs/design/28-link-previews.md)).
 The server fetches them with `curl` (in the Docker image), only from public addresses. Set `LINK_PREVIEWS=off` to turn
 it off.
 
 ## Media grid
 
-Each room's Media button shows its images and videos as a grid ([`docs/DESIGN.md` §30](docs/DESIGN.md)). A worker on
+Each room's Media button shows its images and videos as a grid ([`docs/DESIGN.md` §30](docs/design/30-media-grid.md)). A worker on
 the server makes their thumbnails ahead of time, and a poster frame for each video with `ffmpeg` (in the Docker
 image), which the room shows too, so browsers don't load videos just to draw their first frame. Set `FFMPEG=off` to
 go without: videos then show their first frame in the room as before, and plain tiles in the grid.
 
 ## Telegram integration
 
-An optional bridge between rooms and Telegram groups ([`docs/DESIGN.md` §26](docs/DESIGN.md)). A bot sits in your
+An optional bridge between rooms and Telegram groups ([`docs/DESIGN.md` §26](docs/design/26-telegram-bridge.md)). A bot sits in your
 groups; once a group is linked to a room, messages, replies, edits and files go both ways (deletes only from Chirkle
 to Telegram), and reactions too where the bot is a group admin. Telegram people show in the room under stand-in users ("Ann Lee (TG)") with their names and pictures;
 the bot posts Chirkle messages with the author's name above them.
@@ -341,7 +342,7 @@ the first two to remove it.
 ## Linked instances
 
 Two or more servers running this app can share rooms and let their people write DMs to each other
-([`docs/DESIGN.md` §33](docs/DESIGN.md)). Each room has a home server; the others keep a copy, and messages, edits,
+([`docs/DESIGN.md` §33](docs/design/33-linked-instances.md)). Each room has a home server; the others keep a copy, and messages, edits,
 replies, reactions and files go both ways. People from the other server show under stand-in users named after them
 ("Ann (B)"). Only the admins of both servers pair them and choose which rooms to share.
 

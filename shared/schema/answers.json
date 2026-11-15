@@ -1,0 +1,2122 @@
+{
+  "$comment": "What each /api/chat/* route answers (docs/API.md, docs/REFACTOR.md item 54), as JSON Schema (the subset tests/support/schema.ts checks: type, enum, const, pattern, properties, required, additionalProperties, items, minItems, maxItems, anyOf, $ref to #/$defs). Every 2xx JSON answer the integration tests get is checked against its route's schema (tests/integration/helpers.ts); tests/unit/answers.test.ts checks the examples against the schemas and that every route the server defines is here; the app's ContractTest.kt decodes the examples with its models. A route's answer changes here first: adding a field to a record or an answer fails the integration tests until it is listed.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{15}$"
+    },
+    "idOrEmpty": {
+      "type": "string",
+      "pattern": "^([a-z0-9]{15})?$"
+    },
+    "ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "time": {
+      "$comment": "PocketBase's date format, UTC; empty for none.",
+      "type": "string",
+      "pattern": "^(\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z)?$"
+    },
+    "rfc3339": {
+      "type": "string",
+      "pattern": "^(\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?Z)?$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/count"
+      }
+    },
+    "strings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "profile": {
+      "$comment": "Someone as the routes that aren't the records API show them (no email).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "no_dms": {
+          "type": "boolean"
+        },
+        "banned": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "userRecord": {
+      "$comment": "A users record (records API rules apply: email only to its owner). fields.user and the expands of messages and rooms ask for some of these.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "collectionId": {
+          "type": "string"
+        },
+        "collectionName": {
+          "const": "users"
+        },
+        "name": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "handle": {
+          "type": "string"
+        },
+        "no_dms": {
+          "type": "boolean"
+        },
+        "moderator": {
+          "type": "boolean"
+        },
+        "banned": {
+          "type": "boolean"
+        },
+        "email": {
+          "type": "string"
+        },
+        "emailVisibility": {
+          "type": "boolean"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "created": {
+          "$ref": "#/$defs/time"
+        },
+        "updated": {
+          "$ref": "#/$defs/time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reaction": {
+      "type": "object",
+      "properties": {
+        "emoji": {
+          "type": "string"
+        },
+        "users": {
+          "$ref": "#/$defs/ids"
+        }
+      },
+      "required": [
+        "emoji",
+        "users"
+      ],
+      "additionalProperties": false
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "shared": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "home": {
+              "type": "string"
+            },
+            "with": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "down": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "message": {
+      "$comment": "A messages record, with the fields asked for (fields.message, fields.activity) or all of them. A message of an anonymous room reads with author = the room's id to anyone but its author. JSON fields never set (a message relayed from another server, an old one) read as null: clients treat null as empty.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "collectionId": {
+          "type": "string"
+        },
+        "collectionName": {
+          "const": "messages"
+        },
+        "room": {
+          "$ref": "#/$defs/id"
+        },
+        "author": {
+          "$ref": "#/$defs/idOrEmpty"
+        },
+        "text": {
+          "type": "string"
+        },
+        "text_key": {
+          "type": "string"
+        },
+        "created": {
+          "$ref": "#/$defs/time"
+        },
+        "updated": {
+          "$ref": "#/$defs/time"
+        },
+        "edited_at": {
+          "$ref": "#/$defs/time"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "deleted_at": {
+          "$ref": "#/$defs/time"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "file_names": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/strings"
+            }
+          ]
+        },
+        "file_sources": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/strings"
+            }
+          ]
+        },
+        "file_dims": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          ]
+        },
+        "reactions": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/reaction"
+              }
+            }
+          ]
+        },
+        "previews": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/preview"
+              }
+            }
+          ]
+        },
+        "reply_to": {
+          "$ref": "#/$defs/idOrEmpty"
+        },
+        "forwarded_from": {
+          "$ref": "#/$defs/idOrEmpty"
+        },
+        "forward_of": {
+          "$ref": "#/$defs/idOrEmpty"
+        },
+        "mentions": {
+          "$ref": "#/$defs/ids"
+        },
+        "anonymous": {
+          "type": "boolean"
+        },
+        "forwarded_anonymous": {
+          "type": "boolean"
+        },
+        "expand": {
+          "type": "object",
+          "properties": {
+            "author": {
+              "$ref": "#/$defs/userRecord"
+            },
+            "forwarded_from": {
+              "$ref": "#/$defs/userRecord"
+            },
+            "reply_to": {
+              "$ref": "#/$defs/message"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "room": {
+      "$comment": "A rooms record, with the fields asked for (fields.room) or all of them.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "collectionId": {
+          "type": "string"
+        },
+        "collectionName": {
+          "const": "rooms"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "public",
+            "dm"
+          ]
+        },
+        "visibility": {
+          "enum": [
+            "private",
+            "public",
+            "open"
+          ]
+        },
+        "posting": {
+          "enum": [
+            "everyone",
+            "selected"
+          ]
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "archived_at": {
+          "$ref": "#/$defs/time"
+        },
+        "anonymous": {
+          "type": "boolean"
+        },
+        "created_by": {
+          "$ref": "#/$defs/idOrEmpty"
+        },
+        "members": {
+          "$ref": "#/$defs/ids"
+        },
+        "writers": {
+          "$ref": "#/$defs/ids"
+        },
+        "last_message_at": {
+          "$ref": "#/$defs/time"
+        },
+        "shared": {
+          "$ref": "#/$defs/shared"
+        },
+        "created": {
+          "$ref": "#/$defs/time"
+        },
+        "updated": {
+          "$ref": "#/$defs/time"
+        },
+        "expand": {
+          "type": "object",
+          "properties": {
+            "members": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/userRecord"
+              }
+            },
+            "writers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/userRecord"
+              }
+            },
+            "created_by": {
+              "$ref": "#/$defs/userRecord"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/message"
+      }
+    },
+    "itemPreview": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "file": {
+          "type": "string"
+        },
+        "video": {
+          "type": "boolean"
+        },
+        "poster": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "file",
+        "video",
+        "poster"
+      ],
+      "additionalProperties": false
+    },
+    "inboxMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "text": {
+          "type": "string"
+        },
+        "files": {
+          "$ref": "#/$defs/count"
+        },
+        "created": {
+          "$ref": "#/$defs/time"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "files"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "routes": {
+    "GET /api/chat/rooms": {
+      "$comment": "The rooms you can see (server/lists.go).",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/room"
+        }
+      },
+      "examples": [
+        [
+          {
+            "id": "r00000000000001",
+            "name": "general",
+            "archived": false,
+            "created_by": "u00000000000001",
+            "kind": "public",
+            "visibility": "public",
+            "members": [],
+            "posting": "everyone",
+            "writers": [],
+            "last_message_at": "2026-11-15 10:43:04.516Z",
+            "created": "2026-11-01 08:00:00.000Z",
+            "shared": null
+          },
+          {
+            "id": "r00000000000002",
+            "name": "",
+            "archived": false,
+            "created_by": "u00000000000001",
+            "kind": "dm",
+            "visibility": "private",
+            "members": [
+              "u00000000000001",
+              "u00000000000002"
+            ],
+            "posting": "everyone",
+            "writers": [],
+            "last_message_at": "",
+            "created": "2026-11-02 08:00:00.000Z",
+            "shared": {
+              "home": "chat.example.org",
+              "with": [
+                "other.example.org"
+              ],
+              "down": false
+            },
+            "expand": {
+              "members": [
+                {
+                  "id": "u00000000000001",
+                  "name": "Ada",
+                  "avatar": "",
+                  "no_dms": false,
+                  "instance": ""
+                },
+                {
+                  "id": "u00000000000002",
+                  "name": "Bob",
+                  "avatar": "bob.png",
+                  "no_dms": false,
+                  "instance": "other.example.org"
+                }
+              ]
+            }
+          }
+        ]
+      ]
+    },
+    "GET /api/chat/rooms/{room}/messages": {
+      "$comment": "A page of a room, or search results (server/lists.go). 304 with no body for an unchanged page.",
+      "schema": {
+        "$ref": "#/$defs/messages"
+      },
+      "examples": [
+        [
+          {
+            "id": "m00000000000001",
+            "room": "r00000000000001",
+            "author": "u00000000000001",
+            "text": "Look @bob",
+            "created": "2026-11-15 10:43:04.516Z",
+            "updated": "2026-11-15 10:43:04.516Z",
+            "edited_at": "",
+            "deleted": false,
+            "files": [
+              "cat_cani1ag7yw.png"
+            ],
+            "file_names": {
+              "cat_cani1ag7yw.png": "cat.png"
+            },
+            "file_sources": {},
+            "file_dims": {
+              "cat_cani1ag7yw.png": [
+                640,
+                480
+              ]
+            },
+            "reactions": [
+              {
+                "emoji": "👍",
+                "users": [
+                  "u00000000000002"
+                ]
+              }
+            ],
+            "previews": [
+              {
+                "url": "https://example.org/",
+                "title": "Example",
+                "icon": ""
+              }
+            ],
+            "reply_to": "m00000000000000",
+            "forwarded_from": "",
+            "forward_of": "",
+            "mentions": [
+              "u00000000000002"
+            ],
+            "expand": {
+              "author": {
+                "id": "u00000000000001",
+                "name": "Ada",
+                "avatar": "",
+                "no_dms": false,
+                "instance": ""
+              },
+              "reply_to": {
+                "id": "m00000000000000",
+                "author": "u00000000000002",
+                "text": "a cat?",
+                "deleted": false,
+                "files": [],
+                "expand": {
+                  "author": {
+                    "id": "u00000000000002",
+                    "name": "Bob"
+                  }
+                }
+              }
+            }
+          }
+        ],
+        []
+      ]
+    },
+    "GET /api/chat/notifiable": {
+      "$comment": "What the app's periodic check notifies of (server/lists.go).",
+      "schema": {
+        "$ref": "#/$defs/messages"
+      },
+      "examples": [
+        [
+          {
+            "id": "m00000000000003",
+            "room": "r00000000000002",
+            "author": "u00000000000002",
+            "text": "hi",
+            "created": "2026-11-15 10:45:00.000Z",
+            "updated": "2026-11-15 10:45:00.000Z",
+            "edited_at": "",
+            "deleted": false,
+            "files": [],
+            "reply_to": "",
+            "forwarded_from": "",
+            "forward_of": "",
+            "mentions": [],
+            "expand": {
+              "author": {
+                "id": "u00000000000002",
+                "name": "Bob",
+                "avatar": "",
+                "no_dms": false,
+                "instance": ""
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "GET /api/chat/live": {
+      "$comment": "The realtime topic of live messages (server/live.go); 404 on a server from before it.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "const": "chat/messages"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "topic": "chat/messages"
+        }
+      ]
+    },
+    "GET /api/chat/unread": {
+      "$comment": "Unread counts by room, the rooms with an unread message counted by id only (ids), the inbox's count and mentions by room (server/unread.go).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "$ref": "#/$defs/time"
+          },
+          "rooms": {
+            "$ref": "#/$defs/counts"
+          },
+          "ids": {
+            "$ref": "#/$defs/ids"
+          },
+          "inbox": {
+            "$ref": "#/$defs/count"
+          },
+          "mentions": {
+            "$ref": "#/$defs/counts"
+          }
+        },
+        "required": [
+          "at",
+          "rooms",
+          "ids",
+          "inbox",
+          "mentions"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "at": "2026-11-15 10:45:00.000Z",
+          "rooms": {
+            "r00000000000001": 3
+          },
+          "ids": [
+            "m00000000000004"
+          ],
+          "inbox": 1,
+          "mentions": {
+            "r00000000000001": 1
+          }
+        }
+      ]
+    },
+    "GET /api/chat/unread/{room}": {
+      "$comment": "The oldest unread message of a room; both empty when there is none.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/idOrEmpty"
+          },
+          "created": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "id",
+          "created"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "id": "m00000000000001",
+          "created": "2026-11-15 10:43:04.516Z"
+        },
+        {
+          "id": "",
+          "created": ""
+        }
+      ]
+    },
+    "POST /api/chat/reads": {
+      "$comment": "Your read position in a room, after the mark (server/reads.go).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "$ref": "#/$defs/id"
+          },
+          "last_read_at": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "room",
+          "last_read_at"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "room": "r00000000000001",
+          "last_read_at": "2026-11-15 10:43:04.516Z"
+        }
+      ]
+    },
+    "POST /api/chat/dms": {
+      "$comment": "The DM with someone, made if there was none (pb_hooks/lib/dms.js).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "dm"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public",
+              "open"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "created_by": {
+            "$ref": "#/$defs/idOrEmpty"
+          },
+          "members": {
+            "$ref": "#/$defs/ids"
+          },
+          "posting": {
+            "enum": [
+              "everyone",
+              "selected"
+            ]
+          },
+          "writers": {
+            "$ref": "#/$defs/ids"
+          },
+          "last_message_at": {
+            "$ref": "#/$defs/time"
+          },
+          "created": {
+            "$ref": "#/$defs/time"
+          },
+          "expand": {
+            "type": "object",
+            "properties": {
+              "members": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/profile"
+                }
+              }
+            },
+            "required": [
+              "members"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "visibility",
+          "archived",
+          "created_by",
+          "members",
+          "posting",
+          "writers",
+          "last_message_at",
+          "created",
+          "expand"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "id": "r00000000000002",
+          "name": "",
+          "kind": "dm",
+          "visibility": "private",
+          "archived": false,
+          "created_by": "u00000000000001",
+          "members": [
+            "u00000000000001",
+            "u00000000000002"
+          ],
+          "posting": "everyone",
+          "writers": [],
+          "last_message_at": "",
+          "created": "2026-11-02 08:00:00.000Z",
+          "expand": {
+            "members": [
+              {
+                "id": "u00000000000001",
+                "name": "Ada",
+                "avatar": ""
+              },
+              {
+                "id": "u00000000000002",
+                "name": "Bob",
+                "avatar": "bob.png"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "GET /api/chat/users": {
+      "$comment": "People found by name or handle (pb_hooks/lib/users.js).",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/profile"
+        }
+      },
+      "examples": [
+        [
+          {
+            "id": "u00000000000002",
+            "name": "Bob",
+            "handle": "bob",
+            "avatar": "",
+            "no_dms": false,
+            "instance": ""
+          }
+        ],
+        []
+      ]
+    },
+    "POST /api/chat/remote-users": {
+      "$comment": "Someone on a linked server, by address (pb_hooks/federation/inbox.js); 404 with federation off.",
+      "schema": {
+        "$ref": "#/$defs/profile"
+      },
+      "examples": [
+        {
+          "id": "u00000000000005",
+          "name": "Eve",
+          "avatar": "",
+          "no_dms": false,
+          "instance": "other.example.org"
+        }
+      ]
+    },
+    "GET /api/chat/mentionable": {
+      "$comment": "Whom the composer offers after an @ (pb_hooks/lib/handles.js).",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/profile"
+        }
+      },
+      "examples": [
+        [
+          {
+            "id": "u00000000000002",
+            "name": "Bob",
+            "handle": "bob",
+            "avatar": "",
+            "instance": ""
+          }
+        ]
+      ]
+    },
+    "GET /api/chat/inbox": {
+      "$comment": "A page of Mentions & replies, newest first (pb_hooks/lib/inbox.js); `cursor` asks for the next.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "cursor": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "mention",
+                    "reply",
+                    "reaction"
+                  ]
+                },
+                "emoji": {
+                  "type": "string"
+                },
+                "emojis": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "created": {
+                  "$ref": "#/$defs/time"
+                },
+                "read": {
+                  "type": "boolean"
+                },
+                "room": {
+                  "$ref": "#/$defs/id"
+                },
+                "message": {
+                  "$ref": "#/$defs/inboxMessage"
+                },
+                "quote": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/inboxMessage"
+                    }
+                  ]
+                },
+                "actor": {
+                  "$ref": "#/$defs/profile"
+                }
+              },
+              "required": [
+                "id",
+                "cursor",
+                "kind",
+                "emoji",
+                "emojis",
+                "created",
+                "read",
+                "room",
+                "message",
+                "quote",
+                "actor"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "seen_at": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "items",
+          "more",
+          "seen_at"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "items": [
+            {
+              "id": "i00000000000001",
+              "cursor": "2026-11-15 10:43:04.516Z|i00000000000001",
+              "kind": "reply",
+              "emoji": "",
+              "emojis": [],
+              "created": "2026-11-15 10:43:04.516Z",
+              "read": false,
+              "room": "r00000000000001",
+              "message": {
+                "id": "m00000000000001",
+                "created": "2026-11-15 10:43:04.516Z",
+                "text": "Look @bob",
+                "files": 1
+              },
+              "quote": {
+                "id": "m00000000000000",
+                "text": "a cat?",
+                "files": 0
+              },
+              "actor": {
+                "id": "u00000000000001",
+                "name": "Ada",
+                "avatar": "",
+                "instance": ""
+              }
+            },
+            {
+              "id": "i00000000000002",
+              "cursor": "2026-11-15 10:40:00.000Z|i00000000000002",
+              "kind": "reaction",
+              "emoji": "👍",
+              "emojis": [
+                "👍"
+              ],
+              "created": "2026-11-15 10:40:00.000Z",
+              "read": true,
+              "room": "r00000000000001",
+              "message": {
+                "id": "m00000000000000",
+                "created": "2026-11-15 10:39:00.000Z",
+                "text": "a cat?",
+                "files": 0
+              },
+              "quote": null,
+              "actor": {
+                "id": "u00000000000001",
+                "name": "Ada",
+                "avatar": "",
+                "instance": ""
+              }
+            }
+          ],
+          "more": false,
+          "seen_at": "2026-11-15 10:41:00.000Z"
+        }
+      ]
+    },
+    "POST /api/chat/inbox/seen": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "seen_at": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "seen_at"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "seen_at": "2026-11-15 10:43:04.516Z"
+        }
+      ]
+    },
+    "POST /api/chat/reactions": {
+      "$comment": "The message after the reaction (pb_hooks/lib/reactions.js), with the fields asked for.",
+      "schema": {
+        "$ref": "#/$defs/message"
+      },
+      "examples": [
+        {
+          "id": "m00000000000001",
+          "room": "r00000000000001",
+          "author": "u00000000000001",
+          "text": "Look",
+          "created": "2026-11-15 10:43:04.516Z",
+          "updated": "2026-11-15 10:44:00.000Z",
+          "edited_at": "",
+          "deleted": false,
+          "files": [],
+          "reactions": [
+            {
+              "emoji": "👍",
+              "users": [
+                "u00000000000002"
+              ]
+            }
+          ],
+          "reply_to": "",
+          "forwarded_from": "",
+          "forward_of": "",
+          "mentions": []
+        }
+      ]
+    },
+    "POST /api/chat/delete": {
+      "$comment": "The messages deleted (pb_hooks/lib/bulk.js).",
+      "schema": {
+        "$ref": "#/$defs/messages"
+      },
+      "examples": [
+        [
+          {
+            "id": "m00000000000001",
+            "room": "r00000000000001",
+            "author": "u00000000000001",
+            "text": "",
+            "deleted": true
+          }
+        ]
+      ]
+    },
+    "POST /api/chat/forward": {
+      "$comment": "The copies made in the room forwarded to (pb_hooks/lib/bulk.js).",
+      "schema": {
+        "$ref": "#/$defs/messages"
+      },
+      "examples": [
+        [
+          {
+            "id": "m00000000000009",
+            "room": "r00000000000002",
+            "author": "u00000000000002",
+            "text": "Look",
+            "deleted": false,
+            "files": [
+              "cat_cani1ag7yw.png"
+            ],
+            "file_names": {
+              "cat_cani1ag7yw.png": "cat.png"
+            },
+            "file_sources": {
+              "cat_cani1ag7yw.png": "m00000000000001"
+            },
+            "forwarded_from": "u00000000000001",
+            "forward_of": "m00000000000001",
+            "expand": {
+              "forwarded_from": {
+                "id": "u00000000000001",
+                "name": "Ada"
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "POST /api/chat/ban": {
+      "$comment": "The account after the change (pb_hooks/lib/moderation.js); moderators only.",
+      "schema": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/profile"
+          }
+        ],
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "avatar",
+          "no_dms",
+          "instance",
+          "banned"
+        ]
+      },
+      "examples": [
+        {
+          "id": "u00000000000002",
+          "name": "Bob",
+          "avatar": "",
+          "no_dms": false,
+          "instance": "",
+          "banned": true
+        }
+      ]
+    },
+    "POST /api/chat/password": {
+      "$comment": "A new session after the change (pb_hooks/lib/account.js): the other sessions end.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/$defs/userRecord"
+          }
+        },
+        "required": [
+          "token",
+          "record"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "token": "eyJhbGciOiJIUzI1NiJ9.e30.x",
+          "record": {
+            "id": "u00000000000001",
+            "collectionId": "_pb_users_auth_",
+            "collectionName": "users",
+            "name": "Ada",
+            "avatar": "",
+            "handle": "ada",
+            "instance": "",
+            "no_dms": false,
+            "moderator": false,
+            "banned": false,
+            "email": "ada@example.org",
+            "emailVisibility": false,
+            "verified": true,
+            "created": "2026-11-01 08:00:00.000Z",
+            "updated": "2026-11-15 10:00:00.000Z"
+          }
+        }
+      ]
+    },
+    "GET /api/chat/media/{room}": {
+      "$comment": "A page of a room's images and videos, newest first (pb_hooks/lib/media.js).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "$ref": "#/$defs/id"
+                },
+                "source": {
+                  "$ref": "#/$defs/id"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "pos": {
+                  "$ref": "#/$defs/count"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "video": {
+                  "type": "boolean"
+                },
+                "poster": {
+                  "type": "boolean"
+                },
+                "sent": {
+                  "$ref": "#/$defs/time"
+                },
+                "author": {
+                  "$ref": "#/$defs/profile"
+                }
+              },
+              "required": [
+                "message",
+                "source",
+                "file",
+                "pos",
+                "name",
+                "video",
+                "poster",
+                "sent",
+                "author"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "items": [
+            {
+              "message": "m00000000000001",
+              "source": "m00000000000001",
+              "file": "cat_cani1ag7yw.png",
+              "pos": 0,
+              "name": "cat.png",
+              "video": false,
+              "poster": false,
+              "sent": "2026-11-15 10:43:04.516Z",
+              "author": {
+                "id": "u00000000000001",
+                "name": "Ada"
+              }
+            }
+          ],
+          "more": false
+        }
+      ]
+    },
+    "GET /api/chat/collections": {
+      "$comment": "Your collections and those you follow, by name (pb_hooks/lib/collections.js).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "mine": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "public": {
+                  "type": "boolean"
+                },
+                "items": {
+                  "$ref": "#/$defs/count"
+                },
+                "last_added": {
+                  "$ref": "#/$defs/time"
+                },
+                "preview": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/itemPreview"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "public",
+                "items",
+                "last_added",
+                "preview"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "subs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/id"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "public": {
+                  "const": true
+                },
+                "items": {
+                  "$ref": "#/$defs/count"
+                },
+                "last_added": {
+                  "$ref": "#/$defs/time"
+                },
+                "owner": {
+                  "$ref": "#/$defs/profile"
+                },
+                "seen_at": {
+                  "$ref": "#/$defs/time"
+                },
+                "new": {
+                  "$ref": "#/$defs/count"
+                },
+                "preview": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/itemPreview"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "public",
+                "items",
+                "last_added",
+                "owner",
+                "seen_at",
+                "new",
+                "preview"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "mine",
+          "subs"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "mine": [
+            {
+              "id": "c00000000000001",
+              "name": "Cats",
+              "public": true,
+              "items": 1,
+              "last_added": "2026-11-15 10:43:04.516Z",
+              "preview": [
+                {
+                  "id": "t00000000000001",
+                  "file": "cat_cani1ag7yw.png",
+                  "video": false,
+                  "poster": false
+                }
+              ]
+            }
+          ],
+          "subs": [
+            {
+              "id": "c00000000000002",
+              "name": "Dogs",
+              "public": true,
+              "items": 4,
+              "last_added": "2026-11-15 10:00:00.000Z",
+              "owner": {
+                "id": "u00000000000002",
+                "name": "Bob"
+              },
+              "seen_at": "2026-11-14 10:00:00.000Z",
+              "new": 2,
+              "preview": []
+            }
+          ]
+        }
+      ]
+    },
+    "GET /api/chat/badges": {
+      "$comment": "What the badge of a file attached from each collection may say; null for one that is gone (pb_hooks/lib/collections.js).",
+      "schema": {
+        "type": "object",
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "public": {
+                  "type": "boolean"
+                },
+                "mine": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "public",
+                "mine"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "private": {
+                  "const": true
+                }
+              },
+              "required": [
+                "private"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "examples": [
+        {
+          "c00000000000001": {
+            "name": "Cats",
+            "public": true,
+            "mine": true
+          },
+          "c00000000000003": {
+            "private": true
+          },
+          "c00000000000004": null
+        }
+      ]
+    },
+    "POST /api/chat/items": {
+      "$comment": "The item saved to a collection (pb_hooks/lib/collections.js).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "collectionId": {
+            "type": "string"
+          },
+          "collectionName": {
+            "const": "collection_items"
+          },
+          "collection": {
+            "$ref": "#/$defs/id"
+          },
+          "file": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "video": {
+            "type": "boolean"
+          },
+          "poster": {
+            "type": "boolean"
+          },
+          "created": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "id",
+          "collection",
+          "file",
+          "name",
+          "video",
+          "poster",
+          "created"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "id": "t00000000000001",
+          "collectionId": "pbc_1",
+          "collectionName": "collection_items",
+          "collection": "c00000000000001",
+          "file": "cat_cani1ag7yw.png",
+          "name": "cat.png",
+          "video": false,
+          "poster": false,
+          "created": "2026-11-15 10:43:04.516Z"
+        }
+      ]
+    },
+    "GET /api/chat/saved": {
+      "$comment": "The collections a file is saved in already: collection → item.",
+      "schema": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "examples": [
+        {
+          "c00000000000001": "t00000000000001"
+        },
+        {}
+      ]
+    },
+    "POST /api/chat/subs": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "$ref": "#/$defs/id"
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "seen_at": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "collection",
+          "on",
+          "seen_at"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "collection": "c00000000000002",
+          "on": true,
+          "seen_at": "2026-11-15 10:43:04.516Z"
+        },
+        {
+          "collection": "c00000000000002",
+          "on": false,
+          "seen_at": ""
+        }
+      ]
+    },
+    "POST /api/chat/subs/seen": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "collection": {
+            "$ref": "#/$defs/id"
+          },
+          "seen_at": {
+            "$ref": "#/$defs/time"
+          }
+        },
+        "required": [
+          "collection",
+          "seen_at"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "collection": "c00000000000002",
+          "seen_at": "2026-11-15 10:43:04.516Z"
+        }
+      ]
+    },
+    "GET /api/chat/stats": {
+      "$comment": "Usage counts for moderators and superusers (pb_hooks/lib/stats.js); the web's /stats page only. samples: [ms, online, guests, web, android].",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "integer"
+          },
+          "history": {
+            "type": "boolean"
+          },
+          "sample_minutes": {
+            "type": "integer"
+          },
+          "now": {
+            "type": "object",
+            "properties": {
+              "online": {
+                "$ref": "#/$defs/count"
+              },
+              "guests": {
+                "$ref": "#/$defs/count"
+              },
+              "web": {
+                "$ref": "#/$defs/count"
+              },
+              "android": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "online",
+              "guests",
+              "web",
+              "android"
+            ],
+            "additionalProperties": false
+          },
+          "active": {
+            "type": "object",
+            "properties": {
+              "day": {
+                "$ref": "#/$defs/count"
+              },
+              "week": {
+                "$ref": "#/$defs/count"
+              },
+              "month": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "day",
+              "week",
+              "month"
+            ],
+            "additionalProperties": false
+          },
+          "accounts": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "$ref": "#/$defs/count"
+              },
+              "new_week": {
+                "$ref": "#/$defs/count"
+              },
+              "moderators": {
+                "$ref": "#/$defs/count"
+              },
+              "banned": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "total",
+              "new_week",
+              "moderators",
+              "banned"
+            ],
+            "additionalProperties": false
+          },
+          "messages": {
+            "type": "object",
+            "properties": {
+              "days": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "day": {
+                      "type": "string"
+                    },
+                    "messages": {
+                      "$ref": "#/$defs/count"
+                    },
+                    "people": {
+                      "$ref": "#/$defs/count"
+                    }
+                  },
+                  "required": [
+                    "day",
+                    "messages",
+                    "people"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "people_week": {
+                "$ref": "#/$defs/count"
+              },
+              "people_month": {
+                "$ref": "#/$defs/count"
+              },
+              "dms_month": {
+                "$ref": "#/$defs/count"
+              },
+              "files_month": {
+                "$ref": "#/$defs/count"
+              },
+              "reactions_month": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "days",
+              "people_week",
+              "people_month",
+              "dms_month",
+              "files_month",
+              "reactions_month"
+            ],
+            "additionalProperties": false
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 5,
+              "maxItems": 5
+            }
+          }
+        },
+        "required": [
+          "at",
+          "history",
+          "sample_minutes",
+          "now",
+          "active",
+          "accounts",
+          "messages",
+          "samples"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "at": 1794739321648,
+          "history": true,
+          "sample_minutes": 10,
+          "now": {
+            "online": 2,
+            "guests": 1,
+            "web": 1,
+            "android": 1
+          },
+          "active": {
+            "day": 2,
+            "week": 3,
+            "month": 5
+          },
+          "accounts": {
+            "total": 9,
+            "new_week": 1,
+            "moderators": 1,
+            "banned": 0
+          },
+          "messages": {
+            "days": [
+              {
+                "day": "2026-11-15",
+                "messages": 40,
+                "people": 3
+              }
+            ],
+            "people_week": 3,
+            "people_month": 5,
+            "dms_month": 7,
+            "files_month": 2,
+            "reactions_month": 11
+          },
+          "samples": [
+            [
+              1794739321648,
+              2,
+              1,
+              1,
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    "GET /api/chat/metrics": {
+      "$comment": "Superusers only (server/metrics.go); the web's /stats page shows it. Prometheus text with ?format=prometheus instead.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "$ref": "#/$defs/rfc3339"
+          },
+          "version": {
+            "type": "string"
+          },
+          "pocketbase": {
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "type": "number"
+          },
+          "queues": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "rows": {
+                  "$ref": "#/$defs/count"
+                },
+                "failing": {
+                  "$ref": "#/$defs/count"
+                },
+                "oldest_seconds": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "rows",
+                "failing",
+                "oldest_seconds"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "workers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "last_pass": {
+                  "$ref": "#/$defs/rfc3339"
+                },
+                "last_error": {
+                  "type": "string"
+                },
+                "last_error_at": {
+                  "$ref": "#/$defs/rfc3339"
+                },
+                "running": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "last_pass",
+                "last_error",
+                "last_error_at",
+                "running"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "realtime": {
+            "type": "object",
+            "properties": {
+              "clients": {
+                "$ref": "#/$defs/count"
+              },
+              "senders": {
+                "$ref": "#/$defs/count"
+              },
+              "queued": {
+                "$ref": "#/$defs/count"
+              },
+              "dropped": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "clients",
+              "senders",
+              "queued",
+              "dropped"
+            ],
+            "additionalProperties": false
+          },
+          "admission": {
+            "type": "object",
+            "properties": {
+              "slots": {
+                "$ref": "#/$defs/count"
+              },
+              "running": {
+                "$ref": "#/$defs/count"
+              },
+              "waiting": {
+                "$ref": "#/$defs/count"
+              },
+              "waits": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "slots",
+              "running",
+              "waiting",
+              "waits"
+            ],
+            "additionalProperties": false
+          },
+          "db": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "process": {
+            "type": "object",
+            "properties": {
+              "goroutines": {
+                "$ref": "#/$defs/count"
+              },
+              "heap_bytes": {
+                "$ref": "#/$defs/count"
+              },
+              "sys_bytes": {
+                "$ref": "#/$defs/count"
+              },
+              "gc_runs": {
+                "$ref": "#/$defs/count"
+              },
+              "rss_bytes": {
+                "$ref": "#/$defs/count"
+              }
+            },
+            "required": [
+              "goroutines",
+              "heap_bytes",
+              "sys_bytes",
+              "gc_runs",
+              "rss_bytes"
+            ],
+            "additionalProperties": false
+          },
+          "db_conns": {
+            "type": "object",
+            "properties": {
+              "open": {
+                "$ref": "#/$defs/count"
+              },
+              "in_use": {
+                "$ref": "#/$defs/count"
+              },
+              "waits": {
+                "$ref": "#/$defs/count"
+              },
+              "waited_seconds": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "open",
+              "in_use",
+              "waits",
+              "waited_seconds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "at",
+          "version",
+          "pocketbase",
+          "uptime_seconds",
+          "queues",
+          "workers",
+          "realtime",
+          "admission",
+          "db",
+          "process",
+          "db_conns"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "at": "2026-11-15T10:43:04Z",
+          "version": "0.3.0",
+          "pocketbase": "0.40.4",
+          "uptime_seconds": 120.5,
+          "queues": {
+            "telegram": {
+              "rows": 0,
+              "failing": 0,
+              "oldest_seconds": 0
+            }
+          },
+          "workers": {
+            "previews": {
+              "last_pass": "2026-11-15T10:42:00Z",
+              "last_error": "",
+              "last_error_at": "",
+              "running": false
+            }
+          },
+          "realtime": {
+            "clients": 3,
+            "senders": 0,
+            "queued": 0,
+            "dropped": 0
+          },
+          "admission": {
+            "slots": 64,
+            "running": 1,
+            "waiting": 0,
+            "waits": 0
+          },
+          "db": {
+            "data_bytes": 4096
+          },
+          "process": {
+            "goroutines": 40,
+            "heap_bytes": 1000000,
+            "sys_bytes": 2000000,
+            "gc_runs": 3,
+            "rss_bytes": 3000000
+          },
+          "db_conns": {
+            "open": 2,
+            "in_use": 1,
+            "waits": 0,
+            "waited_seconds": 0
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1742,3 +1742,26 @@ room's menu has no Members for anyone but its creator, a private one's counts th
   The room list passes none, so nothing changes for the app's users.
 
 Tests: `VectorsTest` `jumpOrder`; `JumpTest`.
+
+## 71. Answers, unread counts and strings, shared with the web (2026-11-15)
+
+From docs/REFACTOR.md round 5 (items 54–56). Nothing changes for the app's users.
+
+- **The routes' answers:** `shared/schema/answers.json` has a JSON Schema and examples for each `/api/chat/*` answer;
+  the integration tests check every answer they get against it. `AnswersTest` (core/data, lib) decodes every example
+  with the model `ChirkleApi` decodes that route with and `PbJson`, and fails on a route in the file that is neither
+  decoded nor listed as read some other way (`live`, `password`, the ignored answers, the web's statistics). A route
+  the app starts reading moves from that list to the decoders. Written down there: a message's JSON fields may be
+  `null` (one relayed from a linked server), which `PbJson`'s `coerceInputValues` already reads as empty.
+- **Unread counts:** `UnreadScenariosTest` (core/data, repo) replays `shared/vectors/unread.json` against `Unread`
+  (Sync.kt) and a real server, as `RoomScenariosTest` does `room.json`: messages, your own, mentions, replies, a
+  reaction, a room read in part, caught up, scrolled up, read on another device, a deleted unread message. Recorded from
+  the web's `unread.ts`; the app passed it unchanged.
+- **Strings:** the auth screen's text is `feature/auth/src/main/res/values/strings.xml` (`stringResource` in
+  `AuthScreen`; `AuthViewModel` gets a resolver of the application's resources for its messages), as the web's
+  `web/src/strings/login.ts`. One strings.xml per feature module, moved screen by screen; `tests/unit/strings.test.ts`
+  keeps a moved file free of inline text. What is left: docs/REFACTOR.md item 56.
+- **QA:** docs/QA.md's bug tables have a "Fix in" column (`web`, `app`, `server`, or `app n/a (why)`): a web fix
+  says what the app got (`tests/unit/qa.test.ts`).
+
+Tests: `AnswersTest`, `UnreadScenariosTest`; `UiPasswordResetTest`, `UiAccountsTest`, `UiFlowTest` on the moved strings.

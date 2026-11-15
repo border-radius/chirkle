@@ -28,6 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.semantics.contentType
@@ -63,7 +65,10 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
     val services = LocalServices.current
     val accounts = LocalAccounts.current
     val others = accounts?.list?.collectAsStateWithLifecycle()?.value.orEmpty().filter { it.user != null && it.id != services.accountId }
-    val vm: AuthViewModel = viewModel(key = "auth") { AuthViewModel(services, initial) }
+    // The view model's messages, from this module's strings.xml (the application's resources: nothing of the activity kept).
+    val res = LocalContext.current.applicationContext.resources
+    val text: (Int, Array<out Any>) -> String = { id, args -> res.getString(id, *args) }
+    val vm: AuthViewModel = viewModel(key = "auth") { AuthViewModel(services, initial, text) }
     val state by services.store.flow.collectAsStateWithLifecycle()
     val site = state.site
     Surface(Modifier.fillMaxSize()) {
@@ -76,23 +81,23 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
                 chirkle.android.ui.BrandMark(site.logo, 64.dp)
                 Text(site.title, style = MaterialTheme.typography.headlineMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("on ${serverLabel(services.server)}", color = Chirkle.colors.muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    TextButton(onClick = onChangeServer, enabled = !vm.busy) { Text("Change server") }
+                    Text(stringResource(R.string.auth_on_server, serverLabel(services.server)), color = Chirkle.colors.muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = onChangeServer, enabled = !vm.busy) { Text(stringResource(R.string.auth_change_server)) }
                 }
                 if (vm.mode == AuthMode.Forgot) {
                     ForgotPassword(vm)
                 } else {
                     PrimaryTabRow(selectedTabIndex = vm.mode.ordinal) {
-                        Tab(vm.mode == AuthMode.LogIn, onClick = { vm.switch(AuthMode.LogIn) }, text = { Text("Log in") })
-                        Tab(vm.mode == AuthMode.SignUp, onClick = { vm.switch(AuthMode.SignUp) }, text = { Text("Sign up") })
+                        Tab(vm.mode == AuthMode.LogIn, onClick = { vm.switch(AuthMode.LogIn) }, text = { Text(stringResource(R.string.auth_log_in)) })
+                        Tab(vm.mode == AuthMode.SignUp, onClick = { vm.switch(AuthMode.SignUp) }, text = { Text(stringResource(R.string.auth_sign_up)) })
                     }
                     val err = vm.fieldErrors
                     if (vm.mode == AuthMode.SignUp) {
-                        Field("Display name", vm.name, { vm.name = it }, err["name"], ContentType.PersonFullName)
+                        Field(stringResource(R.string.auth_display_name), vm.name, { vm.name = it }, err["name"], ContentType.PersonFullName)
                     }
-                    Field("Email", vm.email, { vm.email = it }, err["email"], ContentType.EmailAddress, KeyboardType.Email)
+                    Field(stringResource(R.string.auth_email), vm.email, { vm.email = it }, err["email"], ContentType.EmailAddress, KeyboardType.Email)
                     Field(
-                        "Password",
+                        stringResource(R.string.auth_password),
                         vm.password,
                         { vm.password = it },
                         err["password"],
@@ -103,10 +108,10 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
                         onDone = vm::submit,
                     )
                     if (vm.mode == AuthMode.SignUp && state.site.inviteOnly) {
-                        Field("Invite code", vm.inviteCode, { vm.inviteCode = it }, err["invite_code"], null, last = true, onDone = vm::submit)
+                        Field(stringResource(R.string.auth_invite_code), vm.inviteCode, { vm.inviteCode = it }, err["invite_code"], null, last = true, onDone = vm::submit)
                     }
                     if (vm.mode == AuthMode.LogIn && site.passwordReset) {
-                        TextButton(onClick = { vm.switch(AuthMode.Forgot) }, modifier = Modifier.align(Alignment.End)) { Text("Forgot password?") }
+                        TextButton(onClick = { vm.switch(AuthMode.Forgot) }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.auth_forgot_password)) }
                     }
                     Text(
                         vm.formError,
@@ -116,19 +121,19 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
                     Button(onClick = { if (!vm.busy) vm.submit() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                         Text(
                             when {
-                                vm.busy && vm.mode == AuthMode.LogIn -> "Logging in…"
-                                vm.busy -> "Signing up…"
-                                vm.mode == AuthMode.LogIn -> "Log in"
-                                else -> "Sign up"
+                                vm.busy && vm.mode == AuthMode.LogIn -> stringResource(R.string.auth_logging_in)
+                                vm.busy -> stringResource(R.string.auth_signing_up)
+                                vm.mode == AuthMode.LogIn -> stringResource(R.string.auth_log_in)
+                                else -> stringResource(R.string.auth_sign_up)
                             },
                         )
                     }
                 }
                 TextButton(onClick = onGuest, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Just looking? Read the Open Air rooms")
+                    Text(stringResource(R.string.auth_just_looking))
                 }
                 if (accounts != null && others.isNotEmpty()) {
-                    Text("Your other accounts", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp).semantics { heading() })
+                    Text(stringResource(R.string.auth_other_accounts), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp).semantics { heading() })
                     for (a in others) {
                         val user = a.user ?: continue
                         Row(
@@ -152,22 +157,22 @@ fun AuthScreen(initial: AuthMode, onChangeServer: () -> Unit, onGuest: () -> Uni
 /** Forgot password (§39): the email to send the link to, then where it went. */
 @Composable
 private fun ForgotPassword(vm: AuthViewModel) {
-    Text("Reset password", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+    Text(stringResource(R.string.auth_reset_password), style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
     if (vm.sentTo.isNotEmpty()) {
         Text(
-            "If an account uses ${vm.sentTo}, a link to set a new password is on its way. It works for 30 minutes.",
+            stringResource(R.string.auth_link_sent, vm.sentTo),
             color = Chirkle.colors.muted,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
     } else {
-        Text("Enter your account's email, and we'll send you a link to set a new password.", color = Chirkle.colors.muted)
-        Field("Email", vm.email, { vm.email = it }, vm.fieldErrors["email"], ContentType.EmailAddress, KeyboardType.Email, last = true, onDone = vm::submit)
+        Text(stringResource(R.string.auth_forgot_hint), color = Chirkle.colors.muted)
+        Field(stringResource(R.string.auth_email), vm.email, { vm.email = it }, vm.fieldErrors["email"], ContentType.EmailAddress, KeyboardType.Email, last = true, onDone = vm::submit)
         Text(vm.formError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         Button(onClick = { if (!vm.busy) vm.submit() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-            Text(if (vm.busy) "Sending…" else "Send link")
+            Text(stringResource(if (vm.busy) R.string.auth_sending else R.string.auth_send_link))
         }
     }
-    TextButton(onClick = { vm.switch(AuthMode.LogIn) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Back to log in") }
+    TextButton(onClick = { vm.switch(AuthMode.LogIn) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.auth_back_to_log_in)) }
 }
 
 @Composable
@@ -192,7 +197,7 @@ private fun Field(
         supportingText = error?.let { { Text(it) } },
         trailingIcon = if (!password) null else ({
             androidx.compose.material3.IconButton(onClick = { shown = !shown }) {
-                androidx.compose.material3.Icon(if (shown) chirkle.android.ui.ChirkleIcons.Hide else chirkle.android.ui.ChirkleIcons.Show, contentDescription = if (shown) "Hide password" else "Show password")
+                androidx.compose.material3.Icon(if (shown) chirkle.android.ui.ChirkleIcons.Hide else chirkle.android.ui.ChirkleIcons.Show, contentDescription = stringResource(if (shown) R.string.auth_hide_password else R.string.auth_show_password))
             }
         }),
         visualTransformation = if (password && !shown) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
