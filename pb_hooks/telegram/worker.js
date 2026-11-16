@@ -5,7 +5,7 @@
 // POST /api/telegram/tick runs one pass at once (tests, or an admin who doesn't want to wait).
 
 const { asTelegram, call, config, UPDATES } = require(`${__hooks}/telegram/api.js`);
-const { flushAlbums, handleUpdate } = require(`${__hooks}/telegram/inbound.js`);
+const { fetchOver, flushAlbums, handleUpdate } = require(`${__hooks}/telegram/inbound.js`);
 const { edit, remove, send } = require(`${__hooks}/telegram/outbound.js`);
 
 const LOCK = "telegram.worker";
@@ -20,6 +20,11 @@ const STALE_MS = 90_000;
 const CLAIM_MS = 10 * 60_000;
 /** How many times a send that failed for now is tried before it is dropped. */
 const MAX_TRIES = 8;
+/**
+ * How many times a send is tried again after a failure that may have sent it (no answer once the request may have
+ * reached Telegram, api.js maybeDone): each such try may post it twice, so it gets one, not MAX_TRIES (§26.7).
+ */
+const MAX_UNSURE = 1;
 /** Queue rows looked at in one pass. */
 const BATCH = 50;
 
@@ -65,6 +70,32 @@ function poll(app, timeout) {
   }
 }
 
+/** @param {core.Record} row */
+const payloadOf = (row) => /** @type {Record<string, any>} */ (JSON.parse(row.getString("payload") || "null") || {});
+
+/**
+ * Change queue row `id` as it is stored now: what this pass loaded may be older (its claim, a fetch's edited
+ * messages, a send's steps). False when it is gone.
+ * @param {core.App} app
+ * @param {string} id
+ * @param {(row: core.Record) => void} change
+ */
+function update(app, id, change) {
+  let found = false;
+  app.runInTransaction((tx) => {
+    let row;
+    try {
+      row = tx.findRecordById("tg_queue", id);
+    } catch {
+      return;
+    }
+    change(row);
+    tx.save(row);
+    found = true;
+  });
+  return found;
+}
+
 /**
  * Send what is queued for Telegram, oldest first. A group whose oldest item has to wait (a failure that may pass, or
  * another pass sending it) gets nothing more this pass, so its messages arrive in order. `renew` after each one.
@@ -78,40 +109,53 @@ function drain(app, renew) {
   for (const row of rows) {
     if (!row) continue;
     const chat = row.getString("chat_id");
-    if (blocked.has(chat)) continue;
+    const op = row.getString("op");
+    // What comes from a group (a fetch) waits apart from what goes to it: each keeps its own order.
+    const lane = op === "fetch" ? `in ${chat}` : chat;
+    if (blocked.has(lane)) continue;
     const due = row.getDateTime("next_at");
     if (!due.isZero() && due.time().unixMilli() > now) {
-      blocked.add(chat);
+      blocked.add(lane);
       continue;
     }
     if (!claim(app, row.id)) {
-      blocked.add(chat);
+      blocked.add(lane);
       continue;
     }
-    const op = row.getString("op");
     const message = row.getString("message");
+    const tries = row.getInt("tries") + 1;
+    /** @type {Record<string, any>} */
+    let payload = payloadOf(row);
     try {
-      if (op === "send") send(app, message, chat);
-      else if (op === "edit") edit(app, message, chat);
+      if (op === "send") {
+        send(app, message, chat, payload.done || 0, (/** @type {number} */ done) => {
+          payload = { ...payload, done };
+          update(app, row.id, (r) => r.set("payload", payload));
+        });
+      } else if (op === "edit") edit(app, message, chat);
       else if (op === "delete") remove(app, message, chat);
       else if (op === "react") require(`${__hooks}/telegram/reactions.js`).react(app, message, chat);
+      else if (op === "fetch") fetchOver(app, row, tries >= MAX_TRIES);
       app.delete(row);
     } catch (err) {
-      const tries = row.getInt("tries") + 1;
       const tg = asTelegram(err);
       const transient = !tg || tg.transient;
+      const unsure = (payload.unsure || 0) + (op === "send" && tg?.maybeDone ? 1 : 0);
       app.logger().warn(`telegram: ${op}`, "message", message, "chat", chat, "try", tries, "error", String(err));
-      if (!transient || tries >= MAX_TRIES) {
+      if (!transient || tries >= MAX_TRIES || unsure > MAX_UNSURE) {
+        if (unsure > MAX_UNSURE) app.logger().warn(`telegram: ${op} dropped, it may have been sent`, "message", message, "chat", chat);
         app.delete(row);
         continue;
       }
       const wait = Math.max(tg ? tg.retryAfter : 0, 2 ** tries) * 1000;
-      row.set("tries", tries);
-      row.set("next_at", new DateTime(new Date(Date.now() + wait).toISOString()));
-      row.set("locked_until", "");
-      row.set("error", String(err).slice(0, 1000));
-      app.save(row);
-      blocked.add(chat);
+      update(app, row.id, (r) => {
+        r.set("tries", tries);
+        r.set("next_at", new DateTime(new Date(Date.now() + wait).toISOString()));
+        r.set("locked_until", "");
+        r.set("error", String(err).slice(0, 1000));
+        if (unsure) r.set("payload", { ...payloadOf(r), unsure });
+      });
+      blocked.add(lane);
     } finally {
       renew();
     }

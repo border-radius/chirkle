@@ -3224,7 +3224,8 @@
             "edit",
             "delete",
             "album",
-            "react"
+            "react",
+            "fetch"
           ]
         },
         {

@@ -41,6 +41,7 @@ func main() {
 		}
 	}
 	tuneGC()
+	tuneOutgoing()
 	startPprof()
 	app := pocketbase.New()
 	app.RootCmd.Use = "chirkle-server"

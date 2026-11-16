@@ -4,7 +4,7 @@
 // refuses for now (it is down, or asks to slow down) is retried in order.
 
 const { roomName, sourceName } = require(`${__hooks}/lib/anonymous.js`);
-const { asTelegram, call } = require(`${__hooks}/telegram/api.js`);
+const { asTelegram, call, transferTimeout } = require(`${__hooks}/telegram/api.js`);
 const { linkOfChat, linksOfRoom } = require(`${__hooks}/telegram/links.js`);
 
 /** Telegram's limits: a caption's length, and the largest photo it takes as a photo (bigger ones go as files). */
@@ -237,7 +237,7 @@ function filesOf(app, fsys, source) {
     const kind = sticker ? "sticker" : PHOTO_EXT.has(ext) && size <= MAX_PHOTO ? "photo" : VIDEO_EXT.has(ext) ? "video" : "document";
     const file = fsys.getReuploadableFile(key, true);
     file.name = names[name] || name.replace(/_[a-z0-9]{10}(\.[^.]*)?$/i, "$1");
-    return { kind, file };
+    return { kind, file, size };
   });
 }
 
@@ -250,23 +250,26 @@ const SEND = /** @type {Record<string, string>} */ ({
 
 /**
  * Send a message to a group: its text (with its files as their caption when it fits), its files as one or two
- * albums, as a reply when the message it answers is there.
+ * albums, as a reply when the message it answers is there. Those are its steps, sent in turn: `done` of them were
+ * sent by an earlier try, which failed at the next one, and `sent(n)` is told after each (the worker keeps it), so a
+ * try again sends the rest, neither the steps already in the group again nor nothing more (§26.7).
  * @param {core.App} app
  * @param {string} messageId
  * @param {string} chatId
+ * @param {number} [done]
+ * @param {(n: number) => void} [sent]
  */
-function send(app, messageId, chatId) {
+function send(app, messageId, chatId, done = 0, sent = () => {}) {
   const msg = findMessage(app, messageId);
   if (!msg || msg.getBool("deleted")) return;
   const link = linkOfChat(app, chatId);
   if (!link?.getBool("enabled") || link.getString("room") !== msg.getString("room")) return;
-  // Came from this group, or already sent (a retry after the worker stopped halfway).
-  if (mappings(app, messageId, chatId).length) return;
+  // Came from this group, or already sent (a retry after the worker stopped halfway, before it kept the steps).
+  if (!done && mappings(app, messageId, chatId).length) return;
 
   const { html, plain, source } = contentOf(app, msg, link.getBool("anonymous"));
   const replyTo = msg.getString("reply_to") ? mappings(app, msg.getString("reply_to"), chatId)[0] : null;
-  /** @type {any} */
-  let reply = replyTo ? { reply_parameters: { message_id: replyTo.getInt("tg_message_id"), allow_sending_without_reply: true } } : {};
+  const reply = replyTo ? { reply_parameters: { message_id: replyTo.getInt("tg_message_id"), allow_sending_without_reply: true } } : {};
 
   const fsys = app.newFilesystem();
   try {
@@ -274,42 +277,65 @@ function send(app, messageId, chatId) {
     const groups = [files.filter((f) => f.kind !== "document"), files.filter((f) => f.kind === "document")].filter((g) => g.length);
     // A sticker takes no caption: its text goes before it.
     const captioned = groups.length && files[0].kind !== "sticker";
-    let caption = captioned && [...plain].length <= MAX_CAPTION ? { caption: html, parse_mode: "HTML" } : null;
+    const caption = captioned && [...plain].length <= MAX_CAPTION ? { caption: html, parse_mode: "HTML" } : null;
+    /** @type {((reply: Record<string, unknown>) => void)[]} */
+    const steps = [];
     // No text goes alone when there is none: an anonymous link's sticker, or a forward of a deleted message.
     if (!caption && html) {
-      remember(app, messageId, chatId, call("sendMessage", { chat_id: chatId, text: html, parse_mode: "HTML", ...reply }), "text");
-      reply = {};
+      steps.push((r) =>
+        remember(app, messageId, chatId, call("sendMessage", { chat_id: chatId, text: html, parse_mode: "HTML", ...r }), "text"),
+      );
     }
-    for (const group of groups) {
-      if (group.length === 1) {
-        const f = group[0];
-        const sent = call(
-          SEND[f.kind],
-          { chat_id: chatId, ...(f.kind === "video" ? STREAM : {}), ...(caption || {}), ...reply },
-          { [f.kind]: f.file },
-        );
-        remember(app, messageId, chatId, sent, caption ? "caption" : "media");
-      } else {
-        /** @type {Record<string, any>} */
-        const attach = {};
-        const media = group.map((f, i) => {
-          attach[`file${i}`] = f.file;
-          return {
-            type: f.kind,
-            media: `attach://file${i}`,
-            ...(f.kind === "video" ? STREAM : {}),
-            ...(i === 0 && caption ? caption : {}),
-          };
-        });
-        const sent = call("sendMediaGroup", { chat_id: chatId, media, ...reply }, attach);
-        for (let i = 0; i < sent.length; i++) remember(app, messageId, chatId, sent[i], i === 0 && caption ? "caption" : "media");
-      }
-      caption = null;
-      reply = {};
+    steps.push(
+      ...groups.map(
+        (group, g) => (/** @type {Record<string, unknown>} */ r) => sendGroup(app, messageId, chatId, group, g === 0 ? caption : null, r),
+      ),
+    );
+    // The first step answers what it replies to, the rest follow it.
+    for (let i = done; i < steps.length; i++) {
+      steps[i](i === 0 ? reply : {});
+      if (i + 1 < steps.length) sent(i + 1);
     }
   } finally {
     fsys.close();
   }
+}
+
+/**
+ * One album of a message (or its one file), with the caption on its first item.
+ * @param {core.App} app
+ * @param {string} messageId
+ * @param {string} chatId
+ * @param {{ kind: string, file: any, size: number }[]} group
+ * @param {Record<string, unknown> | null} caption
+ * @param {Record<string, unknown>} reply
+ */
+function sendGroup(app, messageId, chatId, group, caption, reply) {
+  const timeout = transferTimeout(group.reduce((n, f) => n + f.size, 0));
+  if (group.length === 1) {
+    const f = group[0];
+    const sent = call(
+      SEND[f.kind],
+      { chat_id: chatId, ...(f.kind === "video" ? STREAM : {}), ...(caption || {}), ...reply },
+      { [f.kind]: f.file },
+      timeout,
+    );
+    remember(app, messageId, chatId, sent, caption ? "caption" : "media");
+    return;
+  }
+  /** @type {Record<string, any>} */
+  const attach = {};
+  const media = group.map((f, i) => {
+    attach[`file${i}`] = f.file;
+    return {
+      type: f.kind,
+      media: `attach://file${i}`,
+      ...(f.kind === "video" ? STREAM : {}),
+      ...(i === 0 && caption ? caption : {}),
+    };
+  });
+  const sent = call("sendMediaGroup", { chat_id: chatId, media, ...reply }, attach, timeout);
+  for (let i = 0; i < sent.length; i++) remember(app, messageId, chatId, sent[i], i === 0 && caption ? "caption" : "media");
 }
 
 /**

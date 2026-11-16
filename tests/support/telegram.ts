@@ -39,6 +39,11 @@ export interface TelegramStub {
   nextMessageId(): number;
   /** Fail the next `times` calls of `method` with this status and body. */
   fail(method: string, status: number, body: Record<string, unknown>, times?: number): void;
+  /**
+   * Do the next `times` calls of `method` (a send is made, its message_id taken) but close the connection before
+   * answering: the request reached Telegram and the answer was lost, as on a network that drops connections.
+   */
+  drop(method: string, times?: number): void;
   close(): Promise<void>;
 }
 
@@ -72,6 +77,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
   const photos = new Map<number, string>();
   const customEmoji = new Map<string, string>();
   const failures = new Map<string, { status: number; body: Record<string, unknown> }[]>();
+  const drops = new Map<string, number>();
   let nextId = 1000;
 
   const message = (params: Record<string, Json>, extra: Record<string, unknown> = {}) => ({
@@ -139,6 +145,11 @@ export async function startTelegramStub(): Promise<TelegramStub> {
     const failure = failures.get(method)?.shift();
     if (failure) return send(failure.status, { ok: false, error_code: failure.status, ...failure.body });
     const result = answer(method, params);
+    const dropping = drops.get(method) ?? 0;
+    if (dropping > 0) {
+      drops.set(method, dropping - 1);
+      return req.socket.destroy();
+    }
     if (result === undefined) return send(400, { ok: false, error_code: 400, description: "Bad Request: invalid file_id" });
     send(200, { ok: true, result });
   });
@@ -161,6 +172,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
       for (let i = 0; i < times; i++) list.push({ status, body });
       failures.set(method, list);
     },
+    drop: (method, times = 1) => void drops.set(method, (drops.get(method) ?? 0) + times),
     close: () => new Promise<void>((ok) => server.close(() => ok())),
   };
 }

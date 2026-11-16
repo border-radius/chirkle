@@ -743,6 +743,79 @@ describe("Telegram bridge (§26)", () => {
     await eventually(() => expect(sent()).toBe(1));
   });
 
+  it("a photo Telegram doesn't hand over for now comes over once it does, edited meanwhile too (§26.4)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.addFile("late", PNG, "photos/late.jpg");
+    // Both of the webhook's tries fail: the message waits for its photo instead of coming over without it.
+    stub.fail("getFile", 502, { description: "Bad Gateway" }, 2);
+    const tg = tgMessage(chat, { caption: "sunset", photo: [{ file_id: "late", width: 90, height: 90 }] });
+    await deliver({ message: tg });
+    await deliver({ edited_message: { ...tg, caption: "sunset!", edit_date: tg.date + 1 } });
+    const [m] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      return l;
+    }, 15_000);
+    expect([m!.text, m!.files.length]).toEqual(["sunset!", 1]);
+    await deliver({ message: tg }); // Telegram delivering it again: it is there already
+    await sleep(300);
+    expect(await messagesOf(room.id)).toHaveLength(1);
+  }, 20_000);
+
+  it("a photo that still fails on the last try comes over saying so (§26.4)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.addFile("never", PNG, "photos/never.jpg");
+    stub.fail("getFile", 502, { description: "Bad Gateway" }, 4); // the webhook's two tries, then the last's two
+    await deliver({ message: tgMessage(chat, { caption: "lost", photo: [{ file_id: "never", width: 90, height: 90 }] }) });
+    const [row] = await admin
+      .collection("tg_queue")
+      .getFullList({ filter: admin.filter("op = 'fetch' && chat_id = {:c}", { c: String(chat) }) });
+    expect(row).toBeDefined();
+    await admin.collection("tg_queue").update(row!.id, { tries: 7 }); // its next try is the last
+    const [m] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      return l;
+    }, 15_000);
+    expect(m!.text).toBe(`lost\n[photo_${row!.payload.msgs[0].message_id}.jpg: couldn't be brought over from Telegram]`);
+    expect(m!.files).toEqual([]);
+  }, 20_000);
+
+  it("a send that failed halfway sends only the rest when tried again (§26.7)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.fail("sendDocument", 502, { description: "Bad Gateway" });
+    await owner.pb.collection("messages").create({
+      room: room.id,
+      author: owner.user.id,
+      text: "halves",
+      files: [new File([PNG], "a.png", { type: "image/png" }), new File(["%PDF"], "Notes.pdf")],
+    });
+    const of = (method: string) => stub.callsOf(method).filter((c) => c.params.chat_id === String(chat));
+    await eventually(() => expect(of("sendDocument")).toHaveLength(2), 15_000);
+    expect(of("sendPhoto")).toHaveLength(1);
+    await eventually(async () =>
+      expect(await admin.collection("tg_queue").getFullList({ filter: admin.filter("chat_id = {:c}", { c: String(chat) }) })).toEqual([]),
+    );
+  }, 20_000);
+
+  it("a send whose answer was lost (it may have been made) is tried again once, not 8 times (§26.7)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.drop("sendMessage", 2);
+    await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "unsure" });
+    const sent = () => stub.callsOf("sendMessage").filter((c) => c.params.chat_id === String(chat)).length;
+    const queued = () => admin.collection("tg_queue").getFullList({ filter: admin.filter("chat_id = {:c}", { c: String(chat) }) });
+    await eventually(async () => {
+      expect(sent()).toBe(2);
+      expect(await queued()).toEqual([]);
+    }, 15_000);
+    await sleep(3000);
+    expect(sent()).toBe(2);
+  }, 25_000);
+
   it("Telegram reactions (the bot an admin) come over as the stand-ins' own, on messages from either side (§26.9)", async () => {
     const owner = await signUp();
     const { room, chat } = await linkedRoom(owner);

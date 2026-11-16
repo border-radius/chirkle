@@ -3,7 +3,7 @@
 // becomes a chat message of its sender's stand-in, with its files; an album (sent as one update per item) becomes one
 // message once all of it is in; an edit edits it. Telegram doesn't tell bots about deleted messages.
 
-const { call, config, download } = require(`${__hooks}/telegram/api.js`);
+const { asTelegram, call, config, download } = require(`${__hooks}/telegram/api.js`);
 const { personOf } = require(`${__hooks}/telegram/people.js`);
 const { activeLink, ensureLink, linkedRoom, linkOfChat, moveLink, tellLinkChange } = require(`${__hooks}/telegram/links.js`);
 const { richText } = require(`${__hooks}/telegram/rich.js`);
@@ -79,10 +79,10 @@ function quoteLines(msg, known) {
  * A Telegram message's text (its caption, or a rich message's blocks as text), its files (that can be brought over),
  * and lines for what can't be: files over the download limit, and things that aren't files (a location, a poll…).
  * @param {any} msg
- * @returns {{ text: string, files: { id: string, name: string }[], notes: string[] }}
+ * @returns {{ text: string, files: { id: string, name: string, size: number }[], notes: string[] }}
  */
 function partsOf(msg) {
-  /** @type {{ id: string, name: string }[]} */
+  /** @type {{ id: string, name: string, size: number }[]} */
   const files = [];
   /** @type {string[]} */
   const notes = [];
@@ -93,7 +93,7 @@ function partsOf(msg) {
    */
   const add = (f, name) => {
     if (f.file_size && f.file_size > MAX_FILE) notes.push(`[${name}, ${mb(f.file_size)}: too large to bring over from Telegram]`);
-    else files.push({ id: f.file_id, name });
+    else files.push({ id: f.file_id, name, size: f.file_size || 0 });
   };
   if (msg.photo?.length) add(msg.photo[msg.photo.length - 1], `photo_${n}.jpg`);
   if (msg.video) add(msg.video, msg.video.file_name || `video_${n}.mp4`);
@@ -278,17 +278,26 @@ function ensureMember(app, room, userId) {
 
 /**
  * Bring Telegram messages over as one chat message: one message, or the items of an album.
+ *
+ * A file that fails to download for now (no answer from Telegram) doesn't become "couldn't be brought over": `live`
+ * (as they come) the messages are queued for the worker (a `fetch`, §26.4) and come over once their files do; `retry`
+ * (the worker's) the failure is thrown, for the worker to try again later; `last` (its last try) what still fails
+ * says so in the text, as one Telegram refuses does.
  * @param {core.App} app
  * @param {core.Record} link tg_links
  * @param {core.Record} room
  * @param {any[]} msgs
+ * @param {"live" | "retry" | "last"} [mode]
  */
-function bringOver(app, link, room, msgs) {
+function bringOver(app, link, room, msgs, mode = "live") {
   const chatId = link.getString("chat_id");
-  // Delivered twice (a webhook retry): brought over already, or an album item queued twice, which would fail the save
-  // of the whole album on the unique (chat_id, tg_message_id) (QA BUG-147).
+  // Delivered twice (a webhook retry): brought over already, waiting for its files, or an album item queued twice,
+  // which would fail the save of the whole album on the unique (chat_id, tg_message_id) (QA BUG-147).
   const seen = new Set();
-  msgs = msgs.filter((m) => !seen.has(m.message_id) && seen.add(m.message_id) && !mapped(app, chatId, m.message_id, m.date));
+  const waiting = mode === "live" ? fetching(app, chatId) : new Set();
+  msgs = msgs.filter(
+    (m) => !seen.has(m.message_id) && seen.add(m.message_id) && !waiting.has(m.message_id) && !mapped(app, chatId, m.message_id, m.date),
+  );
   if (!msgs.length) return;
   msgs.sort((a, b) => a.message_id - b.message_id);
   const first = msgs[0];
@@ -297,9 +306,6 @@ function bringOver(app, link, room, msgs) {
   // A service message (a new group photo, a timer, a topic…) has nothing to show: it makes no stand-in, and none joins
   // a private room for it (QA BUG-88).
   if (!notes.length && !parts.some((p) => p.files.length) && !parts.some((p) => p.text.trim())) return;
-  const author = personOf(app, first);
-  ensureMember(app, room, author.id);
-
   /** @type {any[]} */
   const files = [];
   for (const f of parts.flatMap((p) => p.files)) {
@@ -308,12 +314,17 @@ function bringOver(app, link, room, msgs) {
       continue;
     }
     try {
-      files.push(download(f.id, f.name));
+      files.push(download(f.id, f.name, f.size));
     } catch (err) {
-      app.logger().warn("telegram: download", "chat", chatId, "error", String(err));
+      const later = mode !== "last" && !!asTelegram(err)?.transient;
+      app.logger().warn("telegram: download", "chat", chatId, "message", first.message_id, "later", later, "error", String(err));
+      if (later && mode === "retry") throw err;
+      if (later && queueFetch(app, chatId, msgs, String(err))) return;
       notes.push(`[${f.name}: couldn't be brought over from Telegram]`);
     }
   }
+  const author = personOf(app, first);
+  ensureMember(app, room, author.id);
   const reply = first.reply_to_message ? mapped(app, chatId, first.reply_to_message.message_id, first.reply_to_message.date) : null;
   const known = !!reply && reply.getString("room") === room.id && !reply.getBool("deleted");
   const textOf = (/** @type {boolean} */ withReply) =>
@@ -361,7 +372,8 @@ function editOver(app, msg) {
   const chatId = String(msg.chat.id);
   const rows = partsMapped(app, chatId, msg.message_id, msg.date);
   const rec = rows[0]?.getInt("part") === 0 ? findMessage(app, rows[0].getString("message")) : null;
-  if (!rec || rec.getBool("deleted") || rec.getString("forwarded_from")) return;
+  if (!rec) return editWaiting(app, chatId, msg);
+  if (rec.getBool("deleted") || rec.getString("forwarded_from")) return;
   const quoted = quoteLines(msg, !!rec.getString("reply_to"));
   const { text, notes } = partsOf(msg);
   const lines = [forwardLine(msg), ...quoted, text, ...notes].filter(Boolean);
@@ -415,6 +427,85 @@ function queueAlbumItem(app, msg) {
   row.set("album", msg.media_group_id);
   row.set("payload", msg);
   app.save(row);
+}
+
+/**
+ * The queued fetches of a chat (Telegram messages waiting for their files, §26.4).
+ * @param {core.App} app
+ * @param {string} chatId
+ */
+const fetchesOf = (app, chatId) =>
+  app.findRecordsByFilter("tg_queue", "op = 'fetch' && chat_id = {:chat}", "created", 0, 0, { chat: chatId }).filter((r) => !!r);
+
+/** @param {core.Record} row a fetch */
+const fetchMessages = (row) => /** @type {any[]} */ (JSON.parse(row.getString("payload") || "null")?.msgs || []);
+
+/**
+ * The ids of a chat's Telegram messages waiting for their files.
+ * @param {core.App} app
+ * @param {string} chatId
+ */
+function fetching(app, chatId) {
+  return new Set(fetchesOf(app, chatId).flatMap((r) => fetchMessages(r).map((m) => m.message_id)));
+}
+
+/**
+ * Queue Telegram messages whose files couldn't be downloaded for now: the worker brings them over later (fetchOver).
+ * @param {core.App} app
+ * @param {string} chatId
+ * @param {any[]} msgs
+ * @param {string} error
+ * @returns {boolean} queued
+ */
+function queueFetch(app, chatId, msgs, error) {
+  try {
+    const row = new Record(app.findCollectionByNameOrId("tg_queue"));
+    row.set("op", "fetch");
+    row.set("chat_id", chatId);
+    row.set("payload", { msgs });
+    row.set("tries", 1);
+    row.set("next_at", new DateTime(new Date(Date.now() + 2000).toISOString()));
+    row.set("error", error.slice(0, 1000));
+    app.save(row);
+    return true;
+  } catch (err) {
+    // Too big to queue (a payload over 64 KB): it comes over now, saying what couldn't.
+    app.logger().error("telegram: fetch", "chat", chatId, "error", String(err));
+    return false;
+  }
+}
+
+/**
+ * An edit of a Telegram message still waiting for its files: it comes over as edited.
+ * @param {core.App} app
+ * @param {string} chatId
+ * @param {any} msg
+ */
+function editWaiting(app, chatId, msg) {
+  const has = (/** @type {core.Record} */ row) => fetchMessages(row).some((m) => m.message_id === msg.message_id);
+  if (!fetchesOf(app, chatId).some(has)) return;
+  // Read again in a transaction: the worker may be saving the row (its tries) meanwhile.
+  app.runInTransaction((tx) => {
+    for (const row of fetchesOf(tx, chatId).filter(has)) {
+      row.set("payload", { msgs: fetchMessages(row).map((m) => (m.message_id === msg.message_id ? msg : m)) });
+      tx.save(row);
+    }
+  });
+}
+
+/**
+ * The worker's try at a queued fetch: its messages come over with their files, or (`last`) with what still fails
+ * said in their text. Fails, for the worker to try again, while a file fails to download for now.
+ * @param {core.App} app
+ * @param {core.Record} row
+ * @param {boolean} last
+ */
+function fetchOver(app, row, last) {
+  const chatId = row.getString("chat_id");
+  const link = linkOfChat(app, chatId);
+  const room = link && activeLink(app, link);
+  if (!link || !room) return;
+  bringOver(app, link, room, fetchMessages(row), last ? "last" : "retry");
 }
 
 /**
@@ -586,4 +677,4 @@ function webhook(e) {
   return e.json(200, { ok: true });
 }
 
-module.exports = { webhook, handleUpdate, flushAlbums, mapped };
+module.exports = { webhook, handleUpdate, flushAlbums, fetchOver, mapped };

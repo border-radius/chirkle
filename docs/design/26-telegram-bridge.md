@@ -62,6 +62,13 @@ doesn't hold the next ones back) or polling hands each update to `inbound.js`:
   X" above a forward), and the files, downloaded from Telegram (`getFile`) and saved like uploads: photos (the largest
   size), videos, documents, audio, voice, video notes, GIFs, static stickers. A file over 20 MB, an animated sticker, a
   location, a contact, a poll or a dice becomes a line of text saying what it was.
+- **A download that fails for now** (no answer from Telegram: a network that drops a connection now and then) is
+  tried again at once (`getFile` within 10 s, the file within its transfer time, `api.js` `transferTimeout`). Failing
+  twice, the message isn't brought over without the file: its Telegram messages wait in `tg_queue` (a `fetch`,
+  `1760000056_telegram_fetch.js`) and the worker tries again, as it does sends (§26.7), and brings it over with its
+  files, so it shows after what came meanwhile. An edit while it waits edits what it brings over, and Telegram
+  delivering it again doesn't queue it twice. Only on its last try, or when Telegram refuses the file (4xx), does a
+  file become "[photo_1.jpg: couldn't be brought over from Telegram]". Before, any failure did at once.
 - **A rich message** (Bot API 10.1, `rich_message`: headings, lists, tables, quotes…) has no text or caption: its
   blocks become plain text (`rich.js`; the room has no markdown, §5): a heading as its line with a blank line above
   it, list items with their labels ("1.", "•", ☑/☐), table rows as cells joined by " | ", quotes as "> " lines, a
@@ -138,9 +145,23 @@ complete, then sends what is queued, oldest first (polling Telegram first, when 
 and the slow one stops at its next item). Each queued send is claimed first (`locked_until`, 10 min, in a
 transaction): even two passes at once never send one twice (QA BUG-147). An album item delivered twice is brought
 over once, not making the album's save fail. A failure that may pass (no answer, 5xx, 429) is retried after `retry_after` or 2, 4, 8…
-seconds, up to 8 tries, and holds back that group's later items so they arrive in order; one Telegram refuses for good
-(4xx) is dropped and logged. `POST /api/telegram/tick` (superusers) runs one pass at once. A message whose send fails
-halfway (some of its files sent) isn't sent again.
+seconds, up to 8 tries, and holds back that group's later items so they arrive in order (a `fetch` from a group
+holds back only the group's other fetches, not what goes to it); one Telegram refuses for good (4xx) is dropped and
+logged. `POST /api/telegram/tick` (superusers) runs one pass at once.
+
+A send is in **steps**: the text alone (when it isn't a caption), then each album. The queue row keeps how many were
+sent (`payload.done`), so a send that fails halfway sends the rest when tried again, neither the steps already in the
+group nor nothing more (before, it was left there, its other files never sent). A failure that **may have sent** what
+it asked (no answer once the request may have reached Telegram: a timeout, a connection lost or reset; `api.js`
+`maybeDone`, unlike no connection made at all) is tried again **once**, then dropped and logged ("may have been sent"):
+each such try may post it twice, and 8 of them did, on a network that drops connections. An upload may take its
+transfer time (30 s, plus 1 s per 200 KB, up to 5 min), not a fixed 5 min, which held the worker past its lock ("worker
+took too long, another run took over") and the group's later messages with it.
+
+The server (`server/outgoing.go`) closes idle outgoing connections after 30 s and pings an HTTP/2 one that has
+received nothing for 15 s, closing it when no answer comes in 10 s: Go's default client kept idle ones for 90 s and
+never checked them, so a connection a network path dropped silently was reused and its request waited out its whole
+timeout ("context deadline exceeded").
 
 ## 26.8 Tests
 
@@ -150,7 +171,9 @@ the developer's own `TELEGRAM_*` variables to a test server. Covered: setWebhook
 and `/chatid`; links only for rooms; a stand-in (name, picture, `no_dms`); files, an album as one message (by the next
 update, and once quiet), files too large; replies, edits and a repeated delivery; a stand-in joining a private room; a
 message, reply, edit and delete going out; an anonymous link's (no header, a whole caption); service messages for a group connected, disconnected, moved, deleted and removing the bot; files going out as an album with a caption plus documents; a room linked to
-two groups; retries in order and dropping; nothing while disabled or archived; polling; reactions both ways (§26.9).
+two groups; retries in order and dropping; downloads that fail for now (brought over later, edited meanwhile, or saying
+so on the last try); a send failed halfway sending the rest; a send whose answer was lost (`drop` in the stub) tried
+once more, not 8 times; nothing while disabled or archived; polling; reactions both ways (§26.9).
 
 ## 26.9 Reactions
 
