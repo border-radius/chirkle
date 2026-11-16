@@ -124,6 +124,10 @@ fun ProfileScreen(onBack: () -> Unit) {
     // Your data (§43.2): where the newest export is, and an error of asking for or downloading it.
     var export by remember { mutableStateOf<ExportStatus?>(null) }
     var exportError by remember { mutableStateOf("") }
+    /** "Prepare again" answered with the same export (made under 10 minutes ago, §43.2): said, or it looks broken (QA BUG-283). */
+    var sameExport by remember { mutableStateOf(false) }
+    /** A server from before §43 (its export route a 404): no Your data, no Delete account (QA BUG-285). */
+    var noAccountRoutes by remember { mutableStateOf(false) }
     // Delete account (§43.3): null until chosen; true deletes the messages too.
     var delMessages by remember { mutableStateOf<Boolean?>(null) }
     var delChoiceError by remember { mutableStateOf("") }
@@ -175,7 +179,10 @@ fun ProfileScreen(onBack: () -> Unit) {
         if (export != null) delay(EXPORT_POLL_MS)
         while (true) {
             // Not answered: as if never asked, so Prepare is there to try.
-            runCatching { services.api.exportStatus() }.onSuccess { export = it }.onFailure { if (export == null) export = ExportStatus() }
+            runCatching { services.api.exportStatus() }.onSuccess { export = it }.onFailure {
+                if ((it as? ApiError)?.status == 404) noAccountRoutes = true
+                if (export == null) export = ExportStatus()
+            }
             if (export?.state != ExportState.Queued) return@LaunchedEffect
             delay(EXPORT_POLL_MS)
         }
@@ -336,72 +343,79 @@ fun ProfileScreen(onBack: () -> Unit) {
                 TextButton(onClick = { scope.launch { services.logOut() } }) { Text(stringResource(R.string.profile_log_out), color = MaterialTheme.colorScheme.error) }
                 HorizontalDivider(color = Chirkle.colors.border)
 
-                Section(stringResource(R.string.profile_your_data))
-                Text(stringResource(R.string.profile_download_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
-                val ex = export
-                val exportLine = when {
-                    exportError.isNotEmpty() -> exportError
-                    ex?.state == ExportState.Queued -> stringResource(R.string.profile_preparing_your_data)
-                    ex?.state == ExportState.Done -> stringResource(
-                        R.string.profile_ready_to_download,
-                        formatBytes(ex.size),
-                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(parsePb(ex.expires))),
-                    )
-                    ex?.state == ExportState.Failed -> stringResource(R.string.profile_preparing_failed)
-                    else -> ""
-                }
-                if (exportLine.isNotEmpty()) {
-                    val bad = exportError.isNotEmpty() || ex?.state == ExportState.Failed
-                    Text(exportLine, color = if (bad) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (ex?.state == ExportState.Done) Button(onClick = {
-                        exportError = ""
-                        scope.launch {
-                            // The system's download manager fetches it as it comes, into Downloads (as attachments, §17).
-                            runCatching { services.api.exportFileUrl() }
-                                .onSuccess { url ->
-                                    val name = "chirkle-export-${ex.created.take(10)}.json"
-                                    chirkle.android.ui.download(context, url, name)
-                                }
-                                .onFailure { exportError = errorMessage(it) }
-                        }
-                    }) { Text(stringResource(R.string.profile_download)) }
-                    if (ex != null && ex.state != ExportState.Queued) OutlinedButton(onClick = {
-                        exportError = ""
-                        scope.launch {
-                            runCatching { services.api.startExport() }
-                                .onSuccess { export = it }
-                                .onFailure { exportError = errorMessage(it) }
-                        }
-                    }) { Text(stringResource(if (ex.state == ExportState.Done) R.string.profile_prepare_again else R.string.profile_prepare_my_data)) }
-                }
-                HorizontalDivider(color = Chirkle.colors.border)
+                if (!noAccountRoutes) {
+                    Section(stringResource(R.string.profile_your_data))
+                    Text(stringResource(R.string.profile_download_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                    val ex = export
+                    val exportLine = when {
+                        exportError.isNotEmpty() -> exportError
+                        ex?.state == ExportState.Queued -> stringResource(R.string.profile_preparing_your_data)
+                        ex?.state == ExportState.Done -> stringResource(
+                            R.string.profile_ready_to_download,
+                            formatBytes(ex.size),
+                            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(parsePb(ex.expires))),
+                        ) + if (sameExport) " " + stringResource(R.string.profile_still_the_newest) else ""
+                        ex?.state == ExportState.Failed -> stringResource(R.string.profile_preparing_failed)
+                        else -> ""
+                    }
+                    if (exportLine.isNotEmpty()) {
+                        val bad = exportError.isNotEmpty() || ex?.state == ExportState.Failed
+                        Text(exportLine, color = if (bad) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (ex?.state == ExportState.Done) Button(onClick = {
+                            exportError = ""
+                            scope.launch {
+                                // The system's download manager fetches it as it comes, into Downloads (as attachments, §17).
+                                runCatching { services.api.exportFileUrl() }
+                                    .onSuccess { url ->
+                                        val name = "chirkle-export-${ex.created.take(10)}.json"
+                                        chirkle.android.ui.download(context, url, name)
+                                    }
+                                    .onFailure { exportError = errorMessage(it) }
+                            }
+                        }) { Text(stringResource(R.string.profile_download)) }
+                        if (ex != null && ex.state != ExportState.Queued) OutlinedButton(onClick = {
+                            exportError = ""
+                            sameExport = false
+                            val before = ex
+                            scope.launch {
+                                runCatching { services.api.startExport() }
+                                    .onSuccess {
+                                        sameExport = it.state == ExportState.Done && before.state == ExportState.Done && it.id == before.id
+                                        export = it
+                                    }
+                                    .onFailure { exportError = errorMessage(it) }
+                            }
+                        }) { Text(stringResource(if (ex.state == ExportState.Done) R.string.profile_prepare_again else R.string.profile_prepare_my_data)) }
+                    }
+                    HorizontalDivider(color = Chirkle.colors.border)
 
-                Section(stringResource(R.string.profile_delete_account))
-                Text(stringResource(R.string.profile_delete_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
-                Column(Modifier.selectableGroup()) {
-                    for ((value, label) in listOf(false to R.string.profile_keep_my_messages, true to R.string.profile_delete_my_messages_too)) {
-                        Row(
-                            Modifier.fillMaxWidth().selectable(selected = delMessages == value, role = Role.RadioButton, onClick = {
-                                delMessages = value
-                                delChoiceError = ""
-                            }).padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = delMessages == value, onClick = null)
-                            Text(stringResource(label), Modifier.padding(start = 8.dp))
+                    Section(stringResource(R.string.profile_delete_account))
+                    Text(stringResource(R.string.profile_delete_hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                    Column(Modifier.selectableGroup()) {
+                        for ((value, label) in listOf(false to R.string.profile_keep_my_messages, true to R.string.profile_delete_my_messages_too)) {
+                            Row(
+                                Modifier.fillMaxWidth().selectable(selected = delMessages == value, role = Role.RadioButton, onClick = {
+                                    delMessages = value
+                                    delChoiceError = ""
+                                }).padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = delMessages == value, onClick = null)
+                                Text(stringResource(label), Modifier.padding(start = 8.dp))
+                            }
                         }
                     }
+                    if (delChoiceError.isNotEmpty()) Text(delChoiceError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    PasswordField(stringResource(R.string.profile_your_password), delPassword, delPasswordError) { delPassword = it; delPasswordError = null }
+                    if (delStatus.isNotEmpty()) Text(delStatus, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    Button(
+                        onClick = { deleteAccount() },
+                        enabled = !deleting,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                    ) { Text(stringResource(R.string.profile_delete_my_account)) }
                 }
-                if (delChoiceError.isNotEmpty()) Text(delChoiceError, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                PasswordField(stringResource(R.string.profile_your_password), delPassword, delPasswordError) { delPassword = it; delPasswordError = null }
-                if (delStatus.isNotEmpty()) Text(delStatus, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                Button(
-                    onClick = { deleteAccount() },
-                    enabled = !deleting,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-                ) { Text(stringResource(R.string.profile_delete_my_account)) }
                 val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty() }
                 Text(stringResource(R.string.profile_for_android, s.site.title, version), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted, modifier = Modifier.padding(top = 8.dp))
             }

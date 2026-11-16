@@ -317,6 +317,17 @@ describe("profile view (§15.5)", () => {
       expect(button("Download").hidden).toBe(false);
     });
 
+    it("Prepare again within 10 minutes says this one is still the newest (QA BUG-283)", async () => {
+      await (await me.api.account()).startExport();
+      await work();
+      mount();
+      await vi.waitFor(() => expect(button("Prepare again").hidden).toBe(false));
+      button("Prepare again").click();
+      await vi.waitFor(() =>
+        expect(exportStatus()).toMatch(/^Ready: .+\. It was prepared less than 10 minutes ago, so this one is still the newest\.$/),
+      );
+    });
+
     it("deleting asks what becomes of your messages and your password, and a wrong one is said next to it", async () => {
       const ctl = instrument(me.api);
       mount();

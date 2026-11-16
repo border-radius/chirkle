@@ -23,3 +23,27 @@
 .profile-delete button {
   align-self: flex-start;
 }
+
+/* The radios at their own size, not every input's full width (QA BUG-286: the dot sat mid-card, the words pushed right). */
+.profile-delete-choice input {
+  flex: none;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--fill);
+}
+
+/* "Your data": the text and its two buttons side by side when there is room, else the buttons under the text
+   (QA BUG-284: on a phone the text was squeezed into a column a few words wide). */
+.profile-export {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.profile-export > div:first-child {
+  flex: 1 1 16rem;
+}
+
+.profile-export-actions button {
+  white-space: nowrap;
+}

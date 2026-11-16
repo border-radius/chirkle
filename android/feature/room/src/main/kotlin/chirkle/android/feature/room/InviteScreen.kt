@@ -152,10 +152,14 @@ fun InviteScreen(token: String, onOpenRoom: (String) -> Unit, onLogIn: () -> Uni
     }
 }
 
-/** The access screen's invite link (DESIGN.md §44.1), for a room saved as private that you manage. */
+/**
+ * The access screen's invite link (DESIGN.md §44.1), for a room saved as private that you manage. Archived, the link
+ * doesn't work and no new one can be made: it can only be revoked (QA BUG-282). On a server from before invite links
+ * (its route a 404), nothing (QA BUG-285).
+ */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun InviteSection(roomId: String) {
+fun InviteSection(roomId: String, archived: Boolean = false) {
     val services = LocalServices.current
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -167,12 +171,18 @@ fun InviteSection(roomId: String) {
     var days by remember { mutableIntStateOf(7) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
+    /** The server has no invite links (one from before them, DESIGN.md §44): the section isn't shown. */
+    var unsupported by remember(roomId) { mutableStateOf(false) }
     LaunchedEffect(roomId) {
         runCatching { services.api.invite(roomId) }
             .onSuccess { invite = it }
-            .onFailure { status = res.getString(R.string.room_couldnt_load_link, errorMessage(it)) }
+            .onFailure {
+                if ((it as? ApiError)?.status == 404) unsupported = true
+                else status = res.getString(R.string.room_couldnt_load_link, errorMessage(it))
+            }
         loaded = true
     }
+    if (unsupported) return
     fun url(inv: Invite) = "${services.server}/invite/${inv.token}"
     fun act(run: suspend () -> Invite?) {
         if (busy) return
@@ -198,9 +208,13 @@ fun InviteSection(roomId: String) {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.room_invite_link), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        Text(stringResource(R.string.room_anyone_with_the_link_can_join), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+        Text(
+            stringResource(if (archived) R.string.room_invite_archived else R.string.room_anyone_with_the_link_can_join),
+            style = MaterialTheme.typography.bodySmall,
+            color = Chirkle.colors.muted,
+        )
         val inv = invite
-        if (inv != null) {
+        if (inv != null && !archived) {
             SelectionContainer {
                 Text(
                     url(inv),
@@ -223,14 +237,18 @@ fun InviteSection(roomId: String) {
                 }) { Text(stringResource(R.string.room_share_link)) }
             }
         }
-        Text(stringResource(R.string.room_works_for), style = MaterialTheme.typography.labelLarge)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (d in INVITE_DAYS) {
-                FilterChip(selected = days == d, onClick = { days = d }, label = { Text(pluralStringResource(R.plurals.room_days, d, d)) })
+        if (!archived) {
+            Text(stringResource(R.string.room_works_for), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (d in INVITE_DAYS) {
+                    FilterChip(selected = days == d, onClick = { days = d }, label = { Text(pluralStringResource(R.plurals.room_days, d, d)) })
+                }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (inv == null) {
+            if (archived) {
+                if (inv != null) TextButton(enabled = !busy, onClick = { act { services.api.revokeInvite(roomId); null } }) { Text(stringResource(R.string.room_revoke)) }
+            } else if (inv == null) {
                 Button(enabled = loaded && !busy, onClick = { act { services.api.makeInvite(roomId, days) } }) { Text(stringResource(R.string.room_create_link)) }
             } else {
                 OutlinedButton(enabled = !busy, onClick = { act { services.api.makeInvite(roomId, days) } }) { Text(stringResource(R.string.room_new_link)) }

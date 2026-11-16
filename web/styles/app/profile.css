@@ -212,6 +212,12 @@ label.button.disabled {
   margin: 3px 0 0;
 }
 
+/* Its button keeps its width: "Log out" broke over two lines on a phone (QA BUG-284). */
+.profile-session > button {
+  flex: none;
+  white-space: nowrap;
+}
+
 .profile-notify {
   gap: 0;
   padding-bottom: 0;

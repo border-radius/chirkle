@@ -281,7 +281,7 @@ const itemOut = (item) => ({
  */
 function saveItem(e) {
   const user = me(e);
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const str = (/** @type {string} */ k) => (typeof body[k] === "string" ? /** @type {string} */ (body[k]) : "");
   const coll = find(e.app, "collections", str("collection"));
   if (!coll || !canView(e, coll)) throw new NotFoundError("The collection doesn't exist.");
@@ -447,7 +447,7 @@ function removeItem(e) {
  * @returns {{ rows: core.Record[], sources: Record<string, string> }}
  */
 function itemsToAttach(e, uploads) {
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   let ids = body.items;
   if (ids === undefined || ids === "" || ids === null) return { rows: [], sources: {} };
   if (typeof ids === "string") {
@@ -502,7 +502,7 @@ function findSub(app, user, collection) {
  */
 function subscribe(e) {
   const user = me(e);
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const id = typeof body.collection === "string" ? body.collection : "";
   const what = "Failed to subscribe.";
   // Not "false" or 0 taken for true.
@@ -545,7 +545,7 @@ function subscribe(e) {
  */
 function markSeen(e) {
   const user = me(e);
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const id = typeof body.collection === "string" ? body.collection : "";
   const row = id ? findSub(e.app, user.id, id) : null;
   if (!row) throw new NotFoundError("You don't follow this collection.");

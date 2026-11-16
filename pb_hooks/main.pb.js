@@ -152,8 +152,11 @@ onRecordUpdateRequest((e) => {
   if (fed) fed.rooms.checkHomeMembers(e);
   const members = fed ? fed.mirror.checkMirrorEdit(e) : null;
   require(`${__hooks}/lib/rooms.js`).beforeRoomUpdateRequest(e);
+  const wasMembers = e.record?.original().getStringSlice("members") ?? [];
   e.next();
   if (fed && members && e.record) fed.mirror.sendMembers(e.app, e.record, members);
+  // Taken out of a private room: its invite link doesn't let them back in (§44.2, QA BUG-280).
+  if (e.record) require(`${__hooks}/lib/invites.js`).barRemoved(e.app, wasMembers, e.record);
 }, "rooms");
 
 onRecordCreate((e) => {

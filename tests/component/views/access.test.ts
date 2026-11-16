@@ -281,6 +281,25 @@ describe("room access UI (§23)", () => {
       choose(other, "private");
       expect(dialog(other).querySelector<HTMLElement>(".invite")!.hidden).toBe(true);
     });
+
+    it("an archived room's link can only be revoked: no new one, no address to copy (QA BUG-282)", async () => {
+      const room = await me.api.createRoom(`r-${uniq()}`, "private");
+      await (await me.api.invites()).make(room.id, 7);
+      const archived = await me.api.setArchived(room.id, true);
+      const el = await mountRoom(archived);
+      await openDialog(el, "Room access…");
+      await vi.waitFor(() => expect(buttonIn(section(el), "Revoke")!.disabled).toBe(false));
+      expect(section(el).querySelector(".vis-hint")!.textContent).toBe(
+        "The room is archived: its link doesn't work until the room is unarchived.",
+      );
+      expect(section(el).querySelector<HTMLElement>(".invite-shown")!.hidden).toBe(true);
+      expect(buttonIn(section(el), "New link")!.hidden).toBe(true);
+      expect(section(el).querySelector<HTMLElement>(".invite-days")!.hidden).toBe(true);
+      buttonIn(section(el), "Revoke")!.click();
+      await vi.waitFor(() => expect(status(el)).toBe("The link no longer works."));
+      // Nothing to make while archived.
+      expect(buttonIn(section(el), "Create link")!.hidden).toBe(true);
+    });
   });
 
   describe("who can post (§23.6)", () => {

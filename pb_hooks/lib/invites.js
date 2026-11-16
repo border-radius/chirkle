@@ -36,6 +36,21 @@ function inviteOf(app, roomId) {
   }
 }
 
+/**
+ * Those the room's managers took out of its members while this link worked (QA BUG-280): it doesn't let them back in.
+ * @param {core.Record} inv
+ */
+function barredOf(inv) {
+  // A JSON field reads as its raw text.
+  let v;
+  try {
+    v = JSON.parse(inv.getString("barred") || "[]");
+  } catch {
+    return [];
+  }
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+}
+
 /** Has the link run out? @param {core.Record} inv @param {number} [now] */
 const expired = (inv, now = Date.now()) => msOf(inv.getString("expires")) <= now;
 
@@ -174,6 +189,8 @@ function preview(e) {
     by = e.app.findRecordById("users", inv.getString("created_by")).getString("name");
   } catch {}
   const me = e.auth && !e.auth.isSuperuser() ? e.auth.id : "";
+  // Taken out of the room by its managers: for them the link doesn't work (the same answer as any dead link).
+  if (me && barredOf(inv).includes(me)) throw new NotFoundError(GONE);
   return e.json(200, {
     room: { id: room.id, name: room.getString("name"), members: members.length },
     by,
@@ -198,6 +215,7 @@ function join(e) {
     const found = working(tx, token);
     if (!found) throw new NotFoundError(GONE);
     const { inv, room } = found;
+    if (barredOf(inv).includes(me)) throw new NotFoundError(GONE);
     roomId = room.id;
     const members = room.getStringSlice("members");
     if (members.includes(me) || room.getString("created_by") === me) return;
@@ -223,4 +241,26 @@ function dropInvites(app, wasVisibility, room) {
   if (inv) app.delete(inv);
 }
 
-module.exports = { DAYS, DEFAULT_DAYS, GONE, get, create, revoke, preview, join, dropInvites };
+/**
+ * rooms update request (saved): whoever the request took out of a private room's members can't come back with its
+ * working link (QA BUG-280); its managers make a new link to let everyone in again, or add them back. Not the joins
+ * themselves, nor an account's delete (§43.3): those are saved by the server, not by a request.
+ * @param {core.App} app
+ * @param {string[]} wasMembers
+ * @param {core.Record} room
+ */
+function barRemoved(app, wasMembers, room) {
+  if (room.getString("visibility") !== "private") return;
+  const now = new Set(room.getStringSlice("members"));
+  const gone = wasMembers.filter((u) => !now.has(u));
+  const inv = inviteOf(app, room.id);
+  if (!inv) return;
+  const was = barredOf(inv);
+  // Added back by hand: barred no more.
+  const barred = [...new Set([...was, ...gone])].filter((u) => !now.has(u));
+  if (barred.length === was.length && barred.every((u) => was.includes(u))) return;
+  inv.set("barred", barred);
+  app.save(inv);
+}
+
+module.exports = { DAYS, DEFAULT_DAYS, GONE, get, create, revoke, preview, join, dropInvites, barRemoved };

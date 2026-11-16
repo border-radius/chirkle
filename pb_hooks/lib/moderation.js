@@ -81,7 +81,7 @@ function refuseBanned(rec, password) {
 function ban(e) {
   const me = e.auth;
   if (!isModerator(me)) throw new ForbiddenError("Only moderators can ban people.");
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const what = body.banned === false ? "Failed to unban them." : "Failed to ban them.";
   const bad = (/** @type {string} */ field, /** @type {string} */ msg) =>
     new BadRequestError(what, { [field]: new ValidationError("validation_invalid_value", msg) });

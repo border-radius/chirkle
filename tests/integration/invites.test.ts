@@ -144,6 +144,32 @@ describe("opening and joining (§44.2)", () => {
     expect(await membersOf(a, room.id)).toEqual([a.user.id, c.user.id]);
   });
 
+  it("someone taken out of the members can't come back with the link; added back, or a new link, they can (QA BUG-280)", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const c = await newUser();
+    const room = await privateRoom(a);
+    const { invite } = await makeInvite(a, room.id);
+    await join(b, invite.token);
+    await join(c, invite.token);
+    await a.pb.collection("rooms").update(room.id, { members: [a.user.id, c.user.id] });
+    // For them the link is dead, as any dead link; for everyone else it still works.
+    expect(await status(join(b, invite.token))).toBe(404);
+    expect(await status(preview(b.pb, invite.token))).toBe(404);
+    expect((await preview(client(), invite.token)).room.id).toBe(room.id);
+    expect(await membersOf(a, room.id)).toEqual([a.user.id, c.user.id]);
+    const d = await newUser();
+    expect(await join(d, invite.token)).toEqual({ room: room.id });
+    // Added back by hand, then taken out by nobody: the link knows them again.
+    await a.pb.collection("rooms").update(room.id, { members: [a.user.id, c.user.id, d.user.id, b.user.id] });
+    expect((await preview(b.pb, invite.token)).member).toBe(true);
+    // Taken out again, then a new link: it lets them in.
+    await a.pb.collection("rooms").update(room.id, { members: [a.user.id, c.user.id, d.user.id] });
+    expect(await status(join(b, invite.token))).toBe(404);
+    const fresh = (await makeInvite(a, room.id)).invite;
+    expect(await join(b, fresh.token)).toEqual({ room: room.id });
+  });
+
   it("a guest can't join", async () => {
     const a = await newUser();
     const room = await privateRoom(a);

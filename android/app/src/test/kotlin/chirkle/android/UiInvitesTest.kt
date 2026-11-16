@@ -3,6 +3,7 @@ package chirkle.android
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -57,6 +58,29 @@ class UiInvitesTest {
         ui.waitFor("The link no longer works.")
         ui.until { a.api.invite(room.id) == null }
         ui.waitFor("Create link")
+    }
+
+    @Test fun `an archived room's link can only be revoked (QA BUG-282)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("inv-${uniq()}", Visibility.Private) }
+        val token = runBlocking { a.api.makeInvite(room.id, 7).token }
+        runBlocking { a.api.setArchived(room.id, true) }
+        ui.signedIn(a)
+        ui.waitFor("Rooms")
+        // Archived, it is folded away in the room list: opened by its link.
+        ui.open(chirkle.android.nav.Room(room.id))
+        ui.waitFor("#${room.name}")
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        compose.onNodeWithText("Room access…").performClick()
+        ui.waitFor("The room is archived: its link doesn't work until the room is unarchived.")
+        compose.onNodeWithText("Revoke").performScrollTo().assertExists()
+        assertEquals(0, compose.onAllNodesWithText("New link").fetchSemanticsNodes().size)
+        assertEquals(0, compose.onAllNodesWithText("Copy link").fetchSemanticsNodes().size)
+        assertEquals(0, compose.onAllNodesWithText("${TestServer.url}/invite/$token").fetchSemanticsNodes().size)
+        compose.onNodeWithText("Revoke").performScrollTo().performClick()
+        ui.until { a.api.invite(room.id) == null }
+        ui.waitFor("The link no longer works.")
+        assertEquals(0, compose.onAllNodesWithText("Create link").fetchSemanticsNodes().size)
     }
 
     @Test fun `someone opens a link, joins and lands in the room`() {

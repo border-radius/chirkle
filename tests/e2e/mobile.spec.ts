@@ -141,3 +141,28 @@ test("on a phone, a long room name in the composer's placeholder ends in …, an
     .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)));
   expect(new Set(tops.map((t) => Math.round(t / 10))).size).toBe(1);
 });
+
+test("on a phone, Settings' cards keep their text readable: buttons under the text, radios beside their words (QA BUG-284, BUG-286)", async ({
+  page,
+}) => {
+  const ada = await apiUser("Ada");
+  await login(page, ada);
+  await page.goto("/me");
+  const data = page.locator(".profile-export");
+  await expect(data.getByRole("button", { name: "Prepare my data" })).toBeVisible();
+  // The hint spans the card, not a column a few words wide beside the buttons.
+  const card = (await data.boundingBox())!;
+  const hint = (await data.locator(".field-status").first().boundingBox())!;
+  expect(hint.width).toBeGreaterThan(card.width * 0.7);
+  // "Log out" on one line.
+  const logOut = page.locator(".profile-session").getByRole("button", { name: "Log out" });
+  const lineHeight = parseFloat(await logOut.evaluate((b) => getComputedStyle(b).lineHeight));
+  expect((await logOut.boundingBox())!.height).toBeLessThan(lineHeight * 2);
+  // Each radio sits just before its words.
+  for (const label of await page.locator(".profile-delete-choice label").all()) {
+    const radio = (await label.locator("input").boundingBox())!;
+    const box = (await label.boundingBox())!;
+    expect(radio.x - box.x).toBeLessThan(8);
+    expect(radio.width).toBeLessThan(30);
+  }
+});

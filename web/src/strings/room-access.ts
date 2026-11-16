@@ -43,6 +43,7 @@ export const REVOKE = "Revoke";
 export const LINK_READY = "The link is ready to share.";
 export const NEW_LINK_READY = "A new link is ready. The old one no longer works.";
 export const LINK_REVOKED = "The link no longer works.";
+export const ARCHIVED_LINK = "The room is archived: its link doesn't work until the room is unarchived.";
 export const COPIED = "Copied.";
 export const PRESS_CTRL_C_TO_COPY = "Press Ctrl+C to copy it.";
 export const couldntChangeLink = (why: string) => `Couldn't change the link: ${why}`;

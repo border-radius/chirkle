@@ -2327,3 +2327,100 @@ cancellation that came before the caller ran threw the value away (coroutines' p
 the read is cancelled. Test: `PbClientTest` (MockWebServer: the caller's thread busy when the answer comes, then
 cancelled; the connection must be idle and the next answer read right; fails without). After: `:core:data` 10 of 10
 runs and the full Android run clean. The web is not affected (the browser owns its connections).
+
+# QA pass 41 — heavy testing, invite links and your data first, 2026-11-16
+
+After room invite links (§44) and your data / deleting your account (§43). Suites first, at nice 19 with two workers:
+typecheck and lint, unit + component 899/899, Go, integration 564/564, the Android invite and profile screen tests.
+Then: the routes probed on a throwaway server (odd bodies — none, `null`, `[]`, a string — on every new route; a
+superuser's session on each; `days` as `"7"` and `7.0`; a member taken out and joining again; a banned person joining;
+live messages, unread counts and the room list right after a join; a deleted account's DM, room, link and people
+search; an account deleted while an export is queued, with three public collections, as a member and writer of
+archived rooms and as the creator of an archived room with a link; an export after a reply to a deleted message, by
+HEAD and by a range; an old file token after a password change); the web walked in headless Chromium at 1100 px light
+and 390 px dark (the access dialog from public to private, Create, Copy with the clipboard refused, New link, an
+archived room's dialog; the invite page as a guest, after signing up from it, signed in, revoked while open, a bad and
+an empty token, the creator's own link; Settings' Prepare, Download, Prepare again, deleting with nothing chosen, a
+wrong password and the right one; the other person's room list, DM, room, "@" list and Mentions & replies after; the
+deleted account logging in; signing up as "deleted Account"), screenshots read; and the app's invite screen, access
+screen section and profile screen read against the web's and against a server from before them. Numbering continues
+from BUG-279.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-280 | Medium | Server | Someone the creator took out of a private room joined again at once with the room's invite link, which still worked | server, web n/a (the server refuses), app n/a (the server refuses) | Fixed |
+| BUG-281 | Low | Server | A deleted account's invite links kept working, "Deleted account invited you", adding people to a room nobody may manage any more | server, web n/a (the server deletes them), app n/a (the server deletes them) | Fixed |
+| BUG-282 | Low | Web, Android | An archived room's access dialog offered the link's address, Copy and New link (refused: "This room is archived.") though the link doesn't work while archived | web, app | Fixed |
+| BUG-283 | Low | Web, Android | "Prepare again" within 10 minutes of an export did nothing visible (the server answers the same one by design) | web, app | Fixed |
+| BUG-284 | Low | Web | On a phone, Settings' "Your data" text was squeezed into a column a few words wide beside its two buttons, and "Log out" broke over two lines | web, app n/a (its screen is a column) | Fixed |
+| BUG-285 | Low | Android | On a server from before §43 and §44 the app showed Your data, Delete account and the invite link section, whose buttons could only fail | app, web n/a (always its own server's) | Fixed |
+| BUG-286 | Low | Web | The Delete account choices' radios took every input's full width: the dot sat in the middle of the card, its words pushed to the right | web, app n/a (its own radio rows) | Fixed |
+
+## BUG-280 — Taken out of a private room, back in with its link (Medium)
+
+**Steps:** Ada makes an invite link for her private room; Bob joins by it; Ada takes Bob out in Room access and saves;
+Bob opens the link again. **Expected:** Bob stays out (Ada just removed him). **Actual:** Join the room put him back,
+and counted a use. **Cause:** the link knows nothing of removals: any signed-in person who isn't a member joins.
+**Fix:** `room_invites.barred` (migration 55): an update of a private room by a request (Room access' Save, the API)
+bars from the room's working link whoever it took out of the members; for them preview and join answer the link's
+404. Added back by hand, they are no longer barred; a new link starts with nobody barred. The server's own saves (a
+join, an account's delete) bar nobody. Test: `invites.test.ts` "someone taken out of the members can't come back with
+the link…" (fails without).
+
+## BUG-281 — A deleted account's invite links (Low)
+
+**Steps:** Ada, creator of a private room, makes a link, then deletes her account. **Expected:** the link stops, as her
+other personal things do. **Actual:** it kept working, "Deleted account invited you to this private room", and added
+people to a room that only moderators may now manage. **Fix:** `erase()` deletes the invite links the account made
+with the rest of its small rows (§43.3). Test: `account_delete.test.ts` "the invite links it made stop working…".
+
+## BUG-282 — An archived room's link (Low, Web and Android)
+
+**Steps:** a private room with a link is archived; its creator opens Room access. **Expected:** it says the link
+doesn't work while archived. **Actual:** the address, Copy link and New link as usual; New link answered "Couldn't
+change the link: This room is archived.", and a copied link led to "This invite link doesn't work". **Fix:** archived,
+the section says "The room is archived: its link doesn't work until the room is unarchived." and offers only Revoke
+(web `access.ts`, app `InviteSection`). Tests: `access.test.ts` "an archived room's link can only be revoked…",
+`UiInvitesTest` the same.
+
+## BUG-283 — "Prepare again" that did nothing (Low, Web and Android)
+
+The server answers an export asked for again within 10 minutes of being made with that one (§43.2: tapping often costs
+one). The page showed the same "Ready: …" line, as if the button were broken. Now, when the answer is the export
+already shown, the line adds "It was prepared less than 10 minutes ago, so this one is still the newest." Tests:
+`profile.test.ts` "Prepare again within 10 minutes…", `UiFeaturesTest` "your data is prepared in the background…".
+
+## BUG-284, BUG-285, BUG-286 (Low)
+
+- **BUG-284:** the "Your data" card reused `.profile-session`'s row (text, then one button) with two buttons. It now
+  wraps (`account.css`: the text takes 16rem or the whole row, the buttons under it on a phone), and a session card's
+  button keeps its width (`profile.css`). Test: `mobile.spec.ts` "on a phone, Settings' cards keep their text
+  readable…".
+- **BUG-285:** the app talks to servers from before a feature (ANDROID.md §31); these two had no fallback. A 404 from
+  `GET /api/chat/export` hides both account sections, and from the room's invite route hides the invite section
+  (ANDROID.md §75). Checked by reading: `LegacyServerTest`'s legacy server keeps this repository's JS routes, so no
+  automated test covers it.
+- **BUG-286:** `base.css` gives every `input` the full width and a field's padding; the radios inherited it. They are at
+  their own size now (`account.css`). Test: the same `mobile.spec.ts` test.
+
+## Checked and fine
+
+- Every new route answers a JSON `null`, `[]` or a string body with its field errors or a 400 (a `null` body gave
+  "Something went wrong while processing your request." on the account routes and the older ones that read the body
+  without a fallback; they now treat it as an empty body). A superuser's session is refused by each (403/401).
+- A banned person's session doesn't reach the join (401); `days` must be the number 1, 7 or 30 (`"7"` is refused,
+  `7.0` is 7).
+- After a join: the new member hears the room's next message live, has it in `GET /api/chat/rooms` and counts it
+  unread.
+- Deleting an account that is a member or writer of archived rooms, or the creator of an archived room with a link,
+  works; its messages there are deleted with "delete". An export queued when the account goes is deleted with it.
+- The export file: `application/json`, attachment, HEAD and ranges served; a file token from before a password change
+  is refused.
+- Web: the invite page as a guest at 390 px in dark (no overflow), signing up from it comes back to it, a link revoked
+  while the page is open says so on Join, a bad token says the link doesn't work, `/invite/` goes home, the creator's
+  own link says they're in. A deleted account can't log in ("Wrong email or password."), its name is refused at
+  signup in any case, it isn't offered by "@", and its DM says it takes no messages.
+
+## Noted, not changed
+
+- The invite page's 👋 (the greeting's `.welcome::before`) also shows over "This invite link doesn't work".

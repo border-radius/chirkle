@@ -22,7 +22,7 @@ function fieldError(field, message, code = "validation_invalid_value", what = "F
 /** @param {core.RequestEvent} e */
 function changePassword(e) {
   if (!e.auth) throw new UnauthorizedError("The request requires a logged-in user.");
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const oldPassword = typeof body.oldPassword === "string" ? body.oldPassword : "";
   const password = typeof body.password === "string" ? body.password : "";
   if (!oldPassword) throw fieldError("oldPassword", "Enter your current password.", "validation_required");
@@ -358,7 +358,7 @@ function writeExport(app, job, renew) {
 function deleteAccount(e) {
   if (!e.auth) throw new UnauthorizedError("The request requires a logged-in user.");
   const what = "Failed to delete the account.";
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const password = typeof body.password === "string" ? body.password : "";
   const choice = body.messages;
   if (!password) throw fieldError("password", "Enter your password.", "validation_required", what);
@@ -376,7 +376,8 @@ function deleteAccount(e) {
  * Make `userId` a deleted account (§43.3), in one transaction, and queue the rest. Its name becomes "Deleted account"
  * (lib/users.js beforeUserSave), its handle, picture and e-mail go, it takes no DMs, it is no moderator. Every session
  * ends and no sign-in works again: a random password, its OAuth2 links, one-time codes and sign-in origins gone. What
- * only it had and is small goes now: whom and what it follows, hid and read, its inbox, its exports. Its collections
+ * only it had and is small goes now: whom and what it follows, hid and read, its inbox, its exports, the invite links it
+ * made. Its collections
  * stop being public, and go with their items by the erase job. It leaves the private rooms it was in and the lists of
  * who may post. The row stays, so the messages (kept, or deleted) and rooms that name it still have an author; a room
  * it made keeps it as its creator, and moderators look after it.
@@ -411,6 +412,8 @@ function erase(app, userId, messages) {
       ["inbox_reads", "user"],
       ["stats_activity", "user"],
       ["account_jobs", "user"],
+      // The invite links it made (§44): a room it no longer manages takes no one in by its hand (QA BUG-281).
+      ["room_invites", "created_by"],
     ]) {
       for (;;) {
         const rows = tx.findRecordsByFilter(collection, `${field} = {:id}`, "", PAGE, 0, { id: userId });

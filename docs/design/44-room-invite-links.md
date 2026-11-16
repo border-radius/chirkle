@@ -23,6 +23,10 @@ Tests: `tests/integration/invites.test.ts`, `tests/component/views/access.test.t
   Open Air) loses its link (`dropInvites`, after the rooms update); made private again, it needs a new one, so an old
   link never comes back to life. While a private room is archived its link doesn't work; unarchived, it does again
   until it expires.
+- **Archived:** the access dialog says the link doesn't work until the room is unarchived, and offers only Revoke: no
+  address to copy, no new link (QA BUG-282).
+- **Its maker's account deleted** (§43.3): the links it made are deleted with its personal data, so a room it no longer
+  manages takes nobody in by its hand (QA BUG-281).
 - **It expires** after 1, 7 (the default) or 30 days: a forwarded link can't work for ever. The daily prune (REFACTOR
   item 49, `lib/retention.js`) deletes links a day past their expiry.
 
@@ -44,6 +48,10 @@ Routes (signed in):
   (`setMembers` keeps the list, §23.1), and the link counts a use. Already in (or its creator), nothing changes and no
   use is counted. 404 as above; 400 "This room is full" at 100 members (`LIMITS.roomMembers`). Joining checks and saves
   in one transaction, so two people joining at once can't pass 100 between them.
+- **Taken out, kept out:** someone the room's managers take out of its members (an update of the room by a request)
+  while the link works is barred from it (`barred`, migration 55): for them it answers the same 404 as a dead link,
+  so it can't undo the removal. Added back by hand, they are no longer barred; a new link starts with nobody barred.
+  Joins and an account's delete (§43.3) are saved by the server, not by a request, so they bar nobody (QA BUG-280).
 - **You become a member, not a writer:** in a room where only some people post (§23.6), the link lets you read and
   react; its managers add you as a writer if they want.
 - **Live:** the room's save is an ordinary update, so the new member's rooms subscription gets it (gaining access

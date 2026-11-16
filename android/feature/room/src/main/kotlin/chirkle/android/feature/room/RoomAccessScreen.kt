@@ -166,7 +166,7 @@ fun RoomAccessScreen(roomId: String, onBack: () -> Unit) {
             }
             if (visibility == Visibility.Private) People(stringResource(R.string.room_members), members, room, editable, onAdd = { adding = "members" }, onRemove = { remove("members", it) })
             // Its invite link (DESIGN.md §44): once saved as private, and not a copy of another instance's room.
-            if (editable && visibility == Visibility.Private && room.visibilityOrDefault == Visibility.Private && room.shared?.home.isNullOrEmpty()) InviteSection(roomId)
+            if (editable && visibility == Visibility.Private && room.visibilityOrDefault == Visibility.Private && room.shared?.home.isNullOrEmpty()) InviteSection(roomId, room.archived)
             if (editable) {
                 Text(stringResource(R.string.room_who_can_post_2), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
                 Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

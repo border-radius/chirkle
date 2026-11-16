@@ -376,6 +376,9 @@ class UiFeaturesTest {
         ui.waitFor("Ready: ")
         compose.onNodeWithText("Download").performScrollTo().assertExists()
         compose.onNodeWithText("Prepare again").performScrollTo().assertExists()
+        // Again within 10 minutes: the same one, and the screen says why nothing new is made (QA BUG-283).
+        compose.onNodeWithText("Prepare again").performScrollTo().performClick()
+        ui.waitFor("so this one is still the newest")
     }
 
     @Test fun `deleting your account asks your password, then logs you out (§43)`() {

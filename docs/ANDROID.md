@@ -1838,3 +1838,23 @@ screen's Create, New link and Revoke against the server; joining from the link l
 it and comes back to it; a link revoked while open says so), `RoutesTest` "an invite link", and `AnswersTest` decodes
 the four JSON routes' examples. Not tried on the emulator yet: App Links verification of the new path (the server's
 `assetlinks.json` is for the whole domain, so nothing changes there), and the share sheet.
+
+## 75. QA pass 41 (2026-11-16)
+
+QA pass 41 (QA.md) on invite links and the account's data:
+
+- **An archived room's link** (QA BUG-282): `InviteSection` takes the room's `archived`. Archived, it says "The room is
+  archived: its link doesn't work until the room is unarchived." and offers only **Revoke**: no address, Copy, Share,
+  Works for or New link (the server refuses a new link in an archived room). As the web's dialog. Test:
+  `UiInvitesTest` "an archived room's link can only be revoked".
+- **Prepare again within 10 minutes** (QA BUG-283): the server answers the export it made (§43.2), so the screen looked as
+  if nothing happened. The status line now adds "It was prepared less than 10 minutes ago, so this one is still the
+  newest." when the answer is the same export. Test: `UiFeaturesTest` "your data is prepared in the background…".
+- **A server from before these features** (QA BUG-285, app only: the web is always its own server's): the profile
+  screen hides Your data and Delete account when `GET /api/chat/export` is a 404, and the access screen hides the
+  invite link section when `GET /api/chat/rooms/{room}/invite` is (for a room you manage, a current server never
+  answers 404 there). Before, both showed buttons that could only fail. Not tested against an old release's hooks
+  (`LegacyServerTest`'s legacy server keeps this repository's JS routes).
+- Nothing to change for BUG-280 and BUG-281 (the server's): someone taken out of a private room opening its link gets
+  the dead link's page, as for any 404.
+

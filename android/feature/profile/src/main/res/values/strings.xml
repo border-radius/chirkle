@@ -47,6 +47,7 @@
     <string name="profile_download">Download</string>
     <string name="profile_preparing_your_data">Preparing your data. On a big account this takes a while: you can leave this screen and come back.</string>
     <string name="profile_ready_to_download">Ready: %1$s, to download until %2$s.</string>
+    <string name="profile_still_the_newest">It was prepared less than 10 minutes ago, so this one is still the newest.</string>
     <string name="profile_preparing_failed">Your data couldn\'t be prepared. Try again.</string>
     <string name="profile_delete_account">Delete account</string>
     <string name="profile_delete_hint">Your name, handle, picture, e-mail, collections and sessions are deleted, and nobody can sign in to the account again. This can\'t be undone.</string>

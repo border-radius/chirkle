@@ -238,6 +238,7 @@
     <string name="room_creator">creator</string>
     <!-- Invite links (DESIGN.md §44) -->
     <string name="room_invite_link">Invite link</string>
+    <string name="room_invite_archived">The room is archived: its link doesn\'t work until the room is unarchived.</string>
     <string name="room_anyone_with_the_link_can_join">Anyone with the link who has an account here can join as a member.</string>
     <string name="room_works_for">Works for</string>
     <plurals name="room_days">

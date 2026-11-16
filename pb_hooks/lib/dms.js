@@ -82,7 +82,7 @@ function dmRefusal(app, me, members) {
 function openDm(e) {
   const me = e.auth;
   if (!me) throw new UnauthorizedError("The request requires a logged-in user.");
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const other = typeof body.user === "string" ? body.user : "";
   if (!other) throw userError("Choose who to message.", "validation_required");
   if (other === me.id) throw userError("You can't message yourself.");

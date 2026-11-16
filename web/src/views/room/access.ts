@@ -357,9 +357,14 @@ export function createAccessDialog(opts: {
       if (el.hidden) return;
       if (current === undefined && !loading) load();
       const has = !!current;
-      shown.hidden = !has;
-      make.hidden = has;
-      again.hidden = revoke.hidden = !has;
+      // Archived, the link doesn't work and no new one can be made (§44.1, QA BUG-282): it can only be revoked.
+      const archived = !!room?.archived;
+      hint.textContent = archived ? S.ARCHIVED_LINK : S.ANYONE_WITH_THE_LINK_CAN_JOIN;
+      shown.hidden = !has || archived;
+      choose.hidden = archived;
+      make.hidden = has || archived;
+      again.hidden = !has || archived;
+      revoke.hidden = !has;
       make.disabled = again.disabled = revoke.disabled = busy || current === undefined;
       if (current) {
         url.value = opts.inviteUrl ? opts.inviteUrl(current.token) : current.token;

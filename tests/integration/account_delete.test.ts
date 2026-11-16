@@ -230,6 +230,14 @@ describe("deleting your account (§43.3)", () => {
     expect(await codes(del(a, { password: a.password }))).toEqual({ messages: "validation_required" });
     expect(await codes(del(a, { password: a.password, messages: "maybe" }))).toEqual({ messages: "validation_required" });
     expect(await codes(del(a, { password: "wrong-password", messages: "keep" }))).toEqual({ password: "validation_invalid_value" });
+    // A body that is JSON null is no body: the same field error, not a generic one.
+    const res = await fetch(`${inject("pbUrl")}/api/chat/account/delete`, {
+      method: "POST",
+      headers: { Authorization: a.pb.authStore.token, "content-type": "application/json" },
+      body: "null",
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { data: Record<string, unknown> }).data.password).toBeTruthy();
     // Nothing changed.
     await client().collection("users").authWithPassword(a.email, a.password);
     expect(row(a.user.id).kind).toBe("person");
@@ -288,6 +296,22 @@ describe("deleting your account (§43.3)", () => {
     // Nobody finds it to message, and its DM takes no more messages.
     expect(await b.pb.send<unknown[]>("/api/chat/users", { query: { q: "Deleted account" } })).toEqual([]);
     await expectRejected(post(b, dm.id, "anyone there?"));
+  });
+
+  it("the invite links it made stop working; others' links don't (QA BUG-281)", async () => {
+    const a = await newUser();
+    const b = await newUser();
+    const mine = await a.pb.collection("rooms").create({ name: `p-${uniq()}`, created_by: a.user.id, visibility: "private" });
+    await a.pb.collection("rooms").update(mine.id, { members: [a.user.id] });
+    const theirs = await b.pb.collection("rooms").create({ name: `p-${uniq()}`, created_by: b.user.id, visibility: "private" });
+    await b.pb.collection("rooms").update(theirs.id, { members: [b.user.id, a.user.id] });
+    const link = (u: TestUser, room: string) =>
+      u.pb.send<{ invite: { token: string } }>(`/api/chat/rooms/${room}/invite`, { method: "POST", body: {} });
+    const gone = (await link(a, mine.id)).invite.token;
+    const kept = (await link(b, theirs.id)).invite.token;
+    expect(await status(del(a, { password: a.password, messages: "keep" }))).toBe(200);
+    expect(await status(client().send(`/api/chat/invites/${gone}`, {}))).toBe(404);
+    expect((await client().send<{ by: string }>(`/api/chat/invites/${kept}`, {})).by).toBe(b.user.name);
   });
 
   it("deleting the messages too: every one goes, archived rooms included, and their files with them", async () => {

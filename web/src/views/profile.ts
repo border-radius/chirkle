@@ -126,6 +126,8 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   const downloadBtn = h("button", { type: "button", class: "primary", hidden: true }, S.DOWNLOAD);
   const exportStatus = h("p", { class: "field-status", role: "status" });
   let exportPoll: ReturnType<typeof setTimeout> | undefined;
+  /** The export last shown, to tell "Prepare again" answered with the same one (QA BUG-283). */
+  let shownExport: ExportStatus | null = null;
   /** The account part of the API (§43), loaded once, with the first card that needs it. */
   let accountApi: Promise<AccountApi> | null = null;
   const account = () => (accountApi ??= api.account());
@@ -320,6 +322,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
    */
   function showExport(st: ExportStatus) {
     clearTimeout(exportPoll);
+    shownExport = st;
     exportStatus.classList.toggle("error", st.state === "failed");
     exportStatus.textContent =
       st.state === "queued"
@@ -361,8 +364,15 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
 
   const prepareExport = () =>
     exportAction(prepareBtn, async () => {
+      const before = shownExport;
       const st = await (await account()).startExport();
-      if (scope.active) showExport(st);
+      if (!scope.active) return;
+      showExport(st);
+      // Asked again within 10 minutes of the last one being made, the server answers that one (§43.2): say so, or the
+      // button looks as if it did nothing.
+      if (st.state === "done" && before?.state === "done" && before.id === st.id) {
+        exportStatus.textContent = `${exportStatus.textContent} ${S.STILL_THE_NEWEST}`;
+      }
     });
 
   /** A plain link to the file, so the browser downloads it as it comes (not held in the page first). */

@@ -2143,6 +2143,16 @@
           "presentable": false,
           "system": false,
           "type": "autodate"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSize": 0,
+          "name": "barred",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "json"
         }
       ],
       "indexes": [

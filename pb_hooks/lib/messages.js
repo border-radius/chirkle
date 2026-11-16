@@ -400,7 +400,7 @@ function beforeMessageUpdateRequest(e) {
   const rec = recordOf(e);
   // Uploads and modifiers aren't a file field's any more (§37), so the update rule doesn't see them all: refused
   // here, not dropped.
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   for (const key of ["files", "+files", "files+", "files-"]) {
     let n = 0;
     try {

@@ -47,6 +47,7 @@ export const DOWNLOAD = "Download";
 export const PREPARING_YOUR_DATA = "Preparing your data. On a big account this takes a while: you can leave this page and come back.";
 export const readyToDownload = (size: string, until: string) => `Ready: ${size}, to download until ${until}.`;
 export const PREPARING_FAILED = "Your data couldn't be prepared. Try again.";
+export const STILL_THE_NEWEST = "It was prepared less than 10 minutes ago, so this one is still the newest.";
 export const DELETE_ACCOUNT = "Delete account";
 export const DELETE_HINT =
   "Your name, handle, picture, e-mail, collections and sessions are deleted, and nobody can sign in to the account again. This can't be undone.";

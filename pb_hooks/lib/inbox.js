@@ -329,7 +329,7 @@ function list(e) {
 function markSeen(e) {
   const me = e.auth;
   if (!me) throw new UnauthorizedError("The request requires a logged-in user.");
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const now = new DateTime();
   let at = now;
   if (body.at !== undefined) {

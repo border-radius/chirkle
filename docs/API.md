@@ -75,7 +75,9 @@ Since 2026-11-16 (room invite links, DESIGN.md §44): `GET`, `POST { days: 1 | 7
 /api/chat/rooms/{room}/invite` (a private room's creator, or a moderator in it) read, make (replacing the last) and
 revoke the room's one link, `{ invite: { token, created, expires, uses } | null }`; `GET /api/chat/invites/{token}`
 (anyone) says where a link goes, `{ room: { id, name, members }, by, expires, member }`, and `POST` to it (signed in)
-joins the room as a member, `{ room }`. A link that doesn't work is a 404, whatever the reason. The link itself is
+joins the room as a member, `{ room }`. A link that doesn't work is a 404, whatever the reason; so is a working link
+for someone its room's managers took out of the members while it worked (`room_invites.barred`, migration 55, QA
+BUG-280). The link itself is
 `/invite/<token>` on the server (a web page; the app opens it too, App Links). `room_invites` has no API rules. Both
 clients use all of these.
 

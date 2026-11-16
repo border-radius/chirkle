@@ -20,7 +20,7 @@ function checkInvite(e) {
   const site = siteOf(e.app);
   if (!site?.getBool("invite_only")) return;
   const want = site.getString("invite_code").trim();
-  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body);
+  const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
   const got = typeof body.invite_code === "string" ? body.invite_code.trim() : "";
   if (want !== "" && got !== "" && $security.equal(got, want)) return;
   const [code, message] =

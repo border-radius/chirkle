@@ -52,7 +52,8 @@ The file (schema: `$defs.exportFile` in `shared/schema/answers.json`):
 
 On the web the "Your data" card asks with **Prepare my data**, says "Preparing your data…" and asks again every 3 s while
 the page is open (leaving it loses nothing: the job goes on), then shows the size and until when, with **Download** and
-**Prepare again**. The app does the same (ANDROID.md §73).
+**Prepare again**. Pressed within 10 minutes of the last one being made, it gets that one back, and says "It was
+prepared less than 10 minutes ago, so this one is still the newest." (QA BUG-283). The app does the same (ANDROID.md §73).
 
 Nothing of it is on the web's critical path (§7.7): its calls are `account-api.ts`, which `Api.account()` loads with
 Settings, and the two cards' styles are `styles/account.css`, which the profile chunk links (`ACCOUNT_CSS`). The
@@ -68,7 +69,7 @@ the person's choice (neither: `messages` `validation_required`; a wrong password
    no picture (the file is deleted), e-mail `<id>@deleted.invalid` (not verified, not visible), `no_dms`, not a
    moderator, not banned; a random password and a new token key, so every session ends; its OAuth2 links, MFA, OTP
    and sign-in origin rows deleted. Its `collection_subs`, `hidden_rooms`, `room_reads`, `inbox`, `inbox_reads`,
-   `stats_activity` rows and exports are deleted, all small. Its collections stop being public. It leaves every private
+   `stats_activity` rows and exports are deleted, all small, and the invite links it made (§44, QA BUG-281). Its collections stop being public. It leaves every private
    room's members and every room's writers (not a DM's two members, which name the DM). An `erase` job is queued in
    the same transaction, with `messages` set for "delete".
 2. **After, by the worker** (§43.5), what grows with the account, a batch of 200 to a transaction: its collections'
