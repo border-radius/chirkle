@@ -1,5 +1,5 @@
 # Production image: the built frontend + the Chirkle server (server/: PocketBase with the hot paths in Go), and ffmpeg.
-# Used by Dokku (README "Deploying").
+# Used by Docker and Dokku (docs/site/deploy/docker.md, dokku.md).
 
 # ---- frontend: web/ → pb_public/ ----
 FROM node:22-alpine AS web
@@ -39,7 +39,7 @@ COPY pb_hooks ./pb_hooks
 COPY app.json ./
 USER chirkle
 # Rate limits are per client IP, and Dokku's proxy is always in front: trust the address it adds to X-Forwarded-For.
-# Use -e TRUSTED_PROXY=off when clients reach the container directly (README "Deploying").
+# Use -e TRUSTED_PROXY=off when clients reach the container directly (docs/site/deploy/reverse-proxy.md).
 ENV TRUSTED_PROXY=X-Forwarded-For
 # All data (SQLite + uploaded files) lives here: mount persistent storage on it.
 VOLUME /pb_data
