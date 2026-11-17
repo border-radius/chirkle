@@ -88,6 +88,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
     var seenAt by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
 
     /** You have seen everything listed: the server and the room list's count hear of it. */
     fun seeAll() {
@@ -107,6 +108,9 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                 .onSuccess { page ->
                     if (seenAt == null) seenAt = page.seenAt
                     items = if (first) page.items else items + page.items.filter { n -> items.none { it.id == n.id } }
+                    // From the top, the list shows the top: the rows come in above the spinner, and the list would
+                    // otherwise keep the spinner in place, at the bottom.
+                    if (first) list.scrollToItem(0)
                     // From the top again: keep how far "Show older" had got.
                     if (!first || cursor.isEmpty() || items.isEmpty()) cursor = if (page.more) page.items.lastOrNull()?.cursor.orEmpty() else ""
                     seeAll()
@@ -145,7 +149,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
             title = { Text(stringResource(R.string.rooms_mentions_replies)) },
         )
     }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(items, key = { it.id }) { item ->
                 val new = seenAt != null && item.created > seenAt!! && !item.read
                 val room = app.rooms[item.room]?.title(app.user?.id).orEmpty()

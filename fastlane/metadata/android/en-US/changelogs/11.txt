@@ -1,0 +1,1 @@
+A long unread message now opens at its start, and Mentions & replies opens at the top.

@@ -229,13 +229,19 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         // The list is laid out from the bottom: the target's bottom edge at the bottom, then raised a
                         // quarter of the list so what follows it shows too, as far as the target stays whole. (Two rows
                         // newer at the bottom put it off screen when they are tall: images, a keyboard open.)
+                        // Taller than the list, it opens at its start instead: its top edge at the top.
                         val i = rowsNow.indexOfFirst { it.key == key }
                         list.scrollToItem(i)
                         val info = list.layoutInfo
-                        val size = info.visibleItemsInfo.firstOrNull { it.index == i }?.size ?: 0
+                        val item = info.visibleItemsInfo.firstOrNull { it.index == i }
+                        val size = item?.size ?: 0
                         val viewport = info.viewportEndOffset - info.viewportStartOffset
-                        val raise = minOf(viewport / 4, viewport - size).coerceAtLeast(0)
-                        if (raise > 0 && i > 0) list.scrollBy(-raise.toFloat())
+                        val over = if (item == null) 0 else item.offset + size - info.viewportEndOffset
+                        if (over > 0) list.scrollBy(over.toFloat())
+                        else {
+                            val raise = minOf(viewport / 4, viewport - size).coerceAtLeast(0)
+                            if (raise > 0 && i > 0) list.scrollBy(-raise.toFloat())
+                        }
                     }
                     Scroll.Anchor -> {}
                 }

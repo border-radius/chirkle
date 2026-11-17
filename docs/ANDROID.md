@@ -1858,3 +1858,14 @@ QA pass 41 (QA.md) on invite links and the account's data:
 - Nothing to change for BUG-280 and BUG-281 (the server's): someone taken out of a private room opening its link gets
   the dead link's page, as for any 404.
 
+
+## 76. Opening at the start (2026-11-17)
+
+App-only fixes (the web already did both):
+
+- **A long first unread message** (or any message gone to, §18.5): `Scroll.Target` put the message's bottom edge at the
+  bottom of the list, so one taller than the list opened at its end. Now one taller than the list opens with its top
+  edge at the top; shorter ones are placed as before (QA BUG-163's rule).
+- **Mentions & replies opened at the bottom**: the list starts with only its spinner row, and the first page came in
+  above it while the list kept that row in view. A page loaded from the top now scrolls the list to its first row.
+- Not covered by a test (Robolectric's layout doesn't size rows as a device does); compiled and checked by reading.
