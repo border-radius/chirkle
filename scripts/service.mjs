@@ -75,7 +75,7 @@ export function unitFile(opts) {
   for (const [flag, value] of Object.entries(defaults)) if (!has(flag)) flags.push(`${flag}=${value}`);
   const argv = [join(prefix, "chirkle-server"), "serve", ...serve, ...flags];
 
-  // On loopback only a proxy on this machine can reach it, so trust the client IP it forwards (README "Deploying").
+  // On loopback only a proxy on this machine can reach it, so trust the client IP it forwards (docs/site/deploy/reverse-proxy.md).
   const http = [...serve, ...flags].find((a) => a.startsWith("--http="))?.slice("--http=".length) ?? "";
   const loopback = !domain && /^(127\.|localhost:|\[::1\]:)/.test(http);
   const port = Number(/:(\d+)$/.exec(http)?.[1] ?? 0);

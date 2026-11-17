@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 
-if (process.platform === "win32") fail('Windows is not supported: run it in WSL, or use the Docker image (README "Deploying")');
+if (process.platform === "win32") fail('Windows is not supported: run it in WSL, or use the Docker image (https://chirkle.com/docs/deploy/docker/)');
 
 /** @param {string} cmd @param {string[]} argv @param {import("node:child_process").SpawnSyncOptions} opts */
 const run = (cmd, argv, opts = {}) => {

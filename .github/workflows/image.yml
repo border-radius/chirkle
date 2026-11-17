@@ -2,7 +2,7 @@ name: Image
 
 # Builds the production image on GitHub's runners and pushes it to GitHub Container Registry as
 # ghcr.io/border-radius/chirkle:<commit> (and :latest), after CI passes on master, or by hand. A server then runs it
-# with `dokku git:from-image`: it only pulls layers and restarts, it builds nothing (README "Dokku"). An image for a
+# with `dokku git:from-image`: it only pulls layers and restarts, it builds nothing (docs/site/deploy/dokku.md). An image for a
 # commit exists only if that commit passed CI.
 on:
   workflow_run:

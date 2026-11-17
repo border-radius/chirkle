@@ -31,7 +31,7 @@ Mentions & replies, which load on first use).
 - Links in messages are clickable and open in a new tab (http, https and www. addresses only)
 - Emoji: a picker in the composer with search by name, ":name" suggestions as you type, and reactions on any message
   (as many different ones as you like), live for everyone
-- Attachments: up to 10 files of 20 MB per message, with an upload progress bar; images shown as thumbnails and videos as their first frame (4 tiles, then "+N"); files are private to whoever can read the message
+- Attachments: up to 10 files of 20 MB per message, with an upload progress bar; images shown as thumbnails and videos as their first frame (4 tiles, then "+N"); files open by a link that can't be guessed, and stops working when the message is deleted
 - Image viewer: click a thumbnail to see it full size (or a video to play it) and step through the room's images and videos (buttons, arrow keys, swipe);
   loaded only when first used, so it adds nothing to the page's first load
 - Collections: save any image or video from the chat to collections of your own, public or private, and attach from them to messages; subscribe to other people's public collections to use theirs too, with a count of what's new and the new items highlighted; media attached from a collection link to it (or say "Private collection")
@@ -49,7 +49,7 @@ Mentions & replies, which load on first use).
 - Your own branding (title and logo) and, if you like, invite-only signups: set by the admin in PocketBase
 - Forgot password: once the admin sets up email, "Forgot password?" on the login page (web and Android) emails a link
   that sets a new password and logs out every device
-- Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits, files and (with the bot an admin) reactions go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [Telegram integration](#telegram-integration)
+- Telegram bridge (optional): link rooms to Telegram groups through a bot; messages, replies, edits, files and (with the bot an admin) reactions go both ways (deletes from Chirkle to Telegram), Telegram people show under stand-in accounts with their names and pictures — see [the Telegram bridge](https://chirkle.com/docs/telegram/)
 - Fast room switching: each room's latest messages are kept in the browser (IndexedDB) and shown at once while the
   server answers; unread rooms are fetched ahead. Attachment thumbnails are kept by the service worker, so going back
   to a room (or reloading) doesn't download them again. All of it is cleared on logout
@@ -59,12 +59,15 @@ Mentions & replies, which load on first use).
 - Installable as an app (PWA: Add to Home Screen, the browser's Install button); it opens offline to its shell
 - Optimistic sending with safe retries, reconnect gap-fill, light/dark themes, works on phones
 - A native Android app (Kotlin, Jetpack Compose) with the same features, notifications and a 3 MB download — see
-  [Android app](#android-app)
+  [the Android app](https://chirkle.com/docs/android/)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/collections-dark.png">
   <img alt="A collection in Chirkle: the private Moodboard's pictures by month, with Upload, Rename and Make public; the sidebar lists your collections with their counts and a followed one with 3 new" src="docs/collections-light.png">
 </picture>
+
+**Documentation: [chirkle.com/docs](https://chirkle.com/docs/)**: installing and deploying, the user guide, administration, the
+Android app, linked servers, the Telegram bridge and the configuration reference.
 
 Design: [`docs/DESIGN.md`](docs/DESIGN.md) · Android app: [`docs/ANDROID.md`](docs/ANDROID.md) · QA: [`docs/QA.md`](docs/QA.md) · Refactoring plan: [`docs/REFACTOR.md`](docs/REFACTOR.md) · Archived plans: [MVP build](docs/history/BUILD_PLAN.md), [avatars, DMs, attachments](docs/history/NEXT_FEATURES_PLAN.md)
 
@@ -93,8 +96,7 @@ Open the page and sign up. The first run prints a link to create the admin (supe
 `npx chirkle superuser upsert you@example.com <password>` (`npm start -- superuser upsert …` in a clone).
 `HOST` and `PORT` choose the address (default `127.0.0.1:8090`; `HOST=0.0.0.0` to reach it from other machines),
 `CHIRKLE_DATA` the data directory (default `./pb_data`), and any other `pocketbase serve` flags can follow
-(`npx chirkle --http=0.0.0.0:80`). The settings of [Deploying](#deploying) (`TRUSTED_PROXY` behind a reverse proxy, …)
-apply as they are. The package ships the server built for Linux and macOS (x64, arm64): no Go or PocketBase download
+(`npx chirkle --http=0.0.0.0:80`). Every setting is in the [configuration reference](https://chirkle.com/docs/reference/configuration/). The package ships the server built for Linux and macOS (x64, arm64): no Go or PocketBase download
 needed.
 
 ## Getting started (development)
@@ -151,150 +153,42 @@ android/         the Android app (docs/ANDROID.md): core/data (API, realtime, da
 
 ## Deploying
 
-### systemd, in one command
-
-On a Linux server with Node 22+, with a domain pointing at it, this installs Chirkle as a systemd service that serves
-HTTPS itself (Let's Encrypt, on :80/:443):
+On a Linux server with Node 22+ and a domain pointing at it, one command installs Chirkle as a systemd service that
+serves HTTPS itself (Let's Encrypt, on :80/:443):
 
 ```sh
 sudo npx chirkle install-service chat.example.com
-sudo -u chirkle /opt/chirkle/chirkle-server superuser upsert you@example.com <password> --dir=/opt/chirkle/pb_data
 ```
 
-It copies the server, `pb_public/`, `pb_migrations/` and `pb_hooks/` to `/opt/chirkle`, creates the system user
-`chirkle`, which owns the data directory `/opt/chirkle/pb_data` (and nothing else), writes
-`/etc/systemd/system/chirkle.service` (sandboxed: `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`), and enables and
-starts it. Run it again — `sudo npx chirkle@latest install-service chat.example.com` — to upgrade: the files are
-replaced and the service restarted, the data stays. `sudo npx chirkle uninstall-service` stops and removes the unit
-(files and data are left for you to delete).
+The documentation covers the rest:
 
-- Without a domain it listens on `127.0.0.1:8090` for a reverse proxy on the same machine, and sets
-  `TRUSTED_PROXY=X-Forwarded-For` (see below); `--http=<addr>` picks another address (trusted only on loopback).
-- `--prefix=<dir>`, `--data=<dir>`, `--user=<name>`, `--name=<unit>` (several instances side by side) change the
-  defaults; any other flag goes to `serve`.
-- `--dry-run` prints the unit file and what it would do, and changes nothing; use it to write the unit yourself.
-- More settings (`FFMPEG=`, other environment): `sudo systemctl edit chirkle`, which survives reinstalls.
-
-### By hand
-
-Build once, then copy `bin/chirkle-server`, `pb_public/`, `pb_migrations/` and `pb_hooks/` to the server. It is PocketBase
-with the hot paths in Go (`server/`): the same commands and flags as the `pocketbase` binary. Go builds it for another
-platform with `GOOS`/`GOARCH` (`node scripts/build-server.mjs --all` builds them all into `bin/release/`).
-Migrations run automatically on start, and nothing is served until they are done, so they change only the database.
-What stored files need moving (the shared files of DESIGN.md §37) the media worker does afterwards, while the server
-runs.
-
-```sh
-npm ci && npm run setup && npm run build
-rsync -a bin/chirkle-server pb_public pb_migrations pb_hooks server:/opt/chirkle/
-```
-
-With a domain pointing at the server, PocketBase serves HTTPS itself (Let's Encrypt): run
-`chirkle-server serve chat.example.com --hooksPool=100 --dir=… --publicDir=… --migrationsDir=… --hooksDir=…` under your
-init system with `CAP_NET_BIND_SERVICE` (`npx chirkle install-service chat.example.com --dry-run` prints a systemd unit
-for it).
-
-Behind an existing reverse proxy instead, use `serve --http=127.0.0.1:8090` and proxy to it (keep
-`/api/realtime` unbuffered — it is a Server-Sent Events stream — and let request bodies through up to 210 MB, since a
-message may carry 10 files of 20 MB), and start PocketBase with
-`TRUSTED_PROXY=X-Forwarded-For` (`Environment=` in the unit). The rate limits are per client IP: without it, every
-request seems to come from the proxy, and one client tripping a limit trips it for everyone. The rightmost address of
-the header is used, the one your proxy added. The Docker image sets it (Dokku always runs a proxy in front); run it
-with `-e TRUSTED_PROXY=off` if clients reach port 8090 directly, since they could then choose their own IP. Unset, the
-setting is left as configured under *Settings → Application* in the admin UI.
-
-### Dokku
-
-The `Dockerfile` builds the production image (frontend + pinned PocketBase), and `app.json` gives Dokku its health
-check. On the server:
-
-```sh
-dokku apps:create chirkle
-# All data (SQLite + uploads) lives in /pb_data: keep it on the host. The directory is owned by uid 32767, the
-# image's user.
-dokku storage:ensure-directory chirkle
-dokku storage:mount chirkle /var/lib/dokku/data/storage/chirkle:/pb_data
-dokku domains:set chirkle chat.example.com
-# nginx allows 1 MB bodies by default; a message may carry 10 files of 20 MB.
-dokku nginx:set chirkle client-max-body-size 210m
-dokku letsencrypt:enable chirkle   # with the dokku-letsencrypt plugin
-```
-
-Then deploy. The light way is to run the image GitHub builds: after CI passes on `master`,
-`.github/workflows/image.yml` pushes `ghcr.io/border-radius/chirkle:<commit>` (and `:latest`), so the server only pulls
-and restarts, however many apps run it:
-
-```sh
-dokku git:from-image chirkle ghcr.io/border-radius/chirkle:<commit>   # each deploy needs a new tag: use the commit
-```
-
-To follow `master`, run that from cron with the commit `git ls-remote https://github.com/border-radius/chirkle.git
-refs/heads/master` names; until its image exists (CI and the build take a few minutes, and a commit that fails CI
-gets none) `docker pull` of it fails, and the app keeps running what it has.
-
-Or build on the server: `git push dokku master` from a clone with `dokku@server:chirkle` as the `dokku` remote, or
-`dokku git:sync --build chirkle https://github.com/border-radius/chirkle.git master`. Then create a superuser:
-
-```sh
-dokku run chirkle /app/chirkle-server superuser upsert you@example.com <password> --dir=/pb_data
-```
-
-Settings go in as environment variables (`dokku config:set chirkle KEY=value`, which restarts the app); the image already
-sets `TRUSTED_PROXY` for Dokku's proxy. `dokku logs chirkle -t` shows PocketBase's output; the app's own log (request
-log and errors from hooks) is in the admin UI under *Logs*.
-
-### Running it
-
-**Branding and invite-only signups:** in the admin UI, *Collections → site*, edit the one record: `title` and `logo`
-are shown in the app bar, on the login page and in the tab's title. Tick `invite_only` and fill `invite_code` to let
-only people who have the code sign up (they enter it on the Sign up form; it is case-sensitive). Change the code to stop
-the old one working; leave it empty to close signups. Existing accounts are unaffected, and you can still create
-accounts yourself under *Collections → users*.
-
-**Moderators and statistics:** in the admin UI, *Collections → users*, tick `moderator` on someone's record. They
-then delete messages, change room access, archive rooms and ban people from the app (`banned` on the same record
-undoes a ban), and find usage statistics on Settings; superusers signed in to the admin UI open `/stats` directly.
-Tick `no_stats` on the *site* record to stop recording them.
-
-**Forgot password:** in the admin UI, set *Settings → Application → Application URL* to the server's public
-address (the emailed link starts with it) and the sender under *Settings → Mail settings*, and turn on *Use SMTP
-mail server* with your provider's host, port and login; *Send test email* checks it. Only then do the login pages
-offer "Forgot password?" (an SMTP server set but turned off isn't used). The link opens `/reset-password/…` on the
-web, works once for 30 minutes, and logs out every device of the account. The email's wording is under *Collections →
-users → Options → Default Password reset email template*; keep `{APP_URL}/reset-password/{TOKEN}` as its link.
-
-**Backups:** in the admin UI, *Settings → Backups* — schedule automatic backups (optionally to S3-compatible
-storage). Uploaded files (avatars, attachments) live in `pb_data/storage` (or S3, under *Settings → Files storage*) and
-are part of the backups, so plan disk space for them. **Rate limits** (per IP: messages 10 per 5 s, edits/deletes 20
-per 10 s, reactions 30 per 10 s, forwarding and deleting several messages 20 requests per minute each, password changes 5 per minute, password reset emails 5 per 10 minutes, new rooms 5 per minute, opening DMs 10 per minute, marking rooms read 120 per minute, signups 20 per minute; PocketBase defaults for the rest)
-are set by the migrations and adjustable under *Settings → Rate limits*.
+- [Run it on a server](https://chirkle.com/docs/deploy/): the one-command install and its options, updating, uninstalling, and running the
+  server by hand
+- [Docker](https://chirkle.com/docs/deploy/docker/) and [Dokku](https://chirkle.com/docs/deploy/dokku/), including running the image GitHub builds for every
+  commit on `master` and following it from cron
+- [Behind a reverse proxy](https://chirkle.com/docs/deploy/reverse-proxy/): nginx and Caddy examples, and `TRUSTED_PROXY`
+- [Administration](https://chirkle.com/docs/admin/): branding, invite-only signups, moderators, anonymous rooms, email, backups and S3,
+  rate limits, [link previews and video thumbnails](https://chirkle.com/docs/admin/previews-and-thumbnails/), metrics
+- [Configuration reference](https://chirkle.com/docs/reference/configuration/): every environment variable, flag and setting in one place
 
 ## Android app
 
-In active development alongside the web client (it was frozen 2026-10-21..23): web features and fixes are ported to
-it ([`CLAUDE.md`](CLAUDE.md), [`android/PARITY.md`](android/PARITY.md)).
+A native client for any server running Chirkle (Kotlin, Jetpack Compose), with several accounts at once on one server
+or many, and notifications without Google services. Installing it, and what a server's admin can set up for it (room
+links that open in the app, a minimum app version, a build for your own server):
+[the Android app](https://chirkle.com/docs/android/) and [for admins](https://chirkle.com/docs/android/for-admins/).
 
-A native client for any server running Chirkle, with several accounts at once on one server or many (`android/`,
-design: [`docs/ANDROID.md`](docs/ANDROID.md), §17 for servers and accounts). It needs JDK 17+
-(21 recommended) and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in `android/local.properties`); Gradle fetches the
-rest. Its tests start the server from `bin/`, so run `npm run setup` first.
+To work on it (`android/`), you need JDK 17+ (21 recommended) and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in
+`android/local.properties`); Gradle fetches the rest. Its tests start the server from `bin/`, so run `npm run setup`
+first.
 
 ```sh
 cd android
 ./gradlew assembleDebug          # app/build/outputs/apk/debug: offers http://10.0.2.2:8090 (the dev server, from the emulator)
 ./gradlew check                  # lint, unit tests, API tests against PocketBase, UI tests on Robolectric
-./gradlew checkApkSize -Pchirkle.server=https://chat.example.org -Pchirkle.appId=org.example.chirkle
 ```
 
-People choose their server when they log in or sign up (Change server), and add more accounts from their profile.
-A build only sets the server offered first: `-Pchirkle.devServer=http://192.168.1.20:8090` for a debug build on a device,
-`chirkle.server` for a release (without one, the app asks for a server, and no host's links open in the app). Debug builds
-take http addresses; release builds take https only. The app notifies of DMs and replies to you by checking each
-account's server about every 15 minutes (WorkManager), with no Google services and nothing to set up on the server
-(ANDROID.md §21). Links to rooms on the build's server open in the app once `ANDROID_CERT_SHA256` is
-set (`/.well-known/assetlinks.json`; `ANDROID_APP_ID` only for a build with another `chirkle.appId`). An admin can set
-`min_android_version` on the site record to make older apps ask for an update. What is built and what isn't yet:
-[`docs/ANDROID.md` §16](docs/ANDROID.md#16-implementation-2026-10-18), and [`android/PARITY.md`](android/PARITY.md).
+Design: [`docs/ANDROID.md`](docs/ANDROID.md). What it has of the web app's features: [`android/PARITY.md`](android/PARITY.md).
 
 ## Releasing
 
@@ -305,77 +199,16 @@ Commit, push, then publish a GitHub Release with the new tag `v0.2.0`. The Relea
 stages `chirkle@0.2.0` on npm; approve it on npmjs.com (2FA) to publish it. Setup and details:
 [`docs/ANDROID.md` §28.7](docs/ANDROID.md#287-one-release-for-the-app-and-the-npm-package-2026-11-08).
 
-## Link previews
-
-Messages show a line under them for each link: the page's favicon and title ([`docs/DESIGN.md` §28](docs/design/28-link-previews.md)).
-The server fetches them with `curl` (in the Docker image), only from public addresses. Set `LINK_PREVIEWS=off` to turn
-it off.
-
-## Media grid
-
-Each room's Media button shows its images and videos as a grid ([`docs/DESIGN.md` §30](docs/design/30-media-grid.md)). A worker on
-the server makes their thumbnails ahead of time, and a poster frame for each video with `ffmpeg` (in the Docker
-image), which the room shows too, so browsers don't load videos just to draw their first frame. Set `FFMPEG=off` to
-go without: videos then show their first frame in the room as before, and plain tiles in the grid.
-
 ## Telegram integration
 
-An optional bridge between rooms and Telegram groups ([`docs/DESIGN.md` §26](docs/design/26-telegram-bridge.md)). A bot sits in your
-groups; once a group is linked to a room, messages, replies, edits and files go both ways (deletes only from Chirkle
-to Telegram), and reactions too where the bot is a group admin. Telegram people show in the room under stand-in users ("Ann Lee (TG)") with their names and pictures;
-the bot posts Chirkle messages with the author's name above them.
-
-**Setup**
-
-1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and keep its token. Turn its privacy mode off
-   (`/setprivacy` → Disable) so it sees group messages; if the bot is already in a group, remove it and add it again.
-2. Set the environment and restart:
-   - `TELEGRAM_BOT_TOKEN` — the bot's token (without it the bridge is off)
-   - `TELEGRAM_WEBHOOK_URL` — `https://<your domain>/api/telegram/webhook` (without it the bridge polls Telegram,
-     for local development)
-
-   With Dokku: `dokku config:set chirkle TELEGRAM_BOT_TOKEN='…' TELEGRAM_WEBHOOK_URL='https://chat.example.com/api/telegram/webhook'`.
-3. Add the bot to a Telegram group. A row for it appears in the admin UI under *Collections → tg_links*: pick the
-   room and tick `enabled`. `/chatid` in the group says whether it is linked. Make the bot a group admin to bring
-   reactions over: Telegram tells only admins about them. Tick `anonymous` too to repost the
-   room's messages to that group without their authors' names.
-
-To make a room **anonymous**, tick `anonymous` on its row under *Collections → rooms* in the admin UI. Messages
-posted from then on show the room's name instead of their authors to everyone but the authors themselves (and
-superusers); see DESIGN.md §35. Telegram groups linked to it get the room's name as the author too.
-
-The bridge is self-contained: `pb_hooks/telegram.pb.js`, `pb_hooks/telegram/` and its own `tg_*` collections. Delete
-the first two to remove it.
+Link rooms to Telegram groups and channels through your own bot: messages, replies, edits and files go both ways, and
+reactions too with the bot an admin. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_URL`, add the bot to a group, and
+link the group to a room in the admin UI. Setup, options and limits: [the Telegram bridge](https://chirkle.com/docs/telegram/).
 
 ## Linked instances
 
-Two or more servers running this app can share rooms and let their people write DMs to each other
-([`docs/DESIGN.md` §33](docs/design/33-linked-instances.md)). Each room has a home server; the others keep a copy, and messages, edits,
-replies, reactions and files go both ways. People from the other server show under stand-in users named after them
-("Ann (B)"). Only the admins of both servers pair them and choose which rooms to share.
-
-**Setup** (on each server)
-
-1. Turn it on: in the admin UI, set *Settings → Application → Application URL* to the server's public address, e.g.
-   `https://chat.example.com`, then tick `federation` on the record under *Collections → site*. Peers are reached over
-   https, on public addresses only. The address is part of the ids the peers keep, so it can't be changed while any
-   peer is listed. (A server set up with the old `FEDERATION_ORIGIN` variable gets both done by its next start's
-   migration; the variable is no longer read after that.)
-2. Pair: on server A, under *Collections → fed_peers*, add a row with B's address and a short label for its people
-   (`B`); tick `dms` to let people write DMs across. A sends B the request, and it shows on B as a row with status
-   `requested` (B checks with A that it really asked). B's admin accepts by setting its status to `active`, choosing
-   a label for A's people (and `dms`); both rows are then `active`. Deleting the request declines it. A request B
-   can't be reached for is sent again every minute; one nobody accepts expires after 7 days. If both admins add
-   each other, they pair at once.
-3. Share a room: on its home, add a row under *fed_shares* with the room and the peer. The peer's admin finds it under
-   *fed_shares* there and ticks `accepted`; the room then appears there, named "general (A)", with its latest 200
-   messages. Private rooms too: each side's admins add their own people (on the copy, by editing its members), and the
-   room's creator can add people from the other server by their address, `ann@b.example`.
-4. DMs: with `dms` ticked on both sides, people type `name@b.example` in "New message".
-
-Suspend a peer by setting its `status` to `suspended`; delete its row to unpair (the copies are archived, DMs become
-read-only). The feature is self-contained: `pb_hooks/federation.pb.js`, `pb_hooks/federation/` and the `fed_*`
-collections; while `federation` isn't ticked, its routes answer 404 and nothing is sent.
+Chirkle servers can be paired by their admins to share rooms, public or private, and let their people DM each other.
+Off by default. Setup, sharing, moderation and unpairing: [linked servers](https://chirkle.com/docs/linking/).
 
 ## License
 
