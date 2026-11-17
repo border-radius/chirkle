@@ -1,1 +1,1 @@
-A long unread message now opens at its start, and Mentions & replies opens at the top.
+Room invite links: whoever manages a private room can make a link that lets people join, then copy, share, renew or revoke it. Your data: download a copy of your account and messages, or delete your account (keeping or deleting your messages). A long unread message now opens at its start, and Mentions & replies opens at the top.
