@@ -7,12 +7,24 @@
     "type": "git",
     "url": "git+https://github.com/border-radius/chirkle.git"
   },
-  "homepage": "https://github.com/border-radius/chirkle#readme",
+  "bugs": {
+    "url": "https://github.com/border-radius/chirkle/issues"
+  },
+  "homepage": "https://chirkle.com/",
   "keywords": [
     "chat",
-    "pocketbase",
+    "messenger",
+    "team-chat",
+    "group-chat",
     "self-hosted",
-    "realtime"
+    "selfhosted",
+    "slack-alternative",
+    "discord-alternative",
+    "telegram",
+    "pocketbase",
+    "sqlite",
+    "realtime",
+    "pwa"
   ],
   "type": "module",
   "bin": {
