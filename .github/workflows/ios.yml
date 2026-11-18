@@ -1,0 +1,37 @@
+name: iOS
+
+# The iPhone app (ios/, docs/IOS.md §6): ChirkleCore's tests, against a real server built from this commit, then the
+# app built for the simulator, unsigned. Only when ios/ (or what it shares with the server) changes: macOS minutes
+# cost ten times Linux ones.
+on:
+  push:
+    paths: ["ios/**", "shared/**", "pb_hooks/**", "pb_migrations/**", "server/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", "shared/**", "pb_hooks/**", "pb_migrations/**", "server/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+jobs:
+  ios:
+    name: iOS (core tests, app build)
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      # bin/chirkle-server, which ServerTests start (docs/IOS.md §7).
+      - uses: ./.github/actions/setup
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)" && xcodebuild -version
+      - name: ChirkleCore tests
+        working-directory: ios/ChirkleCore
+        run: swift test
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: brew install xcodegen && xcodegen
+      - name: Build the app (simulator, unsigned)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild build -project Chirkle.xcodeproj -scheme Chirkle \
+            -destination 'generic/platform=iOS Simulator' -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO | tee build.log | grep -E '(error|warning: unre|BUILD)' || true
+          grep -q 'BUILD SUCCEEDED' build.log

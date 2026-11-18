@@ -1,6 +1,6 @@
 # The client API
 
-What the clients (web/, android/) rely on from the server. The Android app is installed and updated by its users, on
+What the clients (web/, android/, ios/) rely on from the server. The Android app is installed and updated by its users, on
 their own schedule (F-Droid), so a release of the server has to keep working with the apps already out there.
 Anything listed here is a public interface. A change to it needs the compatibility check below, not just green
 tests.
@@ -9,6 +9,7 @@ Shared values live in [`shared/contract.json`](../shared/contract.json): the fie
 client keeps its own copy, and tests compare those copies with the contract:
 - `tests/unit/contract.test.ts` checks the web's copy and the hooks' copy.
 - `android/…/lib/ContractTest.kt` checks the app's.
+- `ios/ChirkleCore/Tests/…/SharedTests.swift` checks the iPhone app's (docs/IOS.md §7), and decodes the answers' examples.
 - `tests/integration/schema.test.ts` checks the limits against the migrations.
 
 What each `/api/chat/*` route answers is [`shared/schema/answers.json`](../shared/schema/answers.json): a JSON Schema
