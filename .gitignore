@@ -8,9 +8,3 @@ playwright-report/
 *.log
 types/pocketbase.d.ts
 
-# The iPhone app (docs/IOS.md §6): XcodeGen makes the project and Info.plist; SwiftPM its build.
-ios/Chirkle.xcodeproj/
-ios/App/Info.plist
-ios/ChirkleCore/.build/
-ios/ChirkleCore/.swiftpm/
-ios/build.log
