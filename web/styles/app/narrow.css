@@ -52,6 +52,11 @@
     line-height: 22px;
   }
 
+  /* The "#" column as wide as the face or tile below it. */
+  .room-section li a::before {
+    width: 28px;
+  }
+
   .room-section li.dm .avatar,
   .room-section[data-section="collections"] li a::before {
     width: 28px;

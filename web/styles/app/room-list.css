@@ -112,9 +112,11 @@
   text-decoration: none;
 }
 
+/* The leading slot is as wide as a DM avatar or a collection tile, so every row's icon and name line up. */
 .room-section li a::before {
   content: "#";
-  width: 16px;
+  flex: none;
+  width: 22px;
   color: var(--dim);
   font-weight: 600;
   text-align: center;
@@ -170,7 +172,9 @@
 }
 
 /* Private and Open Air (§23.1). */
+/* A flex box, so the icon is centred with the name rather than sat on a text baseline (which left it high). */
 .room-section li a > .vis {
+  display: flex;
   color: var(--dim);
 }
 

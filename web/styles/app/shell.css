@@ -236,9 +236,11 @@ div.brand .brand-title::after {
   text-align: left;
 }
 
+/* Centred in the rows' 22px icon column (room-list.css). */
 .jump-button::before {
   width: 16px;
   height: 16px;
+  margin: 0 3px;
 }
 
 .jump-button span {
