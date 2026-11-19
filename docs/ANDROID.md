@@ -339,6 +339,7 @@ The app declares the server's host for `/r/*`, so a link to a room or a message 
   the web's `forgetExpired`).
 - Access control stays on the server: the app hides what you can't do, but never relies on it.
 - An opt-in setting sets `FLAG_SECURE` on screens with messages.
+- A notification's tap opens its room only through a non-exported alias of the exported `MainActivity` (§79).
 
 ## 11. Performance budget (enforced in CI)
 
@@ -1903,3 +1904,19 @@ Ported with the web's change (`api.ts`, from the SDK 0.29 change that clears the
 - Tests: `ChirkleApiTest` (a 401 on a read is told, a missing record isn't), `ServicesTest` (a login-only read's 401
   ends a revoked session). QA BUG-183's `ServicesTest` no longer checks that a quick return skips the check
   (`checkStaleMs`): against a real server the live reload ends the session first. Web: `tests/unit/api.test.ts`.
+
+## 79. Notification taps can't be forged (2026-11-20)
+
+From a security audit of the app. `MainActivity` is exported (the launcher, App Links, shares), and `take()` trusted any
+intent with the action `Notifications.OPEN`: another app on the phone could make the app switch to an account and open
+a room id of its choosing, unchecked. An id such as `../../collections/…` then reached two request paths built without
+encoding (`ChirkleApi.media`, `removeItem`): a GET to another route of the user's own server, with their session.
+
+- **Now**: a notification's tap goes to `.NotificationOpen`, an `activity-alias` of `MainActivity` with
+  `exported="false"`. Other apps can't target it, and an intent sent to `MainActivity` itself names `MainActivity` as
+  its component, so `notificationRoute()` (`nav/Routes.kt`) opens a room only for the alias's intents, and only with
+  ids that are ids (the `[a-z0-9]{15}` of `routeOf`); a bad message id is dropped, the room still opens.
+- `ChirkleApi.media` and `removeItem` encode their id in the path, as every other route does.
+- App Links are unchanged: any app could already open `/r/<id>`, but a link can't choose the account.
+- Tests: `RoutesTest` (only the alias counts, bad ids open nothing), `UiNotifyTest` (a posted notification's tap names
+  the alias and opens its message). Web: nothing to port (the web has no such entry point).

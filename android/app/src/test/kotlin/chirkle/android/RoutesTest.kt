@@ -2,6 +2,7 @@ package chirkle.android
 
 import chirkle.android.data.lib.pathOnServer
 import chirkle.android.nav.Room
+import chirkle.android.nav.notificationRoute
 import chirkle.android.nav.routeOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -46,5 +47,18 @@ class RoutesTest {
         assertNull(route("https://chat.example.org/login"))
         assertNull(route("https://chat.example.org/r/ABCDEFGHIJ12345"))
         assertEquals(Room("abcdefghij12345"), route("https://chat.example.org/r/abcdefghij12345/m/bad"))
+    }
+
+    // MainActivity is exported: only a tap on our own notification, through the non-exported alias, opens its room
+    // (ANDROID.md §79). Another app sending OPEN straight to MainActivity, or ids that aren't ids, open nothing.
+    @Test fun `a notification's room, only through the alias`() {
+        val alias = chirkle.android.notify.Notifications.OPEN_ALIAS
+        assertEquals(Room("abcdefghij12345", "zyxwvutsrq54321"), notificationRoute(alias, "abcdefghij12345", "zyxwvutsrq54321"))
+        assertEquals(Room("abcdefghij12345"), notificationRoute(alias, "abcdefghij12345", null))
+        assertEquals(Room("abcdefghij12345"), notificationRoute(alias, "abcdefghij12345", "../x"))
+        assertNull(notificationRoute("chirkle.android.MainActivity", "abcdefghij12345", null))
+        assertNull(notificationRoute(null, "abcdefghij12345", null))
+        assertNull(notificationRoute(alias, "../../collections/users/records", null))
+        assertNull(notificationRoute(alias, null, null))
     }
 }

@@ -70,6 +70,10 @@ class UiNotifyTest {
         assertEquals(mapOf(Notifications.DMS to listOf("hi bob"), Notifications.ROOMS to listOf("the answer")), shown)
         val dmNote = shadowOf(nm).allNotifications.single { it.channelId == Notifications.DMS }
         assertEquals(chirkle.android.data.lib.parsePb(hi.created), NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(dmNote)!!.messages.single().timestamp)
+        // A tap goes through the non-exported alias, the only way MainActivity opens a notification's room (ANDROID.md §79).
+        val tap = shadowOf(dmNote.contentIntent).savedIntent
+        assertEquals(Notifications.OPEN_ALIAS, tap.component?.className)
+        assertEquals(chirkle.android.nav.Room(dm.id, hi.id), chirkle.android.nav.notificationRoute(tap.component?.className, tap.getStringExtra("room"), tap.getStringExtra("msg")))
 
         // Read on another device: the next check takes its notification away.
         runBlocking {

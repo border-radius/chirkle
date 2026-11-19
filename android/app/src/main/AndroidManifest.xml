@@ -57,6 +57,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Notification taps only (not exported, ANDROID.md §79): MainActivity trusts OPEN's extras only through here. -->
+        <activity-alias
+            android:name=".NotificationOpen"
+            android:targetActivity=".MainActivity"
+            android:exported="false" />
+
         <receiver android:name=".notify.ActionReceiver" android:exported="false" />
 
         <!-- WorkManager's foreground service: what its expedited work does (Android 14 asks). -->

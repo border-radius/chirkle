@@ -26,8 +26,8 @@ import androidx.lifecycle.lifecycleScope
 import chirkle.android.nav.AppRoot
 import chirkle.android.nav.Linked
 import chirkle.android.notify.Notifications
-import chirkle.android.nav.Room
 import chirkle.android.nav.ShareInbox
+import chirkle.android.nav.notificationRoute
 import chirkle.android.nav.routeOf
 import chirkle.android.ui.ChirkleTheme
 import kotlinx.coroutines.launch
@@ -119,8 +119,8 @@ class MainActivity : ComponentActivity() {
         val app = ChirkleApp.of(this)
         if (intent.action == Notifications.OPEN) {
             val account = intent.getStringExtra("account") ?: return
-            val room = intent.getStringExtra("room") ?: return
-            return open(account, Room(room, intent.getStringExtra("msg")))
+            val room = notificationRoute(intent.component?.className, intent.getStringExtra("room"), intent.getStringExtra("msg")) ?: return
+            return open(account, room)
         }
         val url = intent.data?.toString() ?: return
         lifecycleScope.launch {

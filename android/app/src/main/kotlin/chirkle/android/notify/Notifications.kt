@@ -17,7 +17,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
-import chirkle.android.MainActivity
 import chirkle.android.R
 import chirkle.android.data.lib.parsePb
 import chirkle.android.data.lib.quoteText
@@ -36,6 +35,8 @@ object Notifications {
     const val KEY_REPLY = "reply"
     private const val EXTRA_ROOM = "chirkle.room"
     const val OPEN = "chirkle.android.OPEN"
+    /** The non-exported alias of MainActivity that notification taps go to (ANDROID.md §79). */
+    const val OPEN_ALIAS = "chirkle.android.NotificationOpen"
     /** The accent (tokens.css): the small icon and actions are tinted with it. */
     private const val ACCENT = 0xFF5B3DF5.toInt()
     /** What is shown: "account/room" keys. */
@@ -62,7 +63,7 @@ object Notifications {
 
     /** Opening a notification opens its room in its account, at the message (MainActivity.take). */
     private fun open(context: Context, account: String, room: String, msg: String?): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java)
+        val intent = Intent().setClassName(context, OPEN_ALIAS)
             .setAction(OPEN)
             .setData(Uri.parse("chirkle-notification://$account/$room"))
             .putExtra("account", account).putExtra("room", room).putExtra("msg", msg)

@@ -646,7 +646,7 @@ class ChirkleApi(val pb: PbClient) {
      * the newest). 404 for a room you can't see.
      */
     suspend fun media(room: String, after: MediaItem? = null, limit: Int = 60): MediaPage =
-        get("/api/chat/media/$room", buildMap {
+        get("/api/chat/media/${java.net.URLEncoder.encode(room, "UTF-8")}", buildMap {
             put("limit", limit)
             if (after != null) {
                 put("sent", after.sent)
@@ -750,7 +750,7 @@ class ChirkleApi(val pb: PbClient) {
 
     /** Take an item out of a collection of yours. */
     suspend fun removeItem(item: String) {
-        call("/api/chat/items/$item", "DELETE")
+        call("/api/chat/items/${java.net.URLEncoder.encode(item, "UTF-8")}", "DELETE")
     }
 
     /** Your collections that have the file already: collection id → item id. */

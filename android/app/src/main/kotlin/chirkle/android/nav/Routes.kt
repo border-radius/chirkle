@@ -45,5 +45,16 @@ fun routeOf(seg: List<String>): NavKey? {
     return null
 }
 
+/**
+ * The room a notification tap opens (ANDROID.md §79), or null. MainActivity is exported, so any app could send it
+ * Notifications.OPEN with ids of its choosing: only an intent that came through the non-exported alias
+ * ([chirkle.android.notify.Notifications.OPEN_ALIAS], named by [component]) counts, and only with well-formed ids.
+ */
+fun notificationRoute(component: String?, room: String?, msg: String?): Room? {
+    if (component != chirkle.android.notify.Notifications.OPEN_ALIAS) return null
+    if (room == null || !room.matches(ID)) return null
+    return Room(room, msg?.takeIf { it.matches(ID) })
+}
+
 private val ID = Regex("[a-z0-9]{15}")
 private val TOKEN = Regex("[A-Za-z0-9]{24}")
