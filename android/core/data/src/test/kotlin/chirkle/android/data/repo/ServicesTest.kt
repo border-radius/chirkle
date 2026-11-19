@@ -359,15 +359,23 @@ class ServicesTest {
     @Test fun `a session revoked elsewhere ends when the app comes back after a while (QA BUG-183)`() = runBlocking {
         val a = newUser()
         val s = services(a)
+        eventually(what = "collections loaded") { s.store.get().collections != null }
         s.setVisible(false)
-        // Another device (the user's own client) changes the password: every other session is revoked.
+        // Another device (the user's own client) changes the password: every other session is revoked. While the
+        // connection is live, that change already brings a login-only read, whose 401 ends the session (the next test),
+        // so whether a quick return skips the check (checkStaleMs) can't be seen against a real server.
         a.api.changePassword(TestServer.PASSWORD, "password456")
-        s.setVisible(true) // back at once: not checked again
-        kotlinx.coroutines.delay(500)
-        assertEquals(a.user.id, s.store.get().user?.id)
         s.checkStaleMs = 0
-        s.setVisible(false)
         s.setVisible(true)
+        eventually(what = "logged out") { s.store.get().user == null }
+    }
+
+    @Test fun `a login-only read refused with a 401 checks the session, which ends if revoked`() = runBlocking {
+        val a = newUser()
+        val s = services(a)
+        eventually(what = "collections loaded") { s.store.get().collections != null }
+        a.api.changePassword(TestServer.PASSWORD, "password456")
+        assertTrue(runCatching { s.api.collections() }.isFailure)
         eventually(what = "logged out") { s.store.get().user == null }
     }
 

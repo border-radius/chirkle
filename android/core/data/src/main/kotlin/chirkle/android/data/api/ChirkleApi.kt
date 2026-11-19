@@ -160,10 +160,12 @@ class ChirkleApi(val pb: PbClient) {
         try {
             return pb.send(path, method, query, body)
         } catch (e: PbError) {
-            // A change refused while the session went with it: often a mistake, but also what a session revoked elsewhere
-            // gets, which only checking the session can tell (the web's onRejected).
-            val write = method != "GET" && "/auth-" !in path
-            if (e.status in REFUSED && write && token.isNotEmpty() && token == pb.authStore.token) rejectedListeners.toList().forEach { it() }
+            // A change refused while the session went with it, or any 401: often a mistake, but also what a session revoked
+            // elsewhere gets, which only checking the session can tell (the web's onRejected). The server reads a token it
+            // refuses as none, so a read gets a 401 only from a route that needs a login; its 403/404 is usually just a
+            // missing record. A login or refresh says so itself.
+            val telling = (method != "GET" || e.status == 401) && "/auth-" !in path
+            if (e.status in REFUSED && telling && token.isNotEmpty() && token == pb.authStore.token) rejectedListeners.toList().forEach { it() }
             throw e.toApiError()
         } catch (e: Exception) {
             throw e.toApiError()
@@ -178,7 +180,7 @@ class ChirkleApi(val pb: PbClient) {
         if (pb.authStore.token.isNotEmpty()) rejectedListeners.toList().forEach { it() }
     }
 
-    /** Called when the server refuses a change sent with the session (400, 401, 403, 404). */
+    /** Called when the server refuses a change sent with the session (400, 401, 403, 404), or any request with a 401. */
     fun onRejected(fn: () -> Unit): () -> Unit {
         rejectedListeners += fn
         return { rejectedListeners -= fn }

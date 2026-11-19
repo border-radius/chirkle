@@ -101,9 +101,9 @@ export interface Api {
    */
   onAuthChange(fn: () => void): () => void;
   /**
-   * Called when the server refuses a change sent with the session (400, 401, 403 or 404). Often a plain mistake, but
-   * also what a session revoked elsewhere gets (a password change signs out every other device), which only checking
-   * the session can tell. Returns an unsubscribe function.
+   * Called when the server refuses a change sent with the session (400, 401, 403 or 404), or any request with a 401.
+   * Often a plain mistake, but also what a session revoked elsewhere gets (a password change signs out every other
+   * device), which only checking the session can tell. Returns an unsubscribe function.
    */
   onRejected(fn: () => void): () => void;
 
@@ -424,8 +424,11 @@ export function createApi(client: PbClient): Api {
       try {
         return await client.send<T>(path, opts);
       } catch (e) {
-        const write = (opts.method ?? "GET") !== "GET" && !path.includes("/auth-"); // a login or refresh says so itself
-        if (e instanceof PbError && REFUSED.has(e.status) && write && token && token === client.authStore.token) {
+        // A refused write, or any 401: the server ignores a token it doesn't accept, so a GET gets a 401 only from a
+        // route that needs a login, as a revoked session does (a 403/404 on a GET is usually just a missing record).
+        // A login or refresh says so itself.
+        const telling = e instanceof PbError && ((opts.method ?? "GET") !== "GET" || e.status === 401) && !path.includes("/auth-");
+        if (telling && REFUSED.has(e.status) && token && token === client.authStore.token) {
           for (const fn of [...rejected]) fn();
         }
         throw e;

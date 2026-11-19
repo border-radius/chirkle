@@ -40,6 +40,21 @@ class ChirkleApiTest {
         assertEquals("This instance isn't linked to nowhere.example.", chirkle.android.data.api.reasonOf(e!!))
     }
 
+    @Test fun `a 401 on a read sent with a session revoked elsewhere is told, a missing record isn't`() = runBlocking {
+        val a = newUser()
+        val other = TestServer.client()
+        other.logIn(a.email, TestServer.PASSWORD)
+        var told = 0
+        other.onRejected { told++ }
+        runCatching { other.getRoom("nosuchroom12345") }
+        assertEquals(0, told)
+        other.collections()
+        assertEquals(0, told)
+        a.api.changePassword(TestServer.PASSWORD, "password456") // signs out every other session
+        assertTrue(runCatching { other.collections() }.isFailure)
+        assertEquals(1, told)
+    }
+
     @Test fun `signs up, logs in, refreshes and logs out`() = runBlocking {
         val name = "ada-${uniq()}"
         val api = TestServer.client()

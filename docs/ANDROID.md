@@ -1884,3 +1884,22 @@ Ported with the web's fix (DESIGN.md §15.3, §17.5):
   without `coil-gif`. `Images.loader` now adds `AnimatedImageDecoder` (Android 9+: GIFs and animated WebPs) or
   `GifDecoder` (Android 8: GIFs only; an animated WebP shows its first frame there). Not covered by a test
   (Robolectric doesn't animate); built and checked by reading.
+
+
+## 78. A 401 on a read checks the session (2026-11-19)
+
+Ported with the web's change (`api.ts`, from the SDK 0.29 change that clears the session after a 401):
+
+- **Before**: `ChirkleApi.call` ran the `onRejected` check (QA BUG-183) only for a refused write. The server reads a
+  token it refuses as none, so a revoked session's reads mostly answered as to a guest, and one refused by a login-only
+  route (`GET /api/chat/collections`, `inbox`, `saved`, …) failed without a word until the app came back after 5
+  minutes or something was sent.
+- **Now**: any 401 to a request sent with the session runs the check too (still not for `/auth-` calls, which say so
+  themselves), and a revoked session ends. A read's 403 or 404 doesn't (usually a missing record). Not the SDK's way of
+  clearing the session on the spot: the check confirms with `auth-refresh` and logs out through `logOut`, as a session
+  that ran out does.
+- In practice a password changed on another device now ends a connected app's session within moments: the change
+  arrives live and the collections reload gets the 401.
+- Tests: `ChirkleApiTest` (a 401 on a read is told, a missing record isn't), `ServicesTest` (a login-only read's 401
+  ends a revoked session). QA BUG-183's `ServicesTest` no longer checks that a quick return skips the check
+  (`checkStaleMs`): against a real server the live reload ends the session first. Web: `tests/unit/api.test.ts`.

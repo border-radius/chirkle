@@ -1,7 +1,8 @@
 import * as S from "./strings/pb.ts";
 // A minimal PocketBase client: only what api.ts uses (REST requests, the auth store, realtime over SSE, file URLs).
 // It replaces the official JS SDK, whose admin services, OAuth2/OTP/MFA flows and cookie helpers the app never used
-// but always shipped (§7.7). The wire behavior follows SDK 0.28: same storage key, query and realtime protocol.
+// but always shipped (§7.7). The wire behavior follows SDK 0.29: same storage key, query and realtime protocol. The
+// SDK also clears the session after a 401; api.ts has it checked instead (onRejected), which logs out as an expiry does.
 
 export type Query = Record<string, string | number | boolean | undefined>;
 

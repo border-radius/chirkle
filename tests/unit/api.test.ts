@@ -85,3 +85,33 @@ describe("onConnect", () => {
     }
   });
 });
+
+describe("onRejected", () => {
+  /** A token that expires in an hour, so the store holds a session. */
+  const token = `x.${btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))}.y`;
+
+  async function refusedGet(status: number, withSession = true) {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ message: "no" }), { status }));
+    try {
+      const client = createClient("http://chat.test");
+      if (withSession) client.authStore.save(token, { id: "u1", collectionName: "users" });
+      const api = createApi(client);
+      const fn = vi.fn();
+      api.onRejected(fn);
+      await expect(api.collections()).rejects.toThrow();
+      return fn;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it("a 401 on a GET sent with the session is told: a login-only route refusing a revoked session", async () => {
+    expect(await refusedGet(401)).toHaveBeenCalledOnce();
+  });
+
+  it("a GET's 403 or 404 isn't (usually a missing record), nor a 401 without a session", async () => {
+    expect(await refusedGet(404)).not.toHaveBeenCalled();
+    expect(await refusedGet(403)).not.toHaveBeenCalled();
+    expect(await refusedGet(401, false)).not.toHaveBeenCalled();
+  });
+});
