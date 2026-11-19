@@ -3,15 +3,19 @@
 import * as S from "../strings/lib-files.ts";
 import { LIMITS } from "./limits.ts";
 
-/** Extensions shown inline as images (through server thumbnails, except GIFs: see isGif). */
+/** Extensions shown inline as images (through server thumbnails, except GIFs and WebPs: see showsItself). */
 const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "gif", "webp", "avif"]);
 
 const ext = (name: string) => name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 
 export const isImage = (name: string): boolean => name.includes(".") && IMAGE_EXT.has(ext(name));
 
-/** A GIF's tile shows the file itself: PocketBase thumbnails a GIF from its first frame only, so it wouldn't play. */
-export const isGif = (name: string): boolean => name.includes(".") && ext(name) === "gif";
+/**
+ * A GIF's or a WebP's tile shows the file itself: PocketBase thumbnails them from their first frame only, so an animated
+ * one wouldn't play. The clients turn a still WebP into JPEG before upload (§15.3), so a WebP is mostly an animated one;
+ * and a still WebP's thumbnail would be a PNG, often bigger than the file itself (QA BUG-26).
+ */
+export const showsItself = (name: string): boolean => name.includes(".") && (ext(name) === "gif" || ext(name) === "webp");
 
 /** Extensions shown inline as videos: the browser draws their first frame and plays them (there are no server thumbnails). */
 const VIDEO_EXT = new Set(["mp4", "m4v", "webm", "mov", "ogv"]);

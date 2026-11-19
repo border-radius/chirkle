@@ -5,6 +5,8 @@ package chirkle.android.ui
 import android.content.Context
 import coil3.ImageLoader
 import coil3.disk.DiskCache
+import coil3.gif.AnimatedImageDecoder
+import coil3.gif.GifDecoder
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.ImageRequest
@@ -15,7 +17,11 @@ import okio.Path.Companion.toOkioPath
 
 object Images {
     fun loader(context: Context, http: OkHttpClient): ImageLoader = ImageLoader.Builder(context)
-        .components { add(OkHttpNetworkFetcherFactory(callFactory = { http })) }
+        .components {
+            add(OkHttpNetworkFetcherFactory(callFactory = { http }))
+            // GIFs and animated WebPs play (§17.5): ImageDecoder plays both from Android 9, before it GIFs only.
+            add(if (android.os.Build.VERSION.SDK_INT >= 28) AnimatedImageDecoder.Factory() else GifDecoder.Factory())
+        }
         .memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.15).build() }
         .diskCache { DiskCache.Builder().directory(context.cacheDir.resolve("images").toOkioPath()).maxSizeBytes(100L * 1024 * 1024).build() }
         .crossfade(false)

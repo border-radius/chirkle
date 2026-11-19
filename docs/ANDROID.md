@@ -1869,3 +1869,18 @@ App-only fixes (the web already did both):
 - **Mentions & replies opened at the bottom**: the list starts with only its spinner row, and the first page came in
   above it while the list kept that row in view. A page loaded from the top now scrolls the list to its first row.
 - Not covered by a test (Robolectric's layout doesn't size rows as a device does); compiled and checked by reading.
+
+
+## 77. Animated WebP (2026-11-19)
+
+Ported with the web's fix (DESIGN.md §15.3, §17.5):
+
+- **Sending**: `ImagePrep.prepare` re-encoded every WebP as JPEG, so an animated one arrived as its first frame. It
+  now reads the header first and sends an animated WebP (a VP8X chunk with the animation flag, `isAnimatedWebp`) as
+  it is, as GIFs are. Test: `ImagePrepTest`.
+- **Showing**: `isGif` became `showsItself` (GIF or WebP): a WebP's tile loads the file, not the server's
+  first-frame thumbnail. Test: `HelpersTest`.
+- **Playing**: before, the app played no animations at all (GIFs included): Coil decodes only the first frame
+  without `coil-gif`. `Images.loader` now adds `AnimatedImageDecoder` (Android 9+: GIFs and animated WebPs) or
+  `GifDecoder` (Android 8: GIFs only; an animated WebP shows its first frame there). Not covered by a test
+  (Robolectric doesn't animate); built and checked by reading.

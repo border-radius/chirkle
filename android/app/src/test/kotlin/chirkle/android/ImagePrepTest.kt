@@ -43,4 +43,24 @@ class ImagePrepTest {
         assertEquals(40, b.width)
         assertTrue(red(b.getPixel(5, 10)))
     }
+
+    /** The first bytes of a WebP: an extended one (VP8X) with these flags, or a plain lossy one (flags null). */
+    private fun webpHead(flags: Int?) = ByteArray(32).also { b ->
+        fun put(i: Int, s: String) = s.forEachIndexed { k, c -> b[i + k] = c.code.toByte() }
+        put(0, "RIFF"); put(8, "WEBP"); put(12, if (flags == null) "VP8 " else "VP8X")
+        if (flags != null) b[20] = flags.toByte()
+    }
+
+    @Test fun `an animated WebP is told by its VP8X flags`() {
+        assertTrue(ImagePrep.isAnimatedWebp(webpHead(0x02)))
+        assertTrue(ImagePrep.isAnimatedWebp(webpHead(0x12)))
+        assertTrue(!ImagePrep.isAnimatedWebp(webpHead(0x10)))
+        assertTrue(!ImagePrep.isAnimatedWebp(webpHead(null)))
+        assertTrue(!ImagePrep.isAnimatedWebp(ByteArray(4)))
+    }
+
+    @Test fun `an animated WebP is sent as it is`() {
+        val f = tmp.newFile("dance.webp").apply { writeBytes(webpHead(0x02)) }
+        assertEquals(null, ImagePrep.prepare(f, "dance.webp", "image/webp", 2048))
+    }
 }

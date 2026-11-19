@@ -93,8 +93,10 @@ other files as chips with name and size, each with a remove (×) button.
   says "+N" over it (N more), and the viewer (§17.7) steps through all of them. The height is fixed, so loading never shifts the list
   vertically: a too-wide image is narrowed and letterboxed rather than shortened, a very narrow one is centred in a
   tile at least half as wide as it is high, and a small one is never enlarged (`object-fit: scale-down`). A GIF's
-  tile shows the file itself, not a thumbnail: PocketBase thumbnails a GIF from its first frame only, so it would
-  not play (the full GIF is up to the attachment limit, and loads lazily like the thumbnails). While a
+  or a WebP's tile shows the file itself, not a thumbnail (`showsItself`): PocketBase thumbnails them from their
+  first frame only, so an animated one would not play (the full file is up to the attachment limit, and loads lazily
+  like the thumbnails). A still WebP is turned into JPEG before upload (§15.3), so a WebP is mostly an animated one,
+  and a still one's thumbnail would be a PNG, often bigger than the file itself (QA BUG-26). While a
   message sends it shows the local previews, at the size its thumbnails will take: the thumbnails get the previews'
   aspect ratio before they load. Only files the server will show as images (by extension) show as previews. Clicking
   opens the image viewer (§17.7); a click asking for a new tab or window (Ctrl/Cmd/Shift/middle click) opens the full

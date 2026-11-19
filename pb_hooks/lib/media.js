@@ -312,8 +312,8 @@ function thumbs(app, fs, row) {
   if (!THUMB_EXT.includes(ext(file))) return;
   const all = /** @type {any} */ (row.collection().fields.getByName("file")).thumbs ?? [];
   const recent = Date.now() - new Date(row.getString("created").replace(" ", "T")).getTime() < RECENT_MS;
-  // A GIF shows itself in the room (§17.5): only the grid shows its thumbnail.
-  const sizes = recent && ext(file) !== "gif" ? all : all.filter((/** @type {string} */ s) => s === GRID_THUMB);
+  // A GIF or a WebP shows itself in the room (§17.5): only the grid shows its thumbnail.
+  const sizes = recent && ext(file) !== "gif" && ext(file) !== "webp" ? all : all.filter((/** @type {string} */ s) => s === GRID_THUMB);
   for (const size of sizes) {
     const thumb = `${row.baseFilesPath()}/thumbs_${file}/${size}_${file}`;
     if (!fs.exists(thumb)) fs.createThumb(key, thumb, size);

@@ -32,7 +32,7 @@ Escape or × closes the grid and gives focus back to the button. Guests can open
   rows not `ready`, newest first (so a new upload goes before the migration's backlog), and makes what they need before
   anyone asks. PocketBase makes a thumbnail on its first request, so a grid opened over old images had the server
   decode and resize dozens at once. An image gets the grid's thumb, and for a message from the last 7 days the room's
-  too (a GIF only the grid's: the room shows the file, §17.5); avif none (PocketBase serves it as it is). A video gets a
+  too (a GIF or a WebP only the grid's: the room shows the file, §17.5); avif none (PocketBase serves it as it is). A video gets a
   **poster**: its first frame, fitted in 800×480 in its own shape and never enlarged (the room's large tile, §17.5),
   JPEG, from `ffmpeg` (`FFMPEG`: the command, default `ffmpeg`;
   `off`, or not installed: no posters), stored as `thumbs_{file}/poster.jpg` next to the file, so PocketBase deletes

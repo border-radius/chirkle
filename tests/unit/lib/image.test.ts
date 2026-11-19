@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fitWithin, prepareImage } from "../../../web/src/lib/image.ts";
+import { fitWithin, isAnimatedWebp, prepareImage } from "../../../web/src/lib/image.ts";
 
 describe("fitWithin (§15.3)", () => {
   it("scales the longest edge down to the limit, keeping the aspect ratio", () => {
@@ -14,6 +14,33 @@ describe("fitWithin (§15.3)", () => {
 
   it("never returns a zero edge", () => {
     expect(fitWithin(10_000, 1, 100)).toEqual({ width: 100, height: 1 });
+  });
+});
+
+/** The first bytes of a WebP: an extended one (VP8X) with these flags, or a plain lossy one. */
+function webpHead(flags: number | "plain"): Uint8Array<ArrayBuffer> {
+  const b = new Uint8Array(32);
+  const put = (i: number, s: string) => {
+    for (let k = 0; k < s.length; k++) b[i + k] = s.charCodeAt(k);
+  };
+  put(0, "RIFF");
+  put(8, "WEBP");
+  put(12, flags === "plain" ? "VP8 " : "VP8X");
+  if (flags !== "plain") b[20] = flags;
+  return b;
+}
+
+describe("isAnimatedWebp (§15.3)", () => {
+  it("reads the animation flag of an extended WebP", () => {
+    expect(isAnimatedWebp(webpHead(0x02))).toBe(true);
+    expect(isAnimatedWebp(webpHead(0x12))).toBe(true); // animated, with alpha
+    expect(isAnimatedWebp(webpHead(0x10))).toBe(false); // alpha only
+  });
+
+  it("a plain WebP, anything else or too few bytes is not", () => {
+    expect(isAnimatedWebp(webpHead("plain"))).toBe(false);
+    expect(isAnimatedWebp(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe(false);
+    expect(isAnimatedWebp(new Uint8Array())).toBe(false);
   });
 });
 
@@ -80,6 +107,13 @@ describe("prepareImage (§15.3)", () => {
     const pdf = file("doc.pdf", "application/pdf");
     expect(await prepareImage(gif, 512)).toBe(gif);
     expect(await prepareImage(pdf, 512)).toBe(pdf);
+    expect(drawn).toEqual([]);
+  });
+
+  it("uploads an animated WebP unchanged: a canvas would keep its first frame only", async () => {
+    stubBrowser();
+    const anim = new File([webpHead(0x02)], "dance.webp", { type: "image/webp" });
+    expect(await prepareImage(anim, 2048)).toBe(anim);
     expect(drawn).toEqual([]);
   });
 

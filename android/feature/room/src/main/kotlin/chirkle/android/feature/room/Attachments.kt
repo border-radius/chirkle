@@ -47,9 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import chirkle.android.data.lib.attachmentName
 import chirkle.android.data.lib.isAudio
-import chirkle.android.data.lib.isGif
 import chirkle.android.data.lib.isMedia
 import chirkle.android.data.lib.isVideo
+import chirkle.android.data.lib.showsItself
 import chirkle.android.data.model.Message
 import chirkle.android.ui.Chirkle
 import chirkle.android.ui.ChirkleIcons
@@ -146,8 +146,8 @@ private fun MediaTile(m: Message, f: Item, height: Int, thumb: String, more: Int
                 }
             }
             else -> {
-                // A GIF shows the file itself: its server thumbnail is the first frame only.
-                val url = services.api.fileUrl(m, f.name, if (isGif(f.label)) null else thumb, services.tokens.current)
+                // A GIF or a WebP shows the file itself: its server thumbnail is the first frame only.
+                val url = services.api.fileUrl(m, f.name, if (showsItself(f.label)) null else thumb, services.tokens.current)
                 AsyncImage(Images.request(context, url), contentDescription = null, contentScale = if (height > 200) ContentScale.Fit else ContentScale.Crop, modifier = Modifier.height(height.dp))
             }
         }
@@ -174,7 +174,7 @@ private fun SingleImage(m: Message, f: Item, onOpen: () -> Unit) {
         f.thumb != null -> f.thumb
         f.local != null -> null
         video -> services.api.posterUrl(m, f.name, services.tokens.current)
-        else -> services.api.fileUrl(m, f.name, if (isGif(f.label)) null else "800x480f", services.tokens.current)
+        else -> services.api.fileUrl(m, f.name, if (showsItself(f.label)) null else "800x480f", services.tokens.current)
     }
     val key = url?.let { Images.cacheKey(it) } ?: f.local.orEmpty()
     var ratio by remember(key) { mutableStateOf(Images.ratios[key] ?: ratioOf(m, f)) }

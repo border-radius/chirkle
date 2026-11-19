@@ -84,8 +84,8 @@ class HelpersTest {
         for (n in listOf("a.ogv", "a.mp4", "mp3")) assertFalse(n, isAudio(n))
         for (n in listOf("a.mp4", "a.MOV", "a.webm", "a.ogv")) assertTrue(n, isVideo(n))
         for (n in listOf("a.avi", "a.mkv", "mp4")) assertFalse(n, isVideo(n))
-        assertTrue(isGif("a.GIF"))
-        assertFalse(isGif("a.gif.exe"))
+        for (n in listOf("a.GIF", "a.webp", "a.WEBP")) assertTrue(n, showsItself(n))
+        for (n in listOf("a.gif.exe", "a.png", "a.webp.exe")) assertFalse(n, showsItself(n))
     }
 
     @Test fun `only other apps' content is read into a message (QA BUG-175)`() {

@@ -42,7 +42,8 @@ transparency) and everything else as JPEG, through `OffscreenCanvas.convertToBlo
 
 - Not WebP: PocketBase can't write WebP, so a WebP's thumbnails would be PNGs, often bigger than the image itself
   (QA BUG-26). PNG and JPEG are thumbnailed in kind.
-- GIFs are uploaded as they are (re-encoding would drop the animation).
+- GIFs and animated WebPs are uploaded as they are (re-encoding would drop the animation). An animated WebP is told
+  by its header: a VP8X chunk with the animation flag (`isAnimatedWebp`). Before 2026-11-19 it became a still JPEG.
 - If decoding fails, the original file is uploaded unchanged, and the server limits decide.
 - The function is pure apart from the browser image APIs, and unit-testable with a stubbed `createImageBitmap`.
 

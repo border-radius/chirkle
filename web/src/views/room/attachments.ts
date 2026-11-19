@@ -3,7 +3,7 @@
 // §31), and one attached from a collection says which.
 
 import { type Child, h } from "../../dom.ts";
-import { attachmentName, isAudio, isGif, isMedia, isVideo } from "../../lib/files.ts";
+import { attachmentName, isAudio, isMedia, isVideo, showsItself } from "../../lib/files.ts";
 import type { Badge, LocalFile, Message } from "../../lib/types.ts";
 import * as S from "../../strings/room-attachments.ts";
 import { collectionIcon } from "../../ui/icon.ts";
@@ -204,7 +204,7 @@ export function createAttachments(opts: {
   function mediaTile(m: Message, name: string, thumb: string, ratio?: string): HTMLElement {
     const video = isVideo(name);
     let poster = video;
-    const src = () => (poster ? opts.posterUrl(m, name) : opts.fileUrl(m, name, video || isGif(name) ? undefined : thumb));
+    const src = () => (poster ? opts.posterUrl(m, name) : opts.fileUrl(m, name, video || showsItself(name) ? undefined : thumb));
     let el = poster ? h("img", { src: src(), alt: attachmentName(m, name), decoding: "async" }) : preview(attachmentName(m, name), src());
     if (el instanceof HTMLImageElement) el.loading = "lazy";
     if (ratio) el.style.aspectRatio = ratio;
