@@ -341,6 +341,32 @@ describe("Telegram bridge (§26)", () => {
     ]);
   });
 
+  it("a delivery Telegram repeats while the first is still downloading comes over once, and isn't sent back (QA BUG-291)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.addFile("slow1", PNG, "photos/slow1.jpg");
+    stub.slowFile("slow1", 1500);
+    const post = tgMessage(chat, { caption: "a post", photo: [{ file_id: "slow1", width: 9, height: 9 }] });
+    // Telegram gave up waiting for the first answer and sent it again: both are handled at once.
+    const first = deliver({ message: post });
+    await sleep(300);
+    await Promise.all([first, deliver({ message: post })]);
+    await deliver({ message: tgMessage(chat, { text: "after" }) });
+    const list = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l.map((m) => m.text)).toEqual(["a post", "after"]);
+      return l;
+    });
+    expect(list[0]!.files).toHaveLength(1);
+    await tick();
+    await sleep(500);
+    await tick();
+    const back = stub.calls.filter(
+      (c) => c.params.chat_id !== undefined && String(c.params.chat_id) === String(chat) && c.method.startsWith("send"),
+    );
+    expect(back).toEqual([]);
+  });
+
   it("an album that ends a conversation comes over once it is quiet", async () => {
     const owner = await signUp();
     const { room, chat } = await linkedRoom(owner);

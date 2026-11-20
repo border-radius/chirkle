@@ -29,6 +29,8 @@ export interface TelegramStub {
   callsOf(method: string): Call[];
   /** A file the bot can download: getFile answers for `id`, and its bytes are served. */
   addFile(id: string, bytes: Uint8Array, path?: string): void;
+  /** Serve file `id`'s bytes only after `ms`: a large file that takes a while to download. */
+  slowFile(id: string, ms: number): void;
   /** Profile pictures of a Telegram user, by file id (getUserProfilePhotos). */
   setPhoto(userId: number, fileId: string): void;
   /** The emoji a custom emoji stands for (getCustomEmojiStickers). */
@@ -78,6 +80,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
   const customEmoji = new Map<string, string>();
   const failures = new Map<string, { status: number; body: Record<string, unknown> }[]>();
   const drops = new Map<string, number>();
+  const slow = new Map<string, number>();
   let nextId = 1000;
 
   const message = (params: Record<string, Json>, extra: Record<string, unknown> = {}) => ({
@@ -134,6 +137,9 @@ export async function startTelegramStub(): Promise<TelegramStub> {
     if (file) {
       const f = [...files.values()].find((x) => x.path === file[2]);
       if (file[1] !== token || !f) return send(404, { ok: false, description: "Not Found" });
+      const id = [...files.entries()].find(([, x]) => x === f)?.[0] ?? "";
+      const wait = slow.get(id);
+      if (wait) await new Promise((ok) => setTimeout(ok, wait));
       res.writeHead(200, { "content-type": "application/octet-stream" });
       return res.end(f.bytes);
     }
@@ -164,6 +170,7 @@ export async function startTelegramStub(): Promise<TelegramStub> {
     updates,
     callsOf: (method) => calls.filter((c) => c.method === method),
     addFile: (id, bytes, path = `files/${id}.bin`) => void files.set(id, { path, bytes }),
+    slowFile: (id, ms) => void slow.set(id, ms),
     setPhoto: (userId, fileId) => void photos.set(userId, fileId),
     setCustomEmoji: (id, emoji) => void customEmoji.set(id, emoji),
     nextMessageId: () => nextId,

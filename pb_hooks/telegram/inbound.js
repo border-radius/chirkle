@@ -336,6 +336,11 @@ function bringOver(app, link, room, msgs, mode = "live") {
   // one message comes as several: the first with the files and the reply, the rest after it.
   const save = (/** @type {boolean} */ withReply) =>
     app.runInTransaction((tx) => {
+      // Brought over meanwhile: Telegram sent it again while this one was downloading its files (a webhook retry
+      // after a slow answer). Checked again here, where writes go one at a time: the forgetStale below would
+      // otherwise take the first one's mappings for stale, and the worker, finding it from nowhere, would send the
+      // first one back to the group (QA BUG-291).
+      if (msgs.some((m) => partsMapped(tx, chatId, m.message_id, m.date).length)) return;
       const pieces = split(textOf(withReply));
       const ids = orderedIds(pieces.length);
       const rec = new Record(tx.findCollectionByNameOrId("messages"));
