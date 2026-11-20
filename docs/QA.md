@@ -2440,7 +2440,7 @@ device", then each client's window compared with the server, 12 seeds. Numbering
 
 | # | Severity | Area | Summary | Fix in | Status |
 |---|---|---|---|---|---|
-| BUG-291 | Medium | Telegram | A group's post came over twice when Telegram sent it again while its files were still downloading, and the bridge sent the first copy back to the group | server (app n/a) | Fixed |
+| BUG-291 | Medium | Telegram | A group's post came over twice when Telegram sent it again while its files were still downloading, and the bridge sent the first copy back to the group | server, web n/a (the server bridges), app n/a (the server bridges) | Fixed |
 | BUG-290 | Medium | Web, Android, room | An edit, a delete or a reaction made while a room's realtime subscription was being set up never showed: a deleted message kept its text until a reload | web, app | Fixed |
 | BUG-289 | Medium | Android, Mentions & replies | Opening Mentions & replies scrolled the list inside a frame (ANDROID.md §76's fix): under test the screen never laid out, and its swipe test failed | app, web n/a (the browser keeps its place by itself) | Fixed |
 | BUG-287 | Low | Web, Android, uploads | A still WebP with transparency (a sticker, a logo) was re-encoded as JPEG: its transparent parts arrived black | web, app | Fixed |
