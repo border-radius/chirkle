@@ -88,6 +88,11 @@
     width: 44px;
   }
 
+  /* In line with the section heads above it, which lose their side padding here (QA BUG-288). */
+  .room-section[data-section="more"] > summary {
+    margin: 10px 0 0;
+  }
+
   /* A room: tighter sides, a 60px header with 44px buttons, a 32px avatar. */
   .room-header {
     gap: 2px;

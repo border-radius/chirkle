@@ -12,7 +12,7 @@ export const isImage = (name: string): boolean => name.includes(".") && IMAGE_EX
 
 /**
  * A GIF's or a WebP's tile shows the file itself: PocketBase thumbnails them from their first frame only, so an animated
- * one wouldn't play. The clients turn a still WebP into JPEG before upload (§15.3), so a WebP is mostly an animated one;
+ * one wouldn't play. The clients turn a still WebP into JPEG (PNG if transparent) before upload (§15.3), so a WebP is mostly an animated one;
  * and a still WebP's thumbnail would be a PNG, often bigger than the file itself (QA BUG-26).
  */
 export const showsItself = (name: string): boolean => name.includes(".") && (ext(name) === "gif" || ext(name) === "webp");

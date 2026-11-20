@@ -503,9 +503,11 @@ class RoomController(
         val pending = buffer
         buffer = mutableListOf()
         for ((action, m) in pending) onMessage(action, m)
-        // A message sent after the page was read but before the server had the subscription reaches neither (QA BUG-61).
+        // A message sent after the page was read but before the server had the subscription reaches neither (QA BUG-61),
+        // nor does an edit, a delete or a reaction made then to one the window has (QA BUG-290).
         if (!liveReady) scope.launch {
             live.await()
+            launch { tracked { refreshWindow() } }
             tracked { catchUp() }
         }
     }

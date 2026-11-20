@@ -467,8 +467,9 @@ export function createRoomController(opts: {
     buffer = [];
     for (const [action, m] of pending) onMessage(action, m);
     // The page and the subscription are set up side by side. A message sent after the page was read but before the
-    // server had the subscription reaches neither (QA BUG-61): once the subscription is there, fetch what is newer.
-    if (!liveReady) void live.then(() => track(catchUp()));
+    // server had the subscription reaches neither (QA BUG-61): once the subscription is there, fetch what is newer,
+    // and what changed in the window meanwhile: an edit, a delete or a reaction (QA BUG-290).
+    if (!liveReady) void live.then(() => track(Promise.all([catchUp(), refreshWindow()])));
   }
 
   /**

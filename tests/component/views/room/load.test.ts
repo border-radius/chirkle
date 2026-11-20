@@ -193,6 +193,33 @@ describe("room view", () => {
       await other.api.unsubscribeAll();
     });
 
+    it("QA BUG-290: an edit, a delete and a reaction made after the first page was read, before realtime was set up, show", async () => {
+      const other = await signedUp("Other");
+      const room = await newRoom();
+      const [e, d, r] = await Promise.all(
+        ["to edit", "to delete", "to react"].map((text) => other.api.send({ id: newId(), room: room.id, text })),
+      );
+      let open!: () => void;
+      const gate = new Promise<void>((ok) => (open = ok));
+      intercept(me.api, "subscribeMessages", (original) => async (roomId, fn) => {
+        await gate;
+        return original(roomId, fn);
+      });
+      setView(createRoomView(viewContext(me.api, store, navigate)));
+      view!.mount(root, { id: room.id });
+      setLayout(fakeLayout(list(), { rowHeight: ROW, clientHeight: VIEWPORT }));
+      await loaded();
+      expect(bodyOf(e!.id)).toBe("to edit");
+      await other.api.edit(e!.id, "edited in the gap");
+      await other.api.deleteMany([d!.id]);
+      await other.api.react(r!.id, "🎉", true);
+      open();
+      await vi.waitFor(() => expect(bodyOf(e!.id)).toBe("edited in the gap"));
+      await vi.waitFor(() => expect(msgEl(d!.id)?.textContent).toContain("Message deleted"));
+      await vi.waitFor(() => expect(msgEl(r!.id)?.querySelectorAll(".reaction").length).toBe(1));
+      await other.api.unsubscribeAll();
+    });
+
     it("an unknown room shows a not-found message", async () => {
       setView(createRoomView(viewContext(me.api, store, navigate)));
       view!.mount(root, { id: "doesnotexist123" });

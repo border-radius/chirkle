@@ -166,3 +166,15 @@ test("on a phone, Settings' cards keep their text readable: buttons under the te
     expect(radio.width).toBeLessThan(30);
   }
 });
+
+test("on a phone, Hidden & archived lines up with the section heads above it (QA BUG-288)", async ({ page }) => {
+  const ada = await apiUser("Ada");
+  await login(page, ada);
+  const heads = page.locator(".sidebar .fold:visible");
+  await expect(heads.first()).toBeVisible();
+  const more = (await page.locator('.room-section[data-section="more"] > summary').boundingBox())!;
+  for (const head of await heads.all()) {
+    const box = (await head.boundingBox())!;
+    expect(more.x).toBe(box.x);
+  }
+});

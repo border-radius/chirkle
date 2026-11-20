@@ -63,4 +63,25 @@ class ImagePrepTest {
         val f = tmp.newFile("dance.webp").apply { writeBytes(webpHead(0x02)) }
         assertEquals(null, ImagePrep.prepare(f, "dance.webp", "image/webp", 2048))
     }
+
+    @Test fun `a WebP with transparency is told by its header`() {
+        assertTrue(ImagePrep.webpHasAlpha(webpHead(0x10)))
+        assertTrue(!ImagePrep.webpHasAlpha(webpHead(0x00)))
+        assertTrue(!ImagePrep.webpHasAlpha(webpHead(null)))
+        assertTrue(!ImagePrep.webpHasAlpha(ByteArray(4)))
+    }
+
+    @Test fun `QA BUG-287 a transparent WebP is re-encoded as PNG, not JPEG`() {
+        val f = tmp.newFile("sticker.webp")
+        val b = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888)
+        for (x in 0 until 40) for (y in 0 until 40) b.setPixel(x, y, if (x < 20) Color.RED else Color.TRANSPARENT)
+        @Suppress("DEPRECATION")
+        f.outputStream().use { b.compress(Bitmap.CompressFormat.WEBP, 100, it) }
+        assertTrue(ImagePrep.webpHasAlpha(f.readBytes().copyOf(32)))
+        // Robolectric can't run ImageDecoder, so prepare() itself isn't run here: what it decides is.
+        assertTrue(ImagePrep.asPng("image/webp", f.readBytes().copyOf(32)))
+        assertTrue(!ImagePrep.asPng("image/webp", webpHead(null)))
+        assertTrue(ImagePrep.asPng("image/png", null))
+        assertTrue(!ImagePrep.asPng("image/jpeg", null))
+    }
 }

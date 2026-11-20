@@ -13,6 +13,17 @@ export function isAnimatedWebp(head: Uint8Array): boolean {
   return at(0, "RIFF") && at(8, "WEBP") && at(12, "VP8X") && ((head[20] ?? 0) & 0x02) !== 0;
 }
 
+/**
+ * Does `head` (a WebP's first bytes, at least 25) say the image has transparency? An extended WebP has an alpha flag;
+ * a lossless one (VP8L) an alpha bit in its header. JPEG has no transparency: such a WebP is re-encoded as PNG (BUG-287).
+ */
+export function webpHasAlpha(head: Uint8Array): boolean {
+  const at = (i: number, s: string) => [...s].every((c, k) => head[i + k] === c.charCodeAt(0));
+  if (!at(0, "RIFF") || !at(8, "WEBP")) return false;
+  if (at(12, "VP8X")) return ((head[20] ?? 0) & 0x10) !== 0;
+  return at(12, "VP8L") && head[20] === 0x2f && ((head[24] ?? 0) & 0x10) !== 0;
+}
+
 /** Size of a `w`×`h` image scaled down (never up) so its longest edge is at most `maxEdge`. */
 export function fitWithin(w: number, h: number, maxEdge: number): { width: number; height: number } {
   const scale = Math.min(1, maxEdge / Math.max(w, h, 1));
@@ -32,22 +43,24 @@ function encode(c: Canvas, type: string): Promise<Blob | null> {
 }
 
 /**
- * `file` scaled to at most `maxEdge` px and re-encoded: PNG as PNG (keeps transparency), the rest as JPEG. Both are
+ * `file` scaled to at most `maxEdge` px and re-encoded: PNG and a transparent WebP as PNG, the rest as JPEG. Both are
  * formats PocketBase thumbnails in kind; a WebP's thumbnails would be PNGs, often bigger than the image (QA BUG-26).
  */
 export async function prepareImage(file: File, maxEdge: number): Promise<File> {
   if (!REENCODE.has(file.type) || typeof createImageBitmap !== "function") return file;
   let bitmap: ImageBitmap | undefined;
   try {
+    const head = file.type === "image/webp" ? new Uint8Array(await file.slice(0, 32).arrayBuffer()) : undefined;
     // A canvas holds one frame: an animated WebP would become a still JPEG.
-    if (file.type === "image/webp" && isAnimatedWebp(new Uint8Array(await file.slice(0, 32).arrayBuffer()))) return file;
+    if (head && isAnimatedWebp(head)) return file;
     bitmap = await createImageBitmap(file);
     const { width, height } = fitWithin(bitmap.width, bitmap.height, maxEdge);
     const c = canvas(width, height);
     const ctx = c.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, width, height);
-    const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+    // PNG, and a WebP with transparency, as PNG: JPEG would turn the transparent parts black (BUG-287).
+    const type = file.type === "image/png" || (head && webpHasAlpha(head)) ? "image/png" : "image/jpeg";
     // An encoder that doesn't support a type falls back to PNG: check what we actually got.
     const blob = await encode(c, type);
     if (blob?.type !== type) return file;

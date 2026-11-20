@@ -89,6 +89,8 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
     var loading by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    /** Bumped when a page from the top is in: the list then goes to its first row (below, once the rows are composed). */
+    var toTop by remember { mutableStateOf(0) }
 
     /** You have seen everything listed: the server and the room list's count hear of it. */
     fun seeAll() {
@@ -109,8 +111,9 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
                     if (seenAt == null) seenAt = page.seenAt
                     items = if (first) page.items else items + page.items.filter { n -> items.none { it.id == n.id } }
                     // From the top, the list shows the top: the rows come in above the spinner, and the list would
-                    // otherwise keep the spinner in place, at the bottom.
-                    if (first) list.scrollToItem(0)
+                    // otherwise keep the spinner in place, at the bottom. Scrolled once the rows are composed: here, the
+                    // list would be measured again with the old rows, inside a frame (QA BUG-289).
+                    if (first) toTop++
                     // From the top again: keep how far "Show older" had got.
                     if (!first || cursor.isEmpty() || items.isEmpty()) cursor = if (page.more) page.items.lastOrNull()?.cursor.orEmpty() else ""
                     seeAll()
@@ -120,6 +123,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
         }
     }
     LaunchedEffect(Unit) { load(true) }
+    LaunchedEffect(toTop) { if (toTop > 0) list.scrollToItem(0) }
     // A row taken away while you look (its message deleted, the mention edited out, the reaction taken back) goes,
     // rather than opening a message that isn't there (QA BUG-254).
     LaunchedEffect(Unit) {

@@ -286,6 +286,38 @@ class ServicesTest {
         }
     }
 
+    @Test fun `QA BUG-290 an edit, a delete and a reaction made before realtime was set up still show`() = runBlocking {
+        val a = newUser()
+        val b = newUser()
+        val room = a.api.createRoom("r-${uniq()}")
+        val (e, d, r) = listOf("to edit", "to delete", "to react").map { a.api.send(NewMessage(newId(), room.id, it)) }
+        // The server gets the subscriptions only once the gate opens: the room's page is read first.
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val http = TestServer.http.newBuilder().addInterceptor { chain ->
+            if (chain.request().url.encodedPath == "/api/realtime" && chain.request().method == "POST") gate.await(20, java.util.concurrent.TimeUnit.SECONDS)
+            chain.proceed(chain.request())
+        }.build()
+        val main = java.util.concurrent.Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val s = ChirkleServices(TestServer.url, http, chirkle.android.data.pb.MemoryAuthStore(b.api.pb.authStore.session.value), testDb(), main)
+        try {
+            s.start()
+            eventually(what = "listed") { room.id in s.store.get().rooms }
+            val c = kotlinx.coroutines.withContext(main) { s.openRoom(room.id) }
+            eventually(what = "ready") { c.state.value.phase == Phase.Ready && c.state.value.items.size == 3 }
+            a.api.edit(e.id, "edited in the gap")
+            a.api.deleteMany(listOf(d.id))
+            b.api.react(r.id, "🎉", true)
+            gate.countDown()
+            eventually(what = "edited") { c.state.value.items.first { it.id == e.id }.text == "edited in the gap" }
+            eventually(what = "deleted") { c.state.value.items.first { it.id == d.id }.deleted }
+            eventually(what = "reacted") { c.state.value.items.first { it.id == r.id }.reactions.isNotEmpty() }
+            kotlinx.coroutines.withContext(main) { c.close() }
+        } finally {
+            gate.countDown()
+            s.close()
+        }
+    }
+
     @Test fun `a refused send shows as failed and can be discarded`() = runBlocking {
         val a = newUser()
         val room = a.api.createRoom("r-${uniq()}")

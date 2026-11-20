@@ -2424,3 +2424,71 @@ already shown, the line adds "It was prepared less than 10 minutes ago, so this 
 ## Noted, not changed
 
 - The invite page's 👋 (the greeting's `.welcome::before`) also shows over "This invite link doesn't work".
+
+# QA pass 42 — heavy testing, 2026-11-20
+
+After animated WebP (§15.3, §17.5), the Telegram download retries (§26.4), the 401 session check (ANDROID.md §78), the
+sidebar icons, the app's scroll fixes (ANDROID.md §76) and its notification alias (§79). Suites first, at nice 19:
+typecheck, lint and the sink guard; unit + component; Go; integration 576/576; Chromium e2e 92/92 (1 skipped); the
+Android unit tests (94: two failed, BUG-287's first test and BUG-289). Then, on a throwaway server with the production
+build in headless Chromium: WebPs sent from the composer (lossless and lossy with transparency, animated, plain), the
+sidebar measured at 390, 800 and 1100 px, light and dark, screenshots read; a password changed elsewhere with a tab
+open on a private room (what it still hears, its room list); every room request held or slowed, the realtime subscribe
+alone held 3 s; and a randomized run of two users (one at 390 px) over three rooms, 0–250 ms on every request:
+sending, editing (Up arrow), reloading and switching in the page, edits, deletes, reactions and sends "from another
+device", then each client's window compared with the server, 12 seeds. Numbering continues from BUG-286.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-290 | Medium | Web, Android, room | An edit, a delete or a reaction made while a room's realtime subscription was being set up never showed: a deleted message kept its text until a reload | web, app | Fixed |
+| BUG-289 | Medium | Android, Mentions & replies | Opening Mentions & replies scrolled the list inside a frame (ANDROID.md §76's fix): under test the screen never laid out, and its swipe test failed | app, web n/a (the browser keeps its place by itself) | Fixed |
+| BUG-287 | Low | Web, Android, uploads | A still WebP with transparency (a sticker, a logo) was re-encoded as JPEG: its transparent parts arrived black | web, app | Fixed |
+| BUG-288 | Low | Web, sidebar | On a phone, "Hidden & archived" sat 4 px right of the section heads above it, and 8 px further down | web, app n/a (its own rows) | Fixed |
+
+## BUG-290 — Changes made while the room's subscription was set up (Medium, Web and Android)
+
+**Steps:** open a room on a slow network (the subscribe request takes a moment longer than the page); meanwhile
+someone edits a message on screen, deletes another and reacts to a third. **Expected:** all three show once the room
+is live. **Actual:** none did, until a reload; the deleted message kept its text. Found by the randomized run (Ada's
+window had a message's text from before Bob's edit), then held: the realtime subscribe alone 3 s. **Cause:** the page
+and the subscription are set up side by side, and what changes between the page's read and the server having the
+subscription reaches neither. QA BUG-61's catch-up fetched only messages newer than the window. **Fix:** the catch-up
+also fetches what changed in the window since its newest `updated` (the reconnect's `refreshWindow`), web
+`controller.ts` and the app's `RoomController`. One small request, after the room shows, only when the subscription
+came after the page. Tests: `load.test.ts` "QA BUG-290: …" (fails without), `ServicesTest` "QA BUG-290 …" (the
+subscribe held by an interceptor).
+
+## BUG-289 — Mentions & replies under test (Medium, Android)
+
+`UiMentionsTest` "swiping Mentions and replies to the right goes back to the rooms" failed on every run: "performMeasureAndLayout
+called during measure layout", the first page never shown. §76 made a page from the top call `list.scrollToItem(0)` in
+the load's coroutine, in the same moment as `items` changed: the list was measured again at once, with the old rows,
+and here inside a frame. On a phone that scroll also comes before the new rows, the very order §76 meant to avoid.
+**Fix:** the load bumps a counter and a `LaunchedEffect` on it scrolls, after the new rows are composed
+(`InboxScreen`). Test: that `UiMentionsTest` (fails without).
+
+## BUG-287, BUG-288 (Low)
+
+- **BUG-287:** `prepareImage` (web) and `ImagePrep` (app) re-encode every still WebP as JPEG (QA BUG-26: PocketBase
+  thumbnails a WebP as PNG), which has no transparency. A WebP whose header says it has some (VP8X's alpha flag, or
+  VP8L's alpha bit, `webpHasAlpha`) is now re-encoded as PNG, as a PNG is. Tests: `image.test.ts` "webpHasAlpha" and
+  "BUG-287: …", `ImagePrepTest` (a transparent WebP from `Bitmap.compress`; Robolectric doesn't run `ImageDecoder`,
+  so the decision, `asPng`, is what is tested).
+- **BUG-288:** `narrow.css` takes the section heads' side padding off; Hidden & archived's summary kept its own margin
+  (`18px 6px 0 4px`). It is now `10px 0 0` there. Test: `mobile.spec.ts` "on a phone, Hidden & archived lines up…".
+
+## Checked and fine
+
+- An animated WebP is sent as it is and its tile loads the file; a plain still WebP still becomes JPEG.
+- A tab whose session was revoked by a password change elsewhere hears nothing more of a private room it shows, and
+  doesn't learn of a new private room it is in (the server drops its subscriptions). It finds out on a refused change or
+  after 5 minutes away, as designed (§22.2); the app now within moments (ANDROID.md §78).
+- An edit made while away from a room, during a slow switch or during a slow reload shows.
+- The randomized run, after the fix: no missing, extra or stale messages, edits or reactions in either client.
+- `ServicesTest`'s BUG-160 test timed out once with e2e running alongside; it passed alone twice.
+
+## Noted, not changed
+
+- With every API request routed through Playwright and held, Chrome warns that the `modulepreload`ed chunks weren't
+  used within seconds: they are `app.js`'s static imports, used when it runs; not seen without the routing.
+- The empty home's 👋 shows as a box in headless Chromium without an emoji font (the machine's fonts, not the app).

@@ -1920,3 +1920,17 @@ encoding (`ChirkleApi.media`, `removeItem`): a GET to another route of the user'
 - App Links are unchanged: any app could already open `/r/<id>`, but a link can't choose the account.
 - Tests: `RoutesTest` (only the alias counts, bad ids open nothing), `UiNotifyTest` (a posted notification's tap names
   the alias and opens its message). Web: nothing to port (the web has no such entry point).
+
+
+## 80. QA pass 42 (2026-11-20)
+
+- **Changes made while a room's subscription is set up** (QA BUG-290, with the web): `RoomController`'s catch-up
+  after a page that came before the subscription also runs `refreshWindow()`, so an edit, a delete or a reaction
+  made in between shows (before, only newer messages were fetched). Test: `ServicesTest` "QA BUG-290 …" (an
+  interceptor holds the realtime subscribe).
+- **Mentions & replies scrolls after composing** (QA BUG-289): §76's `list.scrollToItem(0)` ran in the load's
+  coroutine as `items` changed, measuring the list again with the old rows inside a frame; under Robolectric the
+  screen never laid out. A counter bumped by the load and a `LaunchedEffect` on it scroll once the rows are composed.
+  Test: `UiMentionsTest`'s swipe test, which failed on every run since §76.
+- **A transparent WebP stays transparent** (QA BUG-287, with the web): `ImagePrep` re-encodes a still WebP with an
+  alpha flag (VP8X) or bit (VP8L) as PNG, not JPEG (`webpHasAlpha`, `asPng`). Test: `ImagePrepTest`.

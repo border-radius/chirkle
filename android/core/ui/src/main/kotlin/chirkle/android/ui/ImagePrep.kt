@@ -1,5 +1,5 @@
 // Image preparation before upload (DESIGN.md §15.3; web/src/lib/image.ts): scaled so the longest edge is at most
-// maxEdge (512 px for avatars, 2048 for attachments) and re-encoded, PNG as PNG and the rest as JPEG, which drops EXIF
+// maxEdge (512 px for avatars, 2048 for attachments) and re-encoded, PNG (and a transparent WebP) as PNG and the rest as JPEG, which drops EXIF
 // (GPS location). GIFs and animated WebPs stay as they are (re-encoding drops the animation); anything that fails stays
 // as it was.
 package chirkle.android.ui
@@ -30,10 +30,28 @@ object ImagePrep {
         return at(0, "RIFF") && at(8, "WEBP") && at(12, "VP8X") && head.size > 20 && (head[20].toInt() and 0x02) != 0
     }
 
-    private fun animatedWebp(file: File): Boolean {
+    /**
+     * Does [head] (a WebP's first bytes, at least 25) say the image has transparency? An extended WebP has an alpha
+     * flag; a lossless one (VP8L) an alpha bit in its header. Such a WebP is re-encoded as PNG: JPEG would turn its
+     * transparent parts black (QA BUG-287). web/src/lib/image.ts webpHasAlpha.
+     */
+    fun webpHasAlpha(head: ByteArray): Boolean {
+        fun at(i: Int, s: String) = i + s.length <= head.size && s.indices.all { head[i + it] == s[it].code.toByte() }
+        if (!at(0, "RIFF") || !at(8, "WEBP")) return false
+        if (at(12, "VP8X")) return head.size > 20 && (head[20].toInt() and 0x10) != 0
+        return at(12, "VP8L") && head.size > 24 && head[20] == 0x2f.toByte() && (head[24].toInt() and 0x10) != 0
+    }
+
+    /**
+     * Whether a [type] image with these first bytes ([head], read for a WebP) is re-encoded as PNG: a PNG, and a WebP
+     * with transparency (QA BUG-287). The rest become JPEG.
+     */
+    fun asPng(type: String, head: ByteArray?) = type == "image/png" || (type == "image/webp" && head != null && webpHasAlpha(head))
+
+    private fun head(file: File): ByteArray {
         val head = ByteArray(32)
         val n = file.inputStream().use { it.read(head) }
-        return n > 20 && isAnimatedWebp(head.copyOf(n))
+        return head.copyOf(maxOf(n, 0))
     }
 
     /**
@@ -43,12 +61,14 @@ object ImagePrep {
     fun prepare(file: File, name: String, type: String, maxEdge: Int): Triple<File, String, String>? {
         if (type !in REENCODE) return null
         return runCatching {
+            val head = if (type == "image/webp") head(file) else null
             // A Bitmap is one frame: an animated WebP would become a still JPEG.
-            if (type == "image/webp" && animatedWebp(file)) return null
+            if (head != null && isAnimatedWebp(head)) return null
             val bitmap = decode(file, maxEdge) ?: return null
             val (w, h) = fitWithin(bitmap.width, bitmap.height, maxEdge)
             val scaled = if (w == bitmap.width && h == bitmap.height) bitmap else Bitmap.createScaledBitmap(bitmap, w, h, true)
-            val png = type == "image/png"
+            // PNG, and a WebP with transparency, as PNG: JPEG would turn the transparent parts black (QA BUG-287).
+            val png = asPng(type, head)
             val outName = when {
                 png && name.endsWith(".png", true) -> name
                 !png && (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true)) -> name

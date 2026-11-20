@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fitWithin, isAnimatedWebp, prepareImage } from "../../../web/src/lib/image.ts";
+import { fitWithin, isAnimatedWebp, prepareImage, webpHasAlpha } from "../../../web/src/lib/image.ts";
 
 describe("fitWithin (§15.3)", () => {
   it("scales the longest edge down to the limit, keeping the aspect ratio", () => {
@@ -41,6 +41,33 @@ describe("isAnimatedWebp (§15.3)", () => {
     expect(isAnimatedWebp(webpHead("plain"))).toBe(false);
     expect(isAnimatedWebp(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe(false);
     expect(isAnimatedWebp(new Uint8Array())).toBe(false);
+  });
+});
+
+/** A lossless WebP (VP8L) header, its alpha bit set or not. */
+function losslessHead(alpha: boolean): Uint8Array<ArrayBuffer> {
+  const b = webpHead("plain");
+  b.set(
+    [..."VP8L"].map((c) => c.charCodeAt(0)),
+    12,
+  );
+  b[20] = 0x2f;
+  b[24] = alpha ? 0x10 : 0;
+  return b;
+}
+
+describe("webpHasAlpha (BUG-287)", () => {
+  it("reads the alpha flag of an extended WebP and the alpha bit of a lossless one", () => {
+    expect(webpHasAlpha(webpHead(0x10))).toBe(true);
+    expect(webpHasAlpha(webpHead(0x00))).toBe(false);
+    expect(webpHasAlpha(losslessHead(true))).toBe(true);
+    expect(webpHasAlpha(losslessHead(false))).toBe(false);
+  });
+
+  it("a plain lossy WebP, anything else or too few bytes has none", () => {
+    expect(webpHasAlpha(webpHead("plain"))).toBe(false);
+    expect(webpHasAlpha(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe(false);
+    expect(webpHasAlpha(new Uint8Array())).toBe(false);
   });
 });
 
@@ -99,6 +126,17 @@ describe("prepareImage (§15.3)", () => {
     const out = await prepareImage(file("shot.png", "image/png"), 512);
     expect(out.type).toBe("image/png");
     expect(out.name).toBe("shot.png");
+  });
+
+  it("BUG-287: a WebP with transparency becomes PNG, not JPEG (which would turn it black)", async () => {
+    stubBrowser({ width: 512, height: 512 });
+    for (const head of [webpHead(0x10), losslessHead(true)]) {
+      const out = await prepareImage(new File([head], "sticker.webp", { type: "image/webp" }), 2048);
+      expect(out.type).toBe("image/png");
+      expect(out.name).toBe("sticker.png");
+    }
+    const opaque = await prepareImage(new File([losslessHead(false)], "flat.webp", { type: "image/webp" }), 2048);
+    expect(opaque.type).toBe("image/jpeg");
   });
 
   it("uploads GIFs and non-images unchanged", async () => {

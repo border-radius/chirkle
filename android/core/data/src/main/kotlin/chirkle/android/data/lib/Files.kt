@@ -15,7 +15,7 @@ fun isImage(name: String) = ext(name) in IMAGE_EXT
 
 /**
  * A GIF's or a WebP's tile shows the file itself: the server's thumbnail is its first frame only. A still WebP is turned
- * into JPEG before upload (§15.3), so a WebP is mostly an animated one. web/src/lib/files.ts showsItself.
+ * into JPEG (PNG if transparent) before upload (§15.3), so a WebP is mostly an animated one. web/src/lib/files.ts showsItself.
  */
 fun showsItself(name: String) = ext(name) == "gif" || ext(name) == "webp"
 

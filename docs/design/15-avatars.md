@@ -44,6 +44,8 @@ transparency) and everything else as JPEG, through `OffscreenCanvas.convertToBlo
   (QA BUG-26). PNG and JPEG are thumbnailed in kind.
 - GIFs and animated WebPs are uploaded as they are (re-encoding would drop the animation). An animated WebP is told
   by its header: a VP8X chunk with the animation flag (`isAnimatedWebp`). Before 2026-11-19 it became a still JPEG.
+- A still WebP with transparency (VP8X's alpha flag, or VP8L's alpha bit: `webpHasAlpha`) is re-encoded as PNG, as a
+  PNG is: JPEG has none, and its transparent parts arrived black (QA BUG-287, 2026-11-20).
 - If decoding fails, the original file is uploaded unchanged, and the server limits decide.
 - The function is pure apart from the browser image APIs, and unit-testable with a stubbed `createImageBitmap`.
 
