@@ -1,7 +1,8 @@
 // Light and dark themes in the web app's colours (DESIGN.md §7.8: web/styles/app/tokens.css), following the system.
 // Dynamic colour is off: the app looks the same on every phone, and like the web app. Since the 2026-10-31 redesign: the
 // accent on a fill (primaryContainer and [ChirkleColors.fill]), Inter. Since 2026-11-07 dark is chirkle.com's: graphite
-// surfaces and a lavender fill with ink on it.
+// surfaces. Since 2026-11-22 the violet is Radix violet: step 9 #6e56cf as the fill (white on it) in both themes,
+// step 11 for accent text (#6550b9 light, #baa7ff dark).
 package chirkle.android.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -38,7 +39,7 @@ data class ChirkleColors(
     val own: Color,
     /** The solid accent: unread badges, the send button, a picked tile ([onFill] on it). */
     val fill: Color,
-    /** Text and icons on [fill]: white in light, ink in dark (the lavender fill is light). */
+    /** Text and icons on [fill]: white in both themes. */
     val onFill: Color,
     /** The NEW line above the first unread message. */
     val new: Color,
@@ -50,7 +51,10 @@ val LocalChirkleColors = staticCompositionLocalOf {
     )
 }
 
-private val Accent = Color(0xFF5B3DF5)
+private val Accent = Color(0xFF6550B9)
+
+/** Radix violet 9, the solid fill in both themes (white on it, 5.4:1). */
+private val Fill = Color(0xFF6E56CF)
 private val Accent2 = Color(0xFFC42A7C)
 
 private val Light: ColorScheme = lightColorScheme(
@@ -73,17 +77,17 @@ private val Light: ColorScheme = lightColorScheme(
     outlineVariant = Color(0xFFE3DDF5),
     error = Color(0xFFC41D36),
     onError = Color.White,
-    primaryContainer = Accent,
+    primaryContainer = Fill,
     onPrimaryContainer = Color.White,
     secondaryContainer = Color(0xFFE9E4FB),
     onSecondaryContainer = Color(0xFF1D1530),
 )
 
-private val DarkFill = Color(0xFFA58BFF)
+private val DarkAccent = Color(0xFFBAA7FF)
 private val DarkInk = Color(0xFF16181A)
 
 private val Dark: ColorScheme = darkColorScheme(
-    primary = DarkFill,
+    primary = DarkAccent,
     onPrimary = DarkInk,
     secondary = Color(0xFFF9A8D4),
     onSecondary = DarkInk,
@@ -102,8 +106,8 @@ private val Dark: ColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF2A2C30),
     error = Color(0xFFFCA5A5),
     onError = DarkInk,
-    primaryContainer = DarkFill,
-    onPrimaryContainer = DarkInk,
+    primaryContainer = Fill,
+    onPrimaryContainer = Color.White,
     secondaryContainer = Color(0xFF2A2442),
     onSecondaryContainer = Color(0xFFECECE8),
 )
@@ -116,7 +120,7 @@ private val LightChirkle = ChirkleColors(
     highlight = Color(0xFFFFF1B8),
     tint = Accent.copy(alpha = 0.12f),
     own = Color(0xFFEDE8FF),
-    fill = Accent,
+    fill = Fill,
     onFill = Color.White,
     new = Color(0xFFC0267A),
 )
@@ -127,10 +131,10 @@ private val DarkChirkle = ChirkleColors(
     border = Color(0x14FFFFFF),
     hover = Color(0x0FFFFFFF),
     highlight = Color(0xFF3D3314),
-    tint = DarkFill.copy(alpha = 0.16f),
-    own = DarkFill.copy(alpha = 0.10f),
-    fill = DarkFill,
-    onFill = DarkInk,
+    tint = DarkAccent.copy(alpha = 0.16f),
+    own = DarkAccent.copy(alpha = 0.10f),
+    fill = Fill,
+    onFill = Color.White,
     new = Color(0xFFF9A8D4),
 )
 

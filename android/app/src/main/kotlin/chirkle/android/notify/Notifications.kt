@@ -38,7 +38,7 @@ object Notifications {
     /** The non-exported alias of MainActivity that notification taps go to (ANDROID.md §79). */
     const val OPEN_ALIAS = "chirkle.android.NotificationOpen"
     /** The accent (tokens.css): the small icon and actions are tinted with it. */
-    private const val ACCENT = 0xFF5B3DF5.toInt()
+    private const val ACCENT = 0xFF6E56CF.toInt()
     /** What is shown: "account/room" keys. */
     private val shown = mutableSetOf<String>()
 

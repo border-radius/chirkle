@@ -12,9 +12,9 @@
   --border: #e3ddf5;
   --line: #e3ddf5;
   --hover: #e9e4fb;
-  --accent: #5b3df5;
+  --accent: #6550b9;
   /* Solid fills: Send, badges, primary buttons, with --on-fill text on them. */
-  --fill: #5b3df5;
+  --fill: #6e56cf;
   --on-fill: #fff;
   --accent-2: #c42a7c;
   --grad: linear-gradient(135deg, #6a4bff, #c42a7c);
@@ -54,9 +54,9 @@
     --border: #3a3d42;
     --line: #2a2c30;
     --hover: #2a2c30;
-    --accent: #a58bff;
-    --fill: #a58bff;
-    --on-fill: #16181a;
+    --accent: #baa7ff;
+    --fill: #6e56cf;
+    --on-fill: #fff;
     --danger: #ff7a8f;
     --new: #f9a8d4;
     --highlight: #3d3314;
@@ -80,9 +80,9 @@
   --border: #3a3d42;
   --line: #2a2c30;
   --hover: #2a2c30;
-  --accent: #a58bff;
-  --fill: #a58bff;
-  --on-fill: #16181a;
+  --accent: #baa7ff;
+  --fill: #6e56cf;
+  --on-fill: #fff;
   --danger: #ff7a8f;
   --new: #f9a8d4;
   --highlight: #3d3314;

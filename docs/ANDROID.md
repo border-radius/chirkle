@@ -1940,3 +1940,11 @@ encoding (`ChirkleApi.media`, `removeItem`): a GET to another route of the user'
 The server gzips JSON answers of 1 KB or more (PERF.md §15, `server/compress.go`). Nothing changed in the app: OkHttp
 asks for gzip and unpacks it itself, since the app sets no `Accept-Encoding` of its own. A room page of 50 messages
 comes as ~5 KB instead of ~48 KB. The realtime stream and files are sent as before.
+
+## 82. Radix violet (2026-11-22)
+
+The violet is Radix violet, on the web (`tokens.css`) and here (`core/ui/Theme.kt`), in both themes. The fill
+(`primaryContainer`, `ChirkleColors.fill`: unread badges, send, switches, primary buttons) is step 9 `#6e56cf` with
+white on it (5.4:1); dark's `onFill` is white again, not ink. Accent text (`primary`, links, the tint) is step 11:
+`#baa7ff` in dark (was the fill's lavender `#a58bff`), `#6550b9` in light (was `#5b3df5`). The notification colour
+and `colors.xml`'s `accent` are `#6E56CF`.
