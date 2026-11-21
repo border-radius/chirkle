@@ -46,6 +46,8 @@ browser would. Numbers vary by about 10% between runs.
   the server, not as scripts.
 - **Answers made once:** a page of messages is serialized once, and tagged so a client that has it already gets a
   short "not changed" answer.
+- **Compressed answers:** the web app's scripts and stylesheets are compressed once when it is built (brotli and
+  gzip), and pages of messages and other JSON are gzipped as they are sent, with no proxy needed.
 - **Background workers** make thumbnails, previews and exports, so a request never waits on them.
 
 ## The clients

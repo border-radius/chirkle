@@ -1,5 +1,6 @@
 import { mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { brotliCompressSync, gzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { adminClient, newRoom, newUser, post, status, uniq } from "./helpers.ts";
 
@@ -197,5 +198,64 @@ describe("extra rate limits (BUG-22, BUG-23)", () => {
         codes.push(await status(a.pb.collection("rooms").create({ name: `flood-${uniq()}`, created_by: a.user.id })));
       expect(codes).toContain(429);
     });
+  });
+});
+
+describe("compression (PERF.md §15, server/compress.go)", () => {
+  const js = `console.log(${JSON.stringify("x".repeat(4000))});`;
+  beforeAll(async () => {
+    const assets = join(inject("pbPublicDir"), "assets");
+    await mkdir(assets, { recursive: true });
+    const file = join(assets, "zip-TEST1234.js");
+    await writeFile(file, js);
+    await writeFile(`${file}.br`, brotliCompressSync(js));
+    await writeFile(`${file}.gz`, gzipSync(js));
+    await writeFile(join(assets, "plain-TEST1234.js"), js); // no compressed copies: as a dev build writes
+  });
+
+  it("a built asset is sent as its .br (or .gz) copy, with the route's own headers", async () => {
+    for (const [accept, encoding, copy] of [
+      ["gzip, deflate, br", "br", "zip-TEST1234.js.br"],
+      ["gzip", "gzip", "zip-TEST1234.js.gz"],
+    ] as const) {
+      const res = await fetch(url("/assets/zip-TEST1234.js"), { headers: { "Accept-Encoding": accept } });
+      expect(res.status, accept).toBe(200);
+      expect(res.headers.get("content-encoding"), accept).toBe(encoding);
+      expect(res.headers.get("vary"), accept).toContain("Accept-Encoding");
+      expect(res.headers.get("cache-control"), accept).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.get("content-type"), accept).toMatch(/javascript/);
+      const size = (await readFile(join(inject("pbPublicDir"), "assets", copy))).length;
+      expect(res.headers.get("content-length"), accept).toBe(String(size));
+      expect(await res.text(), accept).toBe(js);
+    }
+    const plain = await fetch(url("/assets/zip-TEST1234.js"), { headers: { "Accept-Encoding": "identity" } });
+    expect(plain.headers.get("content-encoding")).toBeNull();
+    expect(await plain.text()).toBe(js);
+  });
+
+  it("an asset without copies, a page and the API's JSON are gzipped on the way; short answers and files aren't", async () => {
+    const gz = { headers: { "Accept-Encoding": "gzip, br" } };
+    const asset = await fetch(url("/assets/plain-TEST1234.js"), gz);
+    expect(asset.headers.get("content-encoding")).toBe("gzip");
+    expect(await asset.text()).toBe(js);
+
+    const me = await newUser();
+    const room = await newRoom(me);
+    for (let i = 0; i < 20; i++) await post(me, room.id, `message ${i}: something said in the room, long enough to matter`);
+    const page = await fetch(url(`/api/chat/rooms/${room.id}/messages?kind=latest&limit=50`), {
+      headers: { ...gz.headers, Authorization: me.pb.authStore.token },
+    });
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-encoding")).toBe("gzip");
+    expect(page.headers.get("etag")).toMatch(/^"[0-9a-f]{32}"$/); // kept: If-None-Match still matches
+    expect(await page.json()).toHaveLength(20);
+    const tag = page.headers.get("etag")!;
+    const again = await fetch(url(`/api/chat/rooms/${room.id}/messages?kind=latest&limit=50`), {
+      headers: { ...gz.headers, Authorization: me.pb.authStore.token, "If-None-Match": tag },
+    });
+    expect(again.status).toBe(304);
+
+    const health = await fetch(url("/api/health"), gz);
+    expect(health.headers.get("content-encoding")).toBeNull();
   });
 });

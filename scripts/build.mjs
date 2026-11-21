@@ -1,8 +1,8 @@
 // Production build: web/ → pb_public/ (hashed assets + index.html), then enforce the size budget (DESIGN.md §7.7).
 
 import { readFileSync } from "node:fs";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { gzipSync } from "node:zlib";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { brotliCompressSync, gzipSync, constants as zlib } from "node:zlib";
 import * as esbuild from "esbuild";
 import {
   ACCESS,
@@ -91,6 +91,26 @@ await writeFile(
   `${OUTDIR}/stats.html`,
   injectAssets(await readFile(STATS.html, "utf8"), { ...statsAssets, font: latinFont(stats.metafile, OUTDIR) }),
 );
+
+// Each script and stylesheet compressed once, here, at the best levels: the server sends the .br or .gz the browser
+// takes in place of the file (server/compress.go, PERF.md §15), spending no CPU on them. Not the source maps (devtools
+// only; the server gzips them if asked).
+for (const name of await readdir(`${OUTDIR}/assets`)) {
+  if (!/\.(js|css)$/.test(name)) continue;
+  const path = `${OUTDIR}/assets/${name}`;
+  const data = await readFile(path);
+  await writeFile(`${path}.gz`, gzipSync(data, { level: 9 }));
+  await writeFile(
+    `${path}.br`,
+    brotliCompressSync(data, {
+      params: {
+        [zlib.BROTLI_PARAM_QUALITY]: 11,
+        [zlib.BROTLI_PARAM_SIZE_HINT]: data.length,
+        [zlib.BROTLI_PARAM_MODE]: zlib.BROTLI_MODE_TEXT,
+      },
+    }),
+  );
+}
 
 const gz = async (/** @type {string} */ path) => gzipSync(await readFile(`${OUTDIR}/${path}`), { level: 9 }).length;
 /** @type {Record<string, string>} */

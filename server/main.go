@@ -3,7 +3,7 @@
 // (live.go), the room list and message pages (lists.go), the unread counts (unread.go), read positions (reads.go), and
 // what every request or subscription would otherwise take a JS runtime for: the anonymous rooms' probe checks
 // (anonymous.go), the subscriptions' statistics (stats.go), file and poster downloads (files.go) and linked instances' downloads
-// (federation.go).
+// (federation.go). And what PocketBase doesn't do: compressed answers (compress.go).
 // Everything else stays in the JS hooks. Same flags, commands and routes as the stock `pocketbase` binary.
 package main
 
@@ -87,6 +87,7 @@ func main() {
 	})
 
 	register(app, os.Getenv("CHIRKLE_LEGACY") == "1", newAdmission(admissionSlots(hooksPool)))
+	bindCompress(app, publicDir)
 
 	// As the stock binary: pb_public/ unless a route (the hooks' page route, lib/http.js) serves it.
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{

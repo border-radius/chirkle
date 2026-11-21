@@ -47,6 +47,7 @@ How to set environment variables depends on how you run Chirkle: before the comm
 |---|---|---|
 | `GOMEMLIMIT` | 70% of the machine's memory | The memory the server aims to stay within, for example `700MiB`. Not set, it uses 70% of the memory limit of its container, or of the machine's RAM. |
 | `GOGC` | `200` | How far the memory grows between garbage collections, as Go defines it. |
+| `CHIRKLE_COMPRESS` | on | `off` sends every answer uncompressed. Only worth it if a proxy in front compresses anyway. |
 | `CHIRKLE_ADMISSION` | on | `off` lets every request run at once, instead of queueing those past what the server can usefully run together. Leave it on: see [Performance](performance.md#under-overload). |
 
 ### For development and tests

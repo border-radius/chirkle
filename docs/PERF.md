@@ -570,3 +570,33 @@ goroutine of a few KB each, stop waiting when their client leaves, and run in ar
 - When measuring: a goroutine dump (`?debug=1`) cuts deep stacks, so requests in JS don't show their admission frame;
   count `admission.running` in the metrics instead. And check `pgrep -a chirkle-server` first: a test server left
   running by a hung test run answered a sampler for a whole run here.
+
+## 15. 2026-11-21: compressed answers
+
+PocketBase compresses nothing. Behind nginx, Caddy or Cloudflare the proxy did, but the default install (`npx chirkle
+chat.example.com`, the systemd service) serves HTTPS itself: the build's budgets are gzipped sizes (DESIGN.md §7.7), and
+browsers got the raw bytes, and every page of messages as raw JSON. `server/compress.go`, a middleware ahead of the rate
+limit:
+
+- **The built scripts and stylesheets** (`assets/*.js|css`): `scripts/build.mjs` writes a `.br` (quality 11) and a
+  `.gz` (level 9) beside each. When the browser takes one, the route serves the asset as before (its headers, `304`s
+  and `404`s) and the copy goes in place of the file, so no CPU is spent at runtime. A copy older than its file (a dev
+  build since) is ignored.
+- **Other text answers of at least 1 KB** (JSON, HTML, CSS, JS, SVG, the manifest): gzipped as they are written, at
+  level 1. On a 50-message page, level 1 costs ~34 µs against ~79 µs for level 4 and ~92 µs for level 6
+  (`BenchmarkGzipPage`), while building the page takes ~20 ms.
+- **Not compressed:** the realtime stream, file and poster downloads (media is compressed already, and they answer
+  ranges), range requests, HEAD, errors, `304`s, and images, fonts and archives. An answer keeps its `ETag`, so the
+  apps' `If-None-Match` still gets its `304` (lists.go); `Vary: Accept-Encoding` tells caches the two apart.
+- `CHIRKLE_COMPRESS=off` turns it off (a proxy in front that compresses anyway).
+
+Bytes on the wire, a throwaway server with the built client, a room of 60 messages (lines of DESIGN.md as their
+text, two authors):
+
+| | Before (and `Accept-Encoding: identity`) | Now |
+|---|---|---|
+| First load: index.html, the stylesheet, app.js and its modulepreloaded chunks | 188 KB | 58 KB brotli (65 KB gzip-only) |
+| A room page, 50 messages as the web asks (`expand`) | 48.3 KB | 4.6 KB |
+
+Real messages repeat less than these, so expect less than 10× on pages; the assets' numbers are the build's own. A
+proxy in front that compresses already sees no change: it gets the compressed answer, or asks for identity.

@@ -1934,3 +1934,9 @@ encoding (`ChirkleApi.media`, `removeItem`): a GET to another route of the user'
   Test: `UiMentionsTest`'s swipe test, which failed on every run since §76.
 - **A transparent WebP stays transparent** (QA BUG-287, with the web): `ImagePrep` re-encodes a still WebP with an
   alpha flag (VP8X) or bit (VP8L) as PNG, not JPEG (`webpHasAlpha`, `asPng`). Test: `ImagePrepTest`.
+
+## 81. Compressed answers from the server (2026-11-21)
+
+The server gzips JSON answers of 1 KB or more (PERF.md §15, `server/compress.go`). Nothing changed in the app: OkHttp
+asks for gzip and unpacks it itself, since the app sets no `Accept-Encoding` of its own. A room page of 50 messages
+comes as ~5 KB instead of ~48 KB. The realtime stream and files are sent as before.
