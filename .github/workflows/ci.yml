@@ -4,39 +4,91 @@ on:
   push:
   pull_request:
 
-# Static checks first; the test suites then run side by side, e2e once per browser. `npm run check` still runs
-# everything but e2e in one go locally. The Android app (android/, docs/ANDROID.md §12) has a job of its own.
+# Many small jobs, all side by side and none waiting on another: a failed one shows what broke by its name and
+# "Re-run failed jobs" repeats only it. The slow suites are sharded (integration, e2e per browser) and the Android
+# app (android/, docs/ANDROID.md §12) has one job per step. `npm run check` still runs everything but e2e in one go
+# locally.
 jobs:
-  static:
-    name: Typecheck, lint, build
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: npm run typecheck
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          server: "false"
       - run: npm run lint
-      - name: Go vet and unit tests (server/)
-        run: go vet ./... && test -z "$(gofmt -l .)" && go test ./...
-        working-directory: server
       - run: npm run lint:sinks
+
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          server: "false"
       - run: npm run build
+
+  go:
+    name: Go vet and unit tests (server/)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: go vet ./...
+      - name: gofmt
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::gofmt: the files above need formatting"; exit 1; }
+      - run: go test ./...
 
   unit:
     name: Unit tests
-    needs: static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # No server: the unit project has no global setup.
+      - uses: ./.github/actions/setup
+        with:
+          server: "false"
+      - run: npx vitest run --project unit
+
+  component:
+    name: Component tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: npm test
+      - run: npx vitest run --project component
 
   integration:
-    name: Integration tests
-    needs: static
+    name: Integration tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -51,18 +103,19 @@ jobs:
           curl -fsSL "https://github.com/versity/versitygw/releases/download/v$v/checksums.txt" | grep "versitygw_v${v}_Linux_x86_64.tar.gz" | sha256sum -c
           tar xzf "versitygw_v${v}_Linux_x86_64.tar.gz"
           echo "VERSITYGW=$RUNNER_TEMP/versitygw_v${v}_Linux_x86_64/versitygw" >> "$GITHUB_ENV"
-      - run: npm run test:int
+      # Each shard is a third of the files, still one at a time (vitest.config.ts), against its own server.
+      - run: npx vitest run --project integration --shard=${{ matrix.shard }}/3
 
   e2e:
-    name: E2E (${{ matrix.browser }})
-    needs: static
+    name: E2E (${{ matrix.browser }} ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
-      # One browser failing shouldn't cancel (and hide) the others' results.
+      # One browser or shard failing shouldn't cancel (and hide) the others' results.
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -77,7 +130,7 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends ffmpeg
 
       - run: npm run build
-      - run: npx playwright test --project=${{ matrix.browser }}
+      - run: npx playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/2
         env:
           CI: "1"
           E2E_SKIP_BUILD: "1" # built just above
@@ -86,7 +139,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.browser }}
+          name: playwright-report-${{ matrix.browser }}-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
@@ -94,7 +147,6 @@ jobs:
 
   speed:
     name: Web speed check
-    needs: static
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -119,11 +171,40 @@ jobs:
           path: profile-web.json
           retention-days: 30
 
-  android:
-    name: Android (check, size)
-    needs: static
+  # The Android app: `./gradlew check` (lint and every module's JVM tests) and the size check, as separate jobs.
+  android-lint:
+    name: Android lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew lint --max-workers=2
+
+      - name: Upload lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-reports
+          path: android/**/build/reports/
+          retention-days: 7
+
+  android-test:
+    # :app is the Robolectric UI tests, :core:data the unit and data integration tests; the other modules have none.
+    name: Android tests (${{ matrix.module }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [":app", ":core:data"]
     defaults:
       run:
         working-directory: android
@@ -136,14 +217,39 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      # Lint and every module's JVM tests: unit, data integration and Robolectric UI tests.
-      - run: ./gradlew check --max-workers=2
-      - run: ./gradlew :app:checkApkSize --max-workers=2
+      - run: ./gradlew ${{ matrix.module }}:test --max-workers=2
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: android-reports
+          name: android-test-reports-${{ matrix.module == ':app' && 'app' || 'core-data' }}
           path: android/**/build/reports/
           retention-days: 7
+
+  android-size:
+    name: Android APK size
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :app:checkApkSize --max-workers=2
+
+  # One check that is green only when every job above is: branch protection can require it alone, whatever the jobs.
+  ci:
+    name: CI passed
+    if: always()
+    needs: [typecheck, lint, build, go, unit, component, integration, e2e, speed, android-lint, android-test, android-size]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

@@ -1,5 +1,9 @@
 name: Setup
 description: Node 22 with npm 11, the locked dependencies, Go, and the Chirkle server built (server/, PocketBase with Go hooks).
+inputs:
+  server:
+    description: Set up Go and build the server (bin/). Jobs that only lint or bundle the web app skip it.
+    default: "true"
 runs:
   using: composite
   steps:
@@ -13,9 +17,11 @@ runs:
     - run: npm ci
       shell: bash
 
-    - uses: actions/setup-go@v5
+    - if: inputs.server == 'true'
+      uses: actions/setup-go@v5
       with:
         go-version-file: server/go.mod
         cache-dependency-path: server/go.sum
-    - run: npm run setup
+    - if: inputs.server == 'true'
+      run: npm run setup
       shell: bash

@@ -132,8 +132,9 @@ The PocketBase admin UI is at http://127.0.0.1:8090/_/ (create a superuser with
 | `npm run doctor` | Is this machine ready for the tests? Go, the server binary, ffmpeg, versitygw, free space in `TMPDIR`, stray test servers, free e2e ports, and a browser that starts and draws text (`-- --browsers=chromium,firefox,webkit`). The e2e setup runs it first |
 
 Every test run starts its own PocketBase on a free port with a temp data dir — nothing to clean up, and no fakes
-except a stub Telegram Bot API for the bridge's tests. CI (`.github/workflows/ci.yml`) runs typecheck, lint and build, then unit, integration and e2e side by side, e2e once
-per browser (Chromium, Firefox, WebKit).
+except a stub Telegram Bot API for the bridge's tests. CI (`.github/workflows/ci.yml`) runs small jobs all side by side, so a failed one is re-run alone: typecheck, lint,
+build, Go, unit, component, integration (3 shards), e2e (2 shards per browser: Chromium, Firefox, WebKit), the speed
+check, and the Android app's lint, tests and size. A final "CI passed" job is green only when all of them are.
 
 ## Project layout
 

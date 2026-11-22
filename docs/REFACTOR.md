@@ -320,6 +320,10 @@ Fine at today's size; the first things to break as usage grows.
       (typecheck, lint, sinks, build), then `unit`, `integration` and `e2e` (chromium / firefox / webkit,
       `fail-fast: false`, a report per browser) side by side; shared setup in `.github/actions/setup`. YAML checked with
       a parser; not run on GitHub yet: watch the first run.
+      Later (2026-11-22) split further so a failure re-runs only a small job: no `static` gate, every job starts at
+      once; typecheck, lint, build, Go, unit and component each a job; integration in 3 shards, e2e in 2 per browser;
+      Android lint, `:app` tests, `:core:data` tests and the APK size as four jobs; a `ci` job sums them up for branch
+      protection.
 
 ### 28. Docs ✅
 - [x] DESIGN.md (1,872 lines) describes current behavior only; move "why BUG-xx was fixed" stories to QA.md. Section

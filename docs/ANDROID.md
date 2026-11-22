@@ -411,8 +411,9 @@ endpoint.
 **Parity guard:** `android/PARITY.md` maps each web e2e spec to its Android test. A web feature without an Android
 entry fails review.
 
-**CI:** an `android` job in `.github/workflows/ci.yml`, beside the web jobs: `./gradlew check`, the managed-device run
-and the size check. Macrobenchmarks run nightly on Firebase Test Lab.
+**CI:** jobs in `.github/workflows/ci.yml`, started with the web jobs: `android-lint` (`./gradlew lint`), `android-test`
+(`:app:test` and `:core:data:test`, one job each; the other modules have no tests) and `android-size`
+(`:app:checkApkSize`). The managed-device run is not in CI yet (see "Not yet" below). Macrobenchmarks run nightly on Firebase Test Lab.
 
 ## 14. Milestones
 
