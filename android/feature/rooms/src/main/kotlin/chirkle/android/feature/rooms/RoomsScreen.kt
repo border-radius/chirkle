@@ -36,7 +36,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.draw.clip
 import chirkle.android.ui.icon
-import chirkle.android.ui.listIcon
 import chirkle.android.ui.swipeAway
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -643,7 +642,7 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
             } else {
                 // Who can see it (§23.1), in the leading tile as the web's sidebar: "#" private, people public, a globe Open Air.
                 val v = r.visibilityOrDefault
-                chirkle.android.ui.RoomIcon(v, 32.dp, Modifier.semantics { contentDescription = v.label }, icon = v.listIcon())
+                chirkle.android.ui.RoomIcon(v, 32.dp, Modifier.semantics { contentDescription = v.label })
             }
             Text(
                 if (r.isDm) title else r.name,

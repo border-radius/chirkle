@@ -47,12 +47,12 @@ export function visibilityMark(v: Visibility): HTMLElement | null {
   ]);
 }
 
-/** A room row's leading icon, which says who can see it: "#" private, people for public, a globe for Open Air. */
+/** A room row's leading icon, which says who can see it: "#" public, a lock for private, a globe for Open Air. */
 export function visibilityLead(v: Visibility): HTMLElement {
   const { label } = VISIBILITY[v];
-  const icon = v === "private" ? "" : ` ic ${v === "open" ? "i-globe" : "i-users"}`;
+  const icon = v === "public" ? "" : ` ic ${v === "open" ? "i-globe" : "i-lock"}`;
   return h("span", { class: `vis lead${icon}`, title: label }, [
-    v === "private" ? h("span", { "aria-hidden": "true" }, "#") : null,
+    v === "public" ? h("span", { "aria-hidden": "true" }, "#") : null,
     h("span", { class: "visually-hidden" }, ` (${label})`),
   ]);
 }

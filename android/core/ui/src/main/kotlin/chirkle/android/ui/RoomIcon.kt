@@ -1,6 +1,6 @@
 // A room's mark (DESIGN.md §23): # for a public room, a lock for a private one, a globe for an Open Air one, quiet on a
-// raised rounded tile (the 2026-10-31 redesign). The room list's tile says who can see the room as the web's sidebar
-// does (2026-11-22): "#" for private, people for public, a globe for Open Air ([listIcon]).
+// raised rounded tile (the 2026-10-31 redesign). The room list's tile says who can see the room with the same marks, as the
+// web's sidebar does (2026-11-22).
 package chirkle.android.ui
 
 import androidx.compose.foundation.background
@@ -26,12 +26,6 @@ fun Visibility.icon(): ImageVector = when (this) {
     Visibility.Public -> ChirkleIcons.Tag
 }
 
-/** The room list's mark (the web's `visibilityLead`): "#" is the private room's. */
-fun Visibility.listIcon(): ImageVector = when (this) {
-    Visibility.Private -> ChirkleIcons.Tag
-    Visibility.Open -> ChirkleIcons.Globe
-    Visibility.Public -> ChirkleIcons.People
-}
 
 @Composable
 fun RoomIcon(visibility: Visibility, size: Dp = 40.dp, modifier: Modifier = Modifier, icon: ImageVector = visibility.icon()) {

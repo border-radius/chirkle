@@ -1968,3 +1968,9 @@ screen). The app's room list follows: the tile at the start of a room's row is `
 people for public, a globe for Open Air), named for TalkBack by the visibility's label, and the lock or globe after the
 name is gone. Tiles and DM faces are 32 dp (were 40) with 12 dp between them and the name; rows keep their 48 dp touch
 height. Elsewhere (the access screen's choices, headers) `Visibility.icon()` is unchanged: lock, globe, "#".
+
+## 85. "#" for public, a lock for private, in the room list (2026-11-22)
+
+The web's sidebar swapped its leading marks: `visibilityLead` now shows "#" for a public room and a lock for a private
+one (the globe stays for Open Air), the same marks as everywhere else. The app's room list follows by using
+`Visibility.icon()` on the row's tile; `Visibility.listIcon()` (§84) is gone.

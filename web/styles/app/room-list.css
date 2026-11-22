@@ -112,7 +112,7 @@
   text-decoration: none;
 }
 
-/* A room's leading slot (§23.1): "#" for private, people for public, a globe for Open Air. As wide as a DM avatar or a
+/* A room's leading slot (§23.1): "#" for public, a lock for private, a globe for Open Air. As wide as a DM avatar or a
    collection tile, so every row's icon and name line up. */
 .room-section li a > .lead {
   display: flex;
