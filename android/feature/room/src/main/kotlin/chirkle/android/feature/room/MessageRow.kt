@@ -195,7 +195,9 @@ fun MessageRow(
                 }
                 val reactions = actions.reactions(m)
                 if (reactions.isNotEmpty() && !m.deleted) {
-                    FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // As on the web: an emoji and its count with no chip around it, yours in the accent; pulled left by a
+                    // reaction's padding so the first emoji lines up with the text.
+                    FlowRow(Modifier.padding(top = 4.dp).offset(x = (-6).dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         for (r in reactions) {
                             val mine = me != null && me in r.users
                             val who = reactors(r.users, me.orEmpty(), actions.name)
@@ -203,34 +205,36 @@ fun MessageRow(
                                 Modifier
                                     .heightIn(min = 32.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(if (mine) Chirkle.colors.tint else MaterialTheme.colorScheme.surfaceContainer)
-                                    .border(1.dp, if (mine) accent else Chirkle.colors.border, RoundedCornerShape(16.dp))
                                     .clickable(enabled = me != null) { actions.onReact(m, r.emoji) }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .padding(horizontal = 6.dp)
                                     .semantics(mergeDescendants = true) {
                                         contentDescription = res.getString(R.string.room_reacted_with, who, r.emoji)
                                         stateDescription = if (mine) res.getString(R.string.room_yours) else ""
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(r.emoji)
+                                Text(r.emoji, fontSize = 17.sp)
                                 Spacer(Modifier.width(4.dp))
-                                Text(r.users.size.toString(), style = MaterialTheme.typography.labelMedium, color = if (mine) accent else MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    r.users.size.toString(),
+                                    fontSize = 14.sp,
+                                    fontWeight = if (mine) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (mine) accent else Chirkle.colors.muted,
+                                )
                             }
                         }
-                        // As on the web: one more chip, to add a reaction.
+                        // As on the web: then the smiley-plus that adds one.
                         actions.onAddReaction?.let { add ->
                             Box(
                                 Modifier
-                                    .height(32.dp)
+                                    .padding(start = 2.dp)
+                                    .size(32.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .border(1.dp, Chirkle.colors.border, RoundedCornerShape(16.dp))
                                     .clickable { add(m) }
-                                    .padding(horizontal = 10.dp)
                                     .semantics { contentDescription = res.getString(R.string.room_add_reaction) },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(ChirkleIcons.AddReaction, contentDescription = null, tint = Chirkle.colors.muted, modifier = Modifier.size(18.dp))
+                                Icon(ChirkleIcons.AddReaction, contentDescription = null, tint = Chirkle.colors.dim, modifier = Modifier.size(18.dp))
                             }
                         }
                     }

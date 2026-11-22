@@ -1984,3 +1984,11 @@ does as the web's `unread.ts`: `ChirkleApi.subscribeInbox` now hands over the ev
 position (`again()`, batched like `seen()`) instead of refetching the counts at once; the counts are fetched once that
 mark is in. Test: the shared scenario "a reaction to you that comes in while you read its room is seen there"
 (`UnreadScenariosTest`, with the vectors' new `wait` step).
+
+## 87. Reactions without chips (2026-11-23)
+
+As on the web (DESIGN.md §20.3, `reactions.css`): `MessageRow` draws each reaction as its emoji (17 sp) and count
+(14 sp) with no border or fill, the count in the accent and bold when it is yours, muted otherwise; the row is pulled
+6 dp left so the first emoji lines up with the text, and the add-reaction button is a bare smiley-plus in `dim`. `ChirkleIcons.AddReaction` is now the web's `.i-react`
+stroke drawing (1.8 wide, the circle open where the plus sits, dot eyes) instead of the Material glyph. Each
+keeps a 32 dp tap target.

@@ -45,8 +45,10 @@ older copies in `merge` (§7.5), and is picked up by the reconnect refetch of ch
 
 ## 20.3 Frontend
 
-- **Showing them:** under a message's text and attachments, a chip per emoji with its count; yours are tinted and
-  `aria-pressed`. The tooltip says who: "You, Ada and 2 others reacted with 🎉". Names come from the window's
+- **Showing them:** under a message's text and attachments, an emoji and its count per reaction, with no chip around it (2026-11-23: no border or fill, a light
+  background on hover only; the first emoji lines up with the text); yours have the count in the accent, bold, and are
+  `aria-pressed`, others muted. A smiley-plus (☺+, `.i-react`: a thin face whose circle is open
+  where the plus sits) follows them. The tooltip says who: "You, Ada and 2 others reacted with 🎉". Names come from the window's
   authors. Anyone else is looked up (`api.usersById`), with one request for all the unknown names a render needs.
 - **Changing them:** clicking a chip adds yours or takes it back. **☺+** ("Add reaction") in a message's action pill, and the same
   after the chips, open the picker; picking an emoji you already used takes it back. In archived rooms the chips show

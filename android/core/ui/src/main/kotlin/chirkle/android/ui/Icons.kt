@@ -65,12 +65,15 @@ object ChirkleIcons {
             "M12,17.5c2.33,0 4.31,-1.46 5.11,-3.5H6.89c0.8,2.04 2.78,3.5 5.11,3.5z",
         )
     }
-    /** A smiling face with a plus: add a reaction. */
+    /** The web's add-reaction face (.i-react in icons.css): a stroke drawing, a circle open where the plus sits. */
     val AddReaction by lazy {
-        icon(
-            "add_reaction",
-            "M18,9V7h-2V2.84C14.77,2.3 13.42,2 11.99,2 6.47,2 2,6.48 2,12s4.47,10 9.99,10C17.52,22 22,17.52 22,12c0,-1.05 -0.17,-2.05 -0.47,-3H18zM15.5,8c0.83,0 1.5,0.67 1.5,1.5S16.33,11 15.5,11 14,10.33 14,9.5 14.67,8 15.5,8zM8.5,8c0.83,0 1.5,0.67 1.5,1.5S9.33,11 8.5,11 7,10.33 7,9.5 7.67,8 8.5,8zM12,17.5c-2.33,0 -4.31,-1.46 -5.11,-3.5h10.22c-0.8,2.04 -2.78,3.5 -5.11,3.5zM22,3h2v2h-2v2h-2V5h-2V3h2V1h2v2z",
-        )
+        ImageVector.Builder("add_reaction", 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(
+                addPathNodes("M11,5a8,8 0,1 0,8 8M8,15.5c0.8,1.2 1.8,1.8 3,1.8s2.2,-0.6 3,-1.8M19,2.5v5M16.5,5h5"),
+                stroke = SolidColor(Color.Black), strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
+            )
+            addPath(addPathNodes("M8.5,11m-1.1,0a1.1,1.1 0,1 0,2.2 0a1.1,1.1 0,1 0,-2.2 0M13.5,11m-1.1,0a1.1,1.1 0,1 0,2.2 0a1.1,1.1 0,1 0,-2.2 0"), fill = SolidColor(Color.Black))
+        }.build()
     }
     /** A clock face: a message on its way. */
     val Pending by lazy {
