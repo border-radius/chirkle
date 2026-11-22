@@ -223,6 +223,17 @@ class UiPortsTest {
         assertEquals(ThemeChoice.Dark, services.settings.theme.value)
     }
 
+    @Test fun `the text size can be set to large (theme spec)`() {
+        val a = newUser()
+        val services = ui.signedIn(a)
+        ui.waitFor(hasContentDescription("Profile"))
+        compose.onNodeWithContentDescription("Profile").performClick()
+        ui.waitFor("Text size")
+        assertEquals(chirkle.android.data.repo.TextSize.Small, services.settings.textSize.value)
+        compose.onNodeWithText("Large").performScrollTo().performClick()
+        ui.until { services.settings.textSize.value == chirkle.android.data.repo.TextSize.Large }
+    }
+
     @Test fun `text shared into the app goes to the chosen room, and the picker stays closed`() {
         val a = newUser()
         val room = runBlocking { a.api.createRoom("sh-${uniq()}") }

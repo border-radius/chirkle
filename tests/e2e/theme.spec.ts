@@ -38,6 +38,31 @@ test("Appearance on the profile page picks Light, Dark or the system's theme, an
   expect(blocked).toEqual([]);
 });
 
+test("Text size on the profile page makes the text larger, and a reload keeps it (§7.8)", async ({ page }) => {
+  const blocked: string[] = [];
+  page.on("console", (m) => /Content Security Policy/i.test(m.text()) && blocked.push(m.text()));
+  const rootSize = () => page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+  await login(page, await apiUser("Ada"));
+  await page.goto("/me");
+  const size = page.getByRole("group", { name: "Text size" });
+  await expect(size.getByRole("radio", { name: "Small" })).toBeChecked();
+  expect(await rootSize()).toBe("16px");
+
+  await size.getByText("Medium", { exact: true }).click();
+  await expect.poll(rootSize).toBe("18px");
+  await size.getByText("Large", { exact: true }).click();
+  await expect.poll(rootSize).toBe("20px");
+  // The inline script sets it before the first paint.
+  await page.reload();
+  expect(await page.evaluate(() => document.documentElement.dataset.size)).toBe("large");
+  await expect(page.getByRole("radio", { name: "Large" })).toBeChecked();
+  expect(await rootSize()).toBe("20px");
+
+  await page.getByRole("group", { name: "Text size" }).getByText("Small", { exact: true }).click();
+  await expect.poll(rootSize).toBe("16px");
+  expect(blocked).toEqual([]);
+});
+
 test("a profile page taller than the window scrolls on its own; the sidebar stays (QA BUG-135)", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 560 });
   await login(page, await apiUser("Ada"));

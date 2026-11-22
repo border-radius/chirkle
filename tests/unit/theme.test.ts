@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { applyTheme, savedTheme, setTheme, startTheme } from "../../web/src/theme.ts";
+import { applySize, applyTheme, savedSize, savedTheme, setSize, setTheme, startTheme } from "../../web/src/theme.ts";
 
 function memoryStorage(throws = false): Storage {
   const m = new Map<string, string>();
@@ -85,5 +85,48 @@ describe("theme (§7.8)", () => {
     s.setItem("chat.theme", "light");
     dispatchEvent(new StorageEvent("storage", { key: "chat.theme" }));
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+});
+
+describe("text size (§7.8)", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.size;
+  });
+
+  it("is small unless medium or large was saved", () => {
+    const s = memoryStorage();
+    expect(savedSize(s)).toBe("small");
+    s.setItem("chat.size", "huge");
+    expect(savedSize(s)).toBe("small");
+    s.setItem("chat.size", "large");
+    expect(savedSize(s)).toBe("large");
+    expect(savedSize(null)).toBe("small");
+    expect(savedSize(memoryStorage(true))).toBe("small");
+  });
+
+  it("sets <html data-size>, saves it (small removes both), and still applies it when storage throws", () => {
+    const s = memoryStorage();
+    setSize("medium", s);
+    expect(document.documentElement.dataset.size).toBe("medium");
+    expect(s.getItem("chat.size")).toBe("medium");
+    setSize("small", s);
+    expect(document.documentElement.dataset.size).toBeUndefined();
+    expect(s.getItem("chat.size")).toBeNull();
+    setSize("large", memoryStorage(true));
+    expect(document.documentElement.dataset.size).toBe("large");
+    applySize("small");
+    expect(document.documentElement.dataset.size).toBeUndefined();
+  });
+
+  it("is applied on start and follows another tab's choice", () => {
+    const s = memoryStorage();
+    s.setItem("chat.size", "medium");
+    const stop = startTheme(s);
+    expect(document.documentElement.dataset.size).toBe("medium");
+    s.setItem("chat.size", "large");
+    dispatchEvent(new StorageEvent("storage", { key: "chat.size" }));
+    expect(document.documentElement.dataset.size).toBe("large");
+    stop();
+    delete document.documentElement.dataset.theme;
   });
 });

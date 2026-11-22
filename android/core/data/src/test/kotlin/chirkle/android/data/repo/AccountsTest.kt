@@ -113,4 +113,19 @@ class AccountsTest {
         assertEquals(listOf("acct1"), env.deleted)
         assertNotEquals(null, a.now().api.currentUser())
     }
+
+    @Test fun `the text size is the device's, kept in the index, and an old index is Small`() = runBlocking {
+        val env = MemoryAccountEnv()
+        val a = accounts(env)
+        a.start()
+        assertEquals(TextSize.Small, a.settings.textSize.value)
+        a.settings.setTextSize(TextSize.Large)
+        eventually(what = "the size saved") { env.index.textSize == "large" }
+        val b = accounts(env)
+        b.start()
+        assertEquals(TextSize.Large, b.settings.textSize.value)
+        // An index from before the setting.
+        assertEquals("small", PbJson.decodeFromString(AccountIndex.serializer(), """{"accounts":[],"theme":"dark"}""").textSize)
+        assertEquals(TextSize.Small, TextSize.of("huge"))
+    }
 }

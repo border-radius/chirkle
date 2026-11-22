@@ -3,8 +3,8 @@
 
 const CSP = [
   "default-src 'self'",
-  // The hash is index.html's inline theme script (web/src/theme.ts); tests/unit/build/csp.test.ts checks it.
-  "script-src 'self' 'sha256-lMI93IRRLFIlto6GZfZdfPFeIgbs3CJfe2ncDiU/aWw='",
+  // The hash is index.html's inline theme and text size script (web/src/theme.ts); tests/unit/build/csp.test.ts checks it.
+  "script-src 'self' 'sha256-mOQF+ckehOwPXg3QQaTKo5nz/mkpPjspccYc517TGsE='",
   "style-src 'self'",
   "connect-src 'self'",
   "img-src 'self' data: blob:",

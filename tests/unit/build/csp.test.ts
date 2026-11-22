@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { THEME_KEY } from "../../../web/src/theme.ts";
+import { SIZE_KEY, THEME_KEY } from "../../../web/src/theme.ts";
 
 // The unit project runs in happy-dom, where Vite refuses static imports of Node built-ins.
 const { readFileSync } = process.getBuiltinModule("node:fs") as typeof import("node:fs");
@@ -8,7 +8,7 @@ const { createHash } = process.getBuiltinModule("node:crypto") as typeof import(
 
 const read = (path: string) => readFileSync(resolve(import.meta.dirname, "../../..", path), "utf8");
 
-describe("index.html's inline theme script (§7.8)", () => {
+describe("index.html's inline theme and text size script (§7.8)", () => {
   const html = read("web/index.html");
   const scripts = [...html.matchAll(/<script>([^<]*)<\/script>/g)].map((m) => m[1]!);
 
@@ -18,8 +18,9 @@ describe("index.html's inline theme script (§7.8)", () => {
     expect(read("pb_hooks/lib/http.js")).toContain(`'sha256-${hash}'`);
   });
 
-  it("reads the key theme.ts saves, before the stylesheet", () => {
+  it("reads the keys theme.ts saves, before the stylesheet", () => {
     expect(scripts[0]).toContain(`"${THEME_KEY}"`);
+    expect(scripts[0]).toContain(`"${SIZE_KEY}"`);
     expect(html.indexOf("<script>")).toBeLessThan(html.indexOf("<!--CSS-->"));
   });
 });

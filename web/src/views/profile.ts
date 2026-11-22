@@ -16,7 +16,7 @@ import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import * as S from "../strings/profile.ts";
-import { savedTheme, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
+import { SIZE_KEY, SIZES, type Size, savedSize, savedTheme, setSize, setTheme, THEME_KEY, THEMES, type Theme } from "../theme.ts";
 import { avatar } from "../ui/avatar.ts";
 
 /** The §43 cards' stylesheet's URL, set by the build (scripts/lib/build-utils.mjs). */
@@ -162,6 +162,21 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
   const showTheme = () => {
     const theme = savedTheme();
     for (const [t, input] of themeRadios) input.checked = t === theme;
+  };
+
+  // Text size (§7.8): this device's too.
+  const SIZE_LABELS: Record<Size, string> = { small: S.SMALL, medium: S.MEDIUM, large: S.LARGE };
+  const sizeRadios = new Map<Size, HTMLInputElement>();
+  const sizeChoices = h("div", { class: "segmented" }, [
+    ...SIZES.map((z) => {
+      const input = h("input", { type: "radio", name: `${vid}-size`, value: z });
+      sizeRadios.set(z, input);
+      return h("label", {}, [input, SIZE_LABELS[z]]);
+    }),
+  ]);
+  const showSize = () => {
+    const size = savedSize();
+    for (const [z, input] of sizeRadios) input.checked = z === size;
   };
 
   // Notifications (§34): their settings come with notify.ts, a lazy chunk.
@@ -486,6 +501,11 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
             h("p", { id: `${vid}-theme-hint`, class: "field-status" }, S.AUTO_FOLLOWS_YOUR_SYSTEM_SAVED_ON),
             themeChoices,
           ]),
+          h("fieldset", { class: "card profile-theme profile-size", "aria-describedby": `${vid}-size-hint` }, [
+            h("legend", {}, S.TEXT_SIZE),
+            h("p", { id: `${vid}-size-hint`, class: "field-status" }, S.TEXT_SIZE_HINT),
+            sizeChoices,
+          ]),
           notifyBox,
           h(
             "form",
@@ -548,6 +568,7 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
       root.append(shell);
       renderPicture();
       showTheme();
+      showSize();
       void import("../notify.ts").then(
         (m) => scope.active && notifyBox.replaceWith(m.notifySettings({ id: vid, onChange: notify, signal })),
         () => {},
@@ -560,8 +581,17 @@ export function createProfileView({ api, store, logOut, notify }: Pick<Ctx, "api
         },
         { signal },
       );
+      sizeChoices.addEventListener(
+        "change",
+        (e) => {
+          const z = (e.target as HTMLInputElement).value as Size;
+          if ((SIZES as readonly string[]).includes(z)) setSize(z);
+        },
+        { signal },
+      );
       // Chosen in another tab (theme.ts applies it): show it here too.
       addEventListener("storage", (e) => (e.key === THEME_KEY || e.key === null) && showTheme(), { signal });
+      addEventListener("storage", (e) => (e.key === SIZE_KEY || e.key === null) && showSize(), { signal });
       scope.defer(
         store.subscribe((s, prev) => {
           if (s.user === prev.user) return;

@@ -73,6 +73,7 @@ import chirkle.android.ui.LocalServices
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import chirkle.android.data.repo.TextSize
 import chirkle.android.data.repo.ThemeChoice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -299,6 +300,20 @@ fun ProfileScreen(onBack: () -> Unit) {
                             onClick = { services.settings.setTheme(t) },
                             shape = SegmentedButtonDefaults.itemShape(i, ThemeChoice.entries.size),
                             label = { Text(t.label) },
+                        )
+                    }
+                }
+                HorizontalDivider(color = Chirkle.colors.border)
+
+                Section(stringResource(R.string.profile_text_size))
+                val textSize by services.settings.textSize.collectAsStateWithLifecycle()
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    TextSize.entries.forEachIndexed { i, z ->
+                        SegmentedButton(
+                            selected = textSize == z,
+                            onClick = { services.settings.setTextSize(z) },
+                            shape = SegmentedButtonDefaults.itemShape(i, TextSize.entries.size),
+                            label = { Text(z.label) },
                         )
                     }
                 }

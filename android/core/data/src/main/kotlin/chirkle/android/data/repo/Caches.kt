@@ -212,9 +212,18 @@ enum class ThemeChoice(val label: String) {
     }
 }
 
+/** The app's text size (the web's Text size choice, DESIGN.md §7.8): [scale] multiplies the system's font scale. */
+enum class TextSize(val label: String, val scale: Float) {
+    Small(Strings.SMALL, 1f), Medium(Strings.MEDIUM, 1.125f), Large(Strings.LARGE, 1.25f);
+
+    companion object {
+        fun of(v: String?) = entries.firstOrNull { it.name.equals(v, ignoreCase = true) } ?: Small
+    }
+}
+
 /**
  * This device's settings, kept across sessions: whether screens with messages are kept out of screenshots (§10), the
- * theme, and which room list sections are folded (the web keeps those in localStorage). [read] and [write] take a key of [Keys].
+ * theme and text size, and which room list sections are folded (the web keeps those in localStorage). [read] and [write] take a key of [Keys].
  */
 class DeviceSettings(private val read: suspend (String) -> String?, private val write: suspend (String, String) -> Unit, private val scope: CoroutineScope) {
     /** Kept in [db] (tests, and services without accounts). */
@@ -224,6 +233,8 @@ class DeviceSettings(private val read: suspend (String) -> String?, private val 
     val secureScreens: kotlinx.coroutines.flow.StateFlow<Boolean> = secureState
     private val themeState = kotlinx.coroutines.flow.MutableStateFlow(ThemeChoice.System)
     val theme: kotlinx.coroutines.flow.StateFlow<ThemeChoice> = themeState
+    private val textSizeState = kotlinx.coroutines.flow.MutableStateFlow(TextSize.Small)
+    val textSize: kotlinx.coroutines.flow.StateFlow<TextSize> = textSizeState
     private val foldedState = kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>())
     /** The room list's folded sections: only their unread rows (and the open one) are listed. */
     val folded: kotlinx.coroutines.flow.StateFlow<Set<String>> = foldedState
@@ -231,6 +242,7 @@ class DeviceSettings(private val read: suspend (String) -> String?, private val 
     suspend fun load() {
         secureState.value = read(Keys.SECURE_SCREENS) == "1"
         themeState.value = ThemeChoice.of(read(Keys.THEME))
+        textSizeState.value = TextSize.of(read(Keys.TEXT_SIZE))
         foldedState.value = read(Keys.FOLDED).orEmpty().split(' ').filter { it.isNotEmpty() }.toSet()
     }
 
@@ -248,5 +260,10 @@ class DeviceSettings(private val read: suspend (String) -> String?, private val 
     fun setTheme(t: ThemeChoice) {
         themeState.value = t
         scope.launch { write(Keys.THEME, t.name.lowercase()) }
+    }
+
+    fun setTextSize(s: TextSize) {
+        textSizeState.value = s
+        scope.launch { write(Keys.TEXT_SIZE, s.name.lowercase()) }
     }
 }

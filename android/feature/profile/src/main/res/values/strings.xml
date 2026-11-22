@@ -20,6 +20,7 @@
     <string name="profile_hide_messages_from_screenshots">Hide messages from screenshots</string>
     <string name="profile_this_device">This device</string>
     <string name="profile_appearance">Appearance</string>
+    <string name="profile_text_size">Text size</string>
     <string name="profile_save">Save</string>
     <string name="profile_save_handle">Save handle</string>
     <string name="profile_saved">Saved.</string>

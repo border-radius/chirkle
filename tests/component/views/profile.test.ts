@@ -248,6 +248,25 @@ describe("profile view (§15.5)", () => {
     localStorage.removeItem("chat.theme");
   });
 
+  it("Text size switches this device's size: Small, Medium, Large (§7.8)", () => {
+    localStorage.removeItem("chat.size");
+    mount();
+    const radio = (label: string) =>
+      [...root.querySelectorAll<HTMLLabelElement>(".profile-size label")].find((l) => l.textContent === label)!.querySelector("input")!;
+    expect(radio("Small").checked).toBe(true);
+    radio("Large").click();
+    expect(document.documentElement.dataset.size).toBe("large");
+    expect(localStorage.getItem("chat.size")).toBe("large");
+    radio("Small").click();
+    expect(document.documentElement.dataset.size).toBeUndefined();
+    expect(localStorage.getItem("chat.size")).toBeNull();
+    // Chosen in another tab.
+    localStorage.setItem("chat.size", "medium");
+    dispatchEvent(new StorageEvent("storage", { key: "chat.size" }));
+    expect(radio("Medium").checked).toBe(true);
+    localStorage.removeItem("chat.size");
+  });
+
   it("Log out is here (§22.2)", () => {
     mount();
     const btn = [...root.querySelectorAll("button")].find((b) => b.textContent === "Log out")!;

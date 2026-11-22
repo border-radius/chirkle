@@ -12,6 +12,15 @@ html {
   touch-action: manipulation;
 }
 
+/* Text size (§7.8, Profile → Appearance): the rem sizes scale with the root, on top of the browser's own setting. */
+html[data-size="medium"] {
+  font-size: 112.5%;
+}
+
+html[data-size="large"] {
+  font-size: 125%;
+}
+
 #app {
   display: flex;
   flex-direction: column;

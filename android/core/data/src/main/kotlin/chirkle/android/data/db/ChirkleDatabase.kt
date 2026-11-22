@@ -169,4 +169,5 @@ object Keys {
     const val SECURE_SCREENS = "secure_screens"
     const val THEME = "theme"
     const val FOLDED = "folded"
+    const val TEXT_SIZE = "text_size"
 }

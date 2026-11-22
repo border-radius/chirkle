@@ -36,7 +36,7 @@ data class AccountRef(val id: String, val server: String, val used: Long = 0)
 
 /** What is kept of the accounts, with the device's own settings (§17.1). */
 @Serializable
-data class AccountIndex(val accounts: List<AccountRef> = emptyList(), val active: String = "", val secureScreens: Boolean = false, val theme: String = "system", val folded: String = "")
+data class AccountIndex(val accounts: List<AccountRef> = emptyList(), val active: String = "", val secureScreens: Boolean = false, val theme: String = "system", val folded: String = "", val textSize: String = "small")
 
 /** An account as the switcher shows it: [user] is null on the Log in screen of a server (a guest). */
 data class AccountInfo(val id: String, val server: String, val user: User?, val avatarUrl: String)
@@ -96,6 +96,7 @@ class Accounts(
             when (k) {
                 chirkle.android.data.db.Keys.THEME -> index.theme
                 chirkle.android.data.db.Keys.FOLDED -> index.folded
+                chirkle.android.data.db.Keys.TEXT_SIZE -> index.textSize
                 else -> if (index.secureScreens) "1" else "0"
             }
         },
@@ -104,6 +105,7 @@ class Accounts(
                 index = when (k) {
                     chirkle.android.data.db.Keys.THEME -> index.copy(theme = v)
                     chirkle.android.data.db.Keys.FOLDED -> index.copy(folded = v)
+                    chirkle.android.data.db.Keys.TEXT_SIZE -> index.copy(textSize = v)
                     else -> index.copy(secureScreens = v == "1")
                 }
                 env.writeIndex(index)

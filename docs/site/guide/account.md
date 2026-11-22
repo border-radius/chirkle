@@ -28,6 +28,8 @@ Click your name at the top of the room list, or the gear icon next to it, to ope
 
 **Auto** (follows your system), **Light** or **Dark**. Saved on this device.
 
+**Text size:** **Small**, **Medium** or **Large**, for larger text across the app. Saved on this device.
+
 ### Notifications
 
 See [Notifications](notifications.md).
