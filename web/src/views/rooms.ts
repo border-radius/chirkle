@@ -38,11 +38,21 @@ function nameError(err: unknown): string {
   return errorMessage(err);
 }
 
-/** A private or Open Air room's marker next to its name (public rooms have none: they are the usual kind). */
+/** A private collection's marker next to its name. */
 export function visibilityMark(v: Visibility): HTMLElement | null {
   if (v === "public") return null;
   const { label } = VISIBILITY[v];
   return h("span", { class: `vis ic ${v === "open" ? "i-globe" : "i-lock"}`, title: label }, [
+    h("span", { class: "visually-hidden" }, ` (${label})`),
+  ]);
+}
+
+/** A room row's leading icon, which says who can see it: "#" private, people for public, a globe for Open Air. */
+export function visibilityLead(v: Visibility): HTMLElement {
+  const { label } = VISIBILITY[v];
+  const icon = v === "private" ? "" : ` ic ${v === "open" ? "i-globe" : "i-users"}`;
+  return h("span", { class: `vis lead${icon}`, title: label }, [
+    v === "private" ? h("span", { "aria-hidden": "true" }, "#") : null,
     h("span", { class: "visually-hidden" }, ` (${label})`),
   ]);
 }
@@ -309,9 +319,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const other = r.kind === "dm" ? otherMember(r, s.user) : undefined;
     const one = rowAction(r, section);
     const label = [
-      other ? avatar(other, 24, api.avatarUrl) : null,
+      other ? avatar(other, 24, api.avatarUrl) : r.kind === "dm" ? null : visibilityLead(visibilityOf(r)),
       h("span", {}, other ? other.name : r.kind === "dm" ? title(r) : r.name),
-      r.kind === "dm" ? null : visibilityMark(visibilityOf(r)),
       // Unread mentions of you or replies to you (§41).
       at
         ? h("span", { class: "badge", title: S.MENTIONS_YOU }, ["@", h("span", { class: "visually-hidden" }, S.MENTIONS_YOU_HIDDEN)])

@@ -428,10 +428,10 @@ describe("room access UI (§23)", () => {
       view.mount(root, {});
       await vi.waitFor(() => expect(root.querySelector(`[data-room-id="${pub.id}"]`)).not.toBeNull());
       const mark = (r: Room) => root.querySelector(`[data-room-id="${r.id}"] .vis`)?.textContent ?? null;
-      // An icon, named for screen readers.
-      expect(mark(priv)).toBe(" (Private)");
+      // The leading icon ("#" for private), named for screen readers.
+      expect(mark(priv)).toBe("# (Private)");
       expect(mark(open)).toBe(" (Open Air)");
-      expect(mark(pub)).toBeNull();
+      expect(mark(pub)).toBe(" (Public)");
 
       root.querySelector<HTMLButtonElement>("button.new-room-toggle")!.click();
       const form = root.querySelector<HTMLFormElement>("form.new-room")!;

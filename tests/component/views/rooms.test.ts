@@ -45,7 +45,9 @@ describe("rooms view (§7.1)", () => {
   const section = (s: Section) => root.querySelector<HTMLElement>(`[data-section="${s}"]`)!;
   /** Row titles (a DM row's link also holds the avatar; take the name). */
   const names = (s: Section) =>
-    [...section(s).querySelectorAll("[data-room-id] a")].map((a) => a.querySelector("span:not(.avatar)")?.textContent ?? a.textContent);
+    [...section(s).querySelectorAll("[data-room-id] a")].map(
+      (a) => a.querySelector(":scope > span:not(.avatar, .vis)")?.textContent ?? a.textContent,
+    );
   const button = (scope: Element, label: string) =>
     [...scope.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label) ?? null;
   /** A row's button: only hidden and archived rows have one (Unhide, Unarchive); the rest is in the room's menu. */

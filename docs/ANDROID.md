@@ -1958,3 +1958,12 @@ try again." for a 429, as the web does, instead of "Couldn't search. Check your 
 filter (a server from before the routes) is counted the same. Test: `UiFeaturesTest` "too many searches…". The
 server's other changes of the day, staff words reserved as handles (SEC-2) and `….invalid` addresses refused (SEC-3),
 need nothing here: the profile screen shows the server's reason on `handle` as it already did.
+
+## 84. Who can see a room, at the start of its row (2026-11-22)
+
+The web's sidebar moved a room's visibility mark from after its name into the leading slot where "#" was
+(`visibilityLead`, `room-list.css`), and its rows got denser (28px rooms, 32px DMs and collections; 40px on a narrow
+screen). The app's room list follows: the tile at the start of a room's row is `Visibility.listIcon()` ("#" for private,
+people for public, a globe for Open Air), named for TalkBack by the visibility's label, and the lock or globe after the
+name is gone. Tiles and DM faces are 32 dp (were 40) with 12 dp between them and the name; rows keep their 48 dp touch
+height. Elsewhere (the access screen's choices, headers) `Visibility.icon()` is unchanged: lock, globe, "#".

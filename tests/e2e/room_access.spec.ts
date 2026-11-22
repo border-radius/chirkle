@@ -38,7 +38,7 @@ test("a private room: only the people its creator adds see it; someone taken out
   await a.locator("form.new-room .seg label", { hasText: "Private" }).click();
   await a.getByRole("button", { name: "Create" }).click();
   await expect(a.locator("header.room-header h1")).toContainText("Private");
-  await expect(row(a, name).locator(".vis")).toHaveText("(Private)");
+  await expect(row(a, name).locator(".vis")).toHaveText("# (Private)");
   await send(a, "just us");
 
   // Bob isn't in it yet.

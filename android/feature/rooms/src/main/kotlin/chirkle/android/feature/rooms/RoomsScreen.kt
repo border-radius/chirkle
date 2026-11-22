@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.draw.clip
 import chirkle.android.ui.icon
+import chirkle.android.ui.listIcon
 import chirkle.android.ui.swipeAway
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -635,12 +636,14 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
                 .padding(start = 12.dp, end = if (menu.isNotEmpty() && button) 0.dp else 12.dp)
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (r.isDm) {
-                r.otherMember(me)?.let { Avatar(it, 40.dp) }
+                r.otherMember(me)?.let { Avatar(it, 32.dp) }
             } else {
-                chirkle.android.ui.RoomIcon(Visibility.Public, 40.dp)
+                // Who can see it (§23.1), in the leading tile as the web's sidebar: "#" private, people public, a globe Open Air.
+                val v = r.visibilityOrDefault
+                chirkle.android.ui.RoomIcon(v, 32.dp, Modifier.semantics { contentDescription = v.label }, icon = v.listIcon())
             }
             Text(
                 if (r.isDm) title else r.name,
@@ -650,11 +653,6 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
                 fontWeight = if (badge > 0 || current) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (r.archived) Chirkle.colors.dim else if (badge > 0 || current) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
             )
-            // Private and Open Air (§23.1), at the end of the row, before the count (the AndroidRooms board).
-            val v = r.visibilityOrDefault
-            if (!r.isDm && v != Visibility.Public) {
-                Icon(v.icon(), contentDescription = v.label, tint = Chirkle.colors.dim, modifier = Modifier.size(15.dp))
-            }
             // Unread messages that mention or reply to you (DESIGN.md §41): an "@" before the count, as on the web.
             if (badge > 0 && s.mentioned(r.id)) MentionBadge()
             if (badge > 0) UnreadBadge(badge)
