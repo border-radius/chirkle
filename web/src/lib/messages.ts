@@ -119,6 +119,15 @@ export function lastOwnEditable(win: MessageWindow, me: string): Message | undef
 /** A forward whose original was deleted: it has nothing left to show, or to forward again (§21.3). */
 export const emptyForward = (m: Message): boolean => !!m.forwarded_from && !m.text && !m.files?.length;
 
+/**
+ * A message's text split into the line the Telegram bridge puts above a forward ("↪ Forwarded from Bob", §26.4), which
+ * shows small like a forward's own header, and the rest. No such line: `header` is "".
+ */
+export function forwardHeader(text: string): { header: string; body: string } {
+  const m = /^(↪ Forwarded from [^\n]+)(?:\n|$)/.exec(text);
+  return m ? { header: m[1]!, body: text.slice(m[0].length) } : { header: "", body: text };
+}
+
 /** What a reply keeps of the message it answers (§19), e.g. for an optimistic reply before the server expands it. */
 export function quoteOf(m: Message): Quoted {
   return {

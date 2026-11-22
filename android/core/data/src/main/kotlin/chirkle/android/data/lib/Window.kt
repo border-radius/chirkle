@@ -102,3 +102,14 @@ fun quoteText(text: String, deleted: Boolean, files: Int): String {
 }
 
 fun Quoted.line(): String = quoteText(text, deleted, files.size)
+
+private val FORWARD_HEADER = Regex("^(↪ Forwarded from [^\n]+)(?:\n|$)")
+
+/**
+ * A message's text split into the line the Telegram bridge puts above a forward ("↪ Forwarded from Bob", §26.4), which
+ * shows small like a forward's own header, and the rest. No such line: the header is "". As web/src/lib/messages.ts.
+ */
+fun forwardHeader(text: String): Pair<String, String> {
+    val m = FORWARD_HEADER.find(text) ?: return "" to text
+    return m.groupValues[1] to text.substring(m.range.last + 1)
+}

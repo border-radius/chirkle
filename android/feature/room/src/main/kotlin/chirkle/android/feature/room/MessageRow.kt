@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.withStyle
+import chirkle.android.data.lib.forwardHeader
 import chirkle.android.data.lib.isEmptyForward
 import chirkle.android.data.lib.line
 import chirkle.android.data.lib.reactors
@@ -162,7 +163,12 @@ fun MessageRow(
                     m.deleted -> Text(stringResource(R.string.room_message_deleted), color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
                     m.isEmptyForward() -> Text(stringResource(R.string.room_the_original_message_was_deleted), color = Chirkle.colors.muted, fontStyle = FontStyle.Italic)
                     else -> {
-                        if (m.text.isNotEmpty()) {
+                        // The Telegram bridge's "↪ Forwarded from Bob" line shows small, like a forward's own header (§26.4).
+                        val (header, body) = remember(m.text) { forwardHeader(m.text) }
+                        if (header.isNotEmpty()) {
+                            Text(header, color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium, fontStyle = FontStyle.Italic)
+                        }
+                        if (body.isNotEmpty()) {
                             val muted = Chirkle.colors.muted
                             val edited = m.editedAt.isNotEmpty()
                             // "(edited)" follows the text on its line, as on the web.
@@ -171,8 +177,8 @@ fun MessageRow(
                             // Your handle only where the server says the message mentions you: one given up and taken by
                             // you since is someone else's in older messages (QA BUG-265).
                             val mine = if (me != null && me in m.mentions) actions.myHandle else ""
-                            val text = remember(m.text, accent, edited, muted, mine, mark, ink) {
-                                val t = linked(m.text, accent, mine, mark, ink) { openLink(context, it) }
+                            val text = remember(body, accent, edited, muted, mine, mark, ink) {
+                                val t = linked(body, accent, mine, mark, ink) { openLink(context, it) }
                                 if (!edited) t else androidx.compose.ui.text.buildAnnotatedString {
                                     append(t)
                                     append(" ")

@@ -8,7 +8,7 @@
 import { h, reconcile } from "../../dom.ts";
 import { linkify } from "../../lib/links.ts";
 import { splitMentions } from "../../lib/mentions.ts";
-import { emptyForward, type MessageWindow, quoteText, startsGroup } from "../../lib/messages.ts";
+import { emptyForward, forwardHeader, type MessageWindow, quoteText, startsGroup } from "../../lib/messages.ts";
 import { reactors } from "../../lib/reactions.ts";
 import { captureAnchor, restoreAnchor } from "../../lib/scroll.ts";
 import { dayLabel, formatFull, formatTime, parsePb } from "../../lib/time.ts";
@@ -564,10 +564,12 @@ export function createMessageList(opts: {
     } else {
       // A forward with nothing to show: its original was deleted (§21.3).
       const gone = m.deleted || emptyForward(m);
+      const { header, body } = forwardHeader(m.text);
+      if (header && !gone) parts.push(h("div", { class: "forwarded" }, header));
       parts.push(
         gone
           ? h("div", { class: "body placeholder" }, m.deleted ? S.MESSAGE_DELETED : S.THE_ORIGINAL_MESSAGE_WAS_DELETED)
-          : h("div", { class: "body" }, bodyText(m.text, me && m.mentions?.includes(me.id) ? (me.handle ?? "") : "")),
+          : h("div", { class: "body" }, bodyText(body, me && m.mentions?.includes(me.id) ? (me.handle ?? "") : "")),
       );
       if (m.edited_at && !m.deleted)
         parts.push(h("span", { class: "edited", title: S.edited(formatFull(parsePb(m.edited_at))) }, S.EDITED));

@@ -59,7 +59,7 @@ first message (`tg_people` maps the Telegram id to it):
 doesn't hold the next ones back) or polling hands each update to `inbound.js`:
 
 - **A message** in a linked group becomes a message of its sender's stand-in: the text or caption ("↪ Forwarded from
-  X" above a forward), and the files, downloaded from Telegram (`getFile`) and saved like uploads: photos (the largest
+  X" above a forward, which the clients show small, like a forward's own header), and the files, downloaded from Telegram (`getFile`) and saved like uploads: photos (the largest
   size), videos, documents, audio, voice, video notes, GIFs, static stickers. A file over 20 MB, an animated sticker, a
   location, a contact, a poll or a dice becomes a line of text saying what it was.
 - **A download that fails for now** (no answer from Telegram: a network that drops a connection now and then) is

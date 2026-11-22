@@ -4,6 +4,7 @@ import {
   applyPage,
   compare,
   emptyWindow,
+  forwardHeader,
   group,
   lastOwnEditable,
   type MessageWindow,
@@ -287,5 +288,18 @@ describe("quoteText", () => {
     expect(quoteText({ text: "", deleted: false, files: ["a.png", "b.pdf"] })).toBe("2 attachments");
     expect(quoteText({ text: "x", deleted: true })).toBe("Message deleted");
     expect(quoteText({ text: "", deleted: false, files: [] })).toBe("Message deleted");
+  });
+});
+
+describe("forwardHeader", () => {
+  it("splits off the line the Telegram bridge puts above a forward", () => {
+    expect(forwardHeader("↪ Forwarded from Bob\nhello\nthere")).toEqual({ header: "↪ Forwarded from Bob", body: "hello\nthere" });
+    expect(forwardHeader("↪ Forwarded from Bob")).toEqual({ header: "↪ Forwarded from Bob", body: "" });
+  });
+
+  it("leaves other text alone", () => {
+    expect(forwardHeader("hello")).toEqual({ header: "", body: "hello" });
+    expect(forwardHeader("hi\n↪ Forwarded from Bob")).toEqual({ header: "", body: "hi\n↪ Forwarded from Bob" });
+    expect(forwardHeader("↪ Forwarded from \nx")).toEqual({ header: "", body: "↪ Forwarded from \nx" });
   });
 });
