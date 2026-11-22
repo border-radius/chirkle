@@ -2220,6 +2220,17 @@
           "required": true,
           "system": false,
           "type": "date"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "max": "",
+          "min": "",
+          "name": "reactions_seen_at",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "date"
         }
       ],
       "indexes": [

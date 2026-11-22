@@ -15,7 +15,7 @@ const vectors = JSON.parse(readFileSync(FILE, "utf8")) as { scenarios: Scenario[
 
 type Who = "me" | "ann" | "bob";
 interface Step {
-  do: "say" | "react" | "delete" | "open" | "seen" | "close" | "readElsewhere";
+  do: "say" | "react" | "delete" | "open" | "seen" | "close" | "readElsewhere" | "wait";
   who?: Who;
   room?: "A" | "B";
   label?: string;
@@ -24,6 +24,7 @@ interface Step {
   at?: string;
   upTo?: string;
   caughtUp?: boolean;
+  ms?: number;
   expect?: Counts;
 }
 interface Scenario {
@@ -116,6 +117,9 @@ describe("shared scenarios: the unread counts (§18.3, §41.4)", () => {
             break;
           case "readElsewhere":
             await me.api.markRead(room!.id, msgs.get(step.upTo!)!.created);
+            break;
+          case "wait":
+            await new Promise((r) => setTimeout(r, step.ms));
             break;
         }
         if (RECORD) {

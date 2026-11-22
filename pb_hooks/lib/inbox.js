@@ -213,11 +213,12 @@ WHERE i.user = {:me} AND m.deleted = FALSE AND ${SEES_SQL}`;
 
 /**
  * A mention or reply whose message you have read in its room: seen there, so not new in the inbox either (2026-11-10,
- * user: no reading it twice). A reaction is only seen in the inbox: it comes after the message it is on. server/unread.go
- * counts by the same.
+ * user: no reading it twice). A reaction comes after the message it is on: it is seen there if it came before you last
+ * read the room (room_reads.reactions_seen_at, 2026-11-22, user: "when reading room, new reactions should be marked as
+ * seen"). server/unread.go counts by the same.
  */
-const READ_IN_ROOM_SQL = `(i.kind != 'reaction' AND m.created <= COALESCE((SELECT rr.last_read_at FROM room_reads rr
-  WHERE rr.user = {:me} AND rr.room = i.room), ''))`;
+const READ_IN_ROOM_SQL = `EXISTS (SELECT 1 FROM room_reads rr WHERE rr.user = {:me} AND rr.room = i.room
+  AND m.created <= rr.last_read_at AND (i.kind != 'reaction' OR i.created <= rr.reactions_seen_at))`;
 
 /** @param {string} s */
 const snippet = (s) => {
@@ -247,7 +248,7 @@ function shown(app, msg) {
  * GET /api/chat/inbox?before=&limit= → { items, more, seen_at }: the caller's rows, newest first, PAGE at a time
  * (`before`: the last item's `cursor`). Each item: { id, cursor, kind, emoji (a reaction row's: the actor's emoji on
  * the message now, at most EMOJI_SHOWN then " +n"; "" otherwise), emojis (all of them, in the message's order), created, read (a mention or reply read in
- * its room: not new, whatever seen_at says), room, message: { id, text, files,
+ * its room, or a reaction seen there: not new, whatever seen_at says), room, message: { id, text, files,
  * created }, quote (a reply's: the caller's message it answers, { id, text, files }), actor: { id, name, avatar,
  * instance } }. In an anonymous room (§35) a mention or reply shows the room, not who wrote it.
  * @param {core.RequestEvent} e

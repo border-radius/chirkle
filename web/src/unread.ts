@@ -69,6 +69,11 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
   let following: string | null = null;
   /** Readers with a read not sent yet. */
   const pending = new Set<{ send(): void }>();
+  /**
+   * The open rooms' readers, to mark again (at the same position) when a reaction to you comes in while you read: the
+   * server then has it seen there, not new in the inbox (§41.4).
+   */
+  const reading = new Map<string, () => boolean>();
 
   async function load(s: Scope) {
     inFlight++;
@@ -114,6 +119,8 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
     let failures = 0;
     /** What the last seen() said: not caught up, the count is fetched again once a read is in. */
     let caughtUpNow = false;
+    /** A reaction came in while reading (again()): the inbox count is fetched once the mark is in. */
+    let reacted = false;
     const live = () => !closed && !!s?.active && s === scope;
 
     const self = {
@@ -123,16 +130,19 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
         pending.delete(self);
         if (!s?.active || api.currentUser()?.id !== reader) return; // never as someone else
         const at = readAt;
+        const counted = reacted;
+        reacted = false;
         return api.markRead(roomId, at).then(
           () => {
             failures = 0;
             // What is still unread below the screen: the server counts it. So does the inbox's count: a mention or reply
-            // read in its room is seen there too (§41.4).
-            if ((!caughtUpNow || store.get().inbox) && live()) refresh();
+            // read in its room is seen there too, and a reaction (§41.4).
+            if ((!caughtUpNow || store.get().inbox || counted) && live()) refresh();
           },
           (e: unknown) => {
             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room on screen
             // doesn't change), and the room would stay unread everywhere (QA BUG-162). A refusal is final.
+            reacted ||= counted;
             const status = e instanceof ApiError ? e.status : 0;
             if ((status >= 400 && status < 500 && status !== 429) || !live() || timer) return;
             pending.add(self);
@@ -141,6 +151,17 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
         );
       },
     };
+
+    /** Mark again where it is: a reaction came in while the room is read. Whether a mark is on its way. */
+    const again = () => {
+      if (!live() || !readAt || store.get().away) return false;
+      reacted = true;
+      if (timer) return true;
+      pending.add(self);
+      timer = setTimeout(self.send, timing.readMs);
+      return true;
+    };
+    reading.set(roomId, again);
 
     return {
       seen(created, caughtUp) {
@@ -168,6 +189,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
           else refresh();
         }
         closed = true;
+        if (reading.get(roomId) === again) reading.delete(roomId);
       },
     };
   }
@@ -191,8 +213,16 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
           } else if (action === "update" && m.deleted && unread.has(m.room)) refresh(); // was it unread?
         }),
       );
-      // A mention, reply or reaction for you, or one taken back (§41): counted again.
-      s.sub(api.subscribeInbox(() => s.active && refresh()));
+      // A mention, reply or reaction for you, or one taken back (§41): counted again. A reaction in the room you are
+      // reading is seen there (§41.4).
+      s.sub(
+        api.subscribeInbox((ev) => {
+          if (!s.active) return;
+          // Counted once that mark is in (its answer refetches), not before: the badge would blink.
+          if (ev.action === "create" && ev.kind === "reaction" && reading.get(ev.room)?.()) return;
+          refresh();
+        }),
+      );
       s.sub(
         api.subscribeReads((_action, row) => {
           // Read in another tab or on another device. The room you are caught up in is already at 0 here, unless the

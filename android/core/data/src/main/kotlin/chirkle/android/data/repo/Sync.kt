@@ -157,6 +157,12 @@ class Unread(
     private val pending = mutableSetOf<Sender>()
 
     /**
+     * The open rooms' readers, to mark again (at the same position) when a reaction to you comes in while you read: the
+     * server then has it seen there, not new in the inbox (DESIGN.md §41.4). Each says whether a mark is on its way.
+     */
+    private val reading = mutableMapOf<String, () -> Boolean>()
+
+    /**
      * The open room while its newest messages are on screen (its reader last said caughtUp): its count is the room
      * screen's to clear, and what arrives in it is read as it comes. Scrolled up, or opened at its first unread message,
      * it keeps the server's count, badge included: the rest is still unread (2026-11-02, user).
@@ -222,6 +228,8 @@ class Unread(
         var failures = 0
         // What the last seen() said: not caught up, the count is fetched again once a read is in.
         var caughtUpNow = false
+        // A reaction came in while reading (again): the inbox count is fetched once the mark is in.
+        var reacted = false
         val live = { !closed && r != null && r.active && r === run }
         val self = object : Sender {
             override fun send(): Job? {
@@ -231,15 +239,18 @@ class Unread(
                 pending -= this
                 if (r == null || !r.active || api.currentUser()?.id != reader) return null // never as someone else
                 val at = readAt
+                val counted = reacted
+                reacted = false
                 return r.scope.launch {
                     runCatching { api.markRead(roomId, at) }
                         .onSuccess {
                             failures = 0
                             // What is still unread below the screen: the server counts it. So does the inbox's count: a
-                            // mention or reply read in its room is seen there too (DESIGN.md §41.4).
-                            if ((!caughtUpNow || store.get().inbox > 0) && live()) refresh()
+                            // mention or reply read in its room is seen there too, and a reaction (DESIGN.md §41.4).
+                            if ((!caughtUpNow || store.get().inbox > 0 || counted) && live()) refresh()
                         }
                         .onFailure { e ->
+                            reacted = reacted || counted
                             // Offline, or the server in trouble: sent again a little later. Nothing else may ask (the room
                             // on screen doesn't change), and the room would stay unread everywhere. A refusal is final.
                             if (e is kotlinx.coroutines.CancellationException) return@onFailure
@@ -255,6 +266,19 @@ class Unread(
                 }
             }
         }
+        // Mark again where it is: a reaction came in while the room is read. Whether a mark is on its way.
+        val again: () -> Boolean = again@{
+            if (!live() || readAt.isEmpty() || store.get().away) return@again false
+            reacted = true
+            if (timer != null) return@again true
+            pending += self
+            timer = r!!.scope.launch {
+                delay(readMs)
+                self.send()
+            }
+            true
+        }
+        reading[roomId] = again
         return object : RoomReader {
             override fun seen(created: String, caughtUp: Boolean) {
                 if (!live()) return
@@ -288,6 +312,7 @@ class Unread(
                     }
                 }
                 closed = true
+                if (reading[roomId] === again) reading.remove(roomId)
             }
         }
     }
@@ -313,7 +338,13 @@ class Unread(
                 }
             }
             // Mentioned, replied to or reacted to (or one taken back): the room's "@" and the inbox's count (DESIGN.md §41).
-            r.sub { api.subscribeInbox { r.post { refresh() } } }
+            // A reaction in the room you are reading is seen there (§41.4): counted once that mark is in, not before (the
+            // badge would blink).
+            r.sub {
+                api.subscribeInbox { ev ->
+                    r.post { if (!(ev.action == "create" && ev.kind == "reaction" && reading[ev.room]?.invoke() == true)) refresh() }
+                }
+            }
             r.sub {
                 api.subscribeReads { c ->
                     r.post { if (c.record.room != following || store.get().away) refresh() }

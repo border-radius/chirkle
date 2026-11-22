@@ -77,9 +77,10 @@ LIMIT 1`
 const inboxVisibleSQL = `FROM inbox i JOIN messages m ON m.id = i.message JOIN rooms r ON r.id = i.room
 WHERE i.user = {:me} AND m.deleted = FALSE AND ` + seesSQL
 
-// inboxReadInRoomSQL: a mention or reply whose message you have read in its room: not new in the inbox either.
-const inboxReadInRoomSQL = `(i.kind != 'reaction' AND m.created <= COALESCE((SELECT rr.last_read_at FROM room_reads rr
-  WHERE rr.user = {:me} AND rr.room = i.room), ''))`
+// inboxReadInRoomSQL: a mention or reply whose message you have read in its room, or a reaction to one that came
+// before you last read the room (reactions_seen_at): not new in the inbox either.
+const inboxReadInRoomSQL = `EXISTS (SELECT 1 FROM room_reads rr WHERE rr.user = {:me} AND rr.room = i.room
+  AND m.created <= rr.last_read_at AND (i.kind != 'reaction' OR i.created <= rr.reactions_seen_at))`
 
 // inboxCap: the inbox's "unseen" count stops here (shown as "99+"), and so does each room's count of mentions.
 const inboxCap = 100

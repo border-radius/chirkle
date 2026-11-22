@@ -865,7 +865,7 @@ class ChirkleApi(val pb: PbClient) {
         try {
             pb.realtime.subscribe("chat/inbox") { d ->
                 fun s(k: String) = (d[k] as? JsonPrimitive)?.content ?: ""
-                fn(InboxEvent(s("action"), s("id"), s("room")))
+                fn(InboxEvent(s("action"), s("id"), s("room"), s("kind")))
             }
         } catch (e: Exception) {
             throw e.toApiError()

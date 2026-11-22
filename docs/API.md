@@ -56,6 +56,8 @@ only.
 
 Since 2026-11-10 (mentions, DESIGN.md §41) `users` has `handle` (in `fields.user`; set by its owner, refused with the reason when taken or malformed) and `messages` has `mentions` (in `fields.message`; the server's, what a client sends with a create is replaced, an update changing it is refused). `inbox` and `inbox_reads` have no API rules.
 
+Since 2026-11-22 `room_reads` has `reactions_seen_at` (DESIGN.md §41.4): when you last marked the room read (`POST /api/chat/reads`, even at the same position); a reaction to a message read there before then is not new in the inbox. Apps read it from no field: they mark again when a reaction comes in on `chat/inbox` for the room open.
+
 Since 2026-11-09 (usage statistics, DESIGN.md §40) `site` has `no_stats` (hidden), and the realtime subscribe
 request's User-Agent says which app a connection is (the app's OkHttp default, `okhttp/…`: keep it, or the app is
 counted as neither). `GET /api/chat/stats?tz=<minutes east of UTC>` answers moderators and superusers (403 otherwise)

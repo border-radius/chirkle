@@ -55,7 +55,7 @@ now; in an anonymous room the room is the actor of a mention or reply. `POST /ap
 (`{ action, id, kind, room, message, created }`).
 
 `GET /api/chat/unread` adds `inbox` (rows newer than `seen_at`, at most 100, leaving out mentions and replies already
-read in their room: no reading one twice; a reaction is only seen here) and `mentions` (per room, the unread
+read in their room: no reading one twice; and reactions seen there, below) and `mentions` (per room, the unread
 messages that mention or reply to you, at most 100 a room since 2026-11-12: the apps only show whether there are any).
 Each room's count is a range scan of `(user, room, created)` from the read position on (§42.1). A person's inbox keeps
 their newest 500 rows, none older than 180 days (the daily prune, §42.1). The sidebar's first row, right under Jump to, is **Mentions & replies**
@@ -64,6 +64,17 @@ their newest 500 rows, none older than 180 days (the daily prune, §42.1). The s
 in #room", "replied to you" (with your message quoted) or "reacted 👍🎉 to your message", newest first, "Show older",
 what is new tinted (each item's `read`: a mention or reply read in its room isn't new; a read sent while the inbox
 count isn't 0 fetches the counts again); each opens its message in its room. Opening it sees everything listed.
+
+Reactions seen in their room (2026-11-22, user: "when reading room, new reactions should be marked as seen in mentions
+& replies"; migration `1760000057`): `POST /api/chat/reads` also sets `room_reads.reactions_seen_at` to now (never
+back), and a reaction row is read (not new, not counted) when its message is read there and it came before that. A mark
+at the same position still writes when there are reaction rows in the room since the last one (one range scan;
+otherwise it is answered without a write, as before). The apps mark again, where they are, when `chat/inbox` tells of a
+reaction in a room open and read (not away): `unread.ts` / `Sync.kt` `again()`, the inbox count fetched once that
+mark is in rather than on the event (it would blink). A reaction to a message you haven't read yet stays new until you
+do; one to a message read long ago counts as seen too, whether it was scrolled into view or not. Tests:
+`tests/integration/mentions.test.ts`, `tests/component/unread.test.ts`, the shared scenario in
+`shared/vectors/unread.json` (both apps; its `wait` step lets the first read go out before the reaction).
 
 ## 41.5 Notifications
 

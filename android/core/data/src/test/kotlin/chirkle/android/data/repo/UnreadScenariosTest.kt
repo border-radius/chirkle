@@ -77,6 +77,7 @@ class UnreadScenariosTest {
                 "seen" -> readers.getValue(step.str("room")).seen(msgs.getValue(step.str("upTo")).created, step.getValue("caughtUp").jsonPrimitive.boolean)
                 "close" -> readers.remove(step.str("room"))!!.close(step.getValue("caughtUp").jsonPrimitive.boolean)
                 "readElsewhere" -> me.api.markRead(room!!.id, msgs.getValue(step.str("upTo")).created)
+                "wait" -> delay(step.str("ms").toLong())
             }
             val e = step.getValue("expect").jsonObject
             val want = mapOf(

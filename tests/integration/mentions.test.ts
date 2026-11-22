@@ -241,7 +241,7 @@ describe("inbox (§41)", () => {
     expect((await counts(a)).inbox).toBe(1);
   });
 
-  it("a mention or reply read in its room is seen in the inbox too; a reaction isn't", async () => {
+  it("a mention, reply or reaction read in its room is seen in the inbox too", async () => {
     const a = await newUser();
     const b = await newUser();
     const room = await newRoom(a);
@@ -257,19 +257,41 @@ describe("inbox (§41)", () => {
     ]);
     expect((await counts(a)).inbox).toBe(3);
 
-    await a.pb.send("/api/chat/reads", { method: "POST", body: { room: room.id } });
+    const read = (at?: string) => a.pb.send("/api/chat/reads", { method: "POST", body: at ? { room: room.id, at } : { room: room.id } });
+    await read();
     got = await inbox(a);
     expect(got.items.map((i) => [i.kind, i.read])).toEqual([
-      ["reaction", false],
+      ["reaction", true],
       ["reply", true],
       ["mention", true],
     ]);
-    expect((await counts(a)).inbox).toBe(1);
+    expect((await counts(a)).inbox).toBe(0);
 
     // A new mention after the read is new again.
     await post(b, room.id, `again @${await handleOf(a)}`);
     expect((await inbox(a)).items[0]).toMatchObject({ kind: "mention", read: false });
+    expect((await counts(a)).inbox).toBe(1);
+
+    // A reaction after the read is new, until the room is marked read again, even at the same position (the apps do
+    // that when one comes in while the room is open).
+    const before = (await a.pb.collection("room_reads").getFirstListItem(`room = "${room.id}"`)).last_read_at as string;
+    const other = await newUser();
+    await react(other, mine.id, "🎉");
+    expect((await inbox(a)).items[0]).toMatchObject({ kind: "reaction", read: false });
     expect((await counts(a)).inbox).toBe(2);
+    const again = await read(before);
+    expect(again).toMatchObject({ last_read_at: before });
+    expect((await inbox(a)).items[0]).toMatchObject({ kind: "reaction", read: true });
+    expect((await counts(a)).inbox).toBe(1);
+
+    // To a message not read yet: new, whatever the room's marks say, until that message is read.
+    const later = await post(a, room.id, "later words");
+    await post(b, room.id, "and more");
+    await react(b, later.id, "👍");
+    await read(before);
+    expect((await inbox(a)).items[0]).toMatchObject({ kind: "reaction", read: false });
+    await read();
+    expect((await inbox(a)).items[0]).toMatchObject({ kind: "reaction", read: true });
   });
 
   it("pages with a cursor", async () => {

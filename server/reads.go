@@ -24,7 +24,9 @@ const readsBatch = 256
 type readMark struct {
 	user, room string
 	at         types.DateTime
-	done       chan readDone
+	// seen: when the mark was made (wall clock): reactions_seen_at (§41.4).
+	seen types.DateTime
+	done chan readDone
 }
 
 type readDone struct {
@@ -61,13 +63,18 @@ func (r *reads) loop() {
 	}
 }
 
-// save stores the latest of each (user, room)'s marks in batch, never moving a stored position back, and answers each.
+// save stores the latest of each (user, room)'s marks in batch, never moving a stored position (or reactions_seen_at)
+// back, and answers each.
 func (r *reads) save(batch []*readMark) {
 	latest := map[readKey]types.DateTime{}
+	seen := map[readKey]types.DateTime{}
 	for _, m := range batch {
 		k := readKey{m.user, m.room}
 		if at, ok := latest[k]; !ok || m.at.After(at) {
 			latest[k] = m.at
+		}
+		if at, ok := seen[k]; !ok || m.seen.After(at) {
+			seen[k] = m.seen
 		}
 	}
 	stored := map[readKey]string{}
@@ -78,14 +85,22 @@ func (r *reads) save(batch []*readMark) {
 		}
 		for k, at := range latest {
 			row, _ := findRead(tx, k.user, k.room)
+			changed := false
 			if row == nil {
 				row = core.NewRecord(col)
 				row.Set("user", k.user)
 				row.Set("room", k.room)
 				row.Set("last_read_at", at)
+				changed = true
 			} else if at.After(row.GetDateTime("last_read_at")) {
 				row.Set("last_read_at", at)
-			} else {
+				changed = true
+			}
+			if s := seen[k]; s.After(row.GetDateTime("reactions_seen_at")) && reactionsUnseen(tx, row) {
+				row.Set("reactions_seen_at", s)
+				changed = true
+			}
+			if !changed {
 				stored[k] = row.GetString("last_read_at")
 				continue
 			}
@@ -109,8 +124,20 @@ func findRead(app core.App, user, room string) (*core.Record, error) {
 	return app.FindFirstRecordByFilter("room_reads", "user = {:user} && room = {:room}", dbx.Params{"user": user, "room": room})
 }
 
+// reactionsUnseen: does read's person have reaction rows in its room (§41) newer than its reactions_seen_at? A range
+// scan of idx_inbox_user_room_created. Without, a mark that doesn't move the read position has nothing to write.
+func reactionsUnseen(app core.App, read *core.Record) bool {
+	var n int
+	err := app.DB().NewQuery("SELECT COUNT(*) FROM (SELECT 1 FROM inbox WHERE user = {:u} AND room = {:r} AND created > {:s} AND kind = 'reaction' LIMIT 1)").
+		Bind(dbx.Params{"u": read.GetString("user"), "r": read.GetString("room"), "s": read.GetString("reactions_seen_at")}).
+		Row(&n)
+	return err != nil || n > 0
+}
+
 // route: POST /api/chat/reads { room, at? }: the caller has read `room` up to `at` (a message's `created`; default
-// now). Never moves the read position back, and never past now. Idempotent. → { room, last_read_at }.
+// now). Never moves the read position back, and never past now. Idempotent. → { room, last_read_at }. It also notes
+// that they were reading the room now (reactions_seen_at): the reactions to messages they have read there, so far, are
+// seen (§41.4); the apps mark again, at the same position, when one comes in while they read.
 func (r *reads) route(e *core.RequestEvent) error {
 	user := e.Auth
 	info, err := e.RequestInfo()
@@ -139,11 +166,11 @@ func (r *reads) route(e *core.RequestEvent) error {
 			at = now
 		}
 	}
-	// Already read that far: nothing to write.
-	if row, _ := findRead(e.App, user.Id, roomID); row != nil && !at.After(row.GetDateTime("last_read_at")) {
+	// Already read that far, and no reaction since the last mark: nothing to write.
+	if row, _ := findRead(e.App, user.Id, roomID); row != nil && !at.After(row.GetDateTime("last_read_at")) && !reactionsUnseen(e.App, row) {
 		return e.JSON(http.StatusOK, map[string]string{"room": roomID, "last_read_at": row.GetString("last_read_at")})
 	}
-	m := &readMark{user: user.Id, room: roomID, at: at, done: make(chan readDone, 1)}
+	m := &readMark{user: user.Id, room: roomID, at: at, seen: now, done: make(chan readDone, 1)}
 	select {
 	case r.queue <- m:
 	case <-e.Request.Context().Done():

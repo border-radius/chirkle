@@ -74,6 +74,26 @@ describe("unread counts (§18.3)", () => {
       expect(count(r.id)).toBeUndefined();
       await vi.waitFor(() => expect(store.get().inbox).toBe(0), { timeout: 5000 });
     });
+
+    it("a reaction to you that comes in while you read the room is seen there; in another room, it counts", async () => {
+      const { other, r } = await unreadRoom(0);
+      const elsewhere = await other.api.createRoom(`else-${uniq()}`);
+      const mine = await say(me, r.id, "mine");
+      const there = await say(me, elsewhere.id, "there");
+      start();
+      await subscribed(me.api);
+      const reader = unread!.open(r.id);
+      reader.seen(mine.created, true);
+      await sleep(READ_WINDOW_MS);
+      const marks = vi.spyOn(me.api, "markRead");
+      await other.api.react(mine.id, "👍", true);
+      await vi.waitFor(() => expect(marks).toHaveBeenCalledWith(r.id, mine.created), { timeout: 5000 });
+      await sleep(READ_WINDOW_MS);
+      expect(store.get().inbox).toBe(0);
+      await other.api.react(there.id, "👍", true);
+      await vi.waitFor(() => expect(store.get().inbox).toBe(1), { timeout: 5000 });
+      reader.close(true);
+    });
   });
 
   describe("counts", () => {

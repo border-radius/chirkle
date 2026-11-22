@@ -208,7 +208,7 @@ data class InboxItem(
 data class InboxMessage(val id: String, val text: String = "", val files: Int = 0, val created: String = "")
 
 /** A row of the inbox added ("create") or taken away ("delete"), told live on chat/inbox (DESIGN.md §41). */
-data class InboxEvent(val action: String, val id: String, val room: String)
+data class InboxEvent(val action: String, val id: String, val room: String, val kind: String = "")
 
 @Serializable
 data class InboxPage(val items: List<InboxItem> = emptyList(), val more: Boolean = false, @SerialName("seen_at") val seenAt: String = "")

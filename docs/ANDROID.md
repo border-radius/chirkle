@@ -1974,3 +1974,13 @@ height. Elsewhere (the access screen's choices, headers) `Visibility.icon()` is 
 The web's sidebar swapped its leading marks: `visibilityLead` now shows "#" for a public room and a lock for a private
 one (the globe stays for Open Air), the same marks as everywhere else. The app's room list follows by using
 `Visibility.icon()` on the row's tile; `Visibility.listIcon()` (§84) is gone.
+
+## 86. Reactions seen in their room (2026-11-22)
+
+The server counts a reaction to your message as seen in Mentions & replies once you have read its message in the room
+and marked the room read after it came (`room_reads.reactions_seen_at`, DESIGN.md §41.4). `UnreadSync` (`Sync.kt`)
+does as the web's `unread.ts`: `ChirkleApi.subscribeInbox` now hands over the event's `kind`, and a `create` of a
+`reaction` in a room whose reader is open (and has read something, the app not away) marks it again at the same
+position (`again()`, batched like `seen()`) instead of refetching the counts at once; the counts are fetched once that
+mark is in. Test: the shared scenario "a reaction to you that comes in while you read its room is seen there"
+(`UnreadScenariosTest`, with the vectors' new `wait` step).
