@@ -15,11 +15,11 @@ html {
 /* Text size (§7.8, Profile → Text size): everything is sized in rem (but 0–2px hairlines and the breakpoints), so the
    whole interface scales with the root, on top of the browser's own setting. */
 html[data-size="medium"] {
-  font-size: 112.5%;
+  font-size: 125%;
 }
 
 html[data-size="large"] {
-  font-size: 125%;
+  font-size: 150%;
 }
 
 #app {

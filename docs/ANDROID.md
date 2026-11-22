@@ -668,7 +668,7 @@ the accent; the app's version at the end of the profile.
 | Web | App |
 |---|---|
 | Appearance: System, Light, Dark (DESIGN.md §7.8) | Profile → Appearance; kept in the device settings (`DeviceSettings.theme`, the account index's `theme`), the system bars follow it |
-| Text size: Small, Medium, Large (DESIGN.md §7.8, 2026-11-22) | Profile → Text size; kept in the device settings (`DeviceSettings.textSize`, the account index's `textSize`, Small when missing). MainActivity multiplies the density by 1, 1.125 or 1.25 (`TextSize.scale`), so every dp and sp grows (spacing, icons, avatars, not just text), as the web sizes everything in rem |
+| Text size: Small, Medium, Large (DESIGN.md §7.8, 2026-11-22) | Profile → Text size; kept in the device settings (`DeviceSettings.textSize`, the account index's `textSize`, Small when missing). MainActivity multiplies the density by 1, 1.25 or 1.5 (`TextSize.scale`), so every dp and sp grows (spacing, icons, avatars, not just text), as the web sizes everything in rem |
 | Media grid (§30) | The room's 🖼 button → `MediaScreen`: `GET /api/chat/media/{room}`, month headings, 60 a page, posters, a tile opens the viewer |
 | Jump to (§32) | The room list's search button (or Ctrl+K / Ctrl+P): `lib/Jump.kt` ports `targets`/`matches`/`score` (the same cases: `shared/vectors/jump.json`); rooms you just had open come first (`ChirkleServices.opened`, per account, forgotten when the session changes: QA BUG-152) |
 | Media collections (§31) | §19 |

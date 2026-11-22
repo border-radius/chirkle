@@ -49,14 +49,14 @@ test("Text size on the profile page makes the text larger, and a reload keeps it
   expect(await rootSize()).toBe("16px");
 
   await size.getByText("Medium", { exact: true }).click();
-  await expect.poll(rootSize).toBe("18px");
-  await size.getByText("Large", { exact: true }).click();
   await expect.poll(rootSize).toBe("20px");
+  await size.getByText("Large", { exact: true }).click();
+  await expect.poll(rootSize).toBe("24px");
   // The inline script sets it before the first paint.
   await page.reload();
   expect(await page.evaluate(() => document.documentElement.dataset.size)).toBe("large");
   await expect(page.getByRole("radio", { name: "Large" })).toBeChecked();
-  expect(await rootSize()).toBe("20px");
+  expect(await rootSize()).toBe("24px");
 
   await page.getByRole("group", { name: "Text size" }).getByText("Small", { exact: true }).click();
   await expect.poll(rootSize).toBe("16px");

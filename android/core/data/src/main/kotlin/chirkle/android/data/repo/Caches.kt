@@ -214,7 +214,7 @@ enum class ThemeChoice(val label: String) {
 
 /** The app's text size (the web's Text size choice, DESIGN.md §7.8): [scale] multiplies the screen density: every dp and sp. */
 enum class TextSize(val label: String, val scale: Float) {
-    Small(Strings.SMALL, 1f), Medium(Strings.MEDIUM, 1.125f), Large(Strings.LARGE, 1.25f);
+    Small(Strings.SMALL, 1f), Medium(Strings.MEDIUM, 1.25f), Large(Strings.LARGE, 1.5f);
 
     companion object {
         fun of(v: String?) = entries.firstOrNull { it.name.equals(v, ignoreCase = true) } ?: Small
