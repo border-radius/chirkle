@@ -53,7 +53,8 @@
   }
 
   /* The leading icon's column as wide as the face or tile below it. */
-  .room-section li a > .lead {
+  .room-section li a > .lead,
+  .room-section[data-section="inbox"] a::before {
     width: 1.75rem;
   }
 

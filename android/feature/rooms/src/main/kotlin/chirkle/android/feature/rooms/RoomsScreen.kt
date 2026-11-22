@@ -391,10 +391,11 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
             .padding(horizontal = 12.dp)
             .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Chirkle.colors.tint), contentAlignment = Alignment.Center) {
-            Text("@", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        // The rooms' tile (RoomRow): 32dp, 12dp from the name, so the names line up.
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(32.dp * 0.3f)).background(Chirkle.colors.tint), contentAlignment = Alignment.Center) {
+            Text("@", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
         Text(
             stringResource(R.string.rooms_mentions_replies),

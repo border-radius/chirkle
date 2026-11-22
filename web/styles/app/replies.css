@@ -128,8 +128,20 @@
   color: var(--text);
 }
 
+/* "Mentions & replies": an "@" in the rooms' leading slot (room-list.css), so its name lines up with theirs. */
 .room-section[data-section="inbox"] a::before {
   content: "@";
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 1.25rem;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.room-section[data-section="inbox"] a.unread::before,
+.room-section[data-section="inbox"] a[aria-current="page"]::before {
+  color: var(--accent);
 }
 
 .badge + .badge {
