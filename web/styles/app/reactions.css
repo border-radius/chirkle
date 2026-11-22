@@ -4,7 +4,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.125rem;
-  align-items: center;
   /* Pulled left by a button's padding, so the first emoji lines up with the message text. */
   margin: 0.25rem 0 2px -0.375rem;
 }
@@ -26,7 +25,6 @@
 
 .reaction-emoji {
   font-size: 1.0625rem;
-  line-height: 1;
 }
 
 .reaction.mine {
@@ -40,18 +38,5 @@ button.reaction:hover,
 }
 
 .add-reaction {
-  width: 1.75rem;
-  justify-content: center;
-  margin-left: 0.125rem;
-  padding: 0;
   color: var(--dim);
-}
-
-.add-reaction:hover {
-  color: var(--fg);
-}
-
-.add-reaction::before {
-  width: 1.125rem;
-  height: 1.125rem;
 }
