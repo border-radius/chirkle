@@ -129,3 +129,37 @@ describe("user search ignores case beyond ASCII (BUG-55)", () => {
     expect(Object.keys(found!).sort()).toEqual(["avatar", "handle", "id", "name"]);
   });
 });
+
+describe("made-up addresses (QA SEC-3)", () => {
+  it("a signup, or a change of address, can't use the stand-ins' `.invalid` domain", async () => {
+    for (const email of [`${uniq()}@telegram.invalid`, `${uniq()}@FEDERATION.invalid`, `${uniq()}@x.invalid.`]) {
+      const err = await client()
+        .collection("users")
+        .create({ email, password: "password-123", passwordConfirm: "password-123", name: `inv-${uniq()}` })
+        .then(
+          () => null,
+          (e) => e,
+        );
+      expect(err?.status, email).toBe(400);
+      expect(err.response.data.email, email).toBeTruthy();
+    }
+    // Refused by the check (on `email`), not by the mail the test server can't send.
+    const u = await newUser();
+    const change = await u.pb
+      .collection("users")
+      .requestEmailChange(`${uniq()}@deleted.invalid`)
+      .then(
+        () => null,
+        (e) => e,
+      );
+    expect(change?.status).toBe(400);
+    expect(change.response.data.email?.code).toBe("validation_invalid_email");
+    // A superuser can't make a person with one either.
+    const admin = await adminClient();
+    await expectRejected(
+      admin
+        .collection("users")
+        .create({ email: `${uniq()}@telegram.invalid`, password: "password-123", passwordConfirm: "password-123", name: `inv-${uniq()}` }),
+    );
+  });
+});

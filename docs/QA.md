@@ -2082,9 +2082,9 @@ continues from BUG-269.
 | # | Severity | Area | Summary | Fix in | Status |
 |---|---|---|---|---|---|
 | BUG-270 | Medium | Realtime | A realtime client that stops reading blocks every JS hook that sends to it: a message mentioning, replying or reacting to its person never got an answer, and held a JS runtime | server | Fixed |
-| SEC-2 | Low | Handles | Anyone can take `@admin`, `@moderator`, `@support`, `@chirkle`; only the group words are reserved | — | Reported |
-| SEC-3 | Low | Accounts | A signup may use an `@telegram.invalid` or `@federation.invalid` address and is then treated as a stand-in in places (no inbox, reset mail skipped) | — | Reported |
-| SEC-4 | Low | Search | A guest's search in an Open Air room is up to five `LIKE '%…%'` scans of the room per request, limited only by PocketBase's general per-IP limit | — | Reported |
+| SEC-2 | Low | Handles | Anyone can take `@admin`, `@moderator`, `@support`, `@chirkle`; only the group words are reserved | server, web n/a (the server checks handles), app n/a (the server checks handles) | Fixed 2026-11-22 |
+| SEC-3 | Low | Accounts | A signup may use an `@telegram.invalid` or `@federation.invalid` address and is then treated as a stand-in in places (no inbox, reset mail skipped) | server, web n/a (the server checks addresses), app n/a (the server checks addresses) | Fixed 2026-11-22 |
+| SEC-4 | Low | Search | A guest's search in an Open Air room is up to five `LIKE '%…%'` scans of the room per request, limited only by PocketBase's general per-IP limit | server, web, app | Fixed 2026-11-22 |
 
 ## BUG-270 — A stalled realtime reader blocks hooks (Medium)
 
@@ -2103,18 +2103,31 @@ as live messages had), so `Send` never waits; a client that falls that far behin
 and catches up as after any drop. Each SSE write gets a 30 s deadline, so a connection that takes nothing for that
 long ends and is unregistered. After: the same steps, Bob's message answered in 7 ms. Tests: `server/realtime_test.go`.
 
-## Reported, not changed
+## Reported, then fixed (2026-11-22)
 
 - **SEC-2 (handles):** `lib/handles.js RESERVED` has only `all`, `everyone`, `here`, `room`, `channel`. A name like
   `@admin` or `@support` lends a stranger authority in a mention. Suggestion: reserve a few more for new handles
   (existing ones stay, as migration 46 did), and show moderators' handles with their badge. A product call.
+  **Fix:** `lib/handles.js` reserves staff words for new handles and changes (`STAFF`: admin, administrator,
+  chirkle, help, mod, moderator, official, root, security, staff, support, system and plurals; DESIGN.md §41.1). An
+  account that had one keeps it and is mentioned by it; one made from such a name gets the next free one (`moderators2`).
+  The badge by moderators' handles is still a product call. Test: `mentions.test.ts` "staff words aren't given…".
 - **SEC-3 (stand-in addresses):** stand-ins are told apart by their e-mail domain (`lib/inbox.js hasInbox`,
   `lib/users.js skipStandInReset`). A person who signs up with such an address only hurts themselves today (no
   inbox, no reset mail), but any future rule that trusts the domain would be theirs to use. REFACTOR item 50
   (`users.kind`) removes it; meanwhile the signup hook could refuse `.invalid` addresses.
+  **Fix:** item 50 has since made `kind` the only test of a stand-in. Now a person's address can't be `….invalid`
+  either: refused on signup, on a superuser's create and on an e-mail change (`lib/users.js refuseMadeUpEmail`, at
+  request-email-change and again on save). Test: `users.test.ts` "made-up addresses (QA SEC-3)".
 - **SEC-4 (search cost):** `server/lists.go searchWhere`: each word is a substring match over the room's `text_key`.
   Fine for today's rooms; a guest repeating searches in a very large Open Air room costs a scan each. A per-IP rule
   for `GET /api/chat/rooms/*/messages?q=` (or an FTS index) when rooms get big.
+  **Fix:** `server/searchlimit.go`: each caller (a person by account, a guest by IP; superusers exempt) has 20
+  searches at once, refilled one every 2 s, then 429. A search is a page with words in `q`, or a records API list of
+  messages filtering on `text_key` (apps from before the routes). It follows the settings' rate limit switch. The web
+  and the app say "Too many attempts…" on a 429 instead of "Check your connection" (DESIGN.md §29.1). Tests:
+  `searchlimit_test.go`, `search.test.ts` "search limit (QA SEC-4)", the room search component test, `UiFeaturesTest`
+  "too many searches…".
 
 ## Checked and fine
 

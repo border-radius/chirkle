@@ -12,6 +12,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import chirkle.android.data.api.ApiError
+import chirkle.android.data.api.errorMessage
 import chirkle.android.data.api.reasonOf
 import chirkle.android.data.lib.Limits
 import chirkle.android.data.lib.MessageOrder
@@ -617,9 +619,12 @@ class RoomViewModel(
         if (!next) words = w
         searchStatus = app.getString(R.string.room_searching)
         val before = if (next) results.lastOrNull()?.let { Cursor(it.created, it.id) } else null
-        val page = runCatching { services.api.page(searchQuery(roomId, w, before)) }.getOrNull()
+        val got = runCatching { services.api.page(searchQuery(roomId, w, before)) }
+        val page = got.getOrNull()
         if (page == null) {
-            searchStatus = app.getString(R.string.room_couldnt_search_check_your_connection)
+            // Too many searches (the server's search limit, QA SEC-4) says so, not "check your connection".
+            val e = got.exceptionOrNull()
+            searchStatus = if (e is ApiError && e.status == 429) errorMessage(e) else app.getString(R.string.room_couldnt_search_check_your_connection)
             return
         }
         results = if (next) results + page else page

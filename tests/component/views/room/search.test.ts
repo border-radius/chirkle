@@ -1,8 +1,9 @@
 // Message search (§29): the query it sends, the snippets it shows, and the bar in the room view.
 
 import { describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../../web/src/api.ts";
 import { foldKey, highlight, searchQuery, searchWords } from "../../../../web/src/views/room/search.ts";
-import { seedMessages } from "../../../support/api.ts";
+import { instrument, seedMessages } from "../../../support/api.ts";
 import { button, ids, key, me, mount, msgEl, newRoom, root, useRoomView } from "./harness.ts";
 
 describe("search helpers", () => {
@@ -72,6 +73,20 @@ describe("room view: search (§29)", () => {
     // Back in the field, the results are there again.
     field()!.dispatchEvent(new FocusEvent("focus"));
     expect(root.querySelector<HTMLElement>(".search-results")!.hidden).toBe(false);
+  });
+
+  it("too many searches (429, the server's search limit) says so, not to check the connection (QA SEC-4)", async () => {
+    const room = await newRoom();
+    await seedMessages(room.id, me.user.id, 3, { text: (i) => `hit ${i}` });
+    await mount(room);
+    toggle().click();
+    await vi.waitFor(() => expect(field()).toBeTruthy());
+    instrument(me.api).failNext("page", new ApiError("Too many searches.", 429));
+    search("hit");
+    await vi.waitFor(() => expect(status()).toBe("Too many attempts. Wait a few seconds and try again."));
+    instrument(me.api).failNext("page", new ApiError("Failed to fetch.", 0));
+    search("hit 1");
+    await vi.waitFor(() => expect(status()).toBe("Couldn't search. Check your connection."));
   });
 
   it("says when nothing is found, pages through many results, and closes with Escape", async () => {

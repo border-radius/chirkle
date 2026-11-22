@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import chirkle.android.data.api.NewMessage
 import chirkle.android.data.lib.Pages
 import chirkle.android.data.lib.newId
+import chirkle.android.data.lib.searchQuery
 import chirkle.android.data.model.Visibility
 import chirkle.android.data.testing.TestServer
 import chirkle.android.data.testing.TestServer.newUser
@@ -224,6 +225,26 @@ class UiFeaturesTest {
         compose.onAllNodes(hasText("number one", substring = true))[0].performClick()
         compose.onNodeWithContentDescription("Close search").performClick()
         ui.waitFor("Needle number one")
+    }
+
+    @Test fun `too many searches says so, not to check the connection (QA SEC-4)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("sl-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "Needle")) }
+        TestServer.admin("PATCH", "/api/settings", """{"rateLimits":{"enabled":true}}""")
+        try {
+            // The server's 20 searches at once, used up.
+            runBlocking { repeat(20) { a.api.page(searchQuery(room.id, listOf("needle"))) } }
+            ui.signedIn(a)
+            ui.showRoom(room.name)
+            compose.onNodeWithText(room.name).performClick()
+            ui.waitFor("Needle")
+            compose.onNodeWithContentDescription("Search messages").performClick()
+            compose.onNode(hasSetTextAction() and hasContentDescription("Search messages")).performTextInput("NEEDLE")
+            ui.waitFor("Too many attempts. Wait a few seconds and try again.")
+        } finally {
+            TestServer.admin("PATCH", "/api/settings", """{"rateLimits":{"enabled":false}}""")
+        }
     }
 
     @Test fun `a message gone to shows whole, though the messages after it are tall`() {

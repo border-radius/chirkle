@@ -116,6 +116,7 @@ func register(app core.App, legacy bool, admit *admission) {
 	bindEnrich(app)
 	bindAnonymous(app)
 	bindProbes(app) // before bindStats: a refused subscription counts nothing
+	bindSearchLimit(app)
 	bindStats(app)
 	bindFiles(app)
 	live.bind()

@@ -178,9 +178,10 @@ export function createSearch(o: SearchOptions): Search {
       results.hidden = !found.length;
       const n = found.length;
       status.textContent = n ? S.found(n, page.length >= o.pageSize) : S.NO_MESSAGES_FOUND;
-    } catch {
+    } catch (err) {
       if (f !== fetching) return;
-      status.textContent = S.COULDNT_SEARCH_CHECK_YOUR_CONNECTION;
+      // Too many searches (the server's search limit, QA SEC-4) says so, not "check your connection".
+      status.textContent = (err as { status?: unknown })?.status === 429 ? S.TOO_MANY_SEARCHES : S.COULDNT_SEARCH_CHECK_YOUR_CONNECTION;
       if (next) results.append(more); // to try again
     } finally {
       if (f === fetching) fetching = null;

@@ -1949,3 +1949,12 @@ The violet is Radix violet, on the web (`tokens.css`) and here (`core/ui/Theme.k
 white on it (5.4:1); dark's `onFill` is white again, not ink. Accent text (`primary`, links, the tint) is step 11:
 `#baa7ff` in dark (was the fill's lavender `#a58bff`), `#6550b9` in light (was `#5b3df5`). The notification colour
 and `colors.xml`'s `accent` are `#6E56CF`.
+
+## 83. Too many searches (2026-11-22)
+
+The server now limits message searches (QA SEC-4, DESIGN.md §29.1): 20 at once per person, then one every 2 s, else
+429. The app's room search (`RoomViewModel.runSearch`) shows `errorMessage`'s "Too many attempts. Wait a few seconds and
+try again." for a 429, as the web does, instead of "Couldn't search. Check your connection." The app's legacy search
+filter (a server from before the routes) is counted the same. Test: `UiFeaturesTest` "too many searches…". The
+server's other changes of the day, staff words reserved as handles (SEC-2) and `….invalid` addresses refused (SEC-3),
+need nothing here: the profile screen shows the server's reason on `handle` as it already did.

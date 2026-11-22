@@ -10,8 +10,30 @@ const { nameKey } = require(`${__hooks}/lib/text.js`);
 const HANDLE_MIN = 3;
 const HANDLE_MAX = 24;
 const HANDLE = /^[a-z0-9_]{3,24}$/;
-/** Kept for what may one day mean everyone in a room. */
-const RESERVED = new Set(["all", "everyone", "here", "room", "channel"]);
+/** Kept for what may one day mean everyone in a room: nobody has these (migration 46 took them back). */
+const GROUP = ["all", "everyone", "here", "room", "channel"];
+/**
+ * Words that would lend a stranger the site's authority in a mention ("@admin says…", QA SEC-2): not given to a new
+ * handle, nor taken in a change. Whoever has one already keeps it (and is still mentioned by it).
+ */
+const STAFF = [
+  "admin",
+  "admins",
+  "administrator",
+  "chirkle",
+  "help",
+  "mod",
+  "moderator",
+  "moderators",
+  "mods",
+  "official",
+  "root",
+  "security",
+  "staff",
+  "support",
+  "system",
+];
+const RESERVED = new Set([...GROUP, ...STAFF]);
 /** Most people one message mentions. */
 const MAX_MENTIONS = 20;
 /** Most people GET /api/chat/mentionable suggests. */

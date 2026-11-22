@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import type PocketBase from "pocketbase";
 import type { RecordModel } from "pocketbase";
-import { describe, expect, inject, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { pageOptions } from "../../web/src/api.ts";
 import { searchQuery, searchWords } from "../../web/src/views/room/search.ts";
 import { runSql } from "../support/sql.ts";
@@ -158,5 +158,37 @@ describe("message search (§29)", () => {
     await post(a, pub.id, "public words");
     expect(await search(client(), open.id, "words")).toEqual(["open words"]);
     expect(await search(client(), pub.id, "words")).toEqual([]);
+  });
+});
+
+describe("search limit (QA SEC-4)", () => {
+  beforeAll(async () => {
+    const admin = await adminClient();
+    await admin.settings.update({ rateLimits: { ...inject("bootRateLimits"), enabled: true } });
+  });
+  afterAll(async () => {
+    const admin = await adminClient();
+    await admin.settings.update({ rateLimits: { ...inject("bootRateLimits"), enabled: false } });
+  });
+
+  it("each caller has 20 searches at once, by the route or the old filter; pages without words aren't counted", async () => {
+    const a = await newUser();
+    const open = await a.pb.collection("rooms").create({ name: `open-${uniq()}`, created_by: a.user.id, visibility: "open" });
+    await post(a, open.id, "needle");
+    const guest = client();
+    const code = (p: Promise<unknown>) =>
+      p.then(
+        () => 200,
+        (e: { status: number }) => e.status,
+      );
+    const codes: number[] = [];
+    for (let i = 0; i < 20; i++) codes.push(await code(page(guest, open.id, ["needle"])));
+    expect(codes).toEqual(Array(20).fill(200));
+    expect(await code(page(guest, open.id, ["needle"]))).toBe(429);
+    const old = legacy(open.id, ["needle"]);
+    expect(await code(guest.collection("messages").getList(1, 50, { filter: guest.filter(old.filter, old.params) }))).toBe(429);
+    // A plain page isn't a search; a person has a bucket of their own.
+    expect(await code(page(guest, open.id, []))).toBe(200);
+    expect(await code(page(a.pb, open.id, ["needle"]))).toBe(200);
   });
 });

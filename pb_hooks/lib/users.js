@@ -109,9 +109,11 @@ function searchUsers(e) {
 function beforeUserSave(e) {
   const rec = recordOf(e);
   const email = rec.getString("email");
-  if (rec.isNew() || email !== rec.original().getString("email")) rec.set("email", email.trim().toLowerCase());
+  const newEmail = rec.isNew() || email !== rec.original().getString("email");
+  if (newEmail) rec.set("email", email.trim().toLowerCase());
   // Signups and accounts a superuser makes are people; the bridges set their stand-ins' kind before saving.
   if (rec.isNew() && !rec.getString("kind")) rec.set("kind", "person");
+  if (newEmail && kindOf(rec) === "person") refuseMadeUpEmail(rec.getString("email"));
   if (kindOf(rec) === "deleted") {
     // A deleted account (§43, lib/account.js erase): one name for all of them, each with a key of its own (no name
     // is cleaned to a control character, so no one else's key is ever this), and no handle.
@@ -153,6 +155,25 @@ function findLoginByEmail(e) {
 }
 
 /**
+ * A person's address must be one mail can reach: not `….invalid` (RFC 2606), the made-up domain of stand-ins
+ * (`@telegram.invalid`, `@federation.invalid`, `@deleted.invalid`). Stand-ins are told apart by `kind` now, but a person
+ * with such an address looked like one to anything that went by the domain, and gets no mail (QA SEC-3).
+ * @param {string} email in lower case
+ */
+function refuseMadeUpEmail(email) {
+  if (/\.invalid\.?$/.test(email)) throw fieldError("email", "Use an address that can receive e-mail.", "validation_invalid_email");
+}
+
+/**
+ * users request-email-change: the new address is refused at once, not only when its confirmation saves it.
+ * @param {core.RecordRequestEmailChangeRequestEvent} e
+ */
+function checkEmailChange(e) {
+  if (!e.record || kindOf(e.record) === "person") refuseMadeUpEmail(e.newEmail.trim().toLowerCase());
+  return e.next();
+}
+
+/**
  * users request-password-reset (§39): no email to a stand-in (Telegram, another instance): its address is made
  * up (`….invalid`) and nobody can log in as it (`kind`, §5.1). Answered like any other request, as PocketBase does for an unknown
  * address, so it doesn't tell which addresses have accounts. Only called for an address that matched: PocketBase
@@ -164,4 +185,14 @@ function skipStandInReset(e) {
   return e.next();
 }
 
-module.exports = { DELETED_NAME, beforeUserSave, checkPasswordLength, findLoginByEmail, isStandIn, kindOf, searchUsers, skipStandInReset };
+module.exports = {
+  DELETED_NAME,
+  beforeUserSave,
+  checkEmailChange,
+  checkPasswordLength,
+  findLoginByEmail,
+  isStandIn,
+  kindOf,
+  searchUsers,
+  skipStandInReset,
+};

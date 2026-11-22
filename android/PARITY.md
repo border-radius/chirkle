@@ -33,7 +33,7 @@ decodes `shared/schema/answers.json`'s examples of each route's answer with the 
 | `archive` | `UiFeaturesTest`: an archived room is read-only; `ServicesTest` | Covered |
 | `room_access` | `UiFeaturesTest`: private with a member; `ChirkleApiTest` | Partial: who can post, Open Air |
 | `attachments` | `UiPortsTest`: the viewer drops a message deleted while it is open (QA BUG-155); `CollectionsTest`: a sent file's shape (`file_dims`, DESIGN.md §17.5); `VideoPrepTest`: videos compressed before upload, Android only (ANDROID.md §46) | Partial: picking files (pickers; sent through the system picker by hand on the emulator, ANDROID.md §22.3; the outbox sends files: `Outbox`); `ImagePrepTest`: photos upright before re-encoding on Android 8 (QA BUG-164); downloads by hand on the emulator (QA BUG-161, ANDROID.md §26) |
-| `search` | `UiFeaturesTest`: find and go to a message far back; the message gone to shows whole though the ones after it are tall (QA BUG-163); `TextTest`: the web's search cases | Covered |
+| `search` | `UiFeaturesTest`: find and go to a message far back; the message gone to shows whole though the ones after it are tall (QA BUG-163); too many searches (429) says so (QA SEC-4); `TextTest`: the web's search cases | Covered |
 | `cache` | `ServicesTest`: the room is kept for next time; a private room you are taken out of is kept empty (QA BUG-160); the room opened again from a link stays the active one (QA BUG-168) | Partial: opening from it |
 | `urls` | `RoutesTest`: links to rooms, messages and collections | Covered |
 | `xss` | `LinksTest`: only http(s) become links. Compose shows text as text: there is no HTML to inject | Covered |

@@ -1,6 +1,7 @@
 // Handles, mentions and the "Mentions & replies" inbox (§41).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, inject, it } from "vitest";
+import { runSql } from "../support/sql.ts";
 import {
   adminClient,
   client,
@@ -85,6 +86,35 @@ describe("handles (§41)", () => {
     // A rename keeps the handle.
     const renamed = await a.pb.collection("users").update(a.user.id, { name: `Zoe ${uniq()}` });
     expect(renamed.handle).toBe(mine);
+  });
+
+  it("staff words aren't given or taken; whoever had one keeps it and is mentioned by it (QA SEC-2)", async () => {
+    const a = await newUser();
+    for (const handle of ["admin", "@Moderator", "support", "chirkle", "staff"]) {
+      const err = await a.pb
+        .collection("users")
+        .update(a.user.id, { handle })
+        .then(
+          () => null,
+          (e) => e,
+        );
+      expect(err?.status, handle).toBe(400);
+      expect(err.response.data.handle?.code, handle).toBe("validation_not_unique");
+    }
+    // Named so: the handle made from the name is the next free one.
+    expect(await handleOf(await newUser("Moderators"))).toBe("moderators2");
+    // One who had it before the rule (an old account's, set in the database) keeps it through a rename, and "@" names them.
+    const old = await newUser();
+    const handle = `sec2_${uniq().slice(-8)}`;
+    await runSql(inject("pbUrl"), [{ sql: "UPDATE users SET handle = 'security' WHERE id = {:id}", params: { id: old.user.id } }]);
+    try {
+      await old.pb.collection("users").update(old.user.id, { name: `renamed ${uniq()}` });
+      expect(await handleOf(old)).toBe("security");
+      const m = await post(a, (await newRoom(a)).id, "hi @security");
+      expect(m.mentions).toEqual([old.user.id]);
+    } finally {
+      await runSql(inject("pbUrl"), [{ sql: "UPDATE users SET handle = {:h} WHERE id = {:id}", params: { h: handle, id: old.user.id } }]);
+    }
   });
 
   it("people search finds by handle", async () => {

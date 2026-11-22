@@ -31,6 +31,10 @@ the button. Guests can search the Open Air rooms they read.
   Measured 2026-10-18: a no-match search of a 20,000-message room takes 12 ms in SQLite itself, 30–150 ms through the
   API on the dev machine; a search with a page of matches costs as much as a history page. Past a few hundred thousand
   messages a room, FTS5 behind a custom route (it would have to apply the list rule itself) is the next step.
+- **Limit** (QA SEC-4, `server/searchlimit.go`): 20 searches at once per caller (a person by account, a guest by
+  IP), refilled one every 2 s; past that the server answers 429 and the clients say "Too many attempts. Wait a few
+  seconds and try again." Counted: a page with words in `q`, and a records API list of messages whose filter names
+  `text_key` (apps from before the route). Off with the settings' rate limits; superusers aren't counted.
 
 ## 29.2 Frontend
 

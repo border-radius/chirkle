@@ -96,7 +96,7 @@ already installed.
 **Pages and the room list** are routes (`server/lists.go`), so a client names the page, not the filter:
 `GET /api/chat/rooms` and `GET /api/chat/rooms/{room}/messages?kind=latest|first|older|newer|changed` (cursor
 `created`, `id`; for `changed` `since`, `from`, `to`; `files=1`; `q`, search's words, which the server folds and
-escapes; `limit` ≤ 200; `page`). The app's notification check is `GET /api/chat/notifiable?rooms=a,b&since=…&every=a`
+escapes, at most 20 searches at once per person or guest IP, then one every 2 s, else `429` (DESIGN.md §29.1); `limit` ≤ 200; `page`). The app's notification check is `GET /api/chat/notifiable?rooms=a,b&since=…&every=a`
 (signed in; other people's DMs, replies to you and, since 2026-11-10, mentions of you, and every message of the `every` rooms; rooms you can't see left
 out). All answer a plain array of
 records, with `expand` and `fields` as the records API takes them, and see what its rules let the caller see (a room you can't

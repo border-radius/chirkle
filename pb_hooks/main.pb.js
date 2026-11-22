@@ -131,6 +131,7 @@ onRecordAuthWithPasswordRequest((e) => {
 }, "users");
 
 onRecordRequestPasswordResetRequest((e) => require(`${__hooks}/lib/users.js`).skipStandInReset(e), "users");
+onRecordRequestEmailChangeRequest((e) => require(`${__hooks}/lib/users.js`).checkEmailChange(e), "users");
 onRecordConfirmPasswordResetRequest((e) => {
   require(`${__hooks}/lib/users.js`).checkPasswordLength(e.requestInfo().body.password);
   e.next();

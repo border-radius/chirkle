@@ -20,10 +20,11 @@ describe("migration 1760000051_users_kind.js", () => {
       const user = (name: string, email: string) =>
         su.collection("users").create({ email, password: "password-123", passwordConfirm: "password-123", name });
       ids.person = (await user("Person", "person@test.local")).id;
-      ids.tgEmail = (await user("Tg email", "tg1.abcdef@telegram.invalid")).id;
+      // Made-up addresses are refused now (QA SEC-3): given below, in the database as it was.
+      ids.tgEmail = (await user("Tg email", "tgemail@test.local")).id;
       ids.tgRow = (await user("Tg row", "tgrow@test.local")).id;
       await su.collection("tg_people").create({ user: ids.tgRow, tg_user_id: 4242, name: "x" });
-      ids.fedEmail = (await user("Fed email", "fedabc@federation.invalid")).id;
+      ids.fedEmail = (await user("Fed email", "fedemail@test.local")).id;
       ids.fedPeer = (await user("Fed peer", "fedpeer@test.local")).id;
     } finally {
       await server.stop();
@@ -33,6 +34,8 @@ describe("migration 1760000051_users_kind.js", () => {
     const before = new DatabaseSync(join(dataDir, "data.db"));
     try {
       before.prepare("UPDATE users SET peer = 'somepeer0000001' WHERE id = ?").run(ids.fedPeer!);
+      before.prepare("UPDATE users SET email = ? WHERE id = ?").run("tg1.abcdef@telegram.invalid", ids.tgEmail!);
+      before.prepare("UPDATE users SET email = ? WHERE id = ?").run("fedabc@federation.invalid", ids.fedEmail!);
     } finally {
       before.close();
     }

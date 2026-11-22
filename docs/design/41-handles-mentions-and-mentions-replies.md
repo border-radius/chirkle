@@ -11,7 +11,10 @@ be there (somebody set reaction to your message)". Web, server and the Android a
 ## 41.1 Handles (`users.handle`, `pb_hooks/lib/handles.js`)
 
 3 to 24 of `a–z`, `0–9`, `_`, unique, stored in lower case; "all", "everyone", "here", "room" and "channel" are
-reserved. Every account has one: a new account's is made from its name (Latin and Cyrillic letters transliterated,
+reserved. So are words that would lend a stranger the site's authority in a mention (QA SEC-2, 2026-11-22): "admin",
+"admins", "administrator", "chirkle", "help", "mod", "mods", "moderator", "moderators", "official", "root",
+"security", "staff", "support", "system". No new handle is one of them, nor can a handle be changed to one; an
+account that had one before keeps it (and is mentioned by it). Every account has one: a new account's is made from its name (Latin and Cyrillic letters transliterated,
 accents dropped, anything else "_", at most 20, a number added when taken), and migration `1760000045_mentions.js`
 gave existing accounts theirs the same way (it repeats the code: migrations can't require hooks). A Telegram stand-in
 takes its Telegram username when it is free. You change yours on Settings (web) or Your profile (app); an "@" typed
