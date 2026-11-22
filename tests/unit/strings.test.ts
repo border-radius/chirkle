@@ -65,6 +65,8 @@ const CODE = [
 function readsAsText(body: string, before = ""): boolean {
   const t = body.replace(/\$\{[^}]*\}|\$[a-zA-Z_]\w*/g, "X");
   if (NOT_TEXT.has(body) || CODE.some((re) => re.test(body))) return false;
+  // A Kotlin pattern, Regex("…"): code, like the web's /…/ literals this never sees (the bridge's "↪ Forwarded from").
+  if (/\bRegex\($/.test(before)) return false;
   // Words a screen reader or the screen shows, by where they go: "private" as a description, "creator" in Text()
   // (QA BUG-278: one lowercase word passed the rules below).
   if (
