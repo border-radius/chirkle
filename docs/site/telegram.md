@@ -73,6 +73,10 @@ It's off by default. A superuser sets it up.
   text saying what they were.
 - **Albums** arrive as one message with up to 10 files. **Long Telegram messages** are split into several, since a
   Chirkle message holds 2,000 characters.
+- **A message that can't reach Telegram** is retried for a while if Telegram is down or busy. If it still fails, or
+  Telegram refuses it (say, the bot may no longer post in the group), the room gets a notice: "A message from Ann
+  ("…") wasn't delivered to Telegram group "Friends": …", with Telegram's reason. A group gets one such notice
+  every 5 minutes at most, so a group that refuses everything doesn't flood the room.
 - **Telegram users can't sign in** to Chirkle as their (TG) profiles, and nobody can DM them from Chirkle.
 
 ## More settings

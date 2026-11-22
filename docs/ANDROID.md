@@ -77,7 +77,7 @@ Each web feature, the Android screen or mechanism for it, and the API it uses. O
 | Unread counts in sync across devices (§18.3) | `room_reads` events; launcher badge from the total (instead of the favicon, §22.4) | `room_reads`, `/api/chat/unread` |
 | Drafts kept per room (§22.3) | Saved to the DB as you type, restored on open | client only |
 | Fast room switching, prefetch (§7.5, room cache) | The DB is the cache; unread rooms prefetched (§6.3) | as above |
-| Telegram bridge (§26) | Nothing extra: stand-in users and service messages render as on the web | server only |
+| Telegram bridge (§26) | Nothing extra: stand-in users and service messages (a message not delivered to a group, too) render as on the web | server only |
 | Light and dark themes (§7.8) | Material 3 with the web's colours, following the system; dynamic colour off | client only |
 | Paths `/r/:id`, `/r/:id/m/:msgId` (§7.1) | Android App Links on the server's domain (§9.4) | `assetlinks.json` |
 | Installable PWA (§27) | Not needed: the app is the installed app | — |

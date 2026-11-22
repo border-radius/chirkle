@@ -5,7 +5,8 @@
 
 const { roomName, sourceName } = require(`${__hooks}/lib/anonymous.js`);
 const { asTelegram, call, transferTimeout } = require(`${__hooks}/telegram/api.js`);
-const { linkOfChat, linksOfRoom } = require(`${__hooks}/telegram/links.js`);
+const { groupName, linkOfChat, linksOfRoom, tellRoom } = require(`${__hooks}/telegram/links.js`);
+const { tidy } = require(`${__hooks}/lib/text.js`);
 
 /** Telegram's limits: a caption's length, and the largest photo it takes as a photo (bigger ones go as files). */
 const MAX_CAPTION = 1024;
@@ -390,4 +391,57 @@ function remove(app, messageId, chatId) {
   }
 }
 
-module.exports = { queueCreate, queueUpdate, changeOf, send, edit, remove };
+/** A group's notices of undelivered messages: one in this long at most, so a group that refuses everything doesn't flood the room. */
+const UNDELIVERED_GAP_MS = 5 * 60_000;
+/** How much of the message's text the notice quotes, in characters. */
+const UNDELIVERED_QUOTE = 40;
+
+/**
+ * Why a send failed, for the room: what Telegram said ("Bad Request: chat not found", without the method), or that
+ * it didn't answer. Never the request itself (api.js keeps the bot's token out of its errors anyway).
+ * @param {unknown} err
+ */
+function failureOf(err) {
+  const tg = asTelegram(err);
+  if (!tg) return "an error on this server";
+  if (tg.status === 0) return "Telegram didn't answer";
+  const said = tidy(tg.message.replace(/^[A-Za-z]+: /, ""));
+  return said ? [...said].slice(0, 200).join("") : `Telegram refused it (${tg.status})`;
+}
+
+/**
+ * The worker dropped a send (§26.7): the room is told, in a service message, that the message didn't reach the group
+ * (or only partly, or may not have), naming its author (not in an anonymous message) and quoting its text. Not when it was
+ * deleted meanwhile or the link no longer passes this room's messages, and once per group in UNDELIVERED_GAP_MS.
+ * A failure here is logged: the send is dropped whatever happens.
+ * @param {core.App} app
+ * @param {string} messageId
+ * @param {string} chatId
+ * @param {unknown} err
+ * @param {boolean} unsure it may have been sent (no answer, §26.7)
+ * @param {boolean} [partly] some of its steps were sent (its text, an album) before the one that failed
+ */
+function tellUndelivered(app, messageId, chatId, err, unsure, partly = false) {
+  try {
+    const msg = findMessage(app, messageId);
+    if (!msg || msg.getBool("deleted")) return;
+    const link = linkOfChat(app, chatId);
+    if (!link?.getBool("enabled") || link.getString("room") !== msg.getString("room")) return;
+    const key = `telegram.undelivered.${chatId}`;
+    const last = Number(app.store().get(key) || 0);
+    if (Date.now() - last < UNDELIVERED_GAP_MS) return;
+    app.store().set(key, Date.now());
+
+    const author = msg.getBool("anonymous") ? "" : tidy(userName(app, msg.getString("author")));
+    const text = tidy(msg.getString("text"));
+    const chars = [...text];
+    const quote = chars.length ? ` ("${chars.slice(0, UNDELIVERED_QUOTE).join("")}${chars.length > UNDELIVERED_QUOTE ? "…" : ""}")` : "";
+    const what = `A message${author ? ` from ${author}` : ""}${quote}`;
+    const verb = unsure ? "may not have reached" : partly ? "only partly reached" : "wasn't delivered to";
+    tellRoom(app, msg.getString("room"), `${what} ${verb} ${groupName(link).replace(/^A /, "a ")}: ${failureOf(err)}.`);
+  } catch (e) {
+    app.logger().error("telegram: undelivered notice", "message", messageId, "chat", chatId, "error", String(e));
+  }
+}
+
+module.exports = { queueCreate, queueUpdate, changeOf, send, edit, remove, tellUndelivered };

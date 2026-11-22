@@ -147,7 +147,13 @@ transaction): even two passes at once never send one twice (QA BUG-147). An albu
 over once, not making the album's save fail. A failure that may pass (no answer, 5xx, 429) is retried after `retry_after` or 2, 4, 8…
 seconds, up to 8 tries, and holds back that group's later items so they arrive in order (a `fetch` from a group
 holds back only the group's other fetches, not what goes to it); one Telegram refuses for good (4xx) is dropped and
-logged. `POST /api/telegram/tick` (superusers) runs one pass at once.
+logged. A dropped **send** is told in its room too, in a service message (`outbound.js` `tellUndelivered`):
+"A message from Ann ("its text, 40 characters…") wasn't delivered to Telegram group "Friends": Forbidden: bot can't
+send messages here." It says "only partly reached" when some of its steps were sent, "may not have reached" when it
+was dropped as maybe sent, and "Telegram didn't answer" when no answer came. No author is named for an anonymous
+message (§35). None for a message deleted meanwhile or a link no longer passing the room, and one per group in 5
+minutes at most (kept in the app store), so a group that refuses everything doesn't flood the room. Edits, deletes and
+reactions dropped are only logged. `POST /api/telegram/tick` (superusers) runs one pass at once.
 
 A send is in **steps**: the text alone (when it isn't a caption), then each album. The queue row keeps how many were
 sent (`payload.done`), so a send that fails halfway sends the rest when tried again, neither the steps already in the

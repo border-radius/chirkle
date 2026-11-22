@@ -6,7 +6,7 @@
 
 const { asTelegram, call, config, UPDATES } = require(`${__hooks}/telegram/api.js`);
 const { fetchOver, flushAlbums, handleUpdate } = require(`${__hooks}/telegram/inbound.js`);
-const { edit, remove, send } = require(`${__hooks}/telegram/outbound.js`);
+const { edit, remove, send, tellUndelivered } = require(`${__hooks}/telegram/outbound.js`);
 
 const LOCK = "telegram.worker";
 const OFFSET = "telegram.offset";
@@ -144,6 +144,7 @@ function drain(app, renew) {
       app.logger().warn(`telegram: ${op}`, "message", message, "chat", chat, "try", tries, "error", String(err));
       if (!transient || tries >= MAX_TRIES || unsure > MAX_UNSURE) {
         if (unsure > MAX_UNSURE) app.logger().warn(`telegram: ${op} dropped, it may have been sent`, "message", message, "chat", chat);
+        if (op === "send") tellUndelivered(app, message, chat, err, unsure > MAX_UNSURE, (payload.done || 0) > 0);
         app.delete(row);
         continue;
       }

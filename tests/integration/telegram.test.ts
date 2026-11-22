@@ -827,6 +827,37 @@ describe("Telegram bridge (§26)", () => {
     );
   }, 20_000);
 
+  it("tells the room when a message is dropped, once per group in a while, naming no author in an anonymous room", async () => {
+    const owner = await signUp();
+    const { room } = await linkedRoom(owner);
+    stub.fail("sendMessage", 403, { description: "Forbidden: bot can't send messages here" }, 2);
+    await owner.pb
+      .collection("messages")
+      .create({ room: room.id, author: owner.user.id, text: "a rather long message that gets quoted only in part" });
+    await owner.pb.collection("messages").create({ room: room.id, author: owner.user.id, text: "second" });
+    await eventually(
+      async () =>
+        expect((await noticesOf(room.id)).filter((t) => t.startsWith("A message"))).toEqual([
+          `A message from ${owner.user.name} ("a rather long message that gets quoted o…") wasn't delivered to Telegram group "Group": Forbidden: bot can't send messages here.`,
+        ]),
+      15_000,
+    );
+    await tick();
+    expect((await noticesOf(room.id)).filter((t) => t.startsWith("A message"))).toHaveLength(1); // the second one was dropped within the gap: no second notice
+
+    const anon = await linkedRoom(owner);
+    await admin.collection("rooms").update(anon.room.id, { anonymous: true });
+    stub.fail("sendMessage", 400, { description: "Bad Request: chat not found" });
+    await owner.pb.collection("messages").create({ room: anon.room.id, author: owner.user.id, text: "secret" });
+    await eventually(
+      async () =>
+        expect((await noticesOf(anon.room.id)).filter((t) => t.startsWith("A message"))).toEqual([
+          `A message ("secret") wasn't delivered to Telegram group "Group": Bad Request: chat not found.`,
+        ]),
+      15_000,
+    );
+  }, 40_000);
+
   it("a send whose answer was lost (it may have been made) is tried again once, not 8 times (§26.7)", async () => {
     const owner = await signUp();
     const { room, chat } = await linkedRoom(owner);

@@ -155,4 +155,15 @@ function tellLinkChange(app, link, was, now, why = "") {
   if (now) tellRoom(app, now, `${groupName(link)} was connected to this room.`);
 }
 
-module.exports = { linkOfChat, activeLink, linksOfRoom, ensureLink, moveLink, beforeLinkSave, linkedRoom, tellLinkChange };
+module.exports = {
+  linkOfChat,
+  activeLink,
+  linksOfRoom,
+  ensureLink,
+  moveLink,
+  beforeLinkSave,
+  linkedRoom,
+  tellLinkChange,
+  groupName,
+  tellRoom,
+};
