@@ -42,6 +42,7 @@ test("a long room name is cut short in its row; the sidebar keeps its width", as
   await expect(row).toBeVisible();
   // It widened the sidebar (a flex item's min-width is its content's), squeezing the room next to it.
   expect((await page.locator("aside.sidebar").boundingBox())!.width).toBe(280);
-  const name = row.locator("span").first();
+  // The name's own span, not the access lead before it (visibilityLead in views/rooms.ts).
+  const name = row.getByText(room.name, { exact: true });
   expect(await name.evaluate((e) => e.scrollWidth > e.clientWidth)).toBe(true);
 });
