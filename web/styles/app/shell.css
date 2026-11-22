@@ -12,7 +12,8 @@ html {
   touch-action: manipulation;
 }
 
-/* Text size (§7.8, Profile → Appearance): the rem sizes scale with the root, on top of the browser's own setting. */
+/* Text size (§7.8, Profile → Text size): everything is sized in rem (but 0–2px hairlines and the breakpoints), so the
+   whole interface scales with the root, on top of the browser's own setting. */
 html[data-size="medium"] {
   font-size: 112.5%;
 }
@@ -31,7 +32,7 @@ html[data-size="large"] {
   display: flex;
   gap: 0.75rem;
   align-items: center;
-  min-height: 60px;
+  min-height: 3.75rem;
   padding: 0 0.5rem 0 1rem;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
@@ -64,8 +65,8 @@ html[data-size="large"] {
 .brand::before {
   content: "";
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 1.875rem;
+  height: 1.875rem;
   background: url("/icons/icon.svg") center / contain no-repeat;
 }
 
@@ -144,7 +145,7 @@ div.brand .brand-title::after {
 }
 
 .app-bar .me-link {
-  padding: 6px;
+  padding: 0.375rem;
 }
 
 .app-bar .who {
@@ -163,13 +164,13 @@ div.brand .brand-title::after {
 }
 
 .app-bar .icon-button {
-  width: 44px;
-  height: 44px;
+  width: 2.75rem;
+  height: 2.75rem;
 }
 
 /* A new version is out (§27.4): one line above everything, the page shrinks under it. */
 .update-bar {
-  padding: 6px 16px;
+  padding: 0.375rem 1rem;
   text-align: center;
   background: var(--tint);
   font-size: 0.875rem;
@@ -190,7 +191,7 @@ div.brand .brand-title::after {
 /* The sidebar: its top and foot stay, the rooms between them scroll. */
 .sidebar {
   display: flex;
-  flex: 0 0 280px;
+  flex: 0 0 17.5rem;
   flex-direction: column;
   /* A long room name is cut short in its row instead of widening the sidebar. */
   min-width: 0;
@@ -211,7 +212,7 @@ div.brand .brand-title::after {
 
 .sidebar nav {
   flex: 1;
-  padding: 0 12px 12px;
+  padding: 0 0.75rem 0.75rem;
   overflow-y: auto;
 }
 
@@ -219,12 +220,12 @@ div.brand .brand-title::after {
 .side-top {
   display: flex;
   flex-direction: column;
-  padding: 14px 14px 12px;
+  padding: 0.875rem 0.875rem 0.75rem;
 }
 
 .side-top .brand {
-  height: 44px;
-  padding: 0 8px;
+  height: 2.75rem;
+  padding: 0 0.5rem;
   color: var(--fg);
 }
 
@@ -232,13 +233,13 @@ div.brand .brand-title::after {
 .jump-button {
   display: flex;
   flex: 1;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
   min-width: 0;
-  height: 34px;
-  padding: 0 8px 0 10px;
+  height: 2.125rem;
+  padding: 0 0.5rem 0 0.625rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: none;
   color: var(--muted);
   font-weight: 500;
@@ -247,9 +248,9 @@ div.brand .brand-title::after {
 
 /* Centred in the rows' 22px icon column (room-list.css). */
 .jump-button::before {
-  width: 16px;
-  height: 16px;
-  margin: 0 3px;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.1875rem;
 }
 
 .jump-button span {
@@ -273,33 +274,33 @@ div.brand .brand-title::after {
   display: flex;
   flex: none;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
   align-items: center;
-  min-height: 68px;
-  padding: 8px 12px 8px 10px;
+  min-height: 4.25rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.625rem;
   border-top: 1px solid var(--line);
 }
 
 .side-foot .me-link {
-  gap: 10px;
-  height: 48px;
-  padding: 0 8px;
+  gap: 0.625rem;
+  height: 3rem;
+  padding: 0 0.5rem;
 }
 
 .side-foot .avatar {
-  width: 34px;
-  height: 34px;
+  width: 2.125rem;
+  height: 2.125rem;
 }
 
 .side-foot .icon-button::before {
-  width: 17px;
-  height: 17px;
+  width: 1.0625rem;
+  height: 1.0625rem;
 }
 
 /* A guest's way in. */
 .side-foot p {
   flex-basis: 100%;
-  margin: 4px 4px 6px;
+  margin: 0.25rem 0.25rem 0.375rem;
   color: var(--muted);
   font-size: 0.8125rem;
 }
@@ -314,7 +315,7 @@ a.button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
+  height: 2.5rem;
   padding: 0 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);

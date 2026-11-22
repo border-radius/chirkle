@@ -148,8 +148,8 @@ textarea:focus {
   content: "";
   display: inline-block;
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 1.125rem;
+  height: 1.125rem;
   background: currentcolor;
   mask: var(--i) center / contain no-repeat;
 }
@@ -160,18 +160,18 @@ textarea:focus {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: none;
   color: var(--muted);
 }
 
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid var(--tint);
+  outline: 0.1875rem solid var(--tint);
   outline-offset: 0;
 }
 

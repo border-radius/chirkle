@@ -8,7 +8,7 @@
 
 .profile-delete-choice {
   display: grid;
-  gap: 8px;
+  gap: 0.5rem;
   padding: 0;
   border: 0;
 }
@@ -16,7 +16,7 @@
 .profile-delete-choice label,
 .profile-export-actions {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
 }
 
@@ -37,7 +37,7 @@
    (QA BUG-284: on a phone the text was squeezed into a column a few words wide). */
 .profile-export {
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .profile-export > div:first-child {

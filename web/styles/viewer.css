@@ -67,7 +67,7 @@ dialog.viewer::backdrop {
   height: 2.5rem;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0.625rem;
   background: rgb(255 255 255 / 7%);
   color: inherit;
   font-size: 1.5rem;
@@ -128,7 +128,7 @@ dialog.viewer::backdrop {
   position: absolute;
   width: 2.5rem;
   height: 2.5rem;
-  border: 3px solid rgb(255 255 255 / 25%);
+  border: 0.1875rem solid rgb(255 255 255 / 25%);
   border-top-color: #fff;
   border-radius: 50%;
   opacity: 0;

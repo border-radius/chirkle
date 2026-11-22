@@ -11,9 +11,9 @@ dialog.access[open],
    buttons stay in view however long the lists get. */
 .dialog-head {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
-  padding: 18px 16px 14px 24px;
+  padding: 1.125rem 1rem 0.875rem 1.5rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -35,14 +35,14 @@ dialog.access h2 {
 }
 
 .access-body {
-  gap: 22px;
+  gap: 1.375rem;
   min-height: 0;
-  padding: 18px 24px 22px;
+  padding: 1.125rem 1.5rem 1.375rem;
   overflow-y: auto;
 }
 
 dialog.access .dialog-actions {
-  padding: 14px 24px;
+  padding: 0.875rem 1.5rem;
   border-top: 1px solid var(--border);
   background: var(--bg);
 }
@@ -55,7 +55,7 @@ dialog.access .cancel {
 .vis-choices {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
   border: 0;
@@ -64,7 +64,7 @@ dialog.access .cancel {
 .vis-choices legend,
 dialog.access h3 {
   margin: 0;
-  padding: 0 0 8px;
+  padding: 0 0 0.5rem;
   color: var(--text);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -73,11 +73,11 @@ dialog.access h3 {
 /* A choice: an icon tile, its name and what it means, and a radio ring on the right. */
 .vis-choice {
   display: flex;
-  gap: 14px;
+  gap: 0.875rem;
   align-items: center;
-  padding: 12px 14px;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   cursor: pointer;
 }
 
@@ -90,8 +90,8 @@ dialog.access h3 {
   appearance: none;
   flex: none;
   order: 1;
-  width: 20px;
-  height: 20px;
+  width: 1.25rem;
+  height: 1.25rem;
   margin: 0 0 0 auto;
   padding: 0;
   border: 2px solid color-mix(in srgb, var(--dim) 55%, transparent);
@@ -100,7 +100,7 @@ dialog.access h3 {
 
 .vis-choice input:checked {
   border-color: var(--accent);
-  background: radial-gradient(var(--accent) 4.5px, transparent 5.5px);
+  background: radial-gradient(var(--accent) 0.2813rem, transparent 0.3438rem);
 }
 
 .vis-icon {
@@ -108,9 +108,9 @@ dialog.access h3 {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 2.375rem;
+  height: 2.375rem;
+  border-radius: 0.625rem;
   background: var(--hover);
   color: var(--muted);
   font-size: 1rem;
@@ -142,7 +142,7 @@ dialog.access h3 {
 .writers {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.375rem;
 }
 
 /* "Members · 3" and Add people. */
@@ -157,19 +157,19 @@ dialog.access .people-head h3 {
 }
 
 .add-member {
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.625rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--tint);
   color: var(--accent);
   font-size: 0.8125rem;
 }
 
 .add-member::before {
-  width: 14px;
-  height: 14px;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 /* The people: rows of a card, a line between them. */
@@ -177,7 +177,7 @@ dialog.access .people-head h3 {
   margin: 0;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   list-style: none;
 }
 
@@ -187,10 +187,10 @@ dialog.access .people-head h3 {
 
 .member {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
-  height: 52px;
-  padding: 0 8px 0 12px;
+  height: 3.25rem;
+  padding: 0 0.5rem 0 0.75rem;
 }
 
 .member + .member {
@@ -198,8 +198,8 @@ dialog.access .people-head h3 {
 }
 
 .member .avatar {
-  width: 30px;
-  height: 30px;
+  width: 1.875rem;
+  height: 1.875rem;
   font-size: 0.6875rem;
 }
 
@@ -218,8 +218,8 @@ dialog.access .people-head h3 {
 }
 
 .member-role {
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 0.375rem;
   background: var(--hover);
   color: var(--muted);
   font-size: 0.75rem;
@@ -227,8 +227,8 @@ dialog.access .people-head h3 {
 }
 
 .remove-member {
-  height: 32px;
-  padding: 0 10px;
+  height: 2rem;
+  padding: 0 0.625rem;
   border: 0;
   background: none;
   color: var(--muted);
@@ -279,7 +279,7 @@ dialog.access {
 .invite {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 dialog.access .invite h3 {
@@ -290,7 +290,7 @@ dialog.access .invite h3 {
 .invite-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
 }
 
@@ -306,7 +306,7 @@ dialog.access .invite h3 {
 
 .invite-days {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   align-items: center;
   margin-right: auto;
   color: var(--muted);

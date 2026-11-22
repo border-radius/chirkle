@@ -97,10 +97,10 @@ class MainActivity : ComponentActivity() {
             }
             val textSize by app.accounts.settings.textSize.collectAsStateWithLifecycle()
             ChirkleTheme(dark) {
-                // Text size (DESIGN.md §7.8): every sp scales with it, on top of the system's font size.
+                // Text size (DESIGN.md §7.8): the whole interface scales with it (every dp and sp), as the web's rem.
                 val density = androidx.compose.ui.platform.LocalDensity.current
                 androidx.compose.runtime.CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * textSize.scale),
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * textSize.scale, density.fontScale),
                 ) {
                     // Nothing but the theme's background until the stored session is read (a few ms).
                     if (ready) AppRoot(app.accounts, linked = linked, onLinkTaken = { linked = null }, onSignedIn = ::askForNotifications)

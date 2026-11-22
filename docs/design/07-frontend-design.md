@@ -277,8 +277,10 @@ Other rules:
   in `index.html` before the first paint (allowed by its CSP hash, §5.6), so a reload never flashes the other theme.
 - Text size (2026-11-22): the profile page's Text size switch (Small, Medium, Large) is this device's too, kept as
   `chat.size` and set as `<html data-size>` by the same inline script. Small is the original look; Medium and Large set
-  the root font size to 112.5% and 125%, so every rem-sized text and spacing grows with it (px sizes, like avatars,
-  stay). The app scales its sp by the same factors (ANDROID.md).
+  the root font size to 112.5% and 125%. The stylesheets size everything in rem (16 px = 1 rem: text, spacing, avatars,
+  icons, bars, radii), so the whole interface scales, not just the text; only hairlines of 0–2 px (borders, focus
+  rings) and the media queries' breakpoints stay in px. New CSS follows that rule. The app scales by the same factors
+  (ANDROID.md).
 - Mobile-first layout using flexbox and grid. The sidebar collapses below 720 px.
 - Accessibility basics:
   - Semantic HTML (`<main>`, `<nav>`, `<form>`, `<ol>` for messages).

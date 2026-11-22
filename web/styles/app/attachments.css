@@ -6,16 +6,16 @@
 }
 
 .att-images {
-  --att-h: 120px;
-  --att-max-w: 240px;
+  --att-h: 7.5rem;
+  --att-max-w: 15rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .att-images.one {
-  --att-h: 240px;
-  --att-max-w: 400px;
+  --att-h: 15rem;
+  --att-max-w: 25rem;
 }
 
 .att-tile {
@@ -109,15 +109,15 @@
 .att-file {
   display: inline-block;
   max-width: 18rem;
-  padding: 0 12px;
+  padding: 0 0.75rem;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 0.625rem;
   background: color-mix(in srgb, var(--fg) 5%, transparent);
   color: var(--fg);
   font-size: 0.8125rem;
   font-weight: 600;
-  line-height: 40px;
+  line-height: 2.5rem;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -127,11 +127,11 @@
 .att-file::before {
   content: "";
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
   background: var(--accent);
-  vertical-align: -3px;
+  vertical-align: -0.1875rem;
   mask: var(--i) center / contain no-repeat;
 }
 
@@ -159,7 +159,7 @@
 .att-progress {
   display: block;
   width: min(100%, 16rem);
-  height: 4px;
+  height: 0.25rem;
   margin-top: 0.35rem;
   overflow: hidden;
   border: 0;

@@ -21,10 +21,10 @@
 .confirm button,
 .send-error button,
 .msg-error button {
-  height: 26px;
-  padding: 0 10px;
+  height: 1.625rem;
+  padding: 0 0.625rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--hover);
   font-size: 0.75rem;
 }
@@ -63,14 +63,14 @@
 /* "N new messages" / "Jump to latest": a raised pill over the bottom of the list. */
 .new-messages {
   position: absolute;
-  bottom: 16px;
+  bottom: 1rem;
   left: 50%;
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
-  height: 36px;
-  padding: 0 14px 0 12px;
-  border-radius: 18px;
+  height: 2.25rem;
+  padding: 0 0.875rem 0 0.75rem;
+  border-radius: 1.125rem;
   background: var(--raised);
   box-shadow: var(--shadow);
   font-size: 0.8125rem;
@@ -79,8 +79,8 @@
 }
 
 .new-messages::before {
-  width: 14px;
-  height: 14px;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .new-messages:active:not(:disabled) {
@@ -96,18 +96,18 @@
 
 .composer-row {
   display: flex;
-  gap: 4px;
+  gap: 0.25rem;
   align-items: flex-end;
   /* With the composer's top border, as tall as the sidebar's foot (68px), so their top lines meet. */
-  min-height: 67px;
-  padding: 13px 14px 14px 12px;
+  min-height: 4.1875rem;
+  padding: 0.8125rem 0.875rem 0.875rem 0.75rem;
 }
 
 .composer-row > button,
 .composer-row > .menu > summary {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.625rem;
 }
 
 /* One line is as tall as the buttons, with the text (and placeholder) centred on them. */
@@ -115,11 +115,11 @@
   flex: 1;
   align-self: center;
   min-width: 0;
-  min-height: 40px;
+  min-height: 2.5rem;
   max-height: 10rem;
   /* overflow-x: Firefox with classic scrollbars otherwise makes room for a horizontal one, taller than a row. */
   overflow-x: hidden;
-  padding: calc((40px - 1lh) / 2) 6px;
+  padding: calc((2.5rem - 1lh) / 2) 0.375rem;
   border: 0;
   background: none;
   outline: none;
@@ -135,7 +135,7 @@
 .composer .menu-items {
   top: auto;
   right: auto;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 0.5rem);
   left: 0;
   transform-origin: bottom left;
 }
@@ -149,8 +149,8 @@
 }
 
 .composer .send::before {
-  width: 17px;
-  height: 17px;
+  width: 1.0625rem;
+  height: 1.0625rem;
 }
 
 /* Nothing to send yet: dimmed. */
@@ -167,7 +167,7 @@
 /* Ctrl+/ focuses the textarea (§7.6): said while it isn't focused, and only where there is a keyboard. */
 .focus-key {
   align-self: center;
-  margin-inline: 4px;
+  margin-inline: 0.25rem;
   white-space: nowrap;
 }
 

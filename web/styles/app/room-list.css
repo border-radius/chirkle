@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 6px 6px 4px;
+  padding: 1rem 0.375rem 0.375rem 0.25rem;
 }
 
 .room-section h2 {
@@ -21,12 +21,12 @@
 .fold,
 .room-section > summary {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   align-items: center;
-  height: 28px;
-  padding: 0 8px 0 4px;
+  height: 1.75rem;
+  padding: 0 0.5rem 0 0.25rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: none;
   color: var(--dim);
   font-size: 0.75rem;
@@ -40,8 +40,8 @@
 .room-section .section-title {
   display: flex;
   align-items: center;
-  height: 28px;
-  padding: 0 8px;
+  height: 1.75rem;
+  padding: 0 0.5rem;
   color: var(--dim);
   font-size: 0.75rem;
   font-weight: 600;
@@ -53,8 +53,8 @@
 
 .fold::before,
 .room-section > summary::before {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
   transition: transform 0.15s;
 }
 
@@ -64,14 +64,14 @@
 }
 
 .section-head .icon-button {
-  width: 26px;
-  height: 26px;
+  width: 1.625rem;
+  height: 1.625rem;
   color: var(--dim);
 }
 
 .section-head .icon-button::before {
-  width: 15px;
-  height: 15px;
+  width: 0.9375rem;
+  height: 0.9375rem;
 }
 
 .section-head .icon-button[aria-expanded="true"] {
@@ -90,7 +90,7 @@
   display: flex;
   align-items: center;
   margin: 2px 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
 }
 
 @media (hover: hover) {
@@ -102,11 +102,11 @@
 .room-section li a {
   display: flex;
   flex: 1;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
   min-width: 0;
-  height: 34px;
-  padding: 0 10px;
+  height: 2.125rem;
+  padding: 0 0.625rem;
   color: var(--muted);
   font-weight: 500;
   text-decoration: none;
@@ -116,21 +116,21 @@
 .room-section li a::before {
   content: "#";
   flex: none;
-  width: 22px;
+  width: 1.375rem;
   color: var(--dim);
   font-weight: 600;
   text-align: center;
 }
 
 .more-body li a {
-  height: 32px;
+  height: 2rem;
   color: var(--dim);
 }
 
 /* DM and collection rows: an avatar or icon instead of "#", a little taller. */
 .room-section li.dm a,
 .room-section[data-section="collections"] li a {
-  height: 36px;
+  height: 2.25rem;
 }
 
 .room-section li.dm a::before {
@@ -138,9 +138,9 @@
 }
 
 .room-section li.dm .avatar {
-  width: 22px;
-  height: 22px;
-  font-size: 10px;
+  width: 1.375rem;
+  height: 1.375rem;
+  font-size: 0.625rem;
 }
 
 /* The name; the icons and the badge stay visible however long it is. */
@@ -179,21 +179,21 @@
 }
 
 .room-section li a > .vis::before {
-  width: 14px;
-  height: 14px;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .badge {
   flex: none;
-  min-width: 20px;
+  min-width: 1.25rem;
   margin-left: auto;
-  padding: 0 6px;
-  border-radius: 10px;
+  padding: 0 0.375rem;
+  border-radius: 0.625rem;
   background: var(--fill);
   color: var(--on-fill);
   font-size: 0.6875rem;
   font-weight: 700;
-  line-height: 20px;
+  line-height: 1.25rem;
   text-align: center;
 }
 
@@ -214,11 +214,11 @@
 
 .row-action {
   flex: none;
-  margin-right: 4px;
-  height: 26px;
-  padding: 0 9px;
+  margin-right: 0.25rem;
+  height: 1.625rem;
+  padding: 0 0.5625rem;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--hover);
   font-size: 0.75rem;
 }
@@ -226,7 +226,7 @@
 /* Hidden & archived: the count on the right; inside, a part for each, quieter than the rooms. */
 .room-section[data-section="more"] > summary {
   justify-content: flex-start;
-  margin: 18px 6px 0 4px; /* the last row's 2px margin collapses into it */
+  margin: 1.125rem 0.375rem 0 0.25rem; /* the last row's 2px margin collapses into it */
 }
 
 .room-section[data-section="more"] .count {
@@ -234,26 +234,26 @@
 }
 
 .more-body {
-  margin: 2px 0 4px;
-  padding: 2px 0 6px;
-  border-radius: 10px;
+  margin: 2px 0 0.25rem;
+  padding: 2px 0 0.375rem;
+  border-radius: 0.625rem;
   background: var(--hover);
 }
 
 .more-part h3 {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
   margin: 0;
-  padding: 8px 10px 4px;
+  padding: 0.5rem 0.625rem 0.25rem;
   color: var(--dim);
   font-size: 0.6875rem;
   font-weight: 600;
 }
 
 .more-part h3::before {
-  width: 13px;
-  height: 13px;
+  width: 0.8125rem;
+  height: 0.8125rem;
 }
 
 .empty {
@@ -262,30 +262,30 @@
 
 .more-body .empty {
   margin: 0;
-  padding: 8px 10px;
+  padding: 0.5rem 0.625rem;
 }
 
 /* The new-room form, in place under Rooms. */
 .new-room {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 2px 2px 8px;
-  padding: 10px;
+  gap: 0.5rem;
+  margin: 2px 2px 0.5rem;
+  padding: 0.625rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0.75rem;
   background: var(--raised);
   animation: pop 0.25s var(--ease);
 }
 
 .name-field {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   align-items: center;
-  height: 36px;
-  padding: 0 10px;
+  height: 2.25rem;
+  padding: 0 0.625rem;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--surface);
   color: var(--dim);
   font-weight: 600;
@@ -308,17 +308,17 @@
   margin: 0;
   padding: 2px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--surface);
 }
 
 .seg label {
   display: flex;
-  gap: 5px;
+  gap: 0.3125rem;
   align-items: center;
   justify-content: center;
-  height: 30px;
-  border-radius: 6px;
+  height: 1.875rem;
+  border-radius: 0.375rem;
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
@@ -326,8 +326,8 @@
 }
 
 .seg label::before {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .seg label:has(:checked) {
@@ -347,13 +347,13 @@
 
 .form-buttons {
   display: flex;
-  gap: 6px;
+  gap: 0.375rem;
   justify-content: flex-end;
 }
 
 .form-buttons button {
-  height: 32px;
-  padding: 0 12px;
+  height: 2rem;
+  padding: 0 0.75rem;
   font-size: 0.8125rem;
 }
 

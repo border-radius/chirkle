@@ -8,40 +8,40 @@
 
 /* Selecting: a checkbox in front of each message, the avatar after it. */
 .messages.selecting .msg {
-  padding-left: calc(28px + 32px + 36px + 14px);
+  padding-left: calc(1.75rem + 2rem + 2.25rem + 0.875rem);
   cursor: pointer;
   user-select: none;
 }
 
 .messages.selecting .msg > .avatar {
-  left: 60px;
+  left: 3.75rem;
 }
 
 .msg > .select {
   position: absolute;
-  top: 17px;
-  left: 28px;
-  width: 18px;
-  height: 18px;
+  top: 1.0625rem;
+  left: 1.75rem;
+  width: 1.125rem;
+  height: 1.125rem;
   padding: 0;
   accent-color: var(--fill);
 }
 
 .msg:not(.group-start) > .select {
-  top: 6px;
+  top: 0.375rem;
 }
 
 /* A reply to you is a card set in by 16px: its checkbox and avatar line up with the others'. */
 .messages.selecting .msg.to-me {
-  padding-left: calc(28px + 32px + 36px + 14px - 16px);
+  padding-left: calc(1.75rem + 2rem + 2.25rem + 0.875rem - 1rem);
 }
 
 .msg.to-me > .select {
-  left: 12px;
+  left: 0.75rem;
 }
 
 .messages.selecting .msg.to-me > .avatar {
-  left: 44px;
+  left: 2.75rem;
 }
 
 .msg.selected {
@@ -52,10 +52,10 @@
 .selection-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
-  min-height: 68px;
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom)) 24px;
+  min-height: 4.25rem;
+  padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom)) 1.5rem;
   border-top: 1px solid var(--line);
   background: var(--raised);
 }
@@ -68,16 +68,16 @@
 .selection-bar .ic:not([hidden]) {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .selection-bar .ic::before {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
 }
 
 .selection-bar button {
-  height: 38px;
+  height: 2.375rem;
 }
 
 .selection-bar button:not(.primary, .danger) {
@@ -88,7 +88,7 @@
 /* A phone: the buttons without their icons, on one line with the count. */
 @media (max-width: 400px) {
   .selection-bar {
-    padding-left: 16px;
+    padding-left: 1rem;
   }
 
   .selection-bar .ic::before {
@@ -101,9 +101,9 @@ dialog.forward,
 dialog.access {
   width: min(30rem, calc(100% - 2rem));
   max-height: min(36rem, 85vh);
-  padding: 20px 24px;
+  padding: 1.25rem 1.5rem;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 1rem;
   /* Between the raised menus and the page, as the boards draw dialogs (#1d1929 in the dark). */
   background: color-mix(in srgb, var(--raised), var(--bg));
   color: var(--fg);
@@ -113,7 +113,7 @@ dialog.access {
 dialog.forward[open] {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.625rem;
 }
 
 dialog.forward::backdrop,
@@ -127,11 +127,11 @@ dialog.access::backdrop {
 }
 
 .switcher > .search-status {
-  margin: 8px 20px;
+  margin: 0.5rem 1.25rem;
 }
 
 .switcher .forward-list {
-  padding: 8px;
+  padding: 0.5rem;
 }
 
 dialog.forward.busy .forward-list {
@@ -142,8 +142,8 @@ dialog.forward.busy .forward-list {
 /* Jump to (§32): high on the page, a big field over the list; an option chosen with the arrow keys shown as hovered. */
 dialog.switcher {
   width: min(35rem, calc(100% - 2rem));
-  max-height: min(36rem, calc(100dvh - 140px - 1rem));
-  margin-top: 140px;
+  max-height: min(36rem, calc(100dvh - 8.75rem - 1rem));
+  margin-top: 8.75rem;
   padding: 0;
   overflow: hidden;
 }
@@ -157,17 +157,17 @@ dialog.switcher[open] {
 .jump-field {
   display: flex;
   flex: none;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
-  height: 60px;
-  padding: 0 20px;
+  height: 3.75rem;
+  padding: 0 1.25rem;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
 }
 
 .jump-field::before {
-  width: 18px;
-  height: 18px;
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .jump-field input {
@@ -184,9 +184,9 @@ dialog.switcher[open] {
 .switcher kbd,
 .jump-button kbd,
 .focus-key {
-  padding: 1px 6px;
+  padding: 1px 0.375rem;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 0.3125rem;
   color: var(--muted);
   /* Not `font: … inherit` (invalid in the shorthand, so kbd stayed monospace). */
   font: inherit;
@@ -199,9 +199,9 @@ dialog.switcher[open] {
 .jump-keys {
   display: flex;
   flex: none;
-  gap: 16px;
+  gap: 1rem;
   margin: 0;
-  padding: 10px 20px;
+  padding: 0.625rem 1.25rem;
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 0.75rem;
@@ -221,10 +221,10 @@ dialog.switcher[open] {
 }
 
 .switcher .person {
-  gap: 12px;
-  height: 46px;
-  padding: 0 12px;
-  border-radius: 10px;
+  gap: 0.75rem;
+  height: 2.875rem;
+  padding: 0 0.75rem;
+  border-radius: 0.625rem;
   font-weight: 500;
   cursor: pointer;
 }
@@ -241,8 +241,8 @@ dialog.switcher[open] {
 /* A room's "#" or icon, a collection's icon: on a tile, as big as a person's face. */
 .switcher .tile,
 .switcher .avatar {
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .switcher .tile {
@@ -250,19 +250,19 @@ dialog.switcher[open] {
   flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--hover);
   color: var(--dim);
   font-weight: 700;
 }
 
 .switcher .tile::before {
-  width: 14px;
-  height: 14px;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .switcher small {
-  margin-left: 4px;
+  margin-left: 0.25rem;
   color: var(--dim);
   font-size: 0.75rem;
   font-weight: 400;
@@ -294,29 +294,29 @@ dialog.forward > .search-status:empty {
 
 /* Where to forward to: a room's "#" on a tile as big as a person's face. */
 dialog:not(.switcher) .forward-list .person {
-  gap: 12px;
-  height: 44px;
-  padding: 0 10px;
-  border-radius: 10px;
+  gap: 0.75rem;
+  height: 2.75rem;
+  padding: 0 0.625rem;
+  border-radius: 0.625rem;
 }
 
 dialog:not(.switcher) .forward-list .avatar,
 dialog.forward .hash {
-  width: 30px;
-  height: 30px;
+  width: 1.875rem;
+  height: 1.875rem;
 }
 
 dialog.forward .hash {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: var(--hover);
 }
 
 .hash {
   flex: none;
-  width: 24px;
+  width: 1.5rem;
   color: var(--dim);
   font-weight: 600;
   text-align: center;

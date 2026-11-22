@@ -30,11 +30,11 @@ a.brand,
 .guest-banner,
 .archived-banner {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   align-items: center;
-  min-height: 68px;
+  min-height: 4.25rem;
   margin: 0;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 28px;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)) 1.75rem;
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--raised), var(--bg));
   color: var(--text);

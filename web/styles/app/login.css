@@ -8,9 +8,9 @@
 .auth {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 1.5rem;
   width: 100%;
-  max-width: 420px;
+  max-width: 26.25rem;
   margin: auto;
   padding: 2rem 1rem;
 }
@@ -18,7 +18,7 @@
 .auth h1 {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0.875rem;
   align-items: center;
   font-size: 1.625rem;
   text-align: center;
@@ -27,13 +27,13 @@
 /* The logo: the brand's bubble (the site's own image when it has one, §24). */
 .auth h1:not(.has-logo)::before {
   content: "";
-  width: 56px;
-  height: 56px;
+  width: 3.5rem;
+  height: 3.5rem;
   background: url("/icons/icon.svg") center / contain no-repeat;
 }
 
 .auth .brand-by {
-  margin: -18px 0 0;
+  margin: -1.125rem 0 0;
   text-align: center;
 }
 
@@ -46,10 +46,10 @@
 .auth-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 24px;
+  gap: 1.125rem;
+  padding: 1.5rem;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 1rem;
   background: var(--raised);
   animation: pop 0.4s var(--ease);
 }
@@ -58,15 +58,15 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
+  padding: 0.1875rem;
+  border-radius: 0.625rem;
   background: var(--surface);
 }
 
 [role="tab"] {
-  height: 36px;
+  height: 2.25rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: none;
   color: var(--muted);
 }
@@ -77,17 +77,17 @@
 }
 
 .field {
-  margin-bottom: 14px;
+  margin-bottom: 0.875rem;
 }
 
 .field input {
-  height: 42px;
+  height: 2.625rem;
 }
 
 /* Forgot password (§39): the link under the password, the reset forms' heading, hint and way back. */
 .auth-forgot {
   display: block;
-  margin: -6px 0 10px auto;
+  margin: -0.375rem 0 0.625rem auto;
 }
 
 .auth-card h2 {
@@ -96,7 +96,7 @@
 }
 
 .auth-hint {
-  margin: 0 0 14px;
+  margin: 0 0 0.875rem;
   color: var(--muted);
 }
 
@@ -106,7 +106,7 @@
 
 .auth-form button[type="submit"] {
   width: 100%;
-  height: 44px;
-  margin-top: 4px;
+  height: 2.75rem;
+  margin-top: 0.25rem;
   font-size: 0.9375rem;
 }

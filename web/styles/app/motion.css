@@ -3,7 +3,7 @@
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.92) translateY(4px);
+    transform: scale(0.92) translateY(0.25rem);
   }
 }
 

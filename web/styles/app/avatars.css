@@ -15,30 +15,30 @@
 }
 
 .avatar.s24 {
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
   font-size: 0.6rem;
 }
 
 .avatar.s32 {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   font-size: 0.75rem;
 }
 
 /* 36px: the message's text starts 14px after it (.msg's padding). */
 .msg > .avatar.s32 {
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
 }
 
 .avatar.s96 {
-  width: 96px;
-  height: 96px;
+  width: 6rem;
+  height: 6rem;
   font-size: 2rem;
   box-shadow:
-    0 0 0 4px var(--bg),
-    0 0 0 7px var(--accent);
+    0 0 0 0.25rem var(--bg),
+    0 0 0 0.4375rem var(--accent);
 }
 
 /* White text on every color: ≥ 4.5:1 in both themes. */
