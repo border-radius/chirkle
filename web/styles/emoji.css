@@ -87,7 +87,9 @@
 .emoji-suggest {
   position: fixed;
   bottom: var(--b, auto);
-  left: var(--x, auto);
+  /* From the textarea's left edge, moved left as far as it takes to stay on the screen (QA BUG-293: at a larger text
+     size it ran past a phone's right edge, the handles cut off). */
+  left: max(0.5rem, min(var(--x, 0.5rem), 100vw - 0.5rem - min(18rem, 100vw - 1rem)));
   z-index: 20;
   width: min(18rem, calc(100vw - 1rem));
   max-height: min(18rem, 40vh);

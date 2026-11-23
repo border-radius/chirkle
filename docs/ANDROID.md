@@ -1992,3 +1992,9 @@ As on the web (DESIGN.md §20.3, `reactions.css`): `MessageRow` draws each react
 6 dp left so the first emoji lines up with the text, and the add-reaction button is a bare smiley-plus in `dim`. `ChirkleIcons.AddReaction` is now the web's `.i-react`
 stroke drawing (1.8 wide, the circle open where the plus sits, dot eyes) instead of the Material glyph. Each
 keeps a 32 dp tap target.
+
+## 88. QA pass 43 (2026-11-23)
+
+Nothing to change in the app. The pass's two bugs were the web's at a larger text size (QA BUG-292, BUG-293: a menu
+and the composer's "@" list wider than a phone): the app's menus are Compose `DropdownMenu`s, which keep to the screen,
+and its "@" and ":" lists are rows across the composer's width, so a larger font scale wraps or cuts their text instead.

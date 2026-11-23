@@ -178,3 +178,30 @@ test("on a phone, Hidden & archived lines up with the section heads above it (QA
     expect(more.x).toBe(box.x);
   }
 });
+
+test('on a phone at the Large text size, the room menu, the attach menu and the composer\'s "@" list stay on screen (QA BUG-292, BUG-293)', async ({
+  page,
+}) => {
+  const ada = await apiUser("Ada");
+  const bob = await apiUser("Bob");
+  const room = await apiRoom(ada);
+  await apiSend(bob, room, "hello");
+  await page.addInitScript(() => localStorage.setItem("chat.size", "large"));
+  await login(page, ada);
+  await page.goto(`/r/${room.id}`);
+  await expect(message(page, "hello")).toBeVisible();
+  const onScreen = async (selector: string) => {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  };
+  await page.locator("header.room-header details.menu > summary").click();
+  await onScreen("header.room-header details.menu[open] .menu-items");
+  await page.keyboard.press("Escape");
+  await page.locator("form.composer details.menu > summary").click();
+  await onScreen("form.composer details.menu[open] .menu-items");
+  await page.keyboard.press("Escape");
+  await page.locator("form.composer textarea").fill("@");
+  await expect(page.locator(".emoji-suggest li").first()).toBeVisible();
+  await onScreen(".emoji-suggest");
+});

@@ -2517,3 +2517,57 @@ and here inside a frame. On a phone that scroll also comes before the new rows, 
 - With every API request routed through Playwright and held, Chrome warns that the `modulepreload`ed chunks weren't
   used within seconds: they are `app.js`'s static imports, used when it runs; not seen without the routing.
 - The empty home's 👋 shows as a box in headless Chromium without an emoji font (the machine's fonts, not the app).
+
+# QA pass 43 — heavy testing, 2026-11-23
+
+After the text size (§7.8), Radix violet, the room rows' visibility marks, reactions seen in their room (§41.4),
+reactions without chips (§20.3), compressed answers (PERF.md §15) and the search limit (SEC-4). Suites first, at nice
+19: typecheck, lint and the sink guard; unit + component 919/919; Go; integration 583/583; the Android unit and
+Robolectric tests; Chromium e2e after the fixes. Then, on a throwaway server with the production build: compression
+probed with raw requests (gzip and plain pages with one ETag, `If-None-Match` → 304, HEAD, the assets' `.br`/`.gz` by
+`Accept-Encoding` including `br;q=0` and `identity`, `If-Modified-Since`, ranges, 404s, error answers); the search
+limit with rate limits on (25 searches at once as a person and as a guest of an Open Air room: 20 answered, then one
+every 2 s; plain pages never counted); reactions seen step by step (a reaction to a read message, the room marked again
+at the same position, a reaction to a message after the mark, unreact and react again) and `POST /api/chat/reads` with
+odd bodies; and the web in headless Chromium at 1100 px light/dark, 800 px and 390 px (touch), at Small, Medium and
+Large text, every screen and popup (room and attach menus, the author menu, the emoji picker, the "@" and ":" lists, a
+message's buttons, search, room access, Jump to, Settings, Mentions & replies) measured for anything past the window's
+edges, screenshots read. Numbering continues from BUG-291.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-292 | Medium | Web, menus | At the Large text size on a phone, the room menu ran 39 px off the left edge (its icons cut off) and the attach menu off the right | web, app n/a (Compose's menus fit the screen) | Fixed |
+| BUG-293 | Low | Web, composer | At the Medium and Large text sizes on a phone, the composer's "@" and ":" lists ran past the right edge, the handles cut off | web, app n/a (its lists fill the composer's width) | Fixed |
+
+## BUG-292 — Menus off the screen at a larger text size (Medium)
+
+**Steps:** Settings → Text size → Large, on a phone (390 px); open a room's ⋯ menu, or the composer's attach menu.
+**Expected:** the menu on screen. **Actual:** the room menu reached from -39 px (its icons and the start of its labels
+cut off), the attach menu to 429 px. **Cause:** `.menu-items` has `min-width: 17.5rem`, which at 150% is 420 px, wider
+than the phone; anchored at its right (or left) edge, it ran out the other side. **Fix:** `min-width` and `max-width`
+are at most `100vw - 1rem` (`menus.css`). Test: `mobile.spec.ts` "on a phone at the Large text size…" (fails without).
+
+## BUG-293 — The "@" and ":" lists past the right edge (Low)
+
+**Steps:** Text size Medium or Large, on a phone; type "@" (or ":fi") in the composer. **Expected:** the list on
+screen. **Actual:** it started at the textarea's left edge (68–81 px, after the attach button) and, 18rem wide, ended at
+428–447 px: the handles were cut off. **Cause:** `.emoji-suggest`'s width was capped at the window's, but not its left
+edge. **Fix:** its `left` is moved left as far as it takes to end 0.5rem inside the window (`emoji.css`). Test: the same
+`mobile.spec.ts` test (fails without).
+
+## Checked and fine
+
+- Compression: a page's ETag is the same gzipped and plain, and a gzipped client's `If-None-Match` gets a bodiless 304;
+  assets go precompressed by preference (brotli unless refused), 304 and 206 as before; errors and HEADs untouched.
+- The search limit counts searches only (a `q` of punctuation is a search of it, as the page treats it), by account or
+  by guest IP, and says "Too many searches. Wait a moment and try again."
+- Reactions seen: a reaction to a read message is new until the room is marked again (even at the same position);
+  one to a message after the read position stays new until that is read; a reaction taken back and given again is new.
+- `POST /api/chat/reads` refuses a number or empty `at`, clamps a future one to now, never moves back for a past one.
+- The rows' marks ("#" public, a lock private, a globe Open Air), reactions without chips and the violet in both
+  themes; no sideways scroll on any screen at any text size; no console errors.
+
+## Noted, not changed
+
+- A HEAD of a message page has no `Content-Length` (net/http drops the body; clients don't HEAD pages).
+- Emoji show as boxes in headless Chromium without an emoji font (the machine's fonts, as before).
