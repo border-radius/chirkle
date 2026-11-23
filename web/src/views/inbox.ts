@@ -121,7 +121,7 @@ export async function mountInbox(root: HTMLElement, o: InboxOptions): Promise<vo
   function seeAll() {
     const newest = shown[0]?.created;
     if (newest && (seenAt === null || newest > seenAt || store.get().inbox)) {
-      store.set({ inbox: 0 });
+      store.set({ inbox: 0, inboxFrom: [] });
       void api.request("/api/chat/inbox/seen", { method: "POST", body: { at: newest } }).catch(() => {});
     }
   }

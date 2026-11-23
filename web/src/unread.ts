@@ -92,7 +92,7 @@ export function createUnread({ api, store, timing = TIMING }: { api: Api; store:
         unread.delete(following);
         mentions.delete(following);
       }
-      store.set({ unread, mentions, inbox: res.inbox ?? 0 });
+      store.set({ unread, mentions, inbox: res.inbox ?? 0, inboxFrom: res.inbox_from ?? [] });
     } finally {
       store.set(listLoad(-1));
       if (--inFlight === 0) recent = [];

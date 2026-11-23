@@ -38,6 +38,7 @@ interface Inbox {
 interface Counts {
   rooms: Record<string, number>;
   inbox: number;
+  inbox_from: { id: string; name: string; avatar: string }[];
   mentions: Record<string, number>;
 }
 
@@ -209,8 +210,11 @@ describe("inbox (§41)", () => {
     const c = await counts(a);
     expect(c.inbox).toBe(3);
     expect(c.mentions[room.id]).toBe(2);
+    // Whose they are, for the sidebar row's faces: each person once, newest first.
+    expect(c.inbox_from).toEqual([{ id: b.user.id, name: b.user.name, avatar: "" }]);
     await a.pb.send("/api/chat/inbox/seen", { method: "POST", body: { at: got.items[0]!.created } });
     expect((await counts(a)).inbox).toBe(0);
+    expect((await counts(a)).inbox_from).toEqual([]);
     await a.pb.send("/api/chat/reads", { method: "POST", body: { room: room.id } });
     expect((await counts(a)).mentions[room.id]).toBeUndefined();
 
@@ -325,6 +329,8 @@ describe("inbox (§41)", () => {
     await post(b, anon.id, `@${h} who am I`);
     const [item] = (await inbox(a)).items;
     expect(item?.actor).toMatchObject({ id: anon.id, name: anon.name });
+    // Nor among the faces of who mentioned you.
+    expect((await counts(a)).inbox_from.map((p) => p.id)).not.toContain(b.user.id);
   });
 
   it("tells your apps live on chat/inbox", async () => {

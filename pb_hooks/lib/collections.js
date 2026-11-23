@@ -162,11 +162,13 @@ function list(e) {
     .newQuery("SELECT id, name, public, items, last_added FROM collections WHERE owner = {:me} ORDER BY name_key, id")
     .bind({ me: user.id })
     .all(mine);
-  const subs = arrayOf(new DynamicModel({ id: "", name: "", items: 0, last_added: "", owner: "", owner_name: "", seen_at: "", n: 0 }));
+  const subs = arrayOf(
+    new DynamicModel({ id: "", name: "", items: 0, last_added: "", owner: "", owner_name: "", owner_avatar: "", seen_at: "", n: 0 }),
+  );
   e.app
     .db()
     .newQuery(
-      `SELECT c.id, c.name, c.items, c.last_added, c.owner, COALESCE(u.name, '') AS owner_name, s.seen_at, (
+      `SELECT c.id, c.name, c.items, c.last_added, c.owner, COALESCE(u.name, '') AS owner_name, COALESCE(u.avatar, '') AS owner_avatar, s.seen_at, (
          SELECT COUNT(*) FROM (
            SELECT 1 FROM collection_items i WHERE i.collection = c.id AND i.created > s.seen_at LIMIT ${NEW_CAP}
          )
@@ -195,7 +197,7 @@ function list(e) {
       public: true,
       items: c.items,
       last_added: c.last_added,
-      owner: { id: c.owner, name: c.owner_name },
+      owner: { id: c.owner, name: c.owner_name, avatar: c.owner_avatar },
       seen_at: c.seen_at,
       new: c.n,
       preview: previews[c.id] ?? [],

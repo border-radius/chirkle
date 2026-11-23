@@ -87,7 +87,7 @@ test("the tab shows how many messages are unread, in the favicon and the title",
   // Other specs post in their own public rooms meanwhile, which count too: compare with the room list's badges.
   const tab = () =>
     page.evaluate(() => {
-      const badges = [...document.querySelectorAll("aside.sidebar .badge")].map((b) => Number.parseInt(b.textContent ?? "", 10));
+      const badges = [...document.querySelectorAll("aside.sidebar :is(.badge, .dot)")].map((b) => Number.parseInt(b.textContent ?? "", 10));
       const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
       const drawn = icon.dataset.badge ? icon.href.startsWith("data:image/png") : icon.href.endsWith("/icons/icon.svg");
       return { title: document.title, icon: drawn ? (icon.dataset.badge ?? "") : "?", sum: badges.reduce((a, b) => a + b, 0) };
@@ -101,7 +101,7 @@ test("the tab shows how many messages are unread, in the favicon and the title",
 
   await apiSend(bob, room, "one");
   await apiSend(bob, room, "two");
-  const badge = page.locator("aside.sidebar li").filter({ hasText: room.name }).locator(".badge");
+  const badge = page.locator("aside.sidebar li").filter({ hasText: room.name }).locator(".badge, .dot");
   await expect(badge).toContainText("2");
   await expect.poll(consistent).toBe(true);
   await expect(page).toHaveTitle(new RegExp(`^\\(\\d+\\+?\\) #${home.name} – Chirkle$`));

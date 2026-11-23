@@ -43,6 +43,8 @@ export interface AppState {
   mentions: Map<string, number>;
   /** Rows of your "Mentions & replies" inbox you haven't seen (§41), at most 100. */
   inbox: number;
+  /** Who the newest of those rows are from, newest first, at most 3: the sidebar row shows their faces. */
+  inboxFrom: User[];
   roomsStatus: LoadStatus;
   /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§7.9). */
   listLoads: number;
@@ -67,6 +69,7 @@ export const initialState = (): AppState => ({
   unread: UNCOUNTED,
   mentions: new Map(),
   inbox: 0,
+  inboxFrom: [],
   roomsStatus: "idle",
   listLoads: 0,
   activeRoomId: null,

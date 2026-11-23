@@ -115,6 +115,31 @@ div.brand .brand-title::after {
   color: inherit;
 }
 
+/* In the sidebar, "Chirkle" is a signature: near-white, medium, after a tiny Chirkle mark. */
+.side-top .brand-by {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.side-top .brand-by a {
+  display: inline-flex;
+  gap: 0.1875rem;
+  align-items: center;
+  color: var(--fg);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.side-top .brand-by a::before {
+  content: "";
+  width: 0.6875rem;
+  height: 0.6875rem;
+  background: url("/icons/icon.svg") center / contain no-repeat;
+}
+
 .bar-end {
   display: flex;
   gap: 0.25rem;
@@ -201,6 +226,7 @@ div.brand .brand-title::after {
 }
 
 .sidebar .rooms {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -210,23 +236,75 @@ div.brand .brand-title::after {
   padding: 0;
 }
 
+/* The rows start under the header, which floats over them as they scroll (.side-top). */
 .sidebar nav {
   flex: 1;
-  padding: 0 0.75rem 0.75rem;
+  padding: var(--side-head) 0.75rem 0.75rem;
   overflow-y: auto;
+  scroll-padding-top: var(--side-head);
 }
 
-/* The site's name, over the rows (Jump to first) with no line between. */
+.sidebar {
+  --side-head: 4rem;
+}
+
+/* A failed load's message, under the header; the list after it then starts right there. */
+.sidebar .list-error {
+  margin: var(--side-head) 1.25rem 0;
+}
+
+.sidebar .list-error:not(:empty) + nav {
+  padding-top: 0.5rem;
+}
+
+.sidebar .rooms > .loadbar {
+  position: absolute;
+  top: var(--side-head);
+  right: 0;
+  left: 0;
+}
+
+/* The site's name, pinned over the rows: transparent, as tall as the room's header (room.css) with its title's size,
+   so the two titles sit on one line across the window. Its violet-tinted blur fades out past its bottom edge rather
+   than ending in a line. */
 .side-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
-  padding: 0.875rem 0.875rem 0.75rem;
+  align-items: center;
+  height: var(--side-head);
+  padding: 0 1.125rem 0 1.25rem;
+}
+
+.side-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -1.5rem;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(color-mix(in srgb, var(--accent) 10%, transparent), transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
 }
 
 .side-top .brand {
-  height: 2.75rem;
-  padding: 0 0.5rem;
+  gap: 0.75rem;
   color: var(--fg);
+  font-size: 1.125rem;
+  line-height: 1.375rem;
+}
+
+.side-top .brand-name {
+  gap: 1px;
+}
+
+.side-top .brand.has-logo .brand-logo {
+  height: 2.25rem;
+  border-radius: 0.625rem;
 }
 
 /* Jump to (§32): the sidebar's first row, set like the rows under it, with its shortcut on the right. */
@@ -257,44 +335,61 @@ div.brand .brand-title::after {
   flex: 1;
 }
 
-/* Quieter until hovered by colour, not opacity: --muted at 0.75 failed 4.5:1 (QA BUG-259). */
+/* The shortcut fades in only when the row is pointed at or focused, so the top of the sidebar is calmer (sidebar
+   improvements, 2026-11-23). Hidden rather than faint: faint text fails 4.5:1 (QA BUG-259). The button's title says it. */
 .jump-button kbd {
-  transition: color 0.15s;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
 
-.jump-row:hover kbd {
-  color: var(--text);
+.jump-row:hover kbd,
+.jump-button:focus-visible kbd {
+  opacity: 1;
 }
 
 .jump-button:active:not(:disabled) {
   transform: none;
 }
 
+/* Who you are: a borderless row, as tall as the room's message box and level with it (composer.css: its row's 2.75rem,
+   0.75rem off the bottom), so the two read as one line across the window. It opens your profile and settings; a fill
+   only on hover. */
 .side-foot {
   display: flex;
   flex: none;
   flex-wrap: wrap;
   gap: 0.25rem;
   align-items: center;
-  min-height: 4.25rem;
-  padding: 0.5rem 0.75rem 0.5rem 0.625rem;
-  border-top: 1px solid var(--line);
+  padding: 0.5rem 0.5rem calc(0.75rem + env(safe-area-inset-bottom));
 }
 
 .side-foot .me-link {
   gap: 0.625rem;
-  height: 3rem;
-  padding: 0 0.5rem;
+  height: 2.75rem;
+  padding: 0 0.625rem 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.side-foot .me-link .who {
+  flex: 1;
+}
+
+/* The up arrow, at the end. */
+.side-foot .me-link::before {
+  order: 1;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--dim);
+  transform: rotate(180deg);
 }
 
 .side-foot .avatar {
-  width: 2.125rem;
-  height: 2.125rem;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
-.side-foot .icon-button::before {
-  width: 1.0625rem;
-  height: 1.0625rem;
+.side-foot:has(.me-link) {
+  padding-top: 0;
 }
 
 /* A guest's way in. */

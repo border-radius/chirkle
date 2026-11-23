@@ -63,6 +63,7 @@ describe("initialState", () => {
       unread: new Map(),
       mentions: new Map(),
       inbox: 0,
+      inboxFrom: [],
       roomsStatus: "idle",
       listLoads: 0,
       activeRoomId: null,

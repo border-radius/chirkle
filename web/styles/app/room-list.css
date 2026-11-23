@@ -6,15 +6,19 @@
   padding: 1rem;
 }
 
-/* A section's heading: a chevron that folds it, and its "+" on the right. */
+/* A section's heading: a small-caps label that folds it, then its "+" (shown on hover) and the chevron on the right.
+   The label's button covers the whole heading but the "+", so the chevron folds it too. */
 .section-head {
+  position: relative;
   display: flex;
+  gap: 0.375rem;
   align-items: center;
-  justify-content: space-between;
-  padding: 1rem 0.375rem 0.375rem 0.25rem;
+  padding: 1rem 0.5rem 0.375rem 0.5rem;
 }
 
 .room-section h2 {
+  flex: 1;
+  min-width: 0;
   font-size: inherit;
 }
 
@@ -24,16 +28,64 @@
   gap: 0.375rem;
   align-items: center;
   height: 1.75rem;
-  padding: 0 0.5rem 0 0.25rem;
+  padding: 0;
   border: 0;
   border-radius: 0.375rem;
   background: none;
   color: var(--dim);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   list-style: none;
   cursor: pointer;
+}
+
+.fold {
+  width: 100%;
+}
+
+.fold::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.section-head > .icon-button {
+  position: relative;
+  z-index: 1;
+}
+
+.chev {
+  display: flex;
+  flex: none;
+  pointer-events: none;
+  color: var(--dim);
+}
+
+.chev::before {
+  width: 0.75rem;
+  height: 0.75rem;
+  transition: transform 0.15s;
+}
+
+/* Folded: the chevron points right. */
+.section-head:has(.fold[aria-expanded="false"]) .chev::before,
+.room-section:not([open]) > summary .chev::before {
+  transform: rotate(-90deg);
+}
+
+@media (hover: hover) {
+  .section-head > .icon-button {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .section-head:hover > .icon-button,
+  .section-head:focus-within > .icon-button,
+  .section-head > .icon-button[aria-expanded="true"] {
+    opacity: 1;
+  }
 }
 
 /* A heading that doesn't fold (a guest's Open Air rooms): set like the others, without the chevron (QA BUG-188). */
@@ -49,18 +101,6 @@
 
 .room-section > summary::-webkit-details-marker {
   display: none;
-}
-
-.fold::before,
-.room-section > summary::before {
-  width: 0.75rem;
-  height: 0.75rem;
-  transition: transform 0.15s;
-}
-
-.fold[aria-expanded="false"]::before,
-.room-section:not([open]) > summary::before {
-  transform: rotate(-90deg);
 }
 
 .section-head .icon-button {
@@ -151,7 +191,7 @@
 }
 
 /* The name; the icons and the badge stay visible however long it is. */
-.room-section li a > span:not(.avatar, .badge, .vis, .owner, .ci, .n) {
+.room-section li a > span:not(.avatar, .badge, .dot, .faces, .vis, .owner, .ci, .n) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -159,7 +199,46 @@
   white-space: nowrap;
 }
 
-/* Unread (§18.4): the name in full color and bold, plus a count. */
+/* A private collection's lock, right after its name. */
+.room-section li a > span > .vis {
+  display: inline-flex;
+  margin-left: 0.25rem;
+  color: var(--dim);
+  vertical-align: -0.0625rem;
+}
+
+.room-section li a > span > .vis::before {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* Unread (§18.4): the name in full color and bold, plus a dot (a count for what is addressed to you, room.ts). */
+.room-section li a > .dot {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin: 0 0.25rem 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Who mentioned you or replied (§41): their faces, overlapping, the newest first. */
+.room-section li a > .faces {
+  display: flex;
+  flex: none;
+}
+
+.faces > .avatar {
+  width: 1.125rem;
+  height: 1.125rem;
+  font-size: 0.4688rem;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.faces > .avatar + .avatar {
+  margin-left: -0.375rem;
+}
+
 .room-section li a.unread {
   color: var(--fg);
   font-weight: 600;
@@ -227,13 +306,20 @@
 }
 
 /* Hidden & archived: the count on the right; inside, a part for each, quieter than the rooms. */
+/* Set like the other headings, the count where their "+" is. */
 .room-section[data-section="more"] > summary {
   justify-content: flex-start;
-  margin: 1.125rem 0.375rem 0 0.25rem; /* the last row's 2px margin collapses into it */
+  margin: 1.125rem 0.5rem 0; /* the last row's 2px margin collapses into it */
+}
+
+.room-section[data-section="more"] > summary > span:first-child {
+  flex: 1;
 }
 
 .room-section[data-section="more"] .count {
-  margin-left: auto;
+  width: 1.625rem;
+  letter-spacing: 0;
+  text-align: center;
 }
 
 .more-body {

@@ -91,7 +91,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   /** What top and foot were drawn for. */
   let drawn: unknown[] = [];
 
-  /** The site's name; at the foot, who you are and your settings, or (a guest) the way in. */
+  /**
+   * The site's name; at the foot, who you are (a borderless row opening your profile and settings, level with the
+   * room's message box), or (a guest) the way in.
+   */
   function renderEnds() {
     const { site, user } = store.get();
     if (drawn[0] === site && drawn[1] === user) return;
@@ -100,11 +103,17 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     foot.replaceChildren(
       ...(user
         ? [
-            h("a", { href: "/me", class: "me-link", title: S.YOUR_PROFILE, "aria-current": location.pathname === "/me" ? "page" : null }, [
-              avatar(user, 32, api.avatarUrl),
-              h("span", { class: "who" }, user.name),
-            ]),
-            h("a", { href: "/me", class: "icon-button ic i-gear", "aria-label": S.SETTINGS, title: S.SETTINGS }),
+            h(
+              "a",
+              {
+                href: "/me",
+                class: "me-link ic i-chev",
+                title: S.PROFILE_AND_SETTINGS,
+                "aria-label": S.profileAndSettings(user.name),
+                "aria-current": location.pathname === "/me" ? "page" : null,
+              },
+              [avatar(user, 32, api.avatarUrl), h("span", { class: "who" }, user.name)],
+            ),
           ]
         : [
             h("p", {}, S.YOURE_READING_AS_A_GUEST_ONLY),
@@ -247,7 +256,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   function collectionRow(c: Collection): HTMLElement {
     const current = store.get().activeCollectionId === c.id;
     const n = c.owner ? (c.new ?? 0) : 0;
-    const sig = [c.name, c.public, c.owner?.name, n, current, c.items];
+    const sig = [c.name, c.public, c.owner?.name, c.owner?.avatar, n, current, c.items];
     const hit = collRows.get(c.id);
     if (hit?.sig.every((v, i) => v === sig[i])) return hit.el;
     const el = h(
@@ -256,12 +265,19 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       { class: `t${c.id.charCodeAt(0) % 4}`, dataset: { collectionId: c.id } },
       h("a", { href: `/c/${c.id}`, class: n ? "unread" : "", "aria-current": current ? "page" : null }, [
         collectionIcon(),
-        h("span", {}, c.name),
-        c.owner ? h("span", { class: "owner" }, c.owner.name) : null,
-        c.public ? null : visibilityMark("private"),
+        // The lock right after the name, not at the row's end; whose it is as their face (named for a screen reader).
+        h("span", {}, [c.name, c.public ? null : visibilityMark("private")]),
+        c.owner
+          ? h("span", { class: "owner", title: c.owner.name }, [
+              avatar(c.owner, 24, api.avatarUrl),
+              h("span", { class: "visually-hidden" }, S.byOwner(c.owner.name)),
+            ])
+          : null,
         n
           ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.NEW)])
-          : h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, c.items === 1 ? S.ITEM : S.ITEMS)]),
+          : c.items
+            ? h("span", { class: "n" }, [c.items, h("span", { class: "visually-hidden" }, c.items === 1 ? S.ITEM : S.ITEMS)])
+            : null,
       ]),
     );
     collRows.set(c.id, { sig, el });
@@ -311,7 +327,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const s = store.get();
     const current = s.activeRoomId === r.id;
     const n = unreadCount(s, r);
-    const at = mentioned(s, r);
+    const at = mentioned(s, r) ? (s.mentions.get(r.id) ?? 0) : 0;
     // What the row and its button depend on (rowAction reads the user and, when archived, hidden).
     const sig = [r, section, n, current, s.user, section === "archived" && s.hidden.has(r.id), at];
     const hit = rows.get(r.id);
@@ -321,11 +337,18 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const label = [
       other ? avatar(other, 24, api.avatarUrl) : r.kind === "dm" ? null : visibilityLead(visibilityOf(r)),
       h("span", {}, other ? other.name : r.kind === "dm" ? title(r) : r.name),
-      // Unread mentions of you or replies to you (§41).
+      // Numbers only for what is addressed to you: a room's unread mentions of you and replies to you (§41), a DM's
+      // unread messages. Otherwise unread is a dot (and the bold name); the count is still read out.
       at
-        ? h("span", { class: "badge", title: S.MENTIONS_YOU }, ["@", h("span", { class: "visually-hidden" }, S.MENTIONS_YOU_HIDDEN)])
-        : null,
-      n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.UNREAD)]) : null,
+        ? h("span", { class: "badge", title: S.MENTIONS_YOU }, [
+            at > 99 ? "99+" : at,
+            h("span", { class: "visually-hidden" }, S.mentionsYouOf(at, n > 99 ? "99+" : n)),
+          ])
+        : n && r.kind === "dm"
+          ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.UNREAD)])
+          : n
+            ? h("span", { class: "dot" }, h("span", { class: "visually-hidden" }, `${n > 99 ? "99+" : n}${S.UNREAD}`))
+            : null,
     ];
     const el = h("li", { class: r.kind === "dm" ? "dm" : "", dataset: { roomId: r.id } }, [
       h("a", { href: `/r/${r.id}`, class: n ? "unread" : "", "aria-current": current ? "page" : null }, label),
@@ -344,7 +367,11 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   /** Hidden & archived (§7.1): folded, with how many there are; inside, a part for each. Not listed when it would be empty. */
   function collapsible() {
     const count = h("span", { class: "count" });
-    const summary = h("summary", { class: "ic i-chev" }, [h("span", {}, S.HIDDEN_ARCHIVED), count]);
+    const summary = h("summary", {}, [
+      h("span", {}, S.HIDDEN_ARCHIVED),
+      count,
+      h("span", { class: "chev ic i-chev", "aria-hidden": "true" }),
+    ]);
     const part = (section: "hidden" | "archived", title: string, icon: string) => {
       const list = h("ul");
       const el = h("div", { class: "more-part", dataset: { section } }, [h("h3", { class: `ic ${icon}` }, title), list]);
@@ -407,7 +434,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             "button",
             {
               type: "button",
-              class: "fold ic i-chev",
+              class: "fold",
               dataset: { fold: section },
               on: {
                 click: () => {
@@ -424,6 +451,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
           ),
         ),
         add,
+        // The chevron, after the "+"; part of the heading's look, the button says whether it is folded.
+        h("span", { class: "chev ic i-chev", "aria-hidden": "true" }),
       ]);
     return {
       newRoomToggle,
@@ -449,14 +478,33 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     };
   }
 
-  /** "Mentions & replies" (§41), right after Jump to, with how many you haven't seen. */
-  function inboxRow(n: number) {
+  /**
+   * "Mentions & replies" (§41), right after Jump to: while some are new, the faces of who they are from (the newest
+   * first), or how many when the server doesn't say whose.
+   */
+  function inboxRow(n: number, from: User[]) {
+    const count = n > 99 ? "99+" : n;
+    const faces = n && from.length;
     return h(
       "li",
       {},
       h("a", { href: "/inbox", class: n ? "unread" : "", "aria-current": location.pathname === "/inbox" ? "page" : null }, [
         h("span", {}, S.MENTIONS_REPLIES),
-        n ? h("span", { class: "badge" }, [n > 99 ? "99+" : n, h("span", { class: "visually-hidden" }, S.NEW)]) : null,
+        faces
+          ? h("span", { class: "faces", title: S.fromPeople(from.map((u) => u.name)) }, [
+              ...from.map((u) => avatar(u, 24, api.avatarUrl)),
+              h(
+                "span",
+                { class: "visually-hidden" },
+                S.newFrom(
+                  count,
+                  from.map((u) => u.name),
+                ),
+              ),
+            ])
+          : n
+            ? h("span", { class: "badge" }, [count, h("span", { class: "visually-hidden" }, S.NEW)])
+            : null,
       ]),
     );
   }
@@ -516,10 +564,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       m.body,
       [hidden.length ? m.hidden.el : null, archived.length ? m.archived.el : null].filter((n) => n !== null),
     );
-    const key = `${s.inbox} ${location.pathname}`;
+    const key = `${s.inbox} ${location.pathname} ${s.inboxFrom.map((u) => `${u.id}:${u.avatar}`).join()}`;
     if (p.inbox.dataset.k !== key) {
       p.inbox.dataset.k = key;
-      p.inboxItem = inboxRow(s.inbox);
+      p.inboxItem = inboxRow(s.inbox, s.inboxFrom);
     }
     // Jump to is kept (not redrawn with the count), so it keeps focus.
     reconcile(p.inboxList, [p.jump, p.inboxItem!]);
@@ -549,7 +597,9 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     if (!row) return;
     const r = row.getBoundingClientRect();
     const n = nav.getBoundingClientRect();
-    nav.scrollTop += Math.min(0, r.top - n.top) || Math.max(0, r.bottom - n.bottom);
+    // The sidebar's header floats over the top of the list (its padding): a row under it is out of sight too.
+    const under = Number.parseFloat(getComputedStyle(nav).paddingTop) || 0;
+    nav.scrollTop += Math.min(0, r.top - n.top - under) || Math.max(0, r.bottom - n.bottom);
   }
 
   /** Drop the rows of rooms no longer listed. */
@@ -708,6 +758,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             s.hidden !== prev.hidden ||
             s.unread !== prev.unread ||
             s.inbox !== prev.inbox ||
+            s.inboxFrom !== prev.inboxFrom ||
             s.mentions !== prev.mentions ||
             s.activeRoomId !== prev.activeRoomId ||
             s.collections !== prev.collections ||

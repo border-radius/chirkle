@@ -130,9 +130,16 @@ a.att-src:hover {
   text-align: right;
 }
 
+/* A collection you follow: its owner's face. */
 .room-section li .owner {
-  color: var(--muted);
-  font-size: 0.8rem;
+  display: flex;
+  flex: none;
+}
+
+.room-section li .owner > .avatar {
+  width: 1rem;
+  height: 1rem;
+  font-size: 0.4375rem;
 }
 
 /* A sending message's tile for an item from a collection. */

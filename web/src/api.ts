@@ -41,6 +41,8 @@ export interface UnreadCounts {
   ids?: string[];
   /** Inbox rows not seen yet, at most 100, and each room's unread mentions and replies (§41); missing from servers before. */
   inbox?: number;
+  /** Who the newest of those rows are from, newest first, at most 3 (the sidebar shows their faces); missing from servers before. */
+  inbox_from?: User[];
   mentions?: Record<string, number>;
 }
 

@@ -82,8 +82,10 @@ No row means "read up to your signup" (`users.created`): history from before you
 
 ## 18.4 Rendering
 
-- A pill after the room name (`.badge`, the accent gradient, `99+` past 99) and a bold name. The badge holds a
-  visually hidden " unread", so a screen reader reads "general, 3 unread".
+- A bold name and, after it, a small accent dot (`.dot`) holding a visually hidden "3 unread", so a screen reader reads
+  "general, 3 unread". Numbers only for what is addressed to you (2026-11-23, the sidebar improvements): a DM's pill
+  (`.badge`, `99+` past 99) counts its unread messages, a room's its unread mentions and replies (§41). Until then every
+  row had the pill with its count.
 - **No badge** for hidden rooms or archived rooms (`unreadCount()` in `store.ts`). The open room has one, and stays
   among the unread rooms at the top, while it has unread messages left below the screen (§18.3; it had none before
   2026-11-02, which hid what was still unread).

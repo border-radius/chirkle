@@ -109,10 +109,30 @@ SELECT p.room AS room, (
 ) AS n
 FROM p`
 
-// unreadRoute: GET /api/chat/unread → { at, rooms: { "<roomId>": count }, ids, inbox, mentions } for every room with
+// inboxFromSQL: who the newest unseen inbox rows are from (inboxCounts' rows), newest first, at most inboxFaces people
+// among the newest inboxCap rows. Not a mention or reply in an anonymous room (§35): its writer isn't told.
+var inboxFromSQL = `
+SELECT actor FROM (
+  SELECT i.actor AS actor, i.created AS created ` + inboxVisibleSQL + ` AND i.created > {:seen} AND NOT ` + inboxReadInRoomSQL + `
+    AND (i.kind = 'reaction' OR m.anonymous = FALSE)
+  ORDER BY i.created DESC LIMIT ` + strconv.Itoa(inboxCap) + `
+) GROUP BY actor ORDER BY MAX(created) DESC LIMIT ` + strconv.Itoa(inboxFaces)
+
+// inboxFaces: how many people the sidebar's "Mentions & replies" row shows the faces of (inbox_from).
+const inboxFaces = 3
+
+// inboxPerson is someone in inbox_from: what an avatar needs.
+type inboxPerson struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Instance string `json:"instance,omitempty"`
+}
+
+// unreadRoute: GET /api/chat/unread → { at, rooms: { "<roomId>": count }, ids, inbox, inbox_from, mentions } for every room with
 // unread messages (at most unreadCap each). `at` is when the counts were taken. `ids` are the recent messages the counts
 // account for: the client adds the live ones it gets that aren't among them (§18.3, QA BUG-106). `inbox`: the inbox's
-// unseen rows; `mentions`: per room, the unread mentions of and replies to the caller (§41).
+// unseen rows, `inbox_from` who the newest of them are from (inboxFromSQL); `mentions`: per room, the unread mentions of and replies to the caller (§41).
 func unreadRoute(e *core.RequestEvent) error {
 	user := e.Auth
 	at := types.NowDateTime().String()
@@ -138,17 +158,17 @@ func unreadRoute(e *core.RequestEvent) error {
 			rooms[r.Room] = r.N
 		}
 	}
-	inbox, mentions, err := inboxCounts(e.App, user)
+	inbox, from, mentions, err := inboxCounts(e.App, user)
 	if err != nil {
 		return err
 	}
-	return e.JSON(http.StatusOK, map[string]any{"at": at, "rooms": rooms, "ids": ids, "inbox": inbox, "mentions": mentions})
+	return e.JSON(http.StatusOK, map[string]any{"at": at, "rooms": rooms, "ids": ids, "inbox": inbox, "inbox_from": from, "mentions": mentions})
 }
 
 // inboxCounts: how many inbox rows user hasn't seen (at most inboxCap): newer than when they last looked at the inbox,
 // and (a mention or reply) not read in its room already; and per room the mentions of them and replies to them that
 // are still unread there (newer than their read position, or signup).
-func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
+func inboxCounts(app core.App, user *core.Record) (int, []inboxPerson, map[string]int, error) {
 	seen := ""
 	if row, err := app.FindFirstRecordByFilter("inbox_reads", "user = {:u}", dbx.Params{"u": user.Id}); err == nil {
 		seen = row.GetString("seen_at")
@@ -159,7 +179,27 @@ func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
 			" LIMIT " + strconv.Itoa(inboxCap) + ")",
 	).Bind(dbx.Params{"me": user.Id, "seen": seen}).Row(&unseen)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
+	}
+	from := []inboxPerson{}
+	if unseen > 0 {
+		var ids []string
+		if err := app.DB().NewQuery(inboxFromSQL).Bind(dbx.Params{"me": user.Id, "seen": seen}).Column(&ids); err != nil {
+			return 0, nil, nil, err
+		}
+		people, err := app.FindRecordsByIds("users", ids)
+		if err != nil {
+			return 0, nil, nil, err
+		}
+		byID := map[string]*core.Record{}
+		for _, p := range people {
+			byID[p.Id] = p
+		}
+		for _, id := range ids {
+			if p := byID[id]; p != nil {
+				from = append(from, inboxPerson{ID: p.Id, Name: p.GetString("name"), Avatar: p.GetString("avatar"), Instance: p.GetString("instance")})
+			}
+		}
 	}
 	var rows []struct {
 		Room string `db:"room"`
@@ -167,7 +207,7 @@ func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
 	}
 	err = app.DB().NewQuery(inboxMentionsSQL).Bind(dbx.Params{"me": user.Id, "since": user.GetString("created")}).All(&rows)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	mentions := map[string]int{}
 	for _, r := range rows {
@@ -175,7 +215,7 @@ func inboxCounts(app core.App, user *core.Record) (int, map[string]int, error) {
 			mentions[r.Room] = r.N
 		}
 	}
-	return unseen, mentions, nil
+	return unseen, from, mentions, nil
 }
 
 // firstUnreadRoute: GET /api/chat/unread/{room} → { id, created } of the oldest message in room that is unread for the

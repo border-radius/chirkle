@@ -70,7 +70,7 @@ test("a private room: only the people its creator adds see it; someone taken out
 
   // Bob gets it live, with its history; Cat never does. Its row comes in before its unread count, which then moves it to
   // the top (unread first): click it once it has the count, not as it jumps.
-  await expect(row(b, name).locator(".badge")).toBeVisible();
+  await expect(row(b, name).locator(".badge, .dot")).toBeVisible();
   await row(b, name).locator("a").click();
   await expect(message(b, "just us")).toBeVisible();
   await send(b, "hi Ada");

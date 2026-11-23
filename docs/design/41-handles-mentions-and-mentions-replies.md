@@ -59,7 +59,10 @@ read in their room: no reading one twice; and reactions seen there, below) and `
 messages that mention or reply to you, at most 100 a room since 2026-11-12: the apps only show whether there are any).
 Each room's count is a range scan of `(user, room, created)` from the read position on (§42.1). A person's inbox keeps
 their newest 500 rows, none older than 180 days (the daily prune, §42.1). The sidebar's first row, right under Jump to, is **Mentions & replies**
-(`/inbox`) with "N new"; a room with unread mentions or replies has an "@" before its count; both follow
+(`/inbox`) with the faces of who the newest unseen rows are from (`inbox_from` of `GET /api/chat/unread`: at most 3
+people, newest first, among the newest 100 unseen rows, not a mention or reply's writer in an anonymous room; "N new" for a
+screen reader, and shown when the server doesn't say whose; 2026-11-23); a room with unread mentions or replies shows
+how many in its pill, instead of the dot other unread rooms get (2026-11-23; an "@" before its count until then); both follow
 `chat/inbox` live, and reading a room clears its "@". The page (`views/inbox.ts`, a lazy chunk) says "Ada mentioned you
 in #room", "replied to you" (with your message quoted) or "reacted 👍🎉 to your message", newest first, "Show older",
 what is new tinted (each item's `read`: a mention or reply read in its room isn't new; a read sent while the inbox

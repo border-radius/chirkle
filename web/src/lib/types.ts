@@ -168,7 +168,7 @@ export interface Collection {
   items: number;
   last_added: string;
   /** Someone else's that you follow: whose it is, up to when you've seen it, and how many items are new (at most 100). */
-  owner?: { id: string; name: string };
+  owner?: { id: string; name: string; avatar?: string };
   seen_at?: string;
   new?: number;
 }

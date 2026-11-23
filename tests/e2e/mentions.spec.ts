@@ -26,13 +26,13 @@ test("mentions (§41): @ suggests people, the mention is highlighted for them, t
   await composer(a).press("Enter");
   await expect(message(a, "thanks").locator(".mention")).toHaveText(`@${bob.handle}`);
 
-  // Bob, elsewhere: the room has an @ and the sidebar's Mentions & replies a count.
+  // Bob, elsewhere: the room counts its mention, and the sidebar's Mentions & replies shows who it is from.
   const other = await apiRoom(bob);
   const b = await openRoom(browser, bob, other);
   const row = b.locator(`[data-room-id="${room.id}"]`);
-  await expect(row.locator(".badge").first()).toHaveText(/^@/);
+  await expect(row.locator(".badge")).toHaveText(/^1 mention of you or reply/);
   const inbox = b.locator('[data-section="inbox"] a');
-  await expect(inbox).toContainText("1 new");
+  await expect(inbox).toContainText(`1 new, from ${ada.name}`);
   if (SHOTS) await b.screenshot({ path: `${SHOTS}/sidebar.png` });
 
   await inbox.click();

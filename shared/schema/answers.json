@@ -936,7 +936,7 @@
       ]
     },
     "GET /api/chat/unread": {
-      "$comment": "Unread counts by room, the rooms with an unread message counted by id only (ids), the inbox's count and mentions by room (server/unread.go).",
+      "$comment": "Unread counts by room, the rooms with an unread message counted by id only (ids), the inbox's count, who its newest rows are from (inbox_from: at most 3, newest first; since 2026-11-23) and mentions by room (server/unread.go).",
       "schema": {
         "type": "object",
         "properties": {
@@ -951,6 +951,13 @@
           },
           "inbox": {
             "$ref": "#/$defs/count"
+          },
+          "inbox_from": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/$defs/profile"
+            }
           },
           "mentions": {
             "$ref": "#/$defs/counts"
@@ -975,6 +982,13 @@
             "m00000000000004"
           ],
           "inbox": 1,
+          "inbox_from": [
+            {
+              "id": "u00000000000002",
+              "name": "Ada",
+              "avatar": ""
+            }
+          ],
           "mentions": {
             "r00000000000001": 1
           }

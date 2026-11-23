@@ -8,7 +8,7 @@ Mentions & replies, which load on first use).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img alt="A room in Chirkle: the room list with unread counts on the left; messages with avatars, a reply, an @mention of you, a photo and emoji reactions on the right" src="docs/screenshot-light.png">
+  <img alt="A room in Chirkle: the sidebar on the left, with the faces of who mentioned you, unread dots and mention counts; messages with avatars, a reply, an @mention of you, a photo and emoji reactions on the right" src="docs/screenshot-light.png">
 </picture>
 
 - Runs on a $5 VPS (1 vCPU, 1 GB of RAM): about 1,000 people online at a normal pace (2,000

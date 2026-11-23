@@ -345,7 +345,7 @@ describe("rooms view (§7.1)", () => {
   });
 
   describe("mentions and replies (§41)", () => {
-    it("lists Mentions & replies first, with how many are new; a room that mentions you has an @", async () => {
+    it("lists Mentions & replies first, with how many are new; a room that mentions you counts its mentions", async () => {
       const a = await room();
       const b = await room();
       await mount();
@@ -364,19 +364,36 @@ describe("rooms view (§7.1)", () => {
       const now = section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
       expect(now.textContent).toBe("Mentions & replies3 new");
       expect(now.classList.contains("unread")).toBe(true);
-      const badges = (r: Room) => [...row(r)!.querySelectorAll(".badge")].map((x) => x.textContent);
-      expect(badges(a)).toEqual(["@ mentions you,", "2 unread"]);
-      expect(badges(b)).toEqual(["1 unread"]);
-      // Read: no count, no @.
+      const badges = (r: Room) => [...row(r)!.querySelectorAll(".badge, .dot")].map((x) => `${x.className}: ${x.textContent}`);
+      // Numbers only for mentions; other unread rooms get a dot (sidebar improvements, 2026-11-23).
+      expect(badges(a)).toEqual(["badge: 1 mention of you or reply, 2 unread"]);
+      expect(badges(b)).toEqual(["dot: 1 unread"]);
+      // Read: no count, no dot.
       store.set({ unread: new Map([[b.id, 1]]) });
       expect(badges(a)).toEqual([]);
     });
+
+    it("shows the faces of who the newest are from, rather than a count, while some are new", async () => {
+      await mount();
+      const link = () => section("inbox" as Section).querySelector<HTMLAnchorElement>("a")!;
+      const maya = { id: "maya00000000001", name: "Maya Chen" };
+      const sam = { id: "sam000000000001", name: "Sam Rivera" };
+      store.set({ inbox: 4, inboxFrom: [maya, sam] });
+      expect(link().querySelectorAll(".faces > .avatar").length).toBe(2);
+      expect(link().querySelector(".badge")).toBeNull();
+      expect(link().querySelector(".faces .visually-hidden")!.textContent).toBe(", 4 new, from Maya Chen and Sam Rivera");
+      expect(link().querySelector(".faces")!.getAttribute("title")).toBe("From Maya Chen and Sam Rivera");
+      // Seen: nothing.
+      store.set({ inbox: 0, inboxFrom: [] });
+      expect(link().textContent).toBe("Mentions & replies");
+    });
   });
 
-  describe("unread badges (§18.4)", () => {
-    const badge = (r: Room) => row(r)?.querySelector(".badge") ?? null;
+  describe("unread marks (§18.4)", () => {
+    // A room's is a dot (its count read out), a DM's a count (sidebar improvements, 2026-11-23).
+    const badge = (r: Room) => row(r)?.querySelector(".badge, .dot") ?? null;
 
-    it("shows the count (99+ past 99) with a screen-reader label, and makes the name bold", async () => {
+    it("shows a dot with the count (99+ past 99) for a screen reader, and makes the name bold", async () => {
       const a = await room();
       const b = await room();
       const quiet = await room();
@@ -387,8 +404,9 @@ describe("rooms view (§7.1)", () => {
           [b.id, 250],
         ]),
       });
+      expect(badge(a)!.className).toBe("dot");
       expect(badge(a)!.textContent).toBe("3 unread");
-      expect(badge(a)!.querySelector(".visually-hidden")!.textContent).toBe(" unread");
+      expect(badge(a)!.querySelector(".visually-hidden")!.textContent).toBe("3 unread");
       expect(badge(b)!.textContent).toBe("99+ unread");
       expect(row(a)!.querySelector("a")!.classList.contains("unread")).toBe(true);
       expect(badge(quiet)).toBeNull();
@@ -419,7 +437,7 @@ describe("rooms view (§7.1)", () => {
       expect([hidden, archived].map(badge)).toEqual([null, null]);
     });
 
-    it("a message from someone else shows up live; DMs get a badge too", async () => {
+    it("a message from someone else shows up live; DMs get a count", async () => {
       const other = await signedUp("Other");
       const r = await other.api.createRoom(`room-${uniq()}`);
       const dm = await other.api.openDm(me.user.id);
@@ -428,6 +446,8 @@ describe("rooms view (§7.1)", () => {
       await other.api.send({ id: newId(), room: dm.id, text: "psst" });
       await vi.waitFor(() => expect(badge(r)?.textContent).toBe("1 unread"));
       await vi.waitFor(() => expect(badge(dm)?.textContent).toBe("1 unread"));
+      expect(badge(dm)!.className).toBe("badge");
+      expect(badge(r)!.className).toBe("dot");
     });
   });
 

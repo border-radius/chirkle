@@ -106,7 +106,7 @@ const ROOMS: { name: string; visibility?: "open" | "public"; lines: Line[]; unre
     lines: [
       { by: "jonas", ago: 300, text: "Reminder: all-hands moved to 3pm today" },
       { by: "amara", ago: 95, text: "Lunch order is going in at 12:15, reply here if you want in" },
-      { by: "sam", ago: 30, text: "Anyone else's VPN acting up?" },
+      { by: "sam", ago: 30, text: "@alex_morgan is your VPN acting up too?" },
       { by: "jonas", ago: 26, text: "Restarting it fixed it for me" },
       { by: "yuki", ago: 8, text: "Welcome aboard, Priya! 👋" },
     ],
@@ -144,7 +144,7 @@ const ROOMS: { name: string; visibility?: "open" | "public"; lines: Line[]; unre
   {
     name: "support",
     unread: 1,
-    lines: [{ by: "yuki", ago: 52, text: "Ticket queue is down to zero 🎉" }],
+    lines: [{ by: "yuki", ago: 52, text: "@alex_morgan ticket queue is down to zero 🎉" }],
   },
 ];
 

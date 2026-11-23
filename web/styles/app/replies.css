@@ -201,7 +201,3 @@
 .room-section[data-section="inbox"] a[aria-current="page"]::before {
   color: var(--accent);
 }
-
-.badge + .badge {
-  margin-left: 0;
-}

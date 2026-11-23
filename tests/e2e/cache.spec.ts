@@ -83,7 +83,7 @@ test("a room with unread messages is prefetched: opening it shows them at once (
 
   // Bob has never opened the room: all he got is the unread event, without its text.
   await apiSend(ada, room, "new while away");
-  await expect(row.locator(".badge")).toHaveText("1 unread", { timeout: 2_000 });
+  await expect(row.locator(".badge, .dot")).toHaveText("1 unread", { timeout: 2_000 });
   await expect.poll(() => kept(page, room.id)).toEqual(["new while away"]);
 
   const release = await holdMessages(page);
@@ -92,7 +92,7 @@ test("a room with unread messages is prefetched: opening it shows them at once (
   // Seen, though the first page never came: back in the lobby, the room isn't unread.
   await page.locator(`li[data-room-id="${lobby.id}"]`).getByRole("link").click();
   await page.waitForTimeout(500);
-  await expect(row.locator(".badge")).toHaveCount(0);
+  await expect(row.locator(".badge, .dot")).toHaveCount(0);
   release();
   await page.close();
 });
@@ -171,6 +171,6 @@ test("QA BUG-102: a reload into a prefetched room with many unread messages leav
   await expect(page.locator("li.new-line + li.msg .body")).toHaveText("unread 1");
   await page.waitForTimeout(1500); // reads go out a second after they are seen
   await page.locator(`a[href="/r/${lobby.id}"]`).click();
-  await expect(page.locator(`a[href="/r/${room.id}"] .badge`)).toBeVisible();
+  await expect(page.locator(`a[href="/r/${room.id}"] :is(.badge, .dot)`)).toBeVisible();
   await page.close();
 });

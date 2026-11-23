@@ -2,8 +2,8 @@
 // screen's text stays in its own chunk. Copy changes here; a translation would replace these.
 
 export const ROOMS = "Rooms";
-export const YOUR_PROFILE = "Your profile";
-export const SETTINGS = "Settings";
+export const PROFILE_AND_SETTINGS = "Your profile and settings";
+export const profileAndSettings = (name: string) => `${name}, profile and settings`;
 export const YOURE_READING_AS_A_GUEST_ONLY = "You're reading as a guest. Only Open Air rooms are listed.";
 export const LOG_IN = "Log in";
 export const SIGN_UP = "Sign up";
@@ -41,5 +41,11 @@ export const A_ROOM_WITH_THIS_NAME_ALREADY = "A room with this name already exis
 export const NEW = " new";
 export const ITEM = " item";
 export const ITEMS = " items";
-export const MENTIONS_YOU_HIDDEN = " mentions you,";
+export const mentionsYouOf = (at: number, unread: number | string) =>
+  ` ${at === 1 ? "mention of you or reply" : "mentions of you or replies"}, ${unread} unread`;
+export const byOwner = (name: string) => ` (by ${name})`;
+/** "Maya", "Maya and Sam", "Maya, Sam and Leo". */
+const names = (list: string[]) => (list.length < 2 ? (list[0] ?? "") : `${list.slice(0, -1).join(", ")} and ${list.at(-1)}`);
+export const fromPeople = (list: string[]) => `From ${names(list)}`;
+export const newFrom = (n: number | string, list: string[]) => `, ${n} new, from ${names(list)}`;
 export const UNREAD = " unread";
