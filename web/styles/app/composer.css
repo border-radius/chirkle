@@ -72,11 +72,13 @@
   align-items: center;
   height: 2.25rem;
   padding: 0 0.875rem 0 0.75rem;
+  border: 0;
   border-radius: 1.125rem;
   background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  box-shadow: var(--shadow);
+  /* The canvas's 0 8px 24px black at 35% (at its 1.5× scale) in dark; the light theme's violet shadow. */
+  box-shadow: 0 0.3125rem 1rem light-dark(rgb(60 30 140 / 14%), rgb(0 0 0 / 35%));
   color: var(--fg);
   font-size: 0.8125rem;
   font-weight: 600;
@@ -107,6 +109,13 @@
 
 .new-messages .faces .avatar + .avatar {
   margin-left: -0.4375rem;
+}
+
+/* Hovered, still glass: a shade of the hover colour, not the solid one buttons take. */
+@media (hover: hover) {
+  .new-messages:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--hover) 80%, transparent);
+  }
 }
 
 .new-messages:active:not(:disabled) {
