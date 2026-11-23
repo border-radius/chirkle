@@ -2007,3 +2007,12 @@ the buttons' own row under several lines on a phone, the reply-to-you chip with 
 card on the web any more: a mention is highlighted in the text), link previews as a ghost line with the domain, and the authors' faces on
 the scroll button. To port: `RoomScreen`'s top bar and composer drawn over the list with a translucent fill (Compose
 has no backdrop blur before Android 12: the tint alone below it), `MessageRow`'s quote and previews, and the pill.
+
+## 90. Light theme from the room view redesign (2026-11-23)
+
+The web's light theme took the "after · light" board's colours (DESIGN.md §7.8, `tokens.css`): white for the pane and the
+sidebar, ink `#0b0b10`, neutral greys `#3f3f48` (muted) and `#62626e` (dim), `#e7e7ec` lines, `#f1f1f4` hover, and
+`#5536d0` as both the accent text and the fill (white on it). The app's `Light` scheme and `LightChirkle` in
+`core/ui/Theme.kt` follow: `LightFill` is the accent, the surface containers are neutral greys, a picked row
+(`secondaryContainer`, `own`) is `#efebff`; the window background (`MainActivity`, `values/colors.xml` `bg`) is white.
+Dark is unchanged and keeps `Fill` `#6e56cf`. The launcher icon's lavender background is left as it is.

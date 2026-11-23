@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
     /** The window behind Compose, the system bars' icons and (Android 12+) the splash screen, in [t]'s colours. */
     private fun applyTheme(t: ThemeChoice) {
         val dark = isDark(t)
-        window.setBackgroundDrawable((if (dark) 0xFF1A1726.toInt() else 0xFFFBFAFF.toInt()).toDrawable())
+        window.setBackgroundDrawable((if (dark) 0xFF1A1726.toInt() else 0xFFFFFFFF.toInt()).toDrawable())
         val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(style, style)
         if (Build.VERSION.SDK_INT >= 31) {

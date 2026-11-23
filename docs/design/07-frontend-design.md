@@ -266,7 +266,10 @@ Other rules:
 - One plain CSS file with custom properties for theming (`web/styles/app/tokens.css`). The look (2026-10-31, from
   the "Chirkle Sidebar Redesign" design, its boards in `docs/design-frames/`): a dark graphite surface by default, from chirkle.com's dark hero demo (2026-11-07: pane `#1a1b1e`,
   sidebar `#111214`, raised `#232428`), Radix violet (2026-11-22, was lavender `#a58bff` in dark, `#5b3df5` in light): step 9 `#6e56cf` as the fill in both
-  themes with white on it (`--on-fill`), step 11 for accent text and links (`#baa7ff` dark, `#6550b9` light), pink `#f9a8d4` for the NEW line; 10 px radius for controls,
+  themes with white on it (`--on-fill`), step 11 for accent text and links (`#baa7ff` dark), pink `#f9a8d4` for the NEW line; the light theme (2026-11-23, the
+  "Room view redesign" canvas; was lavender, `#fbfaff` pane, `#f1eefc` sidebar, `#6550b9` accent): white pane and sidebar
+  told apart by a `#e7e7ec` line, ink `#0b0b10`, neutral greys `#3f3f48` and `#62626e`, `#f1f1f4` hover, `#5536d0` as both
+  the accent and the fill; 10 px radius for controls,
   16 px for dialogs over a dimmed page; Inter, self-hosted (§7.7), with the system font stack behind it.
 - Icons are one-color SVGs used as CSS masks (`web/styles/app/icons.css`): an element with `ic i-<name>` draws the
   icon as its `::before` in `currentColor`. Icon-only buttons carry an `aria-label`. No emoji in the chrome.

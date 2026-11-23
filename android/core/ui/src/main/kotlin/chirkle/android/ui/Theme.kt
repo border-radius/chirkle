@@ -2,7 +2,8 @@
 // Dynamic colour is off: the app looks the same on every phone, and like the web app. Since the 2026-10-31 redesign: the
 // accent on a fill (primaryContainer and [ChirkleColors.fill]), Inter. Since 2026-11-07 dark is chirkle.com's: graphite
 // surfaces. Since 2026-11-22 the violet is Radix violet: step 9 #6e56cf as the fill (white on it) in both themes,
-// step 11 for accent text (#6550b9 light, #baa7ff dark).
+// step 11 for accent text (#baa7ff dark). Since 2026-11-23 light is the room view redesign's: white surfaces, neutral
+// greys, #5536d0 as both the accent text and the fill.
 package chirkle.android.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -51,10 +52,12 @@ val LocalChirkleColors = staticCompositionLocalOf {
     )
 }
 
-private val Accent = Color(0xFF6550B9)
+private val Accent = Color(0xFF5536D0)
 
-/** Radix violet 9, the solid fill in both themes (white on it, 5.4:1). */
+/** Radix violet 9, the dark theme's solid fill (white on it, 5.4:1). */
 private val Fill = Color(0xFF6E56CF)
+/** The light theme's fill (2026-11-23, the room view redesign): the accent itself, white on it. */
+private val LightFill = Accent
 private val Accent2 = Color(0xFFC42A7C)
 
 private val Light: ColorScheme = lightColorScheme(
@@ -62,25 +65,25 @@ private val Light: ColorScheme = lightColorScheme(
     onPrimary = Color.White,
     secondary = Accent2,
     onSecondary = Color.White,
-    background = Color(0xFFFBFAFF),
-    onBackground = Color(0xFF1D1530),
-    surface = Color(0xFFFBFAFF),
-    onSurface = Color(0xFF1D1530),
-    surfaceVariant = Color(0xFFF1EEFC),
-    onSurfaceVariant = Color(0xFF5E5874),
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF0B0B10),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0B0B10),
+    surfaceVariant = Color(0xFFFFFFFF),
+    onSurfaceVariant = Color(0xFF3F3F48),
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF6F4FE),
-    surfaceContainer = Color(0xFFF1EEFC),
-    surfaceContainerHigh = Color(0xFFECE8FB),
-    surfaceContainerHighest = Color(0xFFE9E4FB),
-    outline = Color(0xFFCFC7EE),
-    outlineVariant = Color(0xFFE3DDF5),
+    surfaceContainerLow = Color(0xFFF8F8FA),
+    surfaceContainer = Color(0xFFF4F4F6),
+    surfaceContainerHigh = Color(0xFFF1F1F4),
+    surfaceContainerHighest = Color(0xFFECECF0),
+    outline = Color(0xFFCFCFD6),
+    outlineVariant = Color(0xFFE7E7EC),
     error = Color(0xFFC41D36),
     onError = Color.White,
-    primaryContainer = Fill,
+    primaryContainer = LightFill,
     onPrimaryContainer = Color.White,
-    secondaryContainer = Color(0xFFE9E4FB),
-    onSecondaryContainer = Color(0xFF1D1530),
+    secondaryContainer = Color(0xFFEFEBFF),
+    onSecondaryContainer = Color(0xFF0B0B10),
 )
 
 private val DarkAccent = Color(0xFFBAA7FF)
@@ -113,14 +116,14 @@ private val Dark: ColorScheme = darkColorScheme(
 )
 
 private val LightChirkle = ChirkleColors(
-    muted = Color(0xFF5E5874),
-    dim = Color(0xFF645E7C),
-    border = Color(0xFFE3DDF5),
-    hover = Color(0xFFE9E4FB),
+    muted = Color(0xFF3F3F48),
+    dim = Color(0xFF62626E),
+    border = Color(0xFFE7E7EC),
+    hover = Color(0xFFF1F1F4),
     highlight = Color(0xFFFFF1B8),
     tint = Accent.copy(alpha = 0.12f),
-    own = Color(0xFFEDE8FF),
-    fill = Fill,
+    own = Color(0xFFEFEBFF),
+    fill = LightFill,
     onFill = Color.White,
     new = Color(0xFFC0267A),
 )

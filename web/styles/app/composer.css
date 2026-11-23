@@ -78,7 +78,7 @@
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   /* The canvas's 0 8px 24px black at 35% (at its 1.5× scale) in dark; the light theme's violet shadow. */
-  box-shadow: 0 0.3125rem 1rem light-dark(rgb(60 30 140 / 14%), rgb(0 0 0 / 35%));
+  box-shadow: 0 0.3125rem 1rem light-dark(rgb(11 11 16 / 12%), rgb(0 0 0 / 35%));
   color: var(--fg);
   font-size: 0.8125rem;
   font-weight: 600;

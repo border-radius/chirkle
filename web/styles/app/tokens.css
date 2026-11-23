@@ -2,19 +2,19 @@
 
 :root {
   color-scheme: light dark;
-  --bg: #fbfaff;
-  --surface: #f1eefc;
+  --bg: #fff;
+  --surface: #fff;
   --raised: #fff;
-  --fg: #1d1530;
-  --text: #1d1530;
-  --muted: #5e5874;
-  --dim: #645e7c;
-  --border: #e3ddf5;
-  --line: #e3ddf5;
-  --hover: #e9e4fb;
-  --accent: #6550b9;
+  --fg: #0b0b10;
+  --text: #0b0b10;
+  --muted: #3f3f48;
+  --dim: #62626e;
+  --border: #e7e7ec;
+  --line: #e7e7ec;
+  --hover: #f1f1f4;
+  --accent: #5536d0;
   /* Solid fills: Send, badges, primary buttons, with --on-fill text on them. */
-  --fill: #6e56cf;
+  --fill: #5536d0;
   --on-fill: #fff;
   --accent-2: #c42a7c;
   --grad: linear-gradient(135deg, #6a4bff, #c42a7c);
@@ -28,7 +28,7 @@
   --danger: #c41d36; /* ≥ 4.5:1 on every light background, hover included (QA BUG-57) */
   --new: #b0175f;
   --highlight: #fff1b8;
-  --shadow: 0 0.375rem 1.5rem rgb(60 30 140 / 14%);
+  --shadow: 0 0.375rem 1.5rem rgb(11 11 16 / 12%);
   --radius: 0.625rem;
   --pill: 62.4375rem;
   --ease: cubic-bezier(0.34, 1.56, 0.64, 1);
