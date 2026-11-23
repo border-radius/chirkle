@@ -511,7 +511,7 @@ export function createMessageList(opts: {
       err?.text ?? "",
       targetId === m.id,
       toMe,
-      quoted && me && quoted.author === me.id ? (me.avatar ?? "") : null,
+      quoted ? (me && quoted.author === me.id ? (me.avatar ?? "") : (quoted.expand?.author?.avatar ?? "")) : null,
       m.expand?.author?.name ?? "",
       m.expand?.author?.avatar ?? "",
       (m.files ?? []).join("/"),
@@ -546,8 +546,6 @@ export function createMessageList(opts: {
         }),
       );
     }
-    // Above the author's name, from where the avatar is.
-    if (quoted) parts.push(quote(quoted, me && quoted.author === me.id ? me : null));
     if (groupStart) {
       parts.push(avatar(author, 32, opts.avatarUrl));
       parts.push(
@@ -557,6 +555,8 @@ export function createMessageList(opts: {
         ]),
       );
     }
+    // Under the name, over the text (the reply redesign).
+    if (quoted) parts.push(quote(quoted, me && quoted.author === me.id ? me : null));
     if (m.forwarded_from && !m.deleted) {
       parts.push(h("div", { class: "forwarded" }, S.forwardedFrom(m.expand?.forwarded_from?.name)));
     }
@@ -668,10 +668,16 @@ export function createMessageList(opts: {
     );
   }
 
-  /** A reply's quote of the message it answers (§19): clicking it shows that message. */
+  /**
+   * A reply's quote of the message it answers (§19): a one-line pill, the author's face, name and text (an icon and
+   * "Attachment" for files alone). Your own words quoted are tinted, your name in the accent (the reply redesign).
+   * Clicking it shows that message.
+   */
   function quote(q: Quoted, mine: User | null): HTMLElement {
-    const name = q.expand?.author?.name ?? "";
+    const who = mine ?? q.expand?.author ?? null;
+    const name = who?.name ?? "";
     const text = quoteText(q);
+    const filesOnly = !q.deleted && !q.text.trim() && !!q.files?.length;
     // Spoken as one line, like it is shown: never the whole of a long message. Not "Reply …" either, which is
     // what the Reply button next to it is called.
     const chars = [...text];
@@ -685,14 +691,11 @@ export function createMessageList(opts: {
         "aria-label": S.quotingShowTheOriginalMessage(name, spoken),
         dataset: { act: "quote", quote: q.id },
       },
-      // Your own words quoted: a chip, your face first, the one you spot quickest (the room view redesign).
-      mine
-        ? h("span", { class: "reply-chip" }, [
-            avatar(mine, 24, opts.avatarUrl),
-            name ? h("span", { class: "reply-author" }, name) : null,
-            h("span", { class: "reply-text" }, text),
-          ])
-        : [name ? h("span", { class: "reply-author" }, name) : null, h("span", { class: "reply-text" }, text)],
+      [
+        who ? avatar(who, 24, opts.avatarUrl) : null,
+        name ? h("span", { class: "reply-author" }, name) : null,
+        h("span", { class: "reply-text" }, [filesOnly ? h("span", { class: "i i-media", "aria-hidden": "true" }) : null, text]),
+      ],
     );
   }
 

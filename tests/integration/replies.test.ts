@@ -125,7 +125,7 @@ describe("replies through the client API (§19)", () => {
         author: parent.author,
         text: "question",
         deleted: false,
-        expand: { author: { id: parent.author, name: "Alice" } },
+        expand: { author: { id: parent.author, name: "Alice", avatar: "" } },
       };
       expect(sent.reply_to).toBe(parent.id);
       expect(sent.expand?.reply_to).toMatchObject(quoted);
@@ -139,7 +139,7 @@ describe("replies through the client API (§19)", () => {
       expect(events[0]![1].expand?.reply_to).toBeUndefined();
       // only the fields the quote needs
       expect(Object.keys(sent.expand!.reply_to!).sort()).toEqual(["author", "deleted", "expand", "files", "id", "text"]);
-      expect(Object.keys(sent.expand!.reply_to!.expand!.author!).sort()).toEqual(["id", "name"]);
+      expect(Object.keys(sent.expand!.reply_to!.expand!.author!).sort()).toEqual(["avatar", "id", "name"]);
     } finally {
       await off();
     }

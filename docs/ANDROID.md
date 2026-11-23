@@ -2016,3 +2016,12 @@ sidebar, ink `#0b0b10`, neutral greys `#3f3f48` (muted) and `#62626e` (dim), `#e
 `core/ui/Theme.kt` follow: `LightFill` is the accent, the surface containers are neutral greys, a picked row
 (`secondaryContainer`, `own`) is `#efebff`; the window background (`MainActivity`, `values/colors.xml` `bg`) is white.
 Dark is unchanged and keeps `Fill` `#6e56cf`. The launcher icon's lavender background is left as it is.
+
+## 91. Reply redesign (2026-11-24)
+
+As on the web (DESIGN.md §19.3, the "reply redesign" canvas): `MessageRow`'s quote is a one-line pill under the name
+and over the text (6 dp from the message above when the reply goes on a group): the quoted author's face (20 dp), name
+and text, `ChirkleIcons.Image` before "Attachment" for files alone, italic for "Message deleted". Your own words quoted
+sit on `Chirkle.colors.tint` with your name in the accent; others' on `surfaceContainerHigh`, name and text muted. The
+accent bar and two lines are gone. `MSG_FIELDS` asks for the quoted author's `avatar` too (`shared/contract.json`).
+This ports §89's reply-to-you chip.

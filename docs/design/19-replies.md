@@ -22,7 +22,7 @@ soft-deleted, so the relation never dangles: a reply to a deleted message quotes
 
 Every message read (`page`, `getMessage`, `changes`, `send`) expands `author,reply_to.author` and asks for
 only what the quote shows: `reply_to`, and the original's `id, author, text, deleted, files` and author's
-`id, name` (`MSG_FIELDS` in `api.ts`). The expand follows the messages view rule, which the same-room check makes
+`id, name, avatar` (the avatar since the reply redesign, 2026-11-24) (`MSG_FIELDS` in `api.ts`). The expand follows the messages view rule, which the same-room check makes
 always true for someone who can see the reply. `NewMessage.replyTo` sends `reply_to`. Live events don't expand it
 (docs/PERF.md §2.3; since 2026-11-09 they come once per message on `chat/messages`, PERF.md §7). The room controller fills the
 quote in from the original in its window, or from its own copy of the reply, and fetches the original only when it has
@@ -38,8 +38,10 @@ neither.
   scroll it into view; Ctrl+Up while not replying starts a reply to the newest one, and Ctrl+Down past the newest ends
   the reply.
 - The reply bar follows the original: edited, it shows the new text; deleted (or the room archived), it closes.
-- **The quote** is a one-line button above the reply's text: author name, then the text on one line (or
-  "Attachment", "Message deleted"). It uses the window's copy of the original when there is one, so edits and
+- **The quote** is a one-line pill under the reply's name and over its text (the reply redesign, 2026-11-24; until
+  then a line above the name, joined to the avatar by a curve): the quoted author's face, name, then the text on one
+  line (or a picture icon and "Attachment", or "Message deleted" in italics). Your own words quoted are on the accent's
+  tint, your name in the accent; anyone else's on the hover grey. A reply that goes on a group has 6px over its pill. It uses the window's copy of the original when there is one, so edits and
   deletes show live; otherwise the server's expanded copy. A live reply to a message beyond the window has neither
   until the controller has fetched it: its quote reads "…" meanwhile (QA BUG-180).
 - **Replies to you** (someone else's reply to one of your messages) are highlighted (`.to-me`: a rounded card with a faint

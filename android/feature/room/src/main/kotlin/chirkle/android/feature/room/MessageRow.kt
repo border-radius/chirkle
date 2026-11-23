@@ -141,22 +141,39 @@ fun MessageRow(
                     Text(stringResource(R.string.room_forwarded_from, m.expand?.forwardedFrom?.name ?: stringResource(R.string.room_unknown)), color = Chirkle.colors.muted, style = MaterialTheme.typography.labelMedium, fontStyle = FontStyle.Italic)
                 }
                 m.expand?.replyTo?.takeIf { m.replyTo.isNotEmpty() }?.let { q ->
-                    val name = q.expand?.author?.name.orEmpty()
+                    // A one-line pill under the name (the web's .reply-quote, the reply redesign): the quoted author's
+                    // face, name and text, an image icon before "Attachment" for files alone. Your own words: on the
+                    // accent's tint, your name in the accent.
+                    val who = q.expand?.author
+                    val name = who?.name.orEmpty()
+                    val mine = me != null && q.author == me
+                    val filesOnly = !q.deleted && q.text.isBlank() && q.files.isNotEmpty()
                     Row(
                         Modifier
-                            .padding(vertical = 2.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .padding(top = if (first) 2.dp else 6.dp, bottom = 2.dp)
+                            .heightIn(min = 26.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (mine) Chirkle.colors.tint else MaterialTheme.colorScheme.surfaceContainerHigh)
                             .clickable(onClickLabel = stringResource(R.string.room_show_the_original_message)) { actions.onQuote(q.id, m.id) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(start = if (who != null) 3.dp else 12.dp, end = 12.dp, top = 3.dp, bottom = 3.dp)
                             .semantics(mergeDescendants = true) { contentDescription = res.getString(R.string.room_quoting, name.ifEmpty { res.getString(R.string.room_a_message) }, q.line()) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Box(Modifier.width(3.dp).height(32.dp).background(accent, RoundedCornerShape(2.dp)))
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            if (name.isNotEmpty()) Text(name, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = accent)
-                            Text(q.line(), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Chirkle.colors.muted)
+                        if (who != null) Avatar(who, 20.dp)
+                        if (name.isNotEmpty()) {
+                            Text(name, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = if (mine) accent else Chirkle.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 160.dp))
                         }
+                        if (filesOnly) Icon(ChirkleIcons.Image, contentDescription = null, tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
+                        Text(
+                            q.line(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = if (q.deleted) FontStyle.Italic else FontStyle.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (mine) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
                     }
                 }
                 when {

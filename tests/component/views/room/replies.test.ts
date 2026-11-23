@@ -34,6 +34,8 @@ describe("room view", () => {
   describe("replies (§19)", () => {
     const replyBar = () => root.querySelector<HTMLElement>("form.composer .replying")!;
     const quoteOf = (id: string) => msgEl(id)?.querySelector<HTMLButtonElement>("button.reply-quote") ?? null;
+    /** What a quote reads: its author and text, not the letters of a face without a picture. */
+    const words = (id: string) => [...quoteOf(id)!.querySelectorAll(".reply-author, .reply-text")].map((e) => e.textContent).join("");
 
     it("Reply shows who you're answering above the composer; the sent message quotes it", async () => {
       const other = await signedUp("Other");
@@ -68,9 +70,11 @@ describe("room view", () => {
       const highlighted = (id: string) => msgEl(id)!.classList.contains("to-me");
       expect(highlighted(toMe.id)).toBe(true);
       expect([mine, theirs, toThem, toSelf].map((m) => highlighted(m.id))).toEqual([false, false, false, false]);
-      // The reply to you is told by its quote: a chip with your face.
-      const chips = (id: string) => msgEl(id)!.querySelectorAll(".reply-quote.mine .reply-chip .avatar").length;
-      expect([toMe, toThem, toSelf].map((m) => chips(m.id))).toEqual([1, 0, 1]);
+      // The reply to you is told by its quote: tinted, your name in the accent. Every quote shows its author's face.
+      const tinted = (id: string) => msgEl(id)!.querySelector(".reply-quote")!.classList.contains("mine");
+      expect([toMe, toThem, toSelf].map((m) => tinted(m.id))).toEqual([true, false, true]);
+      const faces = (id: string) => msgEl(id)!.querySelectorAll(".reply-quote .avatar").length;
+      expect([toMe, toThem, toSelf].map((m) => faces(m.id))).toEqual([1, 1, 1]);
     });
 
     it("× or Escape cancels the reply; the next message is a plain one", async () => {
@@ -172,9 +176,8 @@ describe("room view", () => {
       expect(quoteOf(reply.id)!.textContent).toBe("…");
       expect(quoteOf(reply.id)!.classList.contains("deleted")).toBe(false);
       release();
-      // (Your own words: a chip, your face before them.)
-      const words = () => [...quoteOf(reply.id)!.querySelectorAll(".reply-author, .reply-text")].map((e) => e.textContent).join("");
-      await vi.waitFor(() => expect(words()).toBe(`Me${all[0]!.text}`));
+      // (Your own words: tinted, your face before them.)
+      await vi.waitFor(() => expect(words(reply.id)).toBe(`Me${all[0]!.text}`));
     });
 
     it("the highlight goes away after a few seconds; clicking the quote again shows it again", async () => {
@@ -198,13 +201,13 @@ describe("room view", () => {
       const parent = await other.api.send({ id: newId(), room: room.id, text: "draft" });
       const reply = await other.api.send({ id: newId(), room: room.id, text: "re", replyTo: parent.id });
       await mount(room);
-      expect(quoteOf(reply.id)!.textContent).toBe("Otherdraft");
+      expect(words(reply.id)).toBe("Otherdraft");
       button(msgEl(parent.id), "Reply")!.click();
       await other.api.edit(parent.id, "final");
-      await vi.waitFor(() => expect(quoteOf(reply.id)!.textContent).toBe("Otherfinal"));
+      await vi.waitFor(() => expect(words(reply.id)).toBe("Otherfinal"));
       await vi.waitFor(() => expect(replyBar().textContent).toContain("final"));
       await other.api.softDelete(parent.id);
-      await vi.waitFor(() => expect(quoteOf(reply.id)!.textContent).toBe("OtherMessage deleted"));
+      await vi.waitFor(() => expect(words(reply.id)).toBe("OtherMessage deleted"));
       expect(replyBar().hidden).toBe(true);
       expect(button(msgEl(parent.id), "Reply")).toBeNull();
     });

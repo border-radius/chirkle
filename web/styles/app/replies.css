@@ -1,47 +1,29 @@
-/* ---- Replies (§19): a one-line quote of the original above the reply, joined to the avatar by a curve; clicking it
-   shows the original. ---- */
+/* ---- Replies (§19): a one-line pill under the reply's name and over its text (the reply redesign, 2026-11-24): the
+   quoted author's face, name and text; clicking it shows the original. ---- */
 
 .reply-quote {
   display: flex;
   gap: 0.375rem;
   align-items: center;
-  max-width: calc(100% + 2rem);
-  margin: 0 0 2px -2rem;
-  padding: 0 0.25rem 0 0;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  height: 1.625rem;
+  margin: 2px 0;
+  padding: 0 0.75rem 0 3px;
   border: 0;
-  border-radius: 0.375rem;
-  background: none;
+  border-radius: var(--pill);
+  background: var(--hover);
   color: var(--dim);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 400;
-  line-height: 1.5;
+  line-height: 1.25rem;
   text-align: left;
 }
 
-/* From the avatar's middle to the message's text: the curve and the gap make up the quote's -32px, so its author
-   lines up with the text below. */
-.reply-quote::before {
-  content: "";
-  flex: none;
-  align-self: flex-end;
-  width: 1.625rem;
-  height: 0.625rem;
-  margin-bottom: -0.25rem;
-  border: solid var(--border);
-  border-width: 2px 0 0 2px;
-  border-top-left-radius: 0.375rem;
-}
-
-/* No avatar under a reply that goes on a group: no curve. */
-/* No avatar to reach to: the quote is as wide as the text at most (QA BUG-271: it kept the 32px more and ran past the
-   column, under the window's edge). */
+/* A reply that goes on a group: a little room from the message above it. */
 .msg:not(.group-start) > .reply-quote {
-  max-width: 100%;
-  margin-left: 0;
-}
-
-.msg:not(.group-start) > .reply-quote::before {
-  content: none;
+  margin-top: 0.375rem;
 }
 
 .reply-quote:active:not(:disabled) {
@@ -50,8 +32,21 @@
 
 @media (hover: hover) {
   .reply-quote:hover {
+    background: color-mix(in srgb, var(--fg) 10%, var(--bg));
     color: var(--fg);
   }
+}
+
+.reply-quote .avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.5rem;
+}
+
+/* No face (a quote still loading): the pill's padding on both sides. */
+.reply-quote > .reply-author:first-child,
+.reply-quote > .reply-text:first-child {
+  margin-left: calc(0.75rem - 3px);
 }
 
 /* The text gives way first; the author only a little, and never for a short quote (QA BUG-186: a percentage of the
@@ -74,46 +69,36 @@
   white-space: nowrap;
 }
 
+/* Files alone: "Attachment" after a picture icon. */
+.reply-text .i {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.25rem;
+  vertical-align: -0.0625rem;
+}
+
 /* Room for the slant: the box clips what leans past its end (QA BUG-177). */
 .reply-quote.deleted .reply-text {
   padding-right: 0.15em;
   font-style: italic;
 }
 
-/* A reply to you: the quote is a violet chip with your face, the curve violet too; the message itself stays clean
-   (messages.css). */
-.reply-quote.mine::before {
-  border-color: var(--fill);
-}
-
-.reply-chip {
-  display: flex;
-  gap: 0.3125rem;
-  align-items: center;
-  min-width: 0;
-  height: 1.25rem;
-  padding: 0 0.5rem 0 2px;
-  border-radius: var(--pill);
+/* Your own words quoted: on the accent's tint, your name in the accent (toward the text colour: the accent alone was
+   under 4.5:1 on the tint in the light theme); the message itself stays clean (messages.css). */
+.reply-quote.mine {
   background: color-mix(in srgb, var(--fill) 18%, var(--bg));
-  color: color-mix(in srgb, var(--accent) 60%, var(--text));
+  color: var(--text);
 }
 
-.reply-chip .avatar {
-  width: 1rem;
-  height: 1rem;
-  font-size: 0.4375rem;
-}
-
-.reply-chip .reply-author {
+.reply-quote.mine .reply-author {
   flex-shrink: 0;
   max-width: 40%;
-  /* Toward the text colour: the accent alone on the chip was under 4.5:1 in the light theme. */
   color: color-mix(in srgb, var(--accent) 70%, var(--fg));
 }
 
 @media (hover: hover) {
-  .reply-quote.mine:hover .reply-chip {
-    color: var(--fg);
+  .reply-quote.mine:hover {
+    background: color-mix(in srgb, var(--fill) 26%, var(--bg));
   }
 }
 

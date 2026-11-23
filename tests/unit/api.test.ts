@@ -51,6 +51,8 @@ describe("MSG_FIELDS", () => {
       "expand.reply_to.files",
       "expand.reply_to.expand.author.id",
       "expand.reply_to.expand.author.name",
+      // the quote shows their face (the reply redesign)
+      "expand.reply_to.expand.author.avatar",
       // who first wrote a forwarded message (§21.3)
       "forwarded_from",
       "forward_of",
