@@ -22,7 +22,6 @@ export const MENTIONS_YOU = "Mentions you";
 export const HIDDEN_ARCHIVED = "Hidden & archived";
 export const HIDDEN = "Hidden";
 export const ARCHIVED = "Archived";
-export const NOTHING_HIDDEN_OR_ARCHIVED = "Nothing hidden or archived";
 export const NEW_ROOM = "New room";
 export const NEW_MESSAGE = "New message";
 export const NEW_COLLECTION = "New collection";

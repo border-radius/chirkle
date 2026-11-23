@@ -94,6 +94,16 @@ describe("rooms view (§7.1)", () => {
       expect(more.querySelector("summary")!.textContent).toBe(`Hidden & archived${rows("hidden") + rows("archived")}`);
     });
 
+    it("with nothing hidden or archived, Hidden & archived isn't listed (2026-11-23)", async () => {
+      const r = await room();
+      vi.spyOn(me.api, "listRooms").mockResolvedValue([r]);
+      vi.spyOn(me.api, "listHidden").mockResolvedValue([]);
+      vi.spyOn(me.api, "subscribeRooms").mockResolvedValue(async () => {});
+      await mount();
+      expect(sectionOf(r)).toBe("rooms");
+      expect(document.querySelector('[data-section="more"]')).toBeNull();
+    });
+
     it("shows an empty state when there are no rooms", async () => {
       const api = me.api;
       vi.spyOn(api, "listRooms").mockResolvedValue([]);

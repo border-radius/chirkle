@@ -341,7 +341,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     return el;
   }
 
-  /** Hidden & archived (§7.1): folded, with how many there are; inside, a part for each. */
+  /** Hidden & archived (§7.1): folded, with how many there are; inside, a part for each. Not listed when it would be empty. */
   function collapsible() {
     const count = h("span", { class: "count" });
     const summary = h("summary", { class: "ic i-chev" }, [h("span", {}, S.HIDDEN_ARCHIVED), count]);
@@ -352,7 +352,6 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     };
     const hidden = part("hidden", S.HIDDEN, "i-eyeoff");
     const archived = part("archived", S.ARCHIVED, "i-archive");
-    const empty = h("p", { class: "empty" }, S.NOTHING_HIDDEN_OR_ARCHIVED);
     const body = h("div", { class: "more-body" });
     const el = h(
       "details",
@@ -365,7 +364,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       },
       [summary, body],
     );
-    return { el, count, body, empty, hidden, archived };
+    return { el, count, body, hidden, archived };
   }
 
   /**
@@ -515,11 +514,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       );
     reconcile(
       m.body,
-      [
-        hidden.length ? m.hidden.el : null,
-        archived.length ? m.archived.el : null,
-        hidden.length || archived.length ? null : m.empty,
-      ].filter((n) => n !== null),
+      [hidden.length ? m.hidden.el : null, archived.length ? m.archived.el : null].filter((n) => n !== null),
     );
     const key = `${s.inbox} ${location.pathname}`;
     if (p.inbox.dataset.k !== key) {
@@ -529,7 +524,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     // Jump to is kept (not redrawn with the count), so it keeps focus.
     reconcile(p.inboxList, [p.jump, p.inboxItem!]);
     reconcile(p.inbox, [p.inboxList]);
-    reconcile(nav, [p.inbox, p.main, p.direct, p.colls, m.el]);
+    reconcile(
+      nav,
+      [p.inbox, p.main, p.direct, p.colls, hidden.length || archived.length ? m.el : null].filter((n) => n !== null),
+    );
     for (const b of nav.querySelectorAll<HTMLElement>("[data-fold]"))
       b.setAttribute("aria-expanded", String(!folded.has(b.dataset.fold as string)));
     if (focused?.isConnected && document.activeElement !== focused) focused.focus();

@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { PNG } from "../support/files.ts";
-import { apiRoom, apiSend, apiUser, atPath, attach, login, message, send, test, uniq } from "./fixtures.ts";
+import { apiHide, apiRoom, apiSend, apiUser, atPath, attach, login, message, send, test, uniq } from "./fixtures.ts";
 
 // No isMobile: Firefox does not support it, and CI runs all three engines. Viewport + touch is what matters here.
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
@@ -169,6 +169,8 @@ test("on a phone, Settings' cards keep their text readable: buttons under the te
 
 test("on a phone, Hidden & archived lines up with the section heads above it (QA BUG-288)", async ({ page }) => {
   const ada = await apiUser("Ada");
+  // Hidden & archived is only listed when it holds something.
+  await apiHide(ada, await apiRoom(ada));
   await login(page, ada);
   const heads = page.locator(".sidebar .fold:visible");
   await expect(heads.first()).toBeVisible();

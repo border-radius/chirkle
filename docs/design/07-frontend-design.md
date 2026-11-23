@@ -16,8 +16,8 @@ Mentions & replies (§41), then Rooms, Direct messages and Collections, then one
 name, linking to the profile) with a Settings button (a guest gets Log in and Sign up there instead):
 
 1. **Rooms:** active rooms that aren't hidden, sorted by name, those with unread messages first.
-2. **Hidden & archived:** collapsed by default and shown with how many rooms it holds (or "Nothing hidden or
-   archived"). Inside, a **Hidden** part, each row with an "Unhide" button, and an **Archived** part (read-only rooms,
+2. **Hidden & archived:** collapsed by default and shown with how many rooms it holds; not listed at all when it holds
+   none (until 2026-11-23 it said "Nothing hidden or archived"). Inside, a **Hidden** part, each row with an "Unhide" button, and an **Archived** part (read-only rooms,
    still browsable; the creator gets "Unarchive"). Until 2026-10-31 these were two sections.
 
 A room hidden by the user that is also archived appears only under Archived, with "Unhide". A hidden or archived

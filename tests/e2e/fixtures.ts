@@ -62,6 +62,15 @@ export async function apiRoom(owner: User, name = `room-${uniq()}`, base = E2E_B
   );
 }
 
+/** Hides `room` for `user` (§7.1). */
+export async function apiHide(user: User, room: Room): Promise<void> {
+  await call("/api/collections/hidden_rooms/records", {
+    method: "POST",
+    token: user.token,
+    body: JSON.stringify({ user: user.id, room: room.id }),
+  });
+}
+
 export async function apiSend(user: User, room: Room, text: string): Promise<{ id: string; text: string }> {
   return call("/api/collections/messages/records", {
     method: "POST",
