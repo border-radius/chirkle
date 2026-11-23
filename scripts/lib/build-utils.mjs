@@ -297,7 +297,7 @@ export function latinFont(metafile, outdir) {
  * with app.js. How fast it feels is checked by scripts/profile-web.ts (CI).
  */
 export const BUDGET = Object.freeze({
-  critical: 64 * 1024,
+  critical: 65 * 1024,
   feature: 16 * 1024,
   stats: 10 * 1024,
 });

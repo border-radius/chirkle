@@ -486,7 +486,7 @@ export function createMessageList(opts: {
       ? []
       : opts.reactions(m).map((r) => ({ ...r, who: reactors(r.users, me?.id ?? "", (id) => names.get(id) ?? opts.nameOf(id)) }));
     const { ms, time } = timeOf(m.created);
-    /** Someone else's reply to one of my messages, or a mention of me (§41): highlighted, so that I notice it (§19.3). */
+    /** Someone else's reply to one of my messages, or a mention of me (§41). Not tinted: the quote's chip or the mention stands out (§19.3). */
     const toMe = !!me && m.author !== me.id && (quoted?.author === me.id || !!m.mentions?.includes(me.id));
     const sig = JSON.stringify([
       m.text,
@@ -511,6 +511,7 @@ export function createMessageList(opts: {
       err?.text ?? "",
       targetId === m.id,
       toMe,
+      quoted && me && quoted.author === me.id ? (me.avatar ?? "") : null,
       m.expand?.author?.name ?? "",
       m.expand?.author?.avatar ?? "",
       (m.files ?? []).join("/"),
@@ -546,7 +547,7 @@ export function createMessageList(opts: {
       );
     }
     // Above the author's name, from where the avatar is.
-    if (quoted) parts.push(quote(quoted));
+    if (quoted) parts.push(quote(quoted, me && quoted.author === me.id ? me : null));
     if (groupStart) {
       parts.push(avatar(author, 32, opts.avatarUrl));
       parts.push(
@@ -634,6 +635,15 @@ export function createMessageList(opts: {
     );
   }
 
+  /** A link's site as shown: its host without "www.". */
+  function siteOf(url: string): string {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
   /** A line for each link (§28): its favicon and title, opening it like the link in the text. Only http(s), data: icons. */
   function previewList(previews: readonly LinkPreview[]): HTMLElement {
     return h(
@@ -646,8 +656,12 @@ export function createMessageList(opts: {
             "li",
             {},
             h("a", { href: p.url, target: "_blank", rel: "noopener noreferrer nofollow", title: p.url }, [
-              p.icon.startsWith("data:image/") ? h("img", { src: p.icon, alt: "", width: 16, height: 16 }) : null,
-              h("span", {}, p.title),
+              p.icon.startsWith("data:image/")
+                ? h("img", { src: p.icon, alt: "", width: 14, height: 14 })
+                : h("span", { class: "preview-letter", "aria-hidden": "true" }, siteOf(p.url).charAt(0).toUpperCase()),
+              h("span", { class: "preview-domain" }, siteOf(p.url)),
+              h("span", { class: "preview-dot", "aria-hidden": "true" }),
+              h("span", { class: "preview-title" }, p.title),
             ]),
           ),
         ),
@@ -655,7 +669,7 @@ export function createMessageList(opts: {
   }
 
   /** A reply's quote of the message it answers (§19): clicking it shows that message. */
-  function quote(q: Quoted): HTMLElement {
+  function quote(q: Quoted, mine: User | null): HTMLElement {
     const name = q.expand?.author?.name ?? "";
     const text = quoteText(q);
     // Spoken as one line, like it is shown: never the whole of a long message. Not "Reply …" either, which is
@@ -666,12 +680,19 @@ export function createMessageList(opts: {
       "button",
       {
         type: "button",
-        class: `reply-quote${q.deleted ? " deleted" : ""}`,
+        class: `reply-quote${q.deleted ? " deleted" : ""}${mine ? " mine" : ""}`,
         title: S.SHOW_THE_ORIGINAL_MESSAGE,
         "aria-label": S.quotingShowTheOriginalMessage(name, spoken),
         dataset: { act: "quote", quote: q.id },
       },
-      [name ? h("span", { class: "reply-author" }, name) : null, h("span", { class: "reply-text" }, text)],
+      // Your own words quoted: a chip, your face first, the one you spot quickest (the room view redesign).
+      mine
+        ? h("span", { class: "reply-chip" }, [
+            avatar(mine, 24, opts.avatarUrl),
+            name ? h("span", { class: "reply-author" }, name) : null,
+            h("span", { class: "reply-text" }, text),
+          ])
+        : [name ? h("span", { class: "reply-author" }, name) : null, h("span", { class: "reply-text" }, text)],
     );
   }
 

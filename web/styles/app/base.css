@@ -93,7 +93,6 @@ button:disabled {
 
 button.primary,
 .auth-form button[type="submit"],
-.composer button[type="submit"],
 .new-room button[type="submit"] {
   border-color: transparent;
   background: var(--fill);
@@ -103,7 +102,6 @@ button.primary,
 @media (hover: hover) {
   button.primary:hover:not(:disabled),
   .auth-form button[type="submit"]:hover:not(:disabled),
-  .composer button[type="submit"]:hover:not(:disabled),
   .new-room button[type="submit"]:hover:not(:disabled) {
     background: var(--fill);
     filter: brightness(1.12);

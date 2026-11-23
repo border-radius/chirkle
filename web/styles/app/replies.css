@@ -80,34 +80,90 @@
   font-style: italic;
 }
 
-/* Replying: a strip over the composer. */
+/* A reply to you: the quote is a violet chip with your face, the curve violet too; the message itself stays clean
+   (messages.css). */
+.reply-quote.mine::before {
+  border-color: var(--fill);
+}
+
+.reply-chip {
+  display: flex;
+  gap: 0.3125rem;
+  align-items: center;
+  min-width: 0;
+  height: 1.25rem;
+  padding: 0 0.5rem 0 2px;
+  border-radius: var(--pill);
+  background: color-mix(in srgb, var(--fill) 18%, var(--bg));
+  color: color-mix(in srgb, var(--accent) 60%, var(--text));
+}
+
+.reply-chip .avatar {
+  width: 1rem;
+  height: 1rem;
+  font-size: 0.4375rem;
+}
+
+.reply-chip .reply-author {
+  flex-shrink: 0;
+  max-width: 40%;
+  /* Toward the text colour: the accent alone on the chip was under 4.5:1 in the light theme. */
+  color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+}
+
+@media (hover: hover) {
+  .reply-quote.mine:hover .reply-chip {
+    color: var(--fg);
+  }
+}
+
+/* Replying: the first row of the message box (composer.css), a line under it; name and quote on one line, two on a
+   phone (narrow.css). */
 .replying {
   display: flex;
-  gap: 0.625rem;
+  gap: 0.5rem;
   align-items: center;
-  min-height: 2.5rem;
-  padding: 0 0.875rem 0 1.375rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
+  min-height: 2.125rem;
+  padding: 0 0.3125rem 0 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+  color: var(--dim);
   font-size: 0.8125rem;
 }
 
+.replying::before {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 .replying-label {
+  display: flex;
   flex: 1;
+  gap: 0.5rem;
+  align-items: baseline;
+  min-width: 0;
+  color: var(--dim);
+}
+
+.replying-who,
+.replying-text {
   min-width: 0;
   overflow: hidden;
-  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The name gives way only a little: the quote first. */
+.replying-who {
+  flex: 0 0.2 auto;
+}
+
+.replying-text {
+  flex: 1;
 }
 
 .replying-label strong {
   color: var(--fg);
   font-weight: 600;
-}
-
-.replying-text::before {
-  content: " · ";
 }
 
 .replying .remove {
@@ -121,8 +177,10 @@
   font-weight: 600;
 }
 
-/* In the text's colour: the accent on the tint, in a message tinted as yours too, was under 4.5:1 (QA BUG-262). */
+/* Yours: on the tint, in the text's colour (the accent on the tint was under 4.5:1, QA BUG-262). The message isn't
+   tinted: this is what tells a mention of you. */
 .mention.me {
+  padding: 0 2px;
   border-radius: 0.25rem;
   background: var(--tint);
   color: var(--text);

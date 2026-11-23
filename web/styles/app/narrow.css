@@ -94,10 +94,10 @@
     margin: 0.625rem 0 0;
   }
 
-  /* A room: tighter sides, a 60px header with 44px buttons, a 32px avatar. */
+  /* A room: tighter sides, a 56px frosted header with 44px buttons (no members: a back arrow instead), a 32px avatar. */
   .room-header {
     gap: 2px;
-    min-height: 3.75rem;
+    min-height: 3.5rem;
     padding: 0 0.375rem;
   }
 
@@ -126,28 +126,6 @@
     height: 2rem;
   }
 
-  .msg.to-me {
-    margin: 0 0.5rem;
-    padding-left: calc(0.5rem + 2rem + 0.625rem);
-  }
-
-  .msg.to-me > .avatar {
-    left: 0.5rem;
-  }
-
-  /* Selecting, the card is set in by 8px here (selection.css). */
-  .messages.selecting .msg.to-me {
-    padding-left: calc(1.75rem + 2rem + 2.25rem + 0.875rem - 0.5rem);
-  }
-
-  .msg.to-me > .select {
-    left: 1.25rem;
-  }
-
-  .messages.selecting .msg.to-me > .avatar {
-    left: 3.25rem;
-  }
-
   /* The smaller avatar's middle is 26px left of the text (replies.css). */
   .msg.group-start > .reply-quote {
     max-width: calc(100% + 1.625rem);
@@ -167,15 +145,61 @@
     right: 1rem;
   }
 
-  .composer-row {
-    min-height: 4rem;
-    padding: 0.625rem 0.5rem 0.625rem 0.375rem;
+  /* The message box 8px from the screen's edges, 44px buttons. */
+  .composer {
+    padding: 0.375rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom));
   }
 
-  .composer-row > button,
-  .composer-row > .menu > summary {
+  .composer-row {
+    min-height: 3rem;
+    padding: 2px 2px 2px 0.75rem;
+  }
+
+  .composer-buttons {
+    gap: 0;
+  }
+
+  .composer-buttons > button,
+  .composer-buttons > .menu > summary {
     width: 2.75rem;
     height: 2.75rem;
+  }
+
+  .composer textarea {
+    min-height: 2.75rem;
+    padding-block: calc((2.75rem - 1lh) / 2);
+  }
+
+  /* More than one line: the text takes the whole width, the buttons a row of their own under it. */
+  .composer-box.multi .composer-row {
+    flex-wrap: wrap;
+    padding-top: 0.25rem;
+  }
+
+  .composer-box.multi textarea {
+    flex-basis: 100%;
+    padding-block: 0.375rem 0;
+  }
+
+  .composer-box.multi .counter {
+    margin-right: auto;
+  }
+
+  .composer-box.multi .composer-buttons {
+    margin-left: auto;
+  }
+
+  /* Replying: who on one line, what on the next, so neither is cut too early. */
+  .replying {
+    align-items: center;
+    padding-block: 0.3125rem;
+  }
+
+  .replying-label {
+    flex-direction: column;
+    gap: 0;
+    align-items: stretch;
+    line-height: 1.35;
   }
 }
 

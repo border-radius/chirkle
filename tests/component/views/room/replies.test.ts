@@ -20,6 +20,7 @@ import {
   msgEls,
   newRoom,
   pill,
+  pillText,
   root,
   send,
   sentinel,
@@ -67,6 +68,9 @@ describe("room view", () => {
       const highlighted = (id: string) => msgEl(id)!.classList.contains("to-me");
       expect(highlighted(toMe.id)).toBe(true);
       expect([mine, theirs, toThem, toSelf].map((m) => highlighted(m.id))).toEqual([false, false, false, false]);
+      // The reply to you is told by its quote: a chip with your face.
+      const chips = (id: string) => msgEl(id)!.querySelectorAll(".reply-quote.mine .reply-chip .avatar").length;
+      expect([toMe, toThem, toSelf].map((m) => chips(m.id))).toEqual([1, 0, 1]);
     });
 
     it("× or Escape cancels the reply; the next message is a plain one", async () => {
@@ -111,16 +115,18 @@ describe("room view", () => {
       quoteOf(r2.id)!.click();
       expect(target(r1.id)).toBe(true);
       expect(pill().hidden).toBe(false);
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
+      // With the face of whose reply it goes back to.
+      expect(pill().querySelectorAll(".faces .avatar")).toHaveLength(1);
       quoteOf(r1.id)!.click();
       await vi.waitFor(() => expect(target(all[10]!.id)).toBe(true));
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
       pill().click();
       await vi.waitFor(() => expect(target(r1.id)).toBe(true));
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
       pill().click();
       await vi.waitFor(() => expect(target(r2.id)).toBe(true));
-      expect(pill().textContent).not.toBe("Back to reply");
+      expect(pillText()).not.toBe("Back to reply");
     });
 
     it("scrolling down to the latest messages forgets the replies to go back to; the bottom of history doesn't (§19.5)", async () => {
@@ -134,13 +140,13 @@ describe("room view", () => {
         list().dispatchEvent(new Event("scroll"));
       };
       quoteOf(near.id)!.click();
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
       toBottom();
-      expect(pill().textContent).not.toBe("Back to reply");
+      expect(pillText()).not.toBe("Back to reply");
       quoteOf(far.id)!.click();
       await vi.waitFor(() => expect(msgEl(all[10]!.id)?.classList.contains("target")).toBe(true));
       toBottom(); // the bottom of the window back in history, not the latest messages
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
     });
 
     it("Jump to beginning forgets the replies to go back to (§19.5)", async () => {
@@ -149,9 +155,9 @@ describe("room view", () => {
       const reply = await me.api.send({ id: newId(), room: room.id, text: "re", replyTo: parent.id });
       await mount(room);
       quoteOf(reply.id)!.click();
-      expect(pill().textContent).toBe("Back to reply");
+      expect(pillText()).toBe("Back to reply");
       button(headerMenu(), "Jump to beginning")!.click();
-      await vi.waitFor(() => expect(pill().textContent).not.toBe("Back to reply"));
+      await vi.waitFor(() => expect(pillText()).not.toBe("Back to reply"));
     });
 
     it("a live reply to a message beyond the window doesn't quote it as deleted while its quote loads (QA BUG-180)", async () => {
@@ -166,7 +172,9 @@ describe("room view", () => {
       expect(quoteOf(reply.id)!.textContent).toBe("…");
       expect(quoteOf(reply.id)!.classList.contains("deleted")).toBe(false);
       release();
-      await vi.waitFor(() => expect(quoteOf(reply.id)!.textContent).toBe(`Me${all[0]!.text}`));
+      // (Your own words: a chip, your face before them.)
+      const words = () => [...quoteOf(reply.id)!.querySelectorAll(".reply-author, .reply-text")].map((e) => e.textContent).join("");
+      await vi.waitFor(() => expect(words()).toBe(`Me${all[0]!.text}`));
     });
 
     it("the highlight goes away after a few seconds; clicking the quote again shows it again", async () => {

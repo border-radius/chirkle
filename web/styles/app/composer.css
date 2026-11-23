@@ -60,20 +60,27 @@
   display: none;
 }
 
-/* "N new messages" / "Jump to latest": a raised pill over the bottom of the list. */
+/* "New messages" / "Jump to latest" / "Back to reply": frosted glass over the bottom of the list, like the header. Who it
+   is about shows as faces: the authors of the new messages, or whose reply you came from (the room view redesign). */
 .new-messages {
   position: absolute;
-  bottom: 1rem;
+  bottom: calc(var(--foot-h, 0px) + 0.75rem);
   left: 50%;
+  z-index: 2;
   display: flex;
   gap: 0.5rem;
   align-items: center;
   height: 2.25rem;
   padding: 0 0.875rem 0 0.75rem;
   border-radius: 1.125rem;
-  background: var(--raised);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow);
+  color: var(--fg);
   font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
   transform: translateX(-50%);
   animation: pop 0.3s var(--ease);
 }
@@ -83,31 +90,67 @@
   height: 0.875rem;
 }
 
+.new-messages.has-faces {
+  padding-left: 0.4375rem;
+}
+
+.new-messages.has-faces::before {
+  content: none;
+}
+
+.new-messages .faces .avatar {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-color: var(--bg);
+  font-size: 0.5625rem;
+}
+
+.new-messages .faces .avatar + .avatar {
+  margin-left: -0.4375rem;
+}
+
 .new-messages:active:not(:disabled) {
   transform: translateX(-50%) scale(0.95);
 }
 
-/* The composer: a flat bar along the bottom; replying and attachments show in strips above it, menus float over the
-   messages. */
+/* The composer floats over the bottom of the messages (room.css): no bar of its own, one filled box, set in from the
+   sides, that the messages show faintly through. */
 .composer {
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+.composer-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--field);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--field-ring);
 }
 
 .composer-row {
   display: flex;
   gap: 0.25rem;
   align-items: flex-end;
-  /* With the composer's top border, as tall as the sidebar's foot (68px), so their top lines meet. */
-  min-height: 4.1875rem;
-  padding: 0.8125rem 0.875rem 0.875rem 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.3125rem 0.25rem 0.6875rem;
 }
 
-.composer-row > button,
-.composer-row > .menu > summary {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.625rem;
+/* Emoji, attach, send: together at the end, at the bottom of a text that grows. */
+.composer-buttons {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+}
+
+.composer-buttons > button,
+.composer-buttons > .menu > summary {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
 }
 
 /* One line is as tall as the buttons, with the text (and placeholder) centred on them. */
@@ -115,11 +158,11 @@
   flex: 1;
   align-self: center;
   min-width: 0;
-  min-height: 2.5rem;
+  min-height: 2.25rem;
   max-height: 10rem;
   /* overflow-x: Firefox with classic scrollbars otherwise makes room for a horizontal one, taller than a row. */
   overflow-x: hidden;
-  padding: calc((2.5rem - 1lh) / 2) 0.375rem;
+  padding: calc((2.25rem - 1lh) / 2) 0;
   border: 0;
   background: none;
   outline: none;
@@ -131,33 +174,47 @@
   color: var(--accent);
 }
 
-/* The attach menu opens upwards. */
-.composer .menu-items {
-  top: auto;
-  right: auto;
-  bottom: calc(100% + 0.5rem);
-  left: 0;
-  transform-origin: bottom left;
+/* The attach menu opens upwards, from the end of the box: placed by the box, not the button, which send follows (at a
+   large text size, a menu ending at the button went off the left of a phone, QA BUG-293). */
+.composer .menu {
+  position: static;
 }
 
+.composer .menu-items {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 0.5rem);
+  left: auto;
+  transform-origin: bottom right;
+}
+
+/* Send: the arrow alone, in the accent; faint while there is nothing to send. */
 .composer .send {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
   padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
 }
 
 .composer .send::before {
-  width: 1.0625rem;
-  height: 1.0625rem;
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
-/* Nothing to send yet: dimmed. */
 .composer .send:disabled {
   opacity: 1;
-  background: color-mix(in srgb, var(--fill) 25%, transparent);
-  color: color-mix(in srgb, #fff 55%, transparent);
+  background: none;
+  color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+@media (hover: hover) {
+  .composer .send:hover:not(:disabled) {
+    background: var(--hover);
+  }
 }
 
 .composer .counter {
@@ -165,9 +222,17 @@
 }
 
 /* Ctrl+/ focuses the textarea (§7.6): said while it isn't focused, and only where there is a keyboard. */
-.focus-key {
+.composer .focus-key {
   align-self: center;
   margin-inline: 0.25rem;
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: 0.3125rem;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 12%, transparent);
+  color: var(--dim);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
   white-space: nowrap;
 }
 

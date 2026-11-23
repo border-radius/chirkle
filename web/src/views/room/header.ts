@@ -185,7 +185,8 @@ export function createRoomHeader(opts: {
           : h(
               "span",
               { class: `vis-badge ic ${vis === "open" ? "i-globe" : "i-lock"}`, title: VISIBILITY[vis].hint },
-              VISIBILITY[vis].label,
+              // An icon right after the name (the room view redesign); its word is said.
+              h("span", { class: "visually-hidden" }, VISIBILITY[vis].label),
             );
       title.replaceChildren(
         ...(other

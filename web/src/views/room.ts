@@ -16,6 +16,7 @@ import { emptyForward } from "../lib/messages.ts";
 import { canManage, canPost, dmClosed, isDm, otherMember, roomTitle } from "../lib/rooms.ts";
 import { isNearBottom } from "../lib/scroll.ts";
 import { formatTime, parsePb } from "../lib/time.ts";
+import type { User } from "../lib/types.ts";
 import type { View } from "../router.ts";
 import { createScope } from "../scope.ts";
 import { roomSections } from "../store.ts";
@@ -309,12 +310,23 @@ export function createRoomView({
     active: () => scope.active,
     signal,
   });
+  // The header (with the status line and search under it) and the footer float over the list, frosted, so the messages
+  // scroll under them (the room view redesign); the list is padded by their heights (--head-h, --foot-h).
+  const top = h("div", { class: "room-top" }, [header.el, notice.el]);
   const shell = h("section", { class: "room", "aria-labelledby": `${vid}-title` }, [
-    header.el,
-    notice.el,
+    top,
     h("div", { class: "room-body" }, [bar.el, list, pill]),
     footer.el,
   ]);
+  if (typeof ResizeObserver === "function") {
+    const heights = new ResizeObserver(() => {
+      shell.style.setProperty("--head-h", `${top.offsetHeight}px`);
+      shell.style.setProperty("--foot-h", `${footer.el.offsetHeight}px`);
+    });
+    heights.observe(top);
+    heights.observe(footer.el);
+    signal.addEventListener("abort", () => heights.disconnect());
+  }
   const pickers = createPickers({ api, roomId: () => roomId, shell, scope, say });
   const gallery = createGallery({
     api,
@@ -442,16 +454,54 @@ export function createRoomView({
     const s = state();
     const away = s.phase === "ready" && (s.win.hasNewer || !isNearBottom(list));
     const back = s.phase === "ready" && s.back !== null;
+    const items = s.win.items;
+    // The newest message before any arrived out of sight: those after it are the new ones.
+    if (s.pill !== "below") seenLast = items.at(-1)?.id ?? null;
     pill.hidden = s.pill === null && !away && !back;
     pill.classList.toggle("jump", back || s.pill === null);
-    pill.textContent = back
+    const label = back
       ? S.BACK_TO_REPLY
       : s.pill === "history"
         ? S.NEW_MESSAGES_JUMP_TO_LATEST
         : s.pill === "below"
           ? S.NEW_MESSAGES
           : S.JUMP_TO_LATEST;
+    // Who it is about (the room view redesign): whose reply you came from, or who wrote the new messages (the newest
+    // three, not you).
+    let who: User[] = [];
+    if (back) {
+      const from = ctl.find(s.back!)?.expand?.author;
+      if (from) who = [from];
+    } else if (s.pill === "below") {
+      const since = seenLast ? items.findIndex((m) => m.id === seenLast) : -1;
+      const seen = new Set<string>();
+      for (const m of items.slice(since + 1).reverse()) {
+        const a = m.expand?.author;
+        if (!a || a.id === me()?.id || seen.has(a.id)) continue;
+        seen.add(a.id);
+        who.unshift(a);
+        if (who.length === 3) break;
+      }
+    }
+    const key = JSON.stringify([label, who.map((u) => u.id + (u.avatar ?? ""))]);
+    if (pill.dataset.shown === key) return;
+    pill.dataset.shown = key;
+    pill.classList.toggle("has-faces", who.length > 0);
+    pill.replaceChildren(
+      ...(who.length
+        ? [
+            h(
+              "span",
+              { class: "faces", "aria-hidden": "true" },
+              who.map((u) => avatar(u, 24, api.avatarUrl)),
+            ),
+          ]
+        : []),
+      h("span", { class: "pill-label" }, label),
+    );
   }
+  /** The last message's id while nothing new was out of sight (renderPill). */
+  let seenLast: string | null = null;
 
   function scrollToBottom() {
     list.scrollTop = list.scrollHeight;

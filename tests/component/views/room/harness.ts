@@ -64,6 +64,8 @@ export const bodyOf = (id: string) => msgEl(id)?.querySelector(".body")?.textCon
 export const sentinel = (which: "top" | "bottom") => root.querySelector<HTMLElement>(`li.sentinel[data-sentinel="${which}"]`);
 export const beginning = () => root.querySelector("li.beginning");
 export const pill = () => root.querySelector<HTMLButtonElement>("button.new-messages")!;
+/** The pill's words, without the faces beside them. */
+export const pillText = () => pill().querySelector(".pill-label")?.textContent ?? "";
 export const composer = () => root.querySelector<HTMLTextAreaElement>("form.composer textarea");
 export const sendButton = () => root.querySelector<HTMLButtonElement>("form.composer button[type='submit']")!;
 /** A menu item's label, without the hint under it or the value beside it (ui/menu.ts); else the button's text. */

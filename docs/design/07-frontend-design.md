@@ -229,7 +229,8 @@ while its first page loads.
   is an `<a>` made with `h()` around a text node.
 - **Not inside other words:** a `www.` right after `@`, `.` or `-` (`bob@www.example.com`, `my.www.example.com`) isn't
   linked.
-- Under the message, a line per link with its favicon and title (§28).
+- Under the message, a ghost line per link (§28): no box, its favicon (or the domain's first letter on a tile), the
+  domain without "www.", a dot, the title; the title gives way first.
 - Only message bodies: reply quotes are buttons (a link can't go in one), and the edit box shows the raw text.
 
 ## 7.7 Performance budget (enforced in CI, §9.4)
@@ -239,7 +240,7 @@ every figure and fails over one; how fast it feels is checked by `scripts/profil
 
 | What | Budget (gzipped) |
 |---|---|
-| **The critical path**: `index.html`, `app.js`, the chunks `app.js` imports (code it shares with lazy features, modulepreloaded beside it) and `app.css` | **≤ 64 KB** (61.44 KB at the change: `app.js` 37.3 KB, six chunks 12.4 KB, `app.css` 11.3 KB, `index.html` 0.6 KB; the sum of the per-file budgets it replaced, `app.js` 49.75, `app.css` 11.30, `index.html` 1.5 KB, was 62.5 KB). Raised to 63.5 KB on 2026-11-16: the critical path had reached 62.53 KB with the QA passes' fixes, and was 62.57 KB with §43 (whose calls and styles load with Settings, not here). Raised to 64 KB on 2026-11-23: it sat at exactly 63.50 KB, and the chipless reactions (§20.3) took it to 63.55 KB |
+| **The critical path**: `index.html`, `app.js`, the chunks `app.js` imports (code it shares with lazy features, modulepreloaded beside it) and `app.css` | **≤ 65 KB** (61.44 KB at the change: `app.js` 37.3 KB, six chunks 12.4 KB, `app.css` 11.3 KB, `index.html` 0.6 KB; the sum of the per-file budgets it replaced, `app.js` 49.75, `app.css` 11.30, `index.html` 1.5 KB, was 62.5 KB). Raised to 63.5 KB on 2026-11-16: the critical path had reached 62.53 KB with the QA passes' fixes, and was 62.57 KB with §43 (whose calls and styles load with Settings, not here). Raised to 64 KB on 2026-11-23: it sat at exactly 63.50 KB, and the chipless reactions (§20.3) took it to 63.55 KB. Raised to 65 KB on 2026-11-23: the room view redesign (frosted header and message box, the reply's header and square attachment tiles inside the box, the reply-to-you chip, ghost-line link previews, faces on the scroll button) took it to 64.83 KB |
 | **Any lazy feature's first use**: its chunk, the chunks it imports that the critical path hasn't loaded, and the stylesheet it links | **≤ 16 KB** each (the largest, the emoji picker with its names, 13.6 KB). The features: `FEATURES` in `scripts/lib/build-utils.mjs` (viewer, search, access, media grid, collections, notifications, emoji, inbox, "@" suggestions, settings, login, forward, people search, Jump to) |
 | **The statistics page** (§40): `stats.html`, its script and stylesheet | ≤ 10 KB |
 | Web fonts | **Inter**, self-hosted (`web/fonts/`, OFL): one variable woff2 per script (latin 47 KB, latin-ext, cyrillic, cyrillic-ext, greek), each fetched only when a page uses its characters (`unicode-range`), `font-display: swap`, cached for a year under a hashed name. Until 2026-10-31: none |
@@ -269,9 +270,23 @@ Other rules:
   16 px for dialogs over a dimmed page; Inter, self-hosted (§7.7), with the system font stack behind it.
 - Icons are one-color SVGs used as CSS masks (`web/styles/app/icons.css`): an element with `ic i-<name>` draws the
   icon as its `::before` in `currentColor`. Icon-only buttons carry an `aria-label`. No emoji in the chrome.
-- The room is flat: messages without bubbles (36 px avatar, name and time on one line), a message to me as a tinted
-  card with an accent edge, the message tools as a small icon toolbar on hover, the composer as a 68 px strip
-  (attach menu, field, emoji, send) that a reply strip, the selection bar or a "why you can't post" notice replaces.
+- The room is flat: messages without bubbles (36 px avatar, name and time on one line), no message tinted as mine to
+  read: a mention of me is highlighted in the text, a reply to me told by its quote, a violet chip with my face, its
+  curve violet too; the message tools
+  as a small icon toolbar on hover. Room view redesign (2026-11-23, the "Room view redesign" canvas): the header and
+  the composer float over the list as frosted glass (`--glass`, 72 % of the pane with a 10 px backdrop blur), so the
+  messages stay faintly visible as they scroll under them; `room.ts` measures both and pads the list (`--head-h`,
+  `--foot-h`, also its scroll-padding, so what is scrolled to stays clear of them). The header is borderless, a
+  private or Open Air room's lock or globe right after its name (its word said, not shown); 56 px on a phone, with the
+  back arrow and no members. The composer is one filled box (`--field`) 16 px in from the sides (8 px on a phone): the
+  reply's header as its first row (who and the quote on one line, two on a phone, and ×), the text, emoji · attach ·
+  send at its end (send a bare accent arrow, faint while there is nothing to send; at the bottom when the text grows),
+  then the attachments as 72 px square tiles with a corner ×, a row that scrolls sideways. On a phone, once the text
+  takes more than one line, the buttons go to a row of their own under it (and stay there until the text is shorter
+  than when it wrapped, so they don't flip with every letter). The selection bar or a "why you can't post" notice
+  replaces the box, solid. The scroll button ("New messages", "Jump to latest", "Back to reply") is the same glass and
+  shows who it is about: the newest three authors of the messages that came out of sight (not me), or whose reply
+  "Back to reply" returns to; "Jump to latest" keeps its arrow.
 - `prefers-color-scheme` light and dark themes. The profile page's Appearance switch (Auto, Light, Dark) overrides it on
   this device: kept in localStorage (`chat.theme`), not the account, and set as `<html data-theme>` by an inline script
   in `index.html` before the first paint (allowed by its CSP hash, §5.6), so a reload never flashes the other theme.

@@ -29,6 +29,7 @@ import {
   navigate,
   newRoom,
   pill,
+  pillText,
   ROW,
   root,
   sentinel,
@@ -119,7 +120,7 @@ describe("room view", () => {
         lines.map((a) => [
           a.getAttribute("href"),
           a.getAttribute("target"),
-          a.textContent,
+          a.querySelector(".preview-title")?.textContent,
           a.querySelector("img")?.getAttribute("src") ?? null,
         ]),
       ).toEqual([
@@ -127,6 +128,9 @@ describe("room view", () => {
         ["https://example.org", "_blank", "No icon", null],
       ]);
       expect(msgEls()[0]!.querySelector(".previews b")).toBeNull();
+      // A ghost line: the site's icon or its letter, then its domain.
+      expect(lines.map((a) => a.querySelector(".preview-domain")?.textContent)).toEqual(["example.com", "example.org"]);
+      expect(lines[1]!.querySelector(".preview-letter")?.textContent).toBe("E");
     });
 
     it("inserts a date divider between days", async () => {
@@ -347,7 +351,9 @@ describe("room view", () => {
       await vi.waitFor(() => expect(ids().at(-1)).toBe(m.id));
       expect(list().scrollTop).toBe(0);
       expect(pill().hidden).toBe(false);
-      expect(pill().textContent).toBe("New messages");
+      expect(pillText()).toBe("New messages");
+      // Whose they are: the new message's author's face, not yours.
+      expect(pill().querySelectorAll(".faces .avatar")).toHaveLength(1);
       pill().click();
       expect(atBottom()).toBe(true);
       expect(pill().hidden).toBe(true);
@@ -409,7 +415,7 @@ describe("room view", () => {
       await mount(room, { msgId: all[20]!.id });
       const m = await other.api.send({ id: newId(), room: room.id, text: "meanwhile" });
       // In history the button already shows "Jump to latest" (§22.7): wait for the new message to change it.
-      await vi.waitFor(() => expect(pill().textContent).toBe("New messages · Jump to latest"));
+      await vi.waitFor(() => expect(pillText()).toBe("New messages · Jump to latest"));
       expect(pill().hidden).toBe(false);
       expect(ids()).not.toContain(m.id);
       pill().click();

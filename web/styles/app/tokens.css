@@ -19,6 +19,12 @@
   --accent-2: #c42a7c;
   --grad: linear-gradient(135deg, #6a4bff, #c42a7c);
   --tint: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* Frosted glass (the room view redesign): the header, the scroll button and the message box, over the messages that
+     scroll under them. */
+  --glass: color-mix(in srgb, var(--bg) 72%, transparent);
+  --glass-blur: blur(10px);
+  --field: color-mix(in srgb, var(--hover) 60%, transparent);
+  --field-ring: inset 0 0 0 1px color-mix(in srgb, var(--fg) 6%, transparent);
   --danger: #c41d36; /* ≥ 4.5:1 on every light background, hover included (QA BUG-57) */
   --new: #b0175f;
   --highlight: #fff1b8;

@@ -31,19 +31,6 @@
   top: 0.375rem;
 }
 
-/* A reply to you is a card set in by 16px: its checkbox and avatar line up with the others'. */
-.messages.selecting .msg.to-me {
-  padding-left: calc(1.75rem + 2rem + 2.25rem + 0.875rem - 1rem);
-}
-
-.msg.to-me > .select {
-  left: 0.75rem;
-}
-
-.messages.selecting .msg.to-me > .avatar {
-  left: 2.75rem;
-}
-
 .msg.selected {
   background: var(--tint);
 }

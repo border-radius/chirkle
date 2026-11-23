@@ -1,6 +1,6 @@
 // Message composer (§7.6, §17.4): auto-growing textarea, character counter, Enter to send, Shift+Enter for a
 // newline, Up arrow in an empty composer to edit your last message, Ctrl+Up/Down to pick the message replied to, attachments (picker, paste, drop) shown
-// in a tray above the textarea, the message being replied to (§19) above that, and an emoji button (§20.4). Typing
+// as tiles under the textarea, the message being replied to (§19) as the box's first row, and an emoji button (§20.4). Typing
 // ":name" asks for emoji suggestions (§20.6). Ctrl+/ (⌘/) anywhere in the room focuses it, which a key badge says while
 // it isn't focused (§7.6).
 
@@ -183,6 +183,7 @@ export function createComposer(opts: {
   const tray = h("ul", { class: "tray", "aria-label": S.ATTACHMENTS });
   const trayError = h("p", { class: "tray-error", role: "alert" });
   const replyLabel = h("span", { class: "replying-label" });
+  // The reply's header is the first row of the message box, its own surface (the room view redesign).
   const replyBar = h("div", { class: "replying ic i-reply", hidden: true }, [
     replyLabel,
     h("button", {
@@ -222,34 +223,60 @@ export function createComposer(opts: {
     const len = textLength(textarea.value.trim());
     counter.textContent = len <= COUNTER_FROM ? "" : len <= MAX_LEN ? S.left(MAX_LEN - len) : S.over(len - MAX_LEN);
     fitRows(textarea);
+    markMulti();
     sendBtn.disabled = preparing > 0 || sendable() === null;
     opts.onChange?.(textarea.value);
   }
 
+  /** The kind of a file without a preview, from its name: "PDF", "ZIP"… (at most 4 letters), else none. */
+  const extOf = (name: string) => /\.([a-z0-9]{1,4})$/i.exec(name)?.[1]?.toUpperCase() ?? "";
+
+  /**
+   * More than one line: on a phone the buttons go to a row of their own under the text (narrow.css). Not back to one
+   * line until the text is shorter than it was when it wrapped: at the full width it might fit on one, and flip back
+   * and forth with every letter.
+   */
+  let multiFrom = 0;
+  function markMulti() {
+    const len = textarea.value.length;
+    if (!len) multiFrom = 0;
+    else if (textarea.rows > 1) multiFrom ||= len;
+    else if (len < multiFrom) multiFrom = 0;
+    const multi = multiFrom > 0;
+    if (box.classList.contains("multi") === multi) return;
+    box.classList.toggle("multi", multi);
+    fitRows(textarea); // its width changed
+  }
+
+  // Square tiles under the text, each with a corner × (the room view redesign): an image's or a video's first frame,
+  // else a document icon and the file's kind. The name and size are said, and shown on hover.
   function renderTray() {
     tray.replaceChildren(
-      ...files.map((f) =>
-        h("li", { class: "tray-item" }, [
+      ...files.map((f) => {
+        const about = f.item ? S.FROM_A_COLLECTION : formatBytes(f.file.size);
+        return h("li", { class: "tray-item", title: `${f.file.name} · ${about}` }, [
           f.item && !f.url
-            ? collectionIcon()
+            ? h("span", { class: "tray-doc" }, collectionIcon())
             : !f.url
-              ? h("span", { class: "tray-icon", "aria-hidden": "true" }, "📄")
+              ? h("span", { class: "tray-doc ic i-file", "aria-hidden": "true" }, h("span", { class: "tray-ext" }, extOf(f.file.name)))
               : h(isVideo(f.file.name) && !f.item ? "video" : "img", {
                   class: "tray-thumb",
                   src: isVideo(f.file.name) && !f.item ? `${f.url}#t=0.001` : f.url,
-                  width: 40,
-                  height: 40,
+                  width: 72,
+                  height: 72,
                   alt: "",
                 }),
-          h("span", { class: "tray-name" }, f.file.name),
-          h("span", { class: "tray-size" }, f.item ? S.FROM_A_COLLECTION : formatBytes(f.file.size)),
-          h(
-            "button",
-            { type: "button", class: "remove", "aria-label": S.remove(f.file.name), on: { click: () => removeFile(f) }, signal },
-            "×",
-          ),
-        ]),
-      ),
+          h("span", { class: "tray-name visually-hidden" }, f.file.name),
+          h("span", { class: "tray-size visually-hidden" }, about),
+          h("button", {
+            type: "button",
+            class: "remove ic i-x",
+            "aria-label": S.remove(f.file.name),
+            on: { click: () => removeFile(f) },
+            signal,
+          }),
+        ]);
+      }),
     );
     tray.hidden = files.length === 0;
     onInput();
@@ -364,6 +391,20 @@ export function createComposer(opts: {
     { signal },
   );
 
+  // One filled box (the room view redesign): the reply's header, the text with the buttons after it, and the
+  // attachments under it. Emoji, attach and send stay together at its end, at the bottom when the text grows.
+  const box = h("div", { class: "composer-box" }, [
+    replyBar,
+    h("div", { class: "composer-row" }, [
+      fileInput,
+      h("label", { for: opts.id, class: "visually-hidden" }, S.MESSAGE),
+      textarea,
+      h("kbd", { class: "focus-key", "aria-hidden": "true", title: S.FOCUS_THE_MESSAGE_BOX }, mac ? "⌘/" : S.CTRL),
+      counter,
+      h("div", { class: "composer-buttons" }, [emojiBtn, attach, sendBtn]),
+    ]),
+    h("div", { class: "tray-wrap" }, [tray, trayError]),
+  ]);
   const el = h(
     "form",
     {
@@ -376,20 +417,7 @@ export function createComposer(opts: {
       },
       signal,
     },
-    [
-      replyBar,
-      h("div", { class: "tray-wrap" }, [tray, trayError]),
-      h("div", { class: "composer-row" }, [
-        fileInput,
-        attach,
-        h("label", { for: opts.id, class: "visually-hidden" }, S.MESSAGE),
-        textarea,
-        h("kbd", { class: "focus-key", "aria-hidden": "true", title: S.FOCUS_THE_MESSAGE_BOX }, mac ? "⌘/" : S.CTRL),
-        counter,
-        emojiBtn,
-        sendBtn,
-      ]),
-    ],
+    [box],
   );
   tray.hidden = true;
 
@@ -412,7 +440,12 @@ export function createComposer(opts: {
     setReply(reply) {
       replyBar.hidden = !reply;
       replyLabel.replaceChildren(
-        ...(reply ? [S.REPLYING_TO, h("strong", {}, reply.name), h("span", { class: "replying-text" }, reply.text)] : []),
+        ...(reply
+          ? [
+              h("span", { class: "replying-who" }, [S.REPLYING_TO, h("strong", {}, reply.name)]),
+              h("span", { class: "replying-text" }, reply.text),
+            ]
+          : []),
       );
     },
   };

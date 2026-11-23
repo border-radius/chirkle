@@ -1998,3 +1998,12 @@ keeps a 32 dp tap target.
 Nothing to change in the app. The pass's two bugs were the web's at a larger text size (QA BUG-292, BUG-293: a menu
 and the composer's "@" list wider than a phone): the app's menus are Compose `DropdownMenu`s, which keep to the screen,
 and its "@" and ":" lists are rows across the composer's width, so a larger font scale wraps or cuts their text instead.
+
+## 89. Room view redesign (2026-11-23): web only so far
+
+The web's room view redesign (DESIGN.md §7.7, the look; the "Room view redesign" canvas) is not in the app yet: the
+frosted header and composer over the list, the reply's header and square attachment tiles inside the composer's box,
+the buttons' own row under several lines on a phone, the reply-to-you chip with your face (no message to you is a tinted
+card on the web any more: a mention is highlighted in the text), link previews as a ghost line with the domain, and the authors' faces on
+the scroll button. To port: `RoomScreen`'s top bar and composer drawn over the list with a translucent fill (Compose
+has no backdrop blur before Android 12: the tint alone below it), `MessageRow`'s quote and previews, and the pill.
