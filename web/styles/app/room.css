@@ -141,12 +141,32 @@
   flex-basis: 100%;
 }
 
-/* Where else a shared room is held (§33.9). */
+/* The title, and under it where else a shared room is held (§33.9): a subtitle, keeping the header one row. */
+.room-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.room-heading > h1 {
+  flex: none;
+}
+
 .room-header .room-shared {
-  flex-basis: 100%;
+  overflow: hidden;
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* In line with a DM's name, past its avatar. */
+.room-header h1.dm-title + .room-shared {
+  padding-left: calc(24px + 0.625rem);
 }
 
 .back {

@@ -62,12 +62,12 @@ export function createRoomHeader(opts: {
   const members = h("button", { type: "button", class: "room-members", hidden: true, on: { click: opts.onAccess }, signal });
   const el = h("header", { class: "room-header" }, [
     h("a", { href: "/", class: "back ic i-back", "aria-label": S.BACK_TO_ROOMS }),
-    title,
+    // The shared note goes under the name, as a subtitle, so the header keeps its one row (§33.9).
+    h("div", { class: "room-heading" }, [title, shared]),
     members,
     search,
     media,
     menu.el,
-    shared,
     error,
   ]);
   /** What the title shows, to rebuild it only when that changes (the avatar is an image). */
@@ -214,7 +214,10 @@ export function createRoomHeader(opts: {
       );
     }
     const note = room ? sharedNote(room) : "";
-    if (shared.textContent !== note) shared.textContent = note;
+    if (shared.textContent !== note) {
+      shared.textContent = note;
+      shared.title = note; // One line, cut short when narrow.
+    }
     shared.hidden = !note;
     menu.update(items(room, hidden, !!room && canManage(room, me), !me));
   }
