@@ -91,7 +91,7 @@
 
   /* In line with the section heads above it, which lose their side padding here (QA BUG-288). */
   .room-section[data-section="more"] > summary {
-    margin: 0.625rem 0 0;
+    margin: 0.625rem 0 0 -0.5rem;
   }
 
   /* A room: tighter sides, a 56px frosted header with 44px buttons (no members: a back arrow instead), a 32px avatar. */

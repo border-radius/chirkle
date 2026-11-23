@@ -41,8 +41,11 @@
   cursor: pointer;
 }
 
+/* Padded on the left (and pulled out as far) so its hover background doesn't end flush with the label. */
 .fold {
-  width: 100%;
+  width: calc(100% + 0.5rem);
+  margin-left: -0.5rem;
+  padding-left: 0.5rem;
 }
 
 .fold::after {
@@ -309,7 +312,8 @@
 /* Set like the other headings, the count where their "+" is. */
 .room-section[data-section="more"] > summary {
   justify-content: flex-start;
-  margin: 1.125rem 0.5rem 0; /* the last row's 2px margin collapses into it */
+  margin: 1.125rem 0.5rem 0 0; /* the last row's 2px margin collapses into it */
+  padding-left: 0.5rem; /* set out like a .fold head, its label in line with theirs */
 }
 
 .room-section[data-section="more"] > summary > span:first-child {
