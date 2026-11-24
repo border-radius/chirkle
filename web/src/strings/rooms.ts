@@ -18,7 +18,6 @@ export const couldntOpenTheConversationWith = (name: string | number, why: strin
   `Couldn't open the conversation with “${name}”. ${why}`;
 export const UNHIDE = "Unhide";
 export const UNARCHIVE = "Unarchive";
-export const MENTIONS_YOU = "Mentions you";
 export const HIDDEN_ARCHIVED = "Hidden & archived";
 export const HIDDEN = "Hidden";
 export const ARCHIVED = "Archived";
@@ -49,3 +48,10 @@ const names = (list: string[]) => (list.length < 2 ? (list[0] ?? "") : `${list.s
 export const fromPeople = (list: string[]) => `From ${names(list)}`;
 export const newFrom = (n: number | string, list: string[]) => `, ${n} new, from ${names(list)}`;
 export const UNREAD = " unread";
+/** A room row's hover title (native tooltip): how many unread, and how many of them are addressed to you. */
+export const unreadTitle = (n: number, at: number) => {
+  const count = n > 99 ? "99+" : String(n);
+  const main = `${count} unread ${n === 1 ? "message" : "messages"}`;
+  if (!at) return main;
+  return `${main}, ${at > 99 ? "99+" : at} ${at === 1 ? "mentions you or replies to you" : "mention you or reply to you"}`;
+};

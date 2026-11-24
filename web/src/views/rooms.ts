@@ -340,7 +340,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       // Numbers only for what is addressed to you: a room's unread mentions of you and replies to you (§41), a DM's
       // unread messages. Otherwise unread is a dot (and the bold name); the count is still read out.
       at
-        ? h("span", { class: "badge", title: S.MENTIONS_YOU }, [
+        ? h("span", { class: "badge" }, [
             at > 99 ? "99+" : at,
             h("span", { class: "visually-hidden" }, S.mentionsYouOf(at, n > 99 ? "99+" : n)),
           ])
@@ -351,7 +351,12 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
             : null,
     ];
     const el = h("li", { class: r.kind === "dm" ? "dm" : "", dataset: { roomId: r.id } }, [
-      h("a", { href: `/r/${r.id}`, class: n ? "unread" : "", "aria-current": current ? "page" : null }, label),
+      // The hover title tells the count, which a dot doesn't show (and a badge caps at 99+).
+      h(
+        "a",
+        { href: `/r/${r.id}`, class: n ? "unread" : "", title: n ? S.unreadTitle(n, at) : null, "aria-current": current ? "page" : null },
+        label,
+      ),
       one
         ? h(
             "button",

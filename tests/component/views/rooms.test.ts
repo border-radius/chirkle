@@ -413,6 +413,27 @@ describe("rooms view (§7.1)", () => {
       expect(row(quiet)!.querySelector("a")!.classList.contains("unread")).toBe(false);
     });
 
+    it("tells the unread count in the row's hover title, with how many address you (2026-11-24)", async () => {
+      const a = await room();
+      const b = await room();
+      const c = await room();
+      const quiet = await room();
+      await mount();
+      store.set({
+        unread: new Map([
+          [a.id, 1],
+          [b.id, 250],
+          [c.id, 5],
+        ]),
+        mentions: new Map([[c.id, 2]]),
+      });
+      const title = (r: Room) => row(r)!.querySelector("a")!.getAttribute("title");
+      expect(title(a)).toBe("1 unread message");
+      expect(title(b)).toBe("99+ unread messages");
+      expect(title(c)).toBe("5 unread messages, 2 mention you or reply to you");
+      expect(title(quiet)).toBeNull();
+    });
+
     it("a new count redraws only that room's row; the others are kept as they are", async () => {
       const a = await room();
       const b = await room();
