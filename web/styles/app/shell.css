@@ -223,6 +223,8 @@ div.brand .brand-title::after {
   min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--side-bg);
+  /* Jump to, the section heads and their "+", you at the foot: hovered like a room row (dark: a well, tokens.css). */
+  --hover: var(--row-hover);
 }
 
 .sidebar .rooms {
