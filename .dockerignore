@@ -1,6 +1,7 @@
 .git
 node_modules
 bin
+server/server
 pb_data
 pb_public
 coverage

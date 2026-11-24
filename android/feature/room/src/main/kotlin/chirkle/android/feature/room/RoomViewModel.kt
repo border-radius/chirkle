@@ -18,7 +18,6 @@ import chirkle.android.data.api.reasonOf
 import chirkle.android.data.lib.Limits
 import chirkle.android.data.lib.MessageOrder
 import chirkle.android.data.lib.PAGE_SIZE
-import chirkle.android.data.lib.Pages
 import chirkle.android.data.lib.checkFiles
 import chirkle.android.data.lib.isBlank
 import chirkle.android.data.lib.isForeignContent
@@ -700,7 +699,4 @@ class RoomViewModel(
         val r = services.store.get().rooms[roomId] ?: return app.getString(R.string.room_beginning_of_the_room)
         return if (r.isDm) app.getString(R.string.room_beginning_of_your_conversation_with, r.otherMember(me)?.name ?: app.getString(R.string.room_unknown)) else app.getString(R.string.room_beginning_of, r.name)
     }
-
-    /** The newest page of messages with attachments, for the viewer (§17.7). */
-    suspend fun mediaAround(): List<Message> = runCatching { services.api.page(Pages.withFiles(Pages.latest(roomId))) }.getOrDefault(emptyList())
 }

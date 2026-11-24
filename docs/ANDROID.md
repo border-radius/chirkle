@@ -1315,7 +1315,7 @@ and dropped out of the unread rooms at the top of the list although messages bel
 `Unread` (`Sync.kt`) now only leaves out the room whose reader last said `caughtUp` (`following`): from fetched
 counts, from live +1s and from `room_reads` refetches. Otherwise the open room keeps the server's count, refetched
 after each read that goes in, so it comes down as you scroll. `unreadBadge()` no longer takes the active room; the
-launcher badge (`unreadTotal`) counts what is left in the open room too.
+open room's badge counts what is left in it too.
 
 Tests: `ServicesTest` reads an open room partway (the count comes down to what is left, a new message while scrolled
 up counts, the bottom clears it); `RoomSectionsTest`: the open room with unread messages stays first.
@@ -2020,7 +2020,8 @@ Dark is unchanged and keeps `Fill` `#6e56cf`. The launcher icon's lavender backg
 ## 91. Reply redesign (2026-11-24)
 
 As on the web (DESIGN.md §19.3, the "reply redesign" canvas): `MessageRow`'s quote is a one-line pill under the name
-and over the text (6 dp from the message above when the reply goes on a group): the quoted author's face (20 dp), name
+and over the text, 4 dp from each (8 dp from the message above when the reply goes on a group: 10 dp from its
+text, as on the web): the quoted author's face (20 dp), name
 and text, `ChirkleIcons.Image` before "Attachment" for files alone, italic for "Message deleted". Your own words quoted
 sit on `Chirkle.colors.tint` with your name in the accent; others' on `surfaceContainerHigh`, name and text muted. The
 accent bar and two lines are gone. `MSG_FIELDS` asks for the quoted author's `avatar` too (`shared/contract.json`).

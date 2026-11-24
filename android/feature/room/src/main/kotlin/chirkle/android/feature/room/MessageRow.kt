@@ -150,7 +150,7 @@ fun MessageRow(
                     val filesOnly = !q.deleted && q.text.isBlank() && q.files.isNotEmpty()
                     Row(
                         Modifier
-                            .padding(top = if (first) 2.dp else 6.dp, bottom = 2.dp)
+                            .padding(top = if (first) 4.dp else 8.dp, bottom = 4.dp)
                             .heightIn(min = 26.dp)
                             .clip(RoundedCornerShape(50))
                             .background(if (mine) Chirkle.colors.tint else MaterialTheme.colorScheme.surfaceContainerHigh)
