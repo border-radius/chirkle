@@ -183,6 +183,16 @@
   .replying {
     align-items: center;
     padding-block: 0.3125rem;
+    padding-left: 0.75rem;
+  }
+
+  /* The desktop's wider inset (composer.css) is too much here: back to the text's 12px. */
+  .tray {
+    padding-left: 0.6875rem;
+  }
+
+  .tray-error {
+    margin-inline: 0.6875rem;
   }
 
   .replying-label {

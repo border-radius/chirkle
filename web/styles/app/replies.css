@@ -110,7 +110,7 @@
   gap: 0.5rem;
   align-items: center;
   min-height: 2.125rem;
-  padding: 0 0.3125rem 0 0.75rem;
+  padding: 0 0.3125rem 0 1rem;
   border-bottom: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
   color: var(--dim);
   font-size: 0.8125rem;
