@@ -9,7 +9,7 @@ export const DELETE = "Delete";
 export const MESSAGES = "Messages";
 export const COULDNT_LOAD_THIS_ROOM_CHECK_YOUR = "Couldn't load this room. Check your connection. ";
 export const RETRY = "Retry";
-export const MESSAGE = "Message";
+export const messageName = (name: string | number) => `Message ${name}`;
 export const UNBAN = "Unban";
 export const BAN = "Ban…";
 export const banTheyAreSignedOutEverywhere = (name: string | number) =>

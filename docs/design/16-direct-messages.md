@@ -98,8 +98,9 @@ reaches both members through their `rooms` subscription.
   character). It matches the query's name key against `users.name_key` (§22.1), so case is ignored beyond ASCII
   ("иван" finds "Иван"), which SQLite's `LIKE` on `name` didn't do (QA BUG-55).
   Choosing a user calls `actions.openDm(userId)` → `POST /api/chat/dms` → `upsertRoom` → navigate to `/r/:id`.
-- **From a message:** clicking an author's name or avatar opens a small menu with **Message** (hidden for yourself),
-  which does the same.
+- **From a message:** clicking an author's name opens the DM with them, which does the same. (Until 2026-11-24 it
+  opened a small menu with **Message**.) Your own name, a guest's view, and anyone who takes no DMs or when you don't
+  (§16.7) leave it plain text; a moderator's menu on someone who takes no DMs is §36.4.
 - **Room view:** unchanged apart from the header, the composer placeholder ("Message Bob") and the beginning marker
   ("Beginning of your conversation with Bob"). A DM shows the other member's avatar and name, and its menu has
   **Close conversation** (then back to `/`) and **Jump to beginning**, never Archive. A closed DM opened by URL

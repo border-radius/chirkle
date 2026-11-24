@@ -15,7 +15,7 @@ import { dayLabel, formatFull, formatTime, parsePb } from "../../lib/time.ts";
 import type { Badge, LinkPreview, Message, Quoted, Reaction, User } from "../../lib/types.ts";
 import * as S from "../../strings/room-messages.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
-import { type ActionMenu, createActionMenu, type MenuItem } from "../../ui/menu.ts";
+import { type ActionMenu, createActionMenu } from "../../ui/menu.ts";
 import { createAttachments } from "./attachments.ts";
 import { composing, editProblem, fitRows, rowsFor } from "./composer.ts";
 import { addReactionButton, reactionFocus, reactionRow } from "./reactions.ts";
@@ -116,9 +116,9 @@ export function createMessageList(opts: {
   /** Retry button of a failed first load. */
   onRetryLoad: () => void;
   avatarUrl: AvatarUrl;
-  /** "Message" in an author's menu (§16.5). */
+  /** An author's name was clicked: open the DM with them (§16.5). */
   onMessageUser: (userId: string) => void;
-  /** A moderator's author menu (§36): whether they are banned, and Ban or Unban. */
+  /** A moderator's menu on the name of someone who takes no DMs (§36): whether they are banned, and Ban or Unban. */
   isBanned?: (userId: string) => Promise<boolean>;
   onBan?: (userId: string, banned: boolean) => void;
   /** URL of an attachment (§37.3). */
@@ -306,6 +306,8 @@ export function createMessageList(opts: {
         return askDelete(id);
       case "quote":
         return opts.onOpenQuote(b.dataset.quote!, id);
+      case "dm":
+        return opts.onMessageUser(b.dataset.user!);
       case "send":
         return opts.onRetrySend(id);
       case "discard":
@@ -355,8 +357,8 @@ export function createMessageList(opts: {
     },
     { signal },
   );
-  // An author's menu (authorEl) works once it is first opened. (`toggle` doesn't bubble: caught on its way down.) A
-  // moderator's then offers Ban or Unban, as they are each time it opens (§36).
+  // An author's menu (authorEl: a moderator's, on someone who takes no DMs) works once it is first opened. (`toggle`
+  // doesn't bubble: caught on its way down.) It offers Ban or Unban, as they are each time it opens (§36).
   const authorMenus = new WeakMap<HTMLDetailsElement, ActionMenu>();
   el.addEventListener(
     "toggle",
@@ -371,22 +373,19 @@ export function createMessageList(opts: {
         authorMenus.set(d, menu);
       }
       const user = d.dataset.user!;
-      const items: MenuItem[] = d.dataset.nodm ? [] : [{ label: S.MESSAGE, run: () => opts.onMessageUser(user) }];
-      menu.update(items);
+      menu.update([]);
       const { isBanned, onBan } = opts;
-      if (!d.dataset.ban || !isBanned || !onBan) return;
+      if (!isBanned || !onBan) return;
       isBanned(user).then(
         (banned) => {
           if (signal.aborted) return;
           menu.update([
-            ...items,
             banned
-              ? { label: S.UNBAN, run: () => onBan(user, false), sep: true }
+              ? { label: S.UNBAN, run: () => onBan(user, false) }
               : {
                   label: S.BAN,
                   confirm: { text: S.banTheyAreSignedOutEverywhere(name), action: S.BAN_ACTION },
                   run: () => onBan(user, true),
-                  sep: true,
                 },
           ]);
         },
@@ -700,30 +699,25 @@ export function createMessageList(opts: {
   }
 
   /**
-   * The author's name: for other (known) users a menu offering "Message" (§16.5), unless they take no DMs (§16.7), and
-   * to a moderator Ban (§36). Guests can't message (§23.3). The menu is drawn as ui/menu.ts draws it, and made to work
-   * when first opened (the `toggle` listener above).
+   * The author's name: for other (known) users a button opening the DM with them (§16.5), unless they take no DMs
+   * (§16.7) or I don't. Guests can't message (§23.3). A moderator bans someone in the DM's menu (§36); for those who
+   * take no DMs, who have no DM, the name opens a menu with Ban instead (QA BUG-230), drawn as ui/menu.ts draws it and
+   * made to work when first opened (the `toggle` listener above).
    */
   function authorEl(author: User, me: User | null, known: boolean, room: string): HTMLElement {
     // Someone on a linked instance says where (§33.4).
     const where = author.instance ? S.on(author.instance) : undefined;
-    if (!me || author.id === me.id || !known) return h("span", { class: "author", title: where }, author.name);
-    // A moderator bans this instance's people (§36), those who take no DMs too (QA BUG-230); an anonymous room's author
-    // is the room (§35), no one to ban.
-    const ban = me.moderator && !author.instance && author.id !== room;
-    if (author.no_dms && !ban) return h("span", { class: "author", title: where }, author.name);
-    const data = {
-      user: author.id,
-      ...(where ? { note: where } : {}),
-      ...(ban ? { ban: "1" } : {}),
-      ...(author.no_dms ? { nodm: "1" } : {}),
-    };
-    return h("details", { class: "menu author-menu", dataset: data }, [
+    const plain = () => h("span", { class: "author", title: where }, author.name);
+    if (!me || author.id === me.id || !known) return plain();
+    if (!author.no_dms && !me.no_dms) {
+      const title = where ? `${S.messageName(author.name)} · ${where}` : S.messageName(author.name);
+      return h("button", { type: "button", class: "author", title, dataset: { act: "dm", user: author.id } }, author.name);
+    }
+    // This instance's people only (§36); an anonymous room's author is the room (§35), no one to ban.
+    if (!me.moderator || author.instance || author.id === room) return plain();
+    return h("details", { class: "menu author-menu", dataset: { user: author.id } }, [
       h("summary", { class: "author" }, author.name),
-      h("div", { class: "menu-items" }, [
-        where ? h("p", {}, where) : null,
-        author.no_dms ? null : h("button", { type: "button" }, S.MESSAGE),
-      ]),
+      h("div", { class: "menu-items" }),
     ]);
   }
 

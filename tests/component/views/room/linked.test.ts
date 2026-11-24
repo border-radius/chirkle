@@ -49,10 +49,8 @@ describe("linked instances in the room view (§33.10)", () => {
     const room = await newRoom();
     await bob.api.send({ id: newId(), room: room.id, text: "hello from B" });
     await mount(room);
-    const menu = msgEls()[0]!.querySelector<HTMLDetailsElement>("details.author-menu")!;
-    menu.open = true;
-    expect(menu.querySelector(".menu-items p")!.textContent).toBe("On b.example");
-    expect(button(menu, "Message")).not.toBeNull();
+    const name = msgEls()[0]!.querySelector<HTMLButtonElement>("button.author")!;
+    expect(name.title).toBe("Message Bob (B) · On b.example");
   });
 
   it("the access dialog lists people there, says where the room is kept, and finds them by address", async () => {

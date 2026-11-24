@@ -71,18 +71,18 @@ describe("room view", () => {
       await vi.waitFor(() => expect(root.textContent).toContain("This room doesn't exist."));
     });
 
-    it("another author's name opens a menu with Message, which opens the DM; your own name has none", async () => {
+    it("another author's name opens the DM with them, with no menu; your own name does nothing", async () => {
       const bob = await signedUp("Bob");
       const room = await newRoom();
       await bob.api.send({ id: newId(), room: room.id, text: "hi from bob" });
       await me.api.send({ id: newId(), room: room.id, text: "hi from me" });
       await mount(room);
       const [theirs, mine] = msgEls();
-      expect(mine!.querySelector("details.author-menu")).toBeNull();
-      const authorMenu = theirs!.querySelector<HTMLDetailsElement>("details.author-menu")!;
-      expect(authorMenu.querySelector("summary.author")!.textContent).toBe("Bob");
-      authorMenu.open = true;
-      button(authorMenu, "Message")!.click();
+      expect(mine!.querySelector("button.author, details.author-menu")).toBeNull();
+      expect(theirs!.querySelector("details.author-menu")).toBeNull();
+      const name = theirs!.querySelector<HTMLButtonElement>("button.author")!;
+      expect(name.textContent).toBe("Bob");
+      name.click();
       await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/r\//)));
       const dmId = navigate.mock.calls.at(-1)![0].slice(3);
       expect(store.get().rooms.get(dmId)?.members).toContain(bob.user.id);
@@ -90,7 +90,7 @@ describe("room view", () => {
   });
 
   describe("users who take no DMs (§16.7)", () => {
-    it("their name has no Message menu", async () => {
+    it("their name doesn't open a DM", async () => {
       const bot = await signedUp("Bridge Person");
       const pb = new PocketBase(inject("pbUrl"));
       await pb.collection("users").authWithPassword(bot.email, bot.password);
@@ -99,7 +99,7 @@ describe("room view", () => {
       await bot.api.send({ id: newId(), room: room.id, text: "from telegram" });
       await mount(room);
       const [theirs] = msgEls();
-      expect(theirs!.querySelector("details.author-menu")).toBeNull();
+      expect(theirs!.querySelector("details.author-menu, button.author")).toBeNull();
       expect(theirs!.querySelector(".author")!.textContent).toBe("Bridge Person");
     });
   });

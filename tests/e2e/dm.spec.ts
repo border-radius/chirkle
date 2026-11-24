@@ -55,8 +55,7 @@ test("Message from an author's name opens the DM (§16.5)", async ({ browser }) 
   await page.goto(`/r/${room.id}`);
   await apiSend(bob, room, "ping");
   const theirs = message(page, "ping");
-  await theirs.locator("summary.author").click();
-  await theirs.getByRole("button", { name: "Message" }).click();
+  await theirs.locator("button.author").click();
   await expect(page.locator("header.room-header h1")).toHaveText(new RegExp(bob.name));
   await expect(page.locator(`[data-section="dms"] li`, { hasText: bob.name }).locator("a")).toHaveAttribute("aria-current", "page");
 });

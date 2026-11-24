@@ -105,10 +105,9 @@ test("a shared room: messages both ways live, people from the other instance say
   await send(bobPage, "hello from B");
   const there = message(annPage, "hello from B");
   await expect(there).toBeVisible({ timeout: 15_000 });
-  const author = there.locator("details.author-menu");
-  await expect(author.locator("summary")).toHaveText(`${bob.name} (B)`);
-  await author.locator("summary").click();
-  await expect(author.locator(".menu-items p")).toHaveText(`On ${B.host}`);
+  const author = there.locator("button.author");
+  await expect(author).toHaveText(`${bob.name} (B)`);
+  await expect(author).toHaveAttribute("title", `Message ${bob.name} (B) · On ${B.host}`);
 
   await send(annPage, "hello from A");
   await expect(message(bobPage, "hello from A")).toBeVisible({ timeout: 15_000 });

@@ -1,6 +1,7 @@
 // Room header (§7.1, §16.5): back link, room title, a private room's members (opening the access dialog), the search
 // (§29) and media (§30) buttons and the room actions menu (room access, hide, archive, notify of every message (§34.5),
-// jump to beginning). A DM shows the other member's avatar and name, and can be closed but never archived. A private or Open
+// jump to beginning). A DM shows the other member's avatar and name, and can be closed but never archived; a moderator
+// bans or unbans the other member from its menu (§36). A private or Open
 // Air room says so next to its name (§23.1); a guest only gets "Jump to beginning" (§23.3). A room shared with other
 // instances says where else it is held, and when its home can't be reached (§33.9, §33.7).
 
@@ -33,6 +34,9 @@ export function createRoomHeader(opts: {
   onClosed: () => void;
   /** The notification choices changed (§34.5): app.ts follows them, if it doesn't yet. */
   onNotify: () => void;
+  /** A moderator's Ban or Unban in a DM's menu (§36): whether the other member is banned, asked each time it opens. */
+  isBanned?: (userId: string) => Promise<boolean>;
+  onBan?: (userId: string, banned: boolean) => void;
   signal: AbortSignal;
 }): RoomHeader {
   const { actions, signal } = opts;
@@ -73,6 +77,31 @@ export function createRoomHeader(opts: {
   /** What the title shows, to rebuild it only when that changes (the avatar is an image). */
   let shown = "";
   let last: Parameters<RoomHeader["update"]>[0] | undefined;
+  /** Whether the DM's other member is banned (§36), as the server said when the menu last opened. */
+  let banned: { user: string; banned: boolean } | null = null;
+
+  /** Someone this moderator can ban from a DM's menu: this instance's people only (§36.4). */
+  function bannable(room: Room | undefined, me: User | null): User | undefined {
+    if (!me?.moderator || !opts.isBanned || !opts.onBan || !room) return undefined;
+    const other = otherMember(room, me);
+    return other && other.id !== me.id && !other.instance ? other : undefined;
+  }
+  menu.el.addEventListener(
+    "toggle",
+    () => {
+      const other = menu.el.open && last ? bannable(last.room, last.me) : undefined;
+      if (!other) return;
+      opts.isBanned!(other.id).then(
+        (b) => {
+          if (signal.aborted) return;
+          banned = { user: other.id, banned: b };
+          if (last) update(last);
+        },
+        () => {}, // not known: no item
+      );
+    },
+    { signal },
+  );
 
   /** Notify of every message here (§34.5): flip it in notify.ts's choices (chat.notify), without loading notify.ts. */
   async function setNotifyAll(id: string, on: boolean) {
@@ -107,7 +136,25 @@ export function createRoomHeader(opts: {
     }
   }
 
-  function dmItems(room: Room, hidden: boolean): MenuItem[] {
+  /** Asked again when the menu next opens. */
+  function setBan(user: string, b: boolean) {
+    banned = null;
+    opts.onBan?.(user, b);
+  }
+
+  function dmItems(room: Room, hidden: boolean, me: User | null): MenuItem[] {
+    const other = bannable(room, me);
+    const ban: MenuItem | null =
+      other && banned?.user === other.id
+        ? banned.banned
+          ? { label: S.UNBAN, run: () => setBan(other.id, false), sep: true }
+          : {
+              label: S.BAN,
+              confirm: { text: S.banTheyAreSignedOutEverywhere(other.name), action: S.BAN_ACTION },
+              run: () => setBan(other.id, true),
+              sep: true,
+            }
+        : null;
     return [
       hidden
         ? { label: S.REOPEN_CONVERSATION, run: () => void act(() => actions.unhide(room.id)) }
@@ -118,12 +165,14 @@ export function createRoomHeader(opts: {
                 if (ok) opts.onClosed();
               }),
           },
+      ...(ban ? [ban] : []),
       { label: S.JUMP_TO_BEGINNING, run: opts.onJumpToBeginning, icon: "i-top", sep: true },
     ];
   }
 
-  function items(room: Room | undefined, hidden: boolean, mine: boolean, guest: boolean): MenuItem[] {
-    if (room?.kind === "dm") return dmItems(room, hidden);
+  function items(room: Room | undefined, hidden: boolean, mine: boolean, me: User | null): MenuItem[] {
+    if (room?.kind === "dm") return dmItems(room, hidden, me);
+    const guest = !me;
     const out: MenuItem[] = [];
     if (guest) return [{ label: S.JUMP_TO_BEGINNING, run: opts.onJumpToBeginning, icon: "i-top" }];
     if (room && (mine || visibilityOf(room) === "private")) {
@@ -219,7 +268,7 @@ export function createRoomHeader(opts: {
       shared.title = note; // One line, cut short when narrow.
     }
     shared.hidden = !note;
-    menu.update(items(room, hidden, !!room && canManage(room, me), !me));
+    menu.update(items(room, hidden, !!room && canManage(room, me), me));
   }
 
   return { el, update };

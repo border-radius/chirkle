@@ -296,8 +296,29 @@
   text-decoration: none;
 }
 
-/* Another author's name opens a menu with "Message" (§16.5). It shrinks and truncates like a plain name, so the
-   time stays on screen (QA BUG-32). */
+/* Another author's name opens the DM with them (§16.5): a button that looks like the name, underlined on hover. */
+button.author {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-weight: 600;
+  text-align: start;
+  transition: none;
+}
+
+button.author:hover:not(:disabled),
+button.author:focus-visible {
+  background: none;
+  text-decoration: underline;
+}
+
+button.author:active:not(:disabled) {
+  transform: none;
+}
+
+/* A moderator's menu (Ban) on the name of someone who takes no DMs (§36). It shrinks and truncates like a plain name,
+   so the time stays on screen (QA BUG-32). */
 .author-menu {
   min-width: 0;
 }

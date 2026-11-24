@@ -2026,3 +2026,17 @@ and text, `ChirkleIcons.Image` before "Attachment" for files alone, italic for "
 sit on `Chirkle.colors.tint` with your name in the accent; others' on `surfaceContainerHigh`, name and text muted. The
 accent bar and two lines are gone. `MSG_FIELDS` asks for the quoted author's `avatar` too (`shared/contract.json`).
 This ports §89's reply-to-you chip.
+
+## 92. Author's name opens the DM; Ban in the DM's menu (2026-11-24)
+
+As on the web (DESIGN.md §16.5, §36.4): tapping another author's name in `MessageRow` opens the DM with them
+(`RowActions.onAuthor` → `RoomActions.openDm` → `RoomNav.openRoom`; a snackbar says why if it fails). Not your own
+name, not while selecting, not for a guest, and not for anyone who takes no DMs or when you don't (§16.7). On the web the
+name was a menu with *Message*; the app had no author menu, only the long-press sheet.
+
+In a DM, a moderator's room menu (`RoomMenu`) has *Ban name* or *Unban name* for the other member (this instance's
+people only), asked of the server (`ChirkleApi.isBanned`) each time the menu opens; *Ban* asks first with the same
+dialog as the sheet's. The sheet keeps its *Ban* (it is how someone who takes no DMs is banned, QA BUG-230).
+
+Tests: `UiModeratorsTest` "an author's name opens the DM, whose menu bans and unbans them" and "others' name opens the
+DM too, with no Ban in its menu".

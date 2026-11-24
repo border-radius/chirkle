@@ -115,6 +115,8 @@ export function createRoomView({
     onAccess: () => void openAccess(),
     onClosed: () => navigate("/"),
     onNotify: notify,
+    isBanned: (userId) => api.isBanned(userId),
+    onBan: (userId, banned) => void setBanned(userId, banned),
     signal,
   });
   /** The access dialog (§23.2), once opened: a lazy chunk. */

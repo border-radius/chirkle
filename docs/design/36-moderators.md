@@ -70,13 +70,17 @@ Banning someone, by this route or in the admin UI (the users update hook, `befor
 Their messages stay; moderators delete the ones they want gone. Unbanning lets them sign in again, and nothing else
 changes.
 
-Clients: a moderator's menu on an author (web: the name's menu next to *Message*; Android: the message's long-press
-sheet) shows *Ban…* or *Unban*. The client asks the server which one applies each time the menu opens. *Ban* asks
+Clients: a moderator bans from the DM's menu (the room header's ⋯, since 2026-11-24, when an author's name started
+opening the DM instead of a menu, §16.5). Someone who takes no DMs has no DM: on the web their name opens a menu with
+*Ban…* alone (QA BUG-230). Android also keeps *Ban* in the message's long-press sheet. The menu shows *Ban…* or
+*Unban*; the client asks the server which one applies each time the menu opens. *Ban* asks
 for confirmation first: "Ban *name*? They are signed out everywhere and can't sign in until unbanned." The item isn't
 shown for:
 - yourself;
-- people on linked instances, or anyone who takes no DMs (stand-ins);
+- people on linked instances;
 - an anonymous room's author, which is the room.
+
+Someone who takes no DMs gets the item (QA BUG-230); the server refuses a Telegram stand-in, and says why.
 
 ## 36.5 Tests
 
@@ -89,8 +93,8 @@ shown for:
   - a ban set in the admin UI does the same;
   - who may ban whom.
 - `tests/component/views/room/moderators.test.ts` covers `canManage`, the header menu in someone else's room,
-  deleting but not editing someone else's message, Ban and Unban from an author's menu, and none of these for anyone
-  else.
+  deleting but not editing someone else's message, an author's name opening the DM and Ban and Unban in its menu, Ban
+  on the name of someone who takes no DMs, and none of these for anyone else.
 - Android: `UiModeratorsTest` (ANDROID.md §45).
 
 ## 36.6 QA pass 29

@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 // Moderators (DESIGN.md §36, ANDROID.md §45): ticked by a superuser; in someone else's room they archive it, change its
-// access, delete messages and ban their authors.
+// access, delete messages and ban their authors (from the message sheet, or from the DM an author's name opens).
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class)
 class UiModeratorsTest {
@@ -91,6 +91,35 @@ class UiModeratorsTest {
         ui.until { !m.api.isBanned(a.user.id) }
     }
 
+    /** Tap an author's name (the clickable one: not the DM title it opens). */
+    private fun tapName(name: String) {
+        ui.waitFor(name)
+        compose.onNode(hasText(name) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnClick)).performClick()
+    }
+
+    @Test fun `an author's name opens the DM, whose menu bans and unbans them`() {
+        val a = newUser("dm-${uniq()}")
+        val room = runBlocking { a.api.createRoom("mt-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "hello mods")) }
+        val m = newModerator()
+        ui.signedIn(m)
+        ui.openRoom(room.name)
+        ui.waitFor("hello mods")
+        tapName(a.user.name)
+        ui.waitFor("Beginning of your conversation with ${a.user.name}")
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        ui.waitFor("Ban ${a.user.name}")
+        compose.onNodeWithText("Ban ${a.user.name}").performClick()
+        ui.waitFor("sign in until unbanned")
+        compose.onNodeWithText("Ban").performClick()
+        ui.until { m.api.isBanned(a.user.id) }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasText("Banned.", substring = true)).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        ui.waitFor("Unban ${a.user.name}")
+        compose.onNodeWithText("Unban ${a.user.name}").performClick()
+        ui.until { !m.api.isBanned(a.user.id) }
+    }
+
     @Test fun `QA BUG-230 - someone who takes no DMs can be banned`() {
         val a = newUser("nd-${uniq()}")
         TestServer.admin("PATCH", "/api/collections/users/records/${a.user.id}", """{"no_dms":true}""")
@@ -143,6 +172,21 @@ class UiModeratorsTest {
         longPress("just a message")
         ui.waitFor("Copy text")
         assertTrue(compose.onAllNodes(hasText("Delete")).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("Ban", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun `others' name opens the DM too, with no Ban in its menu`() {
+        val a = newUser("on-${uniq()}")
+        val room = runBlocking { a.api.createRoom("mo-${uniq()}") }
+        runBlocking { a.api.send(NewMessage(newId(), room.id, "say hi")) }
+        val b = newUser()
+        ui.signedIn(b)
+        ui.openRoom(room.name)
+        ui.waitFor("say hi")
+        tapName(a.user.name)
+        ui.waitFor("Beginning of your conversation with ${a.user.name}")
+        compose.onNodeWithContentDescription("Room actions").performClick()
+        ui.waitFor("Close conversation")
         assertTrue(compose.onAllNodes(hasText("Ban", substring = true)).fetchSemanticsNodes().isEmpty())
     }
 }

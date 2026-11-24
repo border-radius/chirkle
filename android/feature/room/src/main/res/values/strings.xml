@@ -79,6 +79,7 @@
     <string name="room_photos_and_videos">Photos and videos</string>
     <string name="room_attach_files">Attach files</string>
     <string name="room_message">Message</string>
+    <string name="room_couldnt_open_the_conversation_with">Couldn\'t open the conversation with “%1$s”. %2$s</string>
     <string name="room_insert_emoji">Insert emoji</string>
     <string name="room_too_long_characters_over_the">Too long: %1$d characters over the %2$d limit.</string>
     <string name="room_remove">Remove %1$s</string>

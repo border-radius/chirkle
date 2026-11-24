@@ -72,7 +72,7 @@ describe("app boot (§7.1)", () => {
     await vi.waitFor(() => expect(root.querySelector("li.msg .body")?.textContent).toBe("hello world"));
     const msg = root.querySelector("li.msg")!;
     expect(msg.querySelector(".author")!.textContent).toBe("Ada");
-    expect(msg.querySelector("summary")).toBeNull(); // no "Message" menu
+    expect(msg.querySelector("summary, button.author")).toBeNull(); // the name opens no DM
     expect(msg.querySelector(".actions")).toBeNull();
     expect(msg.querySelector(".reactions button")).toBeNull(); // shown, not clickable
     expect(msg.querySelector(".reactions .reaction")!.getAttribute("title")).toBe("Ada reacted with 👍"); // in the window: no lookup needed

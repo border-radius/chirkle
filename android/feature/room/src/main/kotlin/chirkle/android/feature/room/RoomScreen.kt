@@ -97,6 +97,7 @@ import chirkle.android.data.lib.title
 import chirkle.android.data.lib.sharedNote
 import chirkle.android.data.lib.visibilityOrDefault
 import chirkle.android.data.model.Message
+import chirkle.android.data.model.User
 import chirkle.android.data.model.Visibility
 import chirkle.android.data.repo.Phase
 import chirkle.android.data.repo.Pill
@@ -274,6 +275,14 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         badge = { badges[it] },
         onCollection = nav.collection,
         myHandle = me?.handle.orEmpty(),
+        // Not your own name, nor anyone's who takes no DMs, or when you don't (§16.7); guests can't message (§23.3).
+        onAuthor = if (me == null || me.noDms) null else ({ u ->
+            scope.launch {
+                runCatching { services.actions.openDm(u.id) }
+                    .onSuccess { nav.openRoom(it.id) }
+                    .onFailure { e -> snackbar.showSnackbar(res.getString(R.string.room_couldnt_open_the_conversation_with, u.name, chirkle.android.data.api.errorMessage(e))) }
+            }
+        }),
     )
 
     Scaffold(
@@ -352,7 +361,10 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         if (room != null) {
                             Box {
                                 IconButton(onClick = { roomMenu = true }) { Icon(ChirkleIcons.More, contentDescription = stringResource(R.string.room_room_actions)) }
-                                RoomMenu(roomMenu, { roomMenu = false }, room, me != null, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar) { c.jump(PageKind.First) }
+                                RoomMenu(
+                                    roomMenu, { roomMenu = false }, room, me, room.canManage(me), app_.hidden.containsKey(roomId), nav, snackbar,
+                                    onBan = { u -> banning = u.id to u.name }, onUnban = { u -> vm.setBanned(u.id, false) },
+                                ) { c.jump(PageKind.First) }
                             }
                         }
                     },
@@ -494,9 +506,29 @@ private fun FocusRequester.requestFocusSafely() {
 }
 
 @Composable
-private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.data.model.Room, signedIn: Boolean, manage: Boolean, hidden: Boolean, nav: RoomNav, snackbar: SnackbarHostState, toBeginning: () -> Unit) {
+private fun RoomMenu(
+    open: Boolean,
+    close: () -> Unit,
+    room: chirkle.android.data.model.Room,
+    me: User?,
+    manage: Boolean,
+    hidden: Boolean,
+    nav: RoomNav,
+    snackbar: SnackbarHostState,
+    onBan: (User) -> Unit,
+    onUnban: (User) -> Unit,
+    toBeginning: () -> Unit,
+) {
     val res = LocalContext.current.resources
     val services = LocalServices.current
+    val signedIn = me != null
+    // A moderator bans or unbans a DM's other member here (DESIGN.md §36): this instance's people only. Whether they are
+    // banned is asked each time the menu opens.
+    val other = room.otherMember(me?.id)?.takeIf { me?.moderator == true && it.id != me.id && it.instance.isEmpty() }
+    val banned by produceState<Boolean?>(null, open, other?.id) {
+        value = null
+        if (open && other != null) value = runCatching { services.api.isBanned(other.id) }.getOrNull()
+    }
     val scope = rememberCoroutineScope()
     var archive by remember { mutableStateOf(false) }
     val every by services.notifyRooms.set.collectAsStateWithLifecycle()
@@ -513,6 +545,15 @@ private fun RoomMenu(open: Boolean, close: () -> Unit, room: chirkle.android.dat
                 DropdownMenuItem(text = { Text(if (manage) stringResource(R.string.room_room_access) else stringResource(R.string.room_members_2, room.members.size)) }, leadingIcon = { Icon(ChirkleIcons.People, contentDescription = null) }, onClick = { close(); nav.access(room.id) })
             }
             if (room.isDm) DropdownMenuItem(text = { Text(stringResource(R.string.room_close_conversation)) }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("close") { services.actions.hide(room.id); nav.back() } })
+            if (other != null) when (banned) {
+                false -> DropdownMenuItem(
+                    text = { Text(stringResource(R.string.room_ban_2, other.name), color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(ChirkleIcons.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = { close(); onBan(other) },
+                )
+                true -> DropdownMenuItem(text = { Text(stringResource(R.string.room_unban, other.name)) }, leadingIcon = { Icon(ChirkleIcons.Lock, contentDescription = null) }, onClick = { close(); onUnban(other) })
+                null -> {}
+            }
             else if (hidden) DropdownMenuItem(text = { Text(stringResource(R.string.room_unhide_room)) }, leadingIcon = { Icon(ChirkleIcons.Show, contentDescription = null) }, onClick = { act("unhide") { services.actions.unhide(room.id) } })
             // Hiding an archived room is pointless: it is listed under Hidden & archived already (the web's menu).
             else if (!room.archived) DropdownMenuItem(text = { Text(stringResource(R.string.room_hide_room)) }, leadingIcon = { Icon(ChirkleIcons.Hide, contentDescription = null) }, onClick = { act("hide") { services.actions.hide(room.id); nav.back() } })

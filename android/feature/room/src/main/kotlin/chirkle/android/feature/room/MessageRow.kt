@@ -91,6 +91,8 @@ class RowActions(
     val onCollection: (String) -> Unit = {},
     /** Your handle (DESIGN.md §41): an "@" of it is marked more. */
     val myHandle: String = "",
+    /** The author's name was tapped: open the DM with them (DESIGN.md §16.5), or null where it can't be (see RoomScreen). */
+    val onAuthor: ((User) -> Unit)? = null,
 )
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -133,7 +135,17 @@ fun MessageRow(
             Column(Modifier.weight(1f)) {
                 if (first) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(author.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                        // Another (known) author's name opens the DM with them (the web's button.author); not while selecting.
+                        val open = actions.onAuthor?.takeIf { m.expand?.author != null && m.author != me && !author.noDms && !selecting }
+                        Text(
+                            author.name,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false).alignByBaseline()
+                                .then(if (open == null) Modifier else Modifier.clickable(onClickLabel = stringResource(R.string.room_message_2, author.name)) { open(author) }),
+                        )
                         Text(Formats.time(m.created), color = Chirkle.colors.muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.alignByBaseline())
                     }
                 }

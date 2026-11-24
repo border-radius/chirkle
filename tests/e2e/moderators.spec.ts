@@ -2,7 +2,7 @@
 // messages (one, and several selected), changes their room's access, archives it, and bans its author, whose open tab
 // is signed out and who can't log in again until unbanned.
 
-import { expect, type Page } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { SUPERUSER } from "../support/pocketbase.ts";
 import { apiRoom, apiSend, apiUser, headerAction, login, message, openRoom, test, type User } from "./fixtures.ts";
 import { E2E_BASE } from "./paths.ts";
@@ -27,8 +27,6 @@ async function moderator(name = "Mod"): Promise<User> {
   await admin("PATCH", `/api/collections/users/records/${u.id}`, { moderator: true });
   return u;
 }
-
-const authorMenu = (page: Page, text: string) => message(page, text).locator("details.author-menu");
 
 test("a moderator deletes someone else's messages, one and several, and everyone sees it live", async ({ browser }) => {
   const ada = await apiUser("Ada");
@@ -86,7 +84,7 @@ test("a moderator changes someone else's room's access, starting in its member l
   await expect(m.locator(".archived-banner")).toHaveCount(0);
 });
 
-test("a moderator bans an author: their open tab is signed out and they can't log in, until unbanned", async ({ browser }) => {
+test("a moderator bans someone from the DM: their open tab is signed out and they can't log in, until unbanned", async ({ browser }) => {
   const ada = await apiUser("Ada");
   const mod = await moderator();
   const room = await apiRoom(mod);
@@ -94,7 +92,10 @@ test("a moderator bans an author: their open tab is signed out and they can't lo
   const a = await openRoom(browser, ada, room);
   const m = await openRoom(browser, mod, room);
 
-  const menu = authorMenu(m, "hello there");
+  // The name opens the DM; its menu bans.
+  await message(m, "hello there").locator("button.author").click();
+  await expect(m.locator("header.room-header h1")).toHaveText(/Ada/);
+  const menu = m.locator("header.room-header details");
   await menu.locator("summary").click();
   await menu.getByRole("button", { name: "Ban…" }).click();
   await expect(menu).toContainText("can't sign in until unbanned");
@@ -135,11 +136,13 @@ test("others get no Ban, no Delete on others' messages and no access settings", 
   const msg = message(b, "plain");
   await msg.hover();
   await expect(msg.getByRole("button", { name: "Delete" })).toHaveCount(0);
-  const menu = authorMenu(b, "plain");
-  await menu.locator("summary").click();
-  await expect(menu.getByRole("button", { name: "Message" })).toBeVisible();
-  await expect(menu.getByRole("button", { name: /Ban/ })).toHaveCount(0);
-  await b.keyboard.press("Escape");
+  await expect(msg.locator("details.author-menu")).toHaveCount(0);
   await b.locator("header.room-header summary").click();
   await expect(b.locator("header.room-header .menu-items").getByRole("button", { name: /Room access|Archive room/ })).toHaveCount(0);
+  await b.keyboard.press("Escape");
+  await msg.locator("button.author").click();
+  await expect(b.locator("header.room-header h1")).toHaveText(/Ada/);
+  await b.locator("header.room-header summary").click();
+  await expect(b.locator("header.room-header .menu-items").getByRole("button", { name: "Close conversation" })).toBeVisible();
+  await expect(b.locator("header.room-header .menu-items").getByRole("button", { name: /Ban/ })).toHaveCount(0);
 });

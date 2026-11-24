@@ -23,3 +23,8 @@ export const NOTIFY_OF_EVERY_MESSAGE = "Notify of every message";
 export const OFF_ONLY_MENTIONS_AND_REPLIES_TO = "Off — only mentions and replies to you";
 export const ON_YOU_HEAR_ABOUT_EVERYTHING_HERE = "On — you hear about everything here";
 export const membersCount = (peopleCount: string | number) => `Members, ${peopleCount}`;
+export const UNBAN = "Unban";
+export const BAN = "Ban…";
+export const banTheyAreSignedOutEverywhere = (name: string | number) =>
+  `Ban ${name}? They are signed out everywhere and can't sign in until unbanned.`;
+export const BAN_ACTION = "Ban";

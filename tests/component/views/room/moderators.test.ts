@@ -1,5 +1,5 @@
 // Moderators in the room view (§36): the header offers access and archiving in anyone's room, anyone's message can be
-// deleted, and an author's menu bans and unbans. The flag is set with SQL, as a superuser would in the admin UI.
+// deleted, and a DM's menu bans and unbans (as does the name's menu of someone who takes no DMs). The flag is set with SQL, as a superuser would in the admin UI.
 
 import { describe, expect, inject, it, vi } from "vitest";
 import { newId } from "../../../../web/src/lib/id.ts";
@@ -54,13 +54,17 @@ describe("moderators in the room view (§36)", () => {
     await vi.waitFor(async () => expect((await other.api.getMessage(m.id)).deleted).toBe(true));
   });
 
-  it("ban and unban from an author's menu", async () => {
+  it("an author's name opens the DM, and the DM's menu bans and unbans", async () => {
     const other = await signedUp("Other");
     const room = await newRoom(other);
     await other.api.send({ id: newId(), room: room.id, text: "hi" });
     await makeModerator();
     await mount(room);
-    const menu = () => root().querySelector<HTMLDetailsElement>("details.author-menu")!;
+    expect(root().querySelector("details.author-menu")).toBeNull();
+    expect(root().querySelector("button.author")!.textContent).toBe("Other");
+    const dm = await me.api.openDm(other.user.id);
+    await mount(dm);
+    const menu = () => root().querySelector<HTMLDetailsElement>("header.room-header details")!;
     menu().open = true;
     await vi.waitFor(() => expect(button(menu(), "Ban…")).not.toBeNull());
     button(menu(), "Ban…")!.click();
@@ -148,11 +152,13 @@ describe("moderators in the room view (§36)", () => {
     const m = await other.api.send({ id: newId(), room: room.id, text: "hi" });
     await mount(room);
     expect(button(msgEl(m.id), "Delete")).toBeNull();
-    const menu = root().querySelector<HTMLDetailsElement>("details.author-menu")!;
-    menu.open = true;
+    expect(root().querySelector("details.author-menu")).toBeNull();
+    const dm = await me.api.openDm(other.user.id);
+    await mount(dm);
+    headerMenu().open = true;
     await new Promise((r) => setTimeout(r, 50));
-    expect(button(menu, "Message")).not.toBeNull();
-    expect(button(menu, "Ban…")).toBeNull();
+    expect(button(headerMenu(), "Close conversation")).not.toBeNull();
+    expect(button(headerMenu(), "Ban…")).toBeNull();
   });
 });
 
