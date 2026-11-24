@@ -274,7 +274,7 @@ export const reasonOf = (err: unknown): string => (err instanceof ApiError && Ob
 
 /** Only what the UI renders; never user emails (§6). */
 export const MSG_FIELDS =
-  "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance," +
+  "id,room,text,created,updated,edited_at,deleted,files,file_names,file_sources,file_dims,reactions,previews,author,expand.author.id,expand.author.name,expand.author.avatar,expand.author.no_dms,expand.author.instance,expand.author.kind," +
   "reply_to,expand.reply_to.id,expand.reply_to.author,expand.reply_to.text,expand.reply_to.deleted,expand.reply_to.files," +
   "expand.reply_to.expand.author.id,expand.reply_to.expand.author.name,expand.reply_to.expand.author.avatar," +
   "forwarded_from,forward_of,expand.forwarded_from.id,expand.forwarded_from.name,mentions";

@@ -222,7 +222,7 @@ div.brand .brand-title::after {
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--side-bg);
 }
 
 .sidebar .rooms {

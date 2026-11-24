@@ -13,6 +13,11 @@ export interface User {
   moderator?: boolean;
   /** What "@handle" names (§41), without the "@"; absent where the server doesn't say. */
   handle?: string;
+  /**
+   * What kind of account (§5.1): "person" signs in here; the others are stand-ins (a Telegram sender's, a linked
+   * instance's person's, a deleted account) nobody can ban. Absent where the server doesn't say.
+   */
+  kind?: "person" | "telegram" | "peer" | "deleted";
 }
 
 /**

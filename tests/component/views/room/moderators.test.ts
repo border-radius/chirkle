@@ -96,6 +96,19 @@ describe("moderators in the room view (§36)", () => {
     await vi.waitFor(async () => expect(await me.api.isBanned(other.user.id)).toBe(true));
   });
 
+  it("a Telegram stand-in's name (or a deleted account's) is plain: no menu with a Ban the server refuses", async () => {
+    const other = await signedUp("Tg Person (TG)");
+    const room = await newRoom(other);
+    const m = await other.api.send({ id: newId(), room: room.id, text: "hi" });
+    await runSql(inject("pbUrl"), [
+      { sql: "UPDATE users SET no_dms = 1, kind = 'telegram' WHERE id = {:id}", params: { id: other.user.id } },
+    ]);
+    await makeModerator();
+    await mount(room);
+    await vi.waitFor(() => expect(msgEl(m.id)!.querySelector(".author")?.textContent).toBe("Tg Person (TG)"));
+    expect(root().querySelector("details.author-menu, button.author")).toBeNull();
+  });
+
   it("QA: delete their own message where they can't post (by the delete route)", async () => {
     const other = await signedUp("Other");
     const room = await newRoom(other);

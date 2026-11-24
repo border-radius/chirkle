@@ -713,8 +713,10 @@ export function createMessageList(opts: {
       const title = where ? `${S.messageName(author.name)} · ${where}` : S.messageName(author.name);
       return h("button", { type: "button", class: "author", title, dataset: { act: "dm", user: author.id } }, author.name);
     }
-    // This instance's people only (§36); an anonymous room's author is the room (§35), no one to ban.
-    if (!me.moderator || author.instance || author.id === room) return plain();
+    // This instance's people only (§36), not a stand-in (a Telegram sender's, a deleted account: the server refuses to
+    // ban them, so the menu would be Ban that fails); an anonymous room's author is the room (§35), no one to ban.
+    const standIn = !!author.kind && author.kind !== "person";
+    if (!me.moderator || author.instance || standIn || author.id === room) return plain();
     return h("details", { class: "menu author-menu", dataset: { user: author.id } }, [
       h("summary", { class: "author" }, author.name),
       h("div", { class: "menu-items" }),

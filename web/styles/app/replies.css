@@ -13,7 +13,7 @@
   padding: 0 0.75rem 0 3px;
   border: 0;
   border-radius: var(--pill);
-  background: var(--hover);
+  background: var(--quote);
   color: var(--dim);
   /* Two pixels under the message text (12px to its 14, 13 to 15 on a phone), as the reply redesign has it. */
   font-size: calc(1em - 2px);
@@ -33,7 +33,7 @@
 
 @media (hover: hover) {
   .reply-quote:hover {
-    background: color-mix(in srgb, var(--fg) 10%, var(--bg));
+    background: var(--quote-hover);
     color: var(--fg);
   }
 }
@@ -87,19 +87,23 @@
 /* Your own words quoted: on the accent's tint, your name in the accent (toward the text colour: the accent alone was
    under 4.5:1 on the tint in the light theme); the message itself stays clean (messages.css). */
 .reply-quote.mine {
-  background: color-mix(in srgb, var(--fill) 18%, var(--bg));
-  color: var(--text);
+  background: var(--quote-mine);
+  color: var(--quote-mine-text);
 }
 
 .reply-quote.mine .reply-author {
   flex-shrink: 0;
   max-width: 40%;
-  color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+  color: var(--quote-mine-author);
+}
+
+.reply-quote.mine:hover {
+  color: var(--quote-mine-text);
 }
 
 @media (hover: hover) {
   .reply-quote.mine:hover {
-    background: color-mix(in srgb, var(--fill) 26%, var(--bg));
+    background: var(--quote-mine-hover);
   }
 }
 
@@ -183,7 +187,10 @@
   font-weight: 600;
 }
 
-.room-section[data-section="inbox"] a.unread::before,
-.room-section[data-section="inbox"] a[aria-current="page"]::before {
+.room-section[data-section="inbox"] a.unread::before {
   color: var(--accent);
+}
+
+.room-section[data-section="inbox"] a[aria-current="page"]::before {
+  color: var(--row-on-icon);
 }

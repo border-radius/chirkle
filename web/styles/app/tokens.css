@@ -19,6 +19,21 @@
   --accent-2: #c42a7c;
   --grad: linear-gradient(135deg, #6a4bff, #c42a7c);
   --tint: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* The sidebar's rows and the reply pills (room-list.css, replies.css). Light: the hover gray, and selected things
+     (the open room, a quote of your own words) in solid accent with white on it. Dark: wells darker than the page. */
+  --side-bg: var(--surface);
+  --row-hover: var(--hover);
+  --row-on: var(--fill);
+  --row-on-fg: var(--on-fill);
+  --row-on-icon: var(--on-fill);
+  --row-on-badge: var(--on-fill);
+  --row-on-badge-fg: var(--fill);
+  --quote: var(--hover);
+  --quote-hover: color-mix(in srgb, var(--fg) 10%, var(--bg));
+  --quote-mine: var(--fill);
+  --quote-mine-hover: color-mix(in srgb, var(--fill) 88%, #000);
+  --quote-mine-author: var(--on-fill);
+  --quote-mine-text: #e2dbff; /* 5.6:1 on the fill */
   /* Frosted glass (the room view redesign): the header, the scroll button and the message box, over the messages that
      scroll under them. */
   --glass: color-mix(in srgb, var(--bg) 72%, transparent);
@@ -67,6 +82,20 @@
     --new: #f9a8d4;
     --highlight: #3d3314;
     --shadow: 0 0.75rem 2rem rgb(0 0 0 / 45%);
+    /* The sidebar on the room's own background, so its wells show (light: tokens in :root). */
+    --side-bg: var(--bg);
+    --row-hover: rgb(0 0 0 / 25%);
+    --row-on: rgb(0 0 0 / 45%);
+    --row-on-fg: var(--fg);
+    --row-on-icon: var(--accent);
+    --row-on-badge: var(--fill);
+    --row-on-badge-fg: var(--on-fill);
+    --quote: rgb(0 0 0 / 25%);
+    --quote-hover: rgb(0 0 0 / 40%);
+    --quote-mine: color-mix(in srgb, var(--fill) 18%, var(--bg));
+    --quote-mine-hover: color-mix(in srgb, var(--fill) 26%, var(--bg));
+    --quote-mine-author: color-mix(in srgb, var(--accent) 70%, var(--fg));
+    --quote-mine-text: var(--text);
   }
 }
 
@@ -93,4 +122,18 @@
   --new: #f9a8d4;
   --highlight: #3d3314;
   --shadow: 0 0.75rem 2rem rgb(0 0 0 / 45%);
+  /* The sidebar on the room's own background, so its wells show (light: tokens in :root). */
+  --side-bg: var(--bg);
+  --row-hover: rgb(0 0 0 / 25%);
+  --row-on: rgb(0 0 0 / 45%);
+  --row-on-fg: var(--fg);
+  --row-on-icon: var(--accent);
+  --row-on-badge: var(--fill);
+  --row-on-badge-fg: var(--on-fill);
+  --quote: rgb(0 0 0 / 25%);
+  --quote-hover: rgb(0 0 0 / 40%);
+  --quote-mine: color-mix(in srgb, var(--fill) 18%, var(--bg));
+  --quote-mine-hover: color-mix(in srgb, var(--fill) 26%, var(--bg));
+  --quote-mine-author: color-mix(in srgb, var(--accent) 70%, var(--fg));
+  --quote-mine-text: var(--text);
 }

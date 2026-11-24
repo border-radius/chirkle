@@ -138,7 +138,7 @@
 
 @media (hover: hover) {
   .room-section li:hover {
-    background: var(--hover);
+    background: var(--row-hover);
   }
 }
 
@@ -173,7 +173,7 @@
 }
 
 .room-section li a[aria-current="page"] > .lead {
-  color: var(--accent);
+  color: var(--row-on-icon);
 }
 
 .more-body li a {
@@ -235,7 +235,7 @@
   width: 1.125rem;
   height: 1.125rem;
   font-size: 0.4688rem;
-  box-shadow: 0 0 0 2px var(--surface);
+  box-shadow: 0 0 0 2px var(--side-bg);
 }
 
 .faces > .avatar + .avatar {
@@ -248,12 +248,31 @@
 }
 
 .room-section li a[aria-current="page"] {
-  color: var(--fg);
+  color: var(--row-on-fg);
   font-weight: 600;
 }
 
+/* The open room: solid accent in the light theme, the deeper well in the dark (tokens.css); hovering it changes nothing. */
 .room-section li:has(a[aria-current="page"]) {
-  background: var(--tint);
+  background: var(--row-on);
+}
+
+.room-section li a[aria-current="page"] > .vis,
+.room-section li a[aria-current="page"] > span > .vis {
+  color: var(--row-on-icon);
+}
+
+.room-section li a[aria-current="page"] > .dot {
+  background: var(--row-on-icon);
+}
+
+.room-section li a[aria-current="page"] > .badge {
+  background: var(--row-on-badge);
+  color: var(--row-on-badge-fg);
+}
+
+.room-section li:has(a[aria-current="page"]) .faces > .avatar {
+  box-shadow: 0 0 0 2px var(--row-on);
 }
 
 /* Private and Open Air (§23.1). */

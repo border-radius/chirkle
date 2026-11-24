@@ -2040,3 +2040,10 @@ dialog as the sheet's. The sheet keeps its *Ban* (it is how someone who takes no
 
 Tests: `UiModeratorsTest` "an author's name opens the DM, whose menu bans and unbans them" and "others' name opens the
 DM too, with no Ban in its menu".
+
+## 93. No Ban on a stand-in (2026-11-25)
+
+`users.kind` is public now (migration 58, DESIGN.md §5.1) and `MSG_FIELDS` asks for `expand.author.kind`
+(`shared/contract.json`); `User.kind` carries it ("" from a server before). The message sheet offers no *Ban* on a
+stand-in (`kind` other than `person`: a Telegram sender's, a deleted account), which the server refuses. On the web the
+name of such an author is plain text instead of a menu with *Ban…* alone (§36.4).

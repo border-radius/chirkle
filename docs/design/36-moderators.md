@@ -80,7 +80,10 @@ shown for:
 - people on linked instances;
 - an anonymous room's author, which is the room.
 
-Someone who takes no DMs gets the item (QA BUG-230); the server refuses a Telegram stand-in, and says why.
+- a stand-in (`kind` other than `person`, §5.1: a Telegram sender's, a deleted account): the server refuses to ban
+  them, so on the web their name is plain text, with no menu (2026-11-25), and Android's sheet has no *Ban*.
+
+Someone who takes no DMs (a person) gets the item (QA BUG-230).
 
 ## 36.5 Tests
 

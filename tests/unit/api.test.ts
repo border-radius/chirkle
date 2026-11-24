@@ -42,6 +42,8 @@ describe("MSG_FIELDS", () => {
       "expand.author.no_dms",
       // which instance a stand-in is on (§33.4)
       "expand.author.instance",
+      // a stand-in gets no Ban (§36.4)
+      "expand.author.kind",
       // the message a reply quotes (§19)
       "reply_to",
       "expand.reply_to.id",

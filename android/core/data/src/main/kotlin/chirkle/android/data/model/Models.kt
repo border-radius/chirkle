@@ -18,6 +18,11 @@ data class User(
     val moderator: Boolean = false,
     /** What "@handle" names (DESIGN.md §41), without the "@"; "" where the server doesn't say. */
     val handle: String = "",
+    /**
+     * What kind of account (DESIGN.md §5.1): "person" signs in here; "telegram", "peer" and "deleted" are stand-ins
+     * nobody can ban. "" where the server doesn't say.
+     */
+    val kind: String = "",
 )
 
 /**

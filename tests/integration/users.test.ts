@@ -74,12 +74,13 @@ describe("users rules (§5.5)", () => {
     await expectRejected(a.pb.collection("users").update(a.user.id, { emailVisibility: true }));
   });
 
-  it("a signup is a person; nobody says otherwise of their own account, and clients never see the kind (REFACTOR item 50)", async () => {
+  it("a signup is a person; nobody says otherwise of their own account, and clients see the kind (REFACTOR item 50, migration 58)", async () => {
     const a = await newUser();
-    expect(a.user).not.toHaveProperty("kind");
+    // Public since migration 58, so the apps offer no Ban on a stand-in (§36.4).
+    expect(a.user.kind).toBe("person");
     const admin = await adminClient();
     expect((await admin.collection("users").getOne(a.user.id)).kind).toBe("person");
-    // Refused, or the hidden field ignored: either way the account stays a person.
+    // Refused (the update rule fails: 404), or ignored: either way the account stays a person.
     const said = await a.pb
       .collection("users")
       .update(a.user.id, { kind: "telegram" })
@@ -87,7 +88,7 @@ describe("users rules (§5.5)", () => {
         () => 200,
         (err: { status: number }) => err.status,
       );
-    expect([200, 400, 403]).toContain(said);
+    expect([200, 400, 403, 404]).toContain(said);
     expect((await admin.collection("users").getOne(a.user.id)).kind).toBe("person");
     const email = `${uniq()}@test.local`;
     await client()
