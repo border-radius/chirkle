@@ -52,12 +52,12 @@ test("collections: make one, save from the chat, follow, see what's new, attach 
   await sendImages(ada, room, "a dog", ["dog.png"]);
   const a = await openRoom(browser, ada, room);
 
-  // A new collection from the sidebar's "+": its page, empty.
+  // A new collection from the sidebar's "+" (a form in place, public unless chosen otherwise): its page, empty.
   await a.getByRole("button", { name: "New collection" }).click();
-  const create = a.getByRole("dialog", { name: "New collection" });
-  await create.getByRole("textbox", { name: "Name" }).fill("Pets");
-  await create.getByRole("switch", { name: /Public/ }).check();
-  await create.getByRole("button", { name: "Create" }).click();
+  const create = a.locator("form.new-coll");
+  await create.getByRole("textbox", { name: "Collection name" }).fill("Pets");
+  await expect(create.getByRole("radio", { name: "Public" })).toBeChecked();
+  await create.getByRole("button", { name: "Create collection" }).click();
   await expect(a.getByRole("heading", { level: 1, name: "Pets" })).toBeVisible();
   await expect(a.getByText("Nothing here yet.", { exact: false })).toBeVisible();
   await expect(sidebarRow(a, "Pets")).toHaveAttribute("aria-current", "page");

@@ -10,8 +10,8 @@ for you. Your collections, and those you follow, are listed under **Collections*
 
 ## Make a collection
 
-Click **New collection** in the room list, give it a name and choose whether it is **Public** (anyone can see it and
-subscribe) or private (only you). You can have up to 50 collections, of up to 2,000 items each.
+Click **New collection** in the room list, give it a name and choose whether it is **Public** (the default: anyone can see it and
+subscribe) or **Private** (only you). You can have up to 50 collections, of up to 2,000 items each.
 
 ## Save to a collection
 

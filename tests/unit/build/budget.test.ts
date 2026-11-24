@@ -31,6 +31,7 @@ describe("checkBudget (DESIGN.md §7.7)", () => {
       "people",
       "jump",
       "invite",
+      "forms",
     ]);
   });
 

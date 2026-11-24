@@ -13,7 +13,6 @@ export const couldntUnhide = (room: string, why: string) => `Couldn't unhide “
 export const couldntArchive = (archived: boolean, room: string, why: string) =>
   `Couldn't ${archived ? "archive" : "unarchive"} “${room}”. ${why}`;
 export const COULDNT_OPEN_THE_PEOPLE_SEARCH_CHECK = "Couldn't open the people search. Check your connection.";
-export const COULDNT_OPEN_COLLECTIONS_CHECK_YOUR_CONNECTION = "Couldn't open collections. Check your connection.";
 export const couldntOpenTheConversationWith = (name: string | number, why: string | number) =>
   `Couldn't open the conversation with “${name}”. ${why}`;
 export const UNHIDE = "Unhide";
@@ -31,12 +30,6 @@ export const NO_OTHER_ROOMS_HIDDEN_AND_ARCHIVED = "No other rooms. Hidden and ar
 export const NO_ROOMS_YET_CREATE_THE_FIRST = "No rooms yet. Create the first one.";
 export const OPEN_AIR_ROOMS = "Open Air rooms";
 export const NO_OPEN_AIR_ROOMS_YET_LOG = "No Open Air rooms yet. Log in to see the others.";
-export const CREATE_ROOM = "Create room";
-export const WHO_CAN_SEE_IT = "Who can see it";
-export const mustBeNoMoreThanCharacters = (roomName: string | number) => `Must be no more than ${roomName} characters.`;
-export const ROOM_NAME = "Room name";
-export const CANCEL = "Cancel";
-export const A_ROOM_WITH_THIS_NAME_ALREADY = "A room with this name already exists.";
 export const NEW = " new";
 export const ITEM = " item";
 export const ITEMS = " items";
@@ -55,3 +48,4 @@ export const unreadTitle = (n: number, at: number) => {
   if (!at) return main;
   return `${main}, ${at > 99 ? "99+" : at} ${at === 1 ? "mentions you or replies to you" : "mention you or reply to you"}`;
 };
+export const COULDNT_OPEN_THE_FORM_CHECK = "Couldn't open the form. Check your connection.";

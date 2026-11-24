@@ -378,6 +378,7 @@ describe("app boot (§7.1)", () => {
     await vi.waitFor(() => expect(root.querySelector("header.room-header h1")?.textContent).toBe(`#${r1.name}`));
     const sidebar = root.querySelector("aside.sidebar")!;
     sidebar.querySelector<HTMLButtonElement>("button.new-room-toggle")!.click();
+    await vi.waitFor(() => expect(sidebar.querySelector("form.new-room")).not.toBeNull());
     const input = sidebar.querySelector<HTMLInputElement>('form.new-room input[name="name"]')!;
     input.value = "half-typ";
     const fetches = ctl.calls("listRooms");

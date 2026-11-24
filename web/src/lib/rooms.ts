@@ -76,3 +76,18 @@ export function otherMember(room: Room, me: User | null): User | undefined {
 export function roomTitle(room: Room, me: User | null): string {
   return isDm(room) ? (otherMember(room, me)?.name ?? S.UNKNOWN) : `#${room.name}`;
 }
+
+/**
+ * A name as the server compares it (nameKey() and tidy() in pb_hooks/lib/text.js): spaces tidied, invisible characters
+ * dropped, NFKC, case folded. With `room`, leading "#"s go too, as the server strips them from room names.
+ */
+export function nameKey(name: string, room = false): string {
+  let s = name
+    .replace(/[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g, "")
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are spaces in a name, as on the server
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (room) s = s.replace(/^[#\s]+/, "");
+  return s.normalize("NFKC").toUpperCase().toLowerCase();
+}

@@ -13,6 +13,7 @@ const define = {
   EMOJI_CSS: JSON.stringify("/assets/emoji.css"),
   INBOX_CSS: JSON.stringify("/assets/inbox.css"),
   ACCOUNT_CSS: JSON.stringify("/assets/account.css"),
+  FORMS_CSS: JSON.stringify("/assets/sidebar-forms.css"),
 };
 
 export default defineConfig({

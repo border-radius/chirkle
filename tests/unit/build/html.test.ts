@@ -131,6 +131,7 @@ describe("viewerDefine", () => {
         "assets/emoji-IJ90.css",
         "assets/inbox-KL12.css",
         "assets/account-MN34.css",
+        "assets/sidebar-forms-OP56.css",
       ),
     ).toEqual({
       VIEWER_CSS: '"/assets/viewer-AB12.css"',
@@ -140,6 +141,7 @@ describe("viewerDefine", () => {
       EMOJI_CSS: '"/assets/emoji-IJ90.css"',
       INBOX_CSS: '"/assets/inbox-KL12.css"',
       ACCOUNT_CSS: '"/assets/account-MN34.css"',
+      FORMS_CSS: '"/assets/sidebar-forms-OP56.css"',
     });
   });
 });

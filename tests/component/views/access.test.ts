@@ -434,6 +434,7 @@ describe("room access UI (§23)", () => {
       expect(mark(pub)).toBe("# (Public)");
 
       root.querySelector<HTMLButtonElement>("button.new-room-toggle")!.click();
+      await vi.waitFor(() => expect(root.querySelector("form.new-room")).not.toBeNull());
       const form = root.querySelector<HTMLFormElement>("form.new-room")!;
       const name = `made-${uniq()}`;
       form.querySelector<HTMLInputElement>("input[name=name]")!.value = name;

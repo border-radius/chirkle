@@ -21,7 +21,7 @@ test("an invite link: made in the dialog, opened logged out, joined after loggin
   const name = `club-${tag}`;
   await a.getByRole("button", { name: "New room" }).click();
   await a.getByLabel("Room name").fill(name);
-  await a.locator("form.new-room .seg label", { hasText: "Private" }).click();
+  await a.locator("form.new-room .tiles label", { hasText: "Private" }).click();
   await a.getByRole("button", { name: "Create" }).click();
   await expect(a.locator("header.room-header h1")).toContainText("Private");
   await send(a, "welcome, everyone");

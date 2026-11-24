@@ -1,14 +1,13 @@
 // Room list (§7.1, §16.5): the site's name and "Jump to" (§32) on top, Rooms / Direct messages / Collections (§31) /
-// Hidden & archived sections, new-room form, user search, Unhide / Unarchive buttons, unread badges (§18.4) and new items in
+// Hidden & archived sections, new-room and new-collection forms, user search, Unhide / Unarchive buttons, unread badges (§18.4) and new items in
 // collections you follow, private and Open Air markers (§23.1), and who you are (or the way in) at the foot. A guest
 // gets only the Open Air rooms, to read (§23.3).
 // The data comes from the store, kept live by sync.ts; this view only renders it and issues commands.
 
-import { ApiError, errorMessage, reasonOf } from "../api.ts";
+import { errorMessage, reasonOf } from "../api.ts";
 import type { Ctx } from "../context.ts";
 import { clear, h, holdKeys, reconcile, typeInto, uniqueId } from "../dom.ts";
 import { brand, jumpButton } from "../header.ts";
-import { LIMITS, textLength } from "../lib/limits.ts";
 import { canManage, isAddress, otherMember, roomTitle, VISIBILITY, visibilityOf } from "../lib/rooms.ts";
 import type { Collection, Room, User, Visibility } from "../lib/types.ts";
 import { HOVER_MS } from "../prefetch.ts";
@@ -21,7 +20,7 @@ import { collectionIcon } from "../ui/icon.ts";
 import { createLoadbar } from "../ui/loadbar.ts";
 import type { MenuItem } from "../ui/menu.ts";
 import type { UserSearch } from "../ui/user-search.ts";
-import { chunkContext, collectionChunk } from "./collection.ts";
+import type { FormKind, FormParts } from "./rooms-forms.ts";
 
 type Section = "rooms" | "dms" | "hidden" | "archived";
 
@@ -31,12 +30,6 @@ const folded = new Set<string>();
 try {
   for (const s of JSON.parse(localStorage.getItem(FOLD_KEY) ?? "[]")) folded.add(s);
 } catch {}
-
-function nameError(err: unknown): string {
-  if (err instanceof ApiError && err.codes.name === "validation_not_unique") return S.A_ROOM_WITH_THIS_NAME_ALREADY;
-  if (err instanceof ApiError && err.fields.name) return err.fields.name;
-  return errorMessage(err);
-}
 
 /** A private collection's marker next to its name. */
 export function visibilityMark(v: Visibility): HTMLElement | null {
@@ -60,6 +53,21 @@ export function visibilityLead(v: Visibility): HTMLElement {
 /** What the room list uses of the app shell's services. */
 export type RoomsCtx = Pick<Ctx, "api" | "store" | "sync" | "unread" | "actions" | "navigate" | "collections" | "early">;
 
+/** The forms' chunk (rooms-forms.ts) with its stylesheet in, once asked for. */
+let formsChunk: Promise<typeof import("./rooms-forms.ts")> | null = null;
+function formsReady(): Promise<typeof import("./rooms-forms.ts")> {
+  formsChunk ??= import("./rooms-forms.ts")
+    .then(async (m) => {
+      await m.loadStylesheet();
+      return m;
+    })
+    .catch((e: unknown) => {
+      formsChunk = null;
+      throw e;
+    });
+  return formsChunk;
+}
+
 export function createRoomsView({ api, store, sync, unread, actions, navigate, collections, early }: RoomsCtx): View {
   const id = uniqueId("rooms");
   let root: HTMLElement;
@@ -75,10 +83,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
   let actionError = "";
   /** The "New message" user search, while open (kept across renders, so typing and focus survive). */
   let search: UserSearch | null = null;
-  /** The new-room form, built once per mount and shown while `creating` (so a half-typed name survives). */
-  let newRoom: { form: HTMLFormElement; input: HTMLInputElement; reset: () => void };
+  /** The new-room and new-collection forms, built once per mount and shown while open (so a half-typed name survives). */
+  let forms: Partial<Record<FormKind, FormParts>> = {};
   const guest = () => !store.get().user;
-  let creating = false;
+  const open: Record<FormKind, boolean> = { room: false, coll: false };
   /** Collection rows by id, with what they were drawn from. */
   const collRows = new Map<string, { sig: unknown[]; el: HTMLElement }>();
 
@@ -180,7 +188,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     }
     opening = true;
     held = holdKeys(scope.signal);
-    searchChunk ??= import("../ui/user-search.ts");
+    // The search's card is styled by the forms' stylesheet.
+    searchChunk ??= Promise.all([import("../ui/user-search.ts"), formsReady()]).then(([m]) => m);
     searchChunk.then(
       (m) => {
         const early = held?.take() ?? "";
@@ -214,6 +223,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       },
       avatarUrl: api.avatarUrl,
       onPick: (u) => void message(u),
+      card: true,
       onClose: () => {
         toggleSearch(false);
         nav.querySelector<HTMLElement>("button.new-dm")?.focus();
@@ -225,29 +235,55 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     typeInto(search.el.querySelector("input"), early);
   }
 
-  function toggleNewRoom(open: boolean) {
-    if (open === creating) return;
-    creating = open;
-    if (!open) newRoom.reset();
+  /** Which form is on its way ("+" pressed while its chunk loads). */
+  let loadingForm: FormKind | null = null;
+  /** What is typed while the chunk loads goes in the name field once it shows (as for the people search). */
+  let heldName: { take(): string } | null = null;
+
+  /**
+   * Opens or closes the new-room or new-collection form; closed, it is emptied and its "+" has the focus again. The
+   * forms are a lazy chunk, loaded on the first "+".
+   */
+  function toggleForm(which: FormKind, show: boolean) {
+    if (show && loadingForm === which) return;
+    if (!show && loadingForm === which) {
+      heldName?.take();
+      heldName = null;
+      loadingForm = null;
+      return;
+    }
+    if (show === open[which]) return;
+    const form = forms[which];
+    if (show && !form) return loadForm(which);
+    open[which] = show;
+    if (!show) form?.reset();
     render();
-    if (open) newRoom.input.focus();
-    else nav.querySelector<HTMLElement>("button.new-room-toggle")?.focus();
+    if (show) form?.input.focus();
+    else nav.querySelector<HTMLElement>(which === "room" ? "button.new-room-toggle" : "button.new-coll")?.focus();
   }
 
-  /** "+" in Collections (§31): the new-collection dialog, from the collections' chunk. */
-  function newCollection(opener: HTMLElement) {
-    collectionChunk().then(
-      (c) =>
-        scope.active &&
-        void c.openCreate({
-          ...chunkContext({ api, store, collections }),
-          signal: scope.signal,
-          opener,
-          onCreated: (cid) => navigate(`/c/${cid}`),
-        }),
+  function loadForm(which: FormKind) {
+    heldName?.take();
+    loadingForm = which;
+    heldName = holdKeys(scope.signal);
+    const mounted = scope;
+    formsReady().then(
+      (m) => {
+        const early = heldName?.take() ?? "";
+        heldName = null;
+        if (loadingForm !== which || !mounted.active) return;
+        loadingForm = null;
+        forms[which] = m.createForm(which, { id, scope, store, actions, navigate, api, collections, toggleForm });
+        toggleForm(which, true);
+        typeInto(forms[which]!.input, early);
+      },
       () => {
-        actionError = S.COULDNT_OPEN_COLLECTIONS_CHECK_YOUR_CONNECTION;
-        if (scope.active) renderAlert();
+        heldName?.take();
+        heldName = null;
+        if (loadingForm !== which) return;
+        loadingForm = null;
+        actionError = S.COULDNT_OPEN_THE_FORM_CHECK;
+        if (mounted.active) renderAlert();
       },
     );
   }
@@ -409,7 +445,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       class: "icon-button ic i-plus new-room-toggle",
       "aria-label": S.NEW_ROOM,
       title: S.NEW_ROOM,
-      on: { click: () => toggleNewRoom(!creating) },
+      on: { click: () => toggleForm("room", !open.room) },
       signal: scope.signal,
     });
     const newDm = h("button", {
@@ -425,8 +461,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       class: "icon-button ic i-plus new-coll",
       "aria-label": S.NEW_COLLECTION,
       title: S.NEW_COLLECTION,
-      "aria-haspopup": "dialog",
-      on: { click: () => newCollection(newColl) },
+      on: { click: () => toggleForm("coll", !open.coll) },
       signal: scope.signal,
     });
     // A section's heading folds it: then only its unread rows and the open one stay listed.
@@ -526,7 +561,8 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const p = parts;
     const keep = (r: Room) => unreadCount(s, r) || s.activeRoomId === r.id;
     const shown = <T>(section: string, list: T[], keep: (x: T) => unknown) => (folded.has(section) ? list.filter(keep) : list);
-    p.newRoomToggle.setAttribute("aria-expanded", String(creating));
+    p.newRoomToggle.setAttribute("aria-expanded", String(open.room));
+    p.newColl.setAttribute("aria-expanded", String(open.coll));
     reconcile(
       p.rooms,
       shown("rooms", rooms, keep).map((r) => roomRow(r, "rooms")),
@@ -536,7 +572,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     const mainList = rooms.length ? p.rooms : s.roomsStatus === "ready" ? p.empty : null;
     reconcile(
       p.main,
-      [p.mainHead, creating ? newRoom.form : null, mainList].filter((n) => n !== null),
+      [p.mainHead, open.room ? (forms.room?.form ?? null) : null, mainList].filter((n) => n !== null),
     );
     p.newDm.setAttribute("aria-expanded", String(!!search));
     reconcile(
@@ -553,7 +589,7 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     for (const id of collRows.keys()) if (!all.some((x) => x.id === id)) collRows.delete(id);
     reconcile(
       p.colls,
-      [p.collHead, all.length ? p.collList : null].filter((n) => n !== null),
+      [p.collHead, open.coll ? (forms.coll?.form ?? null) : null, all.length ? p.collList : null].filter((n) => n !== null),
     );
     const m = p.more;
     m.count.textContent = String(hidden.length + archived.length);
@@ -636,105 +672,6 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
     forget();
   }
 
-  function newRoomForm(): typeof newRoom {
-    const inputId = `${id}-name`;
-    const errId = `${inputId}-error`;
-    const err = h("p", { id: errId, class: "field-error" });
-    const input = h("input", {
-      id: inputId,
-      name: "name",
-      required: true,
-      // No `maxlength`: it counts UTF-16 units (an emoji is 2), the server counts characters. Checked on submit.
-      autocomplete: "off",
-      placeholder: "room-name",
-      "aria-describedby": errId,
-    });
-    const submit = h("button", { type: "submit" }, S.CREATE_ROOM);
-    // Who can see it (§23.1): public unless chosen otherwise; members of a private room are added from the room.
-    const hint = h("p", { class: "hint" });
-    const choices = (["public", "private", "open"] as const).map((v) =>
-      h("input", { type: "radio", name: "visibility", value: v, class: "visually-hidden" }),
-    );
-    const chosen = () => (choices.find((c) => c.checked)?.value ?? "public") as Visibility;
-    const showHint = () => {
-      hint.textContent = VISIBILITY[chosen()].hint;
-    };
-    const choose = (v: Visibility) => {
-      for (const c of choices) c.checked = c.value === v;
-      showHint();
-    };
-    const seg = h("fieldset", { class: "seg", on: { change: showHint }, signal: scope.signal }, [
-      h("legend", { class: "visually-hidden" }, S.WHO_CAN_SEE_IT),
-      ...choices.map((c) =>
-        h("label", { class: c.value === "public" ? "" : `ic ${c.value === "private" ? "i-lock" : "i-globe"}` }, [
-          c,
-          VISIBILITY[c.value as Visibility].label,
-        ]),
-      ),
-    ]);
-    choose("public");
-    const setError = (msg: string) => {
-      err.textContent = msg;
-      if (msg) input.setAttribute("aria-invalid", "true");
-      else input.removeAttribute("aria-invalid");
-    };
-    const form = h(
-      "form",
-      {
-        class: "new-room",
-        on: {
-          keydown: (e) => {
-            if (e.key === "Escape") toggleNewRoom(false);
-          },
-          submit: async (e) => {
-            e.preventDefault();
-            if (submit.disabled) return;
-            if (textLength(input.value.trim()) > LIMITS.roomName) {
-              setError(S.mustBeNoMoreThanCharacters(LIMITS.roomName));
-              return;
-            }
-            submit.disabled = true;
-            setError("");
-            try {
-              const room = await actions.create(input.value, chosen());
-              if (!scope.active) return;
-              toggleNewRoom(false);
-              navigate(`/r/${room.id}`);
-            } catch (e) {
-              if (scope.active) setError(nameError(e));
-            } finally {
-              submit.disabled = false;
-            }
-          },
-        },
-        signal: scope.signal,
-      },
-      [
-        h("label", { class: "name-field" }, [
-          h("span", { "aria-hidden": "true" }, "#"),
-          h("span", { class: "visually-hidden" }, S.ROOM_NAME),
-          input,
-        ]),
-        err,
-        seg,
-        hint,
-        h("div", { class: "form-buttons" }, [
-          h("button", { type: "button", class: "cancel", on: { click: () => toggleNewRoom(false) }, signal: scope.signal }, S.CANCEL),
-          submit,
-        ]),
-      ],
-    );
-    return {
-      form,
-      input,
-      reset() {
-        input.value = "";
-        choose("public");
-        setError("");
-      },
-    };
-  }
-
   return {
     mount(el) {
       root = el;
@@ -742,9 +679,10 @@ export function createRoomsView({ api, store, sync, unread, actions, navigate, c
       rows.clear();
       search = null;
       opening = false;
-      creating = false;
+      open.room = open.coll = false;
       collRows.clear();
-      newRoom = newRoomForm();
+      forms = {};
+      loadingForm = null;
       parts = skeleton();
       drawn = [];
       renderEnds();

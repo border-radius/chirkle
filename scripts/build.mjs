@@ -14,6 +14,7 @@ import {
   eagerChunks,
   entryOutputs,
   FEATURES,
+  FORMS,
   formatSizes,
   INBOX,
   injectAssets,
@@ -57,6 +58,7 @@ const viewerCss = await esbuild.build({
     { in: EMOJI.css, out: "emoji" },
     { in: INBOX.css, out: "inbox" },
     { in: PROFILE.css, out: "account" },
+    { in: FORMS.css, out: "sidebar-forms" },
   ],
   bundle: true,
   outdir: OUTDIR,
@@ -68,11 +70,12 @@ const accessCssPath = outputOf(viewerCss.metafile, OUTDIR, ACCESS.css);
 const emojiCssPath = outputOf(viewerCss.metafile, OUTDIR, EMOJI.css);
 const inboxCssPath = outputOf(viewerCss.metafile, OUTDIR, INBOX.css);
 const accountCssPath = outputOf(viewerCss.metafile, OUTDIR, PROFILE.css);
+const formsCssPath = outputOf(viewerCss.metafile, OUTDIR, FORMS.css);
 
 const result = await esbuild.build({
   ...BASE_OPTIONS,
   ...shared,
-  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath, accountCssPath),
+  define: viewerDefine(viewerCssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath, accountCssPath, formsCssPath),
 });
 
 const assets = entryOutputs(result.metafile, OUTDIR, ENTRIES);
@@ -122,6 +125,7 @@ const cssOf = {
   [EMOJI.css]: emojiCssPath,
   [INBOX.css]: inboxCssPath,
   [PROFILE.css]: accountCssPath,
+  [FORMS.css]: formsCssPath,
 };
 
 /** @type {Record<string, number>} */

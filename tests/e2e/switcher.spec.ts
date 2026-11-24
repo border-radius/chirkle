@@ -56,12 +56,4 @@ test("a click beside a dialog closes it, as Escape does; a drag out of it doesn'
   await expect(jump).toBeVisible();
   await page.mouse.click(4, 4);
   await expect(jump).toBeHidden();
-
-  // A dialog from a lazy chunk too.
-  await page.getByRole("button", { name: "New collection" }).click();
-  const create = page.getByRole("dialog", { name: "New collection" });
-  await expect(create).toBeVisible();
-  await page.mouse.click(4, 4);
-  await expect(create).toBeHidden();
-  await expect(page.getByRole("button", { name: "New collection" })).toBeFocused();
 });

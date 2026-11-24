@@ -393,12 +393,6 @@ dialog.coll-dialog::backdrop {
   accent-color: var(--accent);
 }
 
-.coll-public {
-  display: flex;
-  gap: 0.625rem;
-  align-items: center;
-}
-
 .coll-new-form input {
   flex: 1;
   width: auto;

@@ -141,9 +141,10 @@ describe("rooms view (§7.1)", () => {
 
   describe("creating", () => {
     const toggle = () => root.querySelector<HTMLButtonElement>("button.new-room-toggle")!;
-    /** Opens the form with "+ New room" and returns its input. */
-    function openForm(): HTMLInputElement {
+    /** Opens the form with "+ New room" (a lazy chunk, there once it has loaded) and returns its input. */
+    async function openForm(): Promise<HTMLInputElement> {
       toggle().click();
+      await vi.waitFor(() => expect(root.querySelector('form.new-room input[name="name"]')).not.toBeNull());
       return root.querySelector<HTMLInputElement>('form.new-room input[name="name"]')!;
     }
 
@@ -153,7 +154,7 @@ describe("rooms view (§7.1)", () => {
       expect(root.querySelector("form.new-room")).toBeNull();
       expect(toggle().getAttribute("aria-expanded")).toBe("false");
 
-      const input = openForm();
+      const input = await openForm();
       expect(toggle().getAttribute("aria-expanded")).toBe("true");
       expect(document.activeElement).toBe(input);
       input.value = "draft";
@@ -161,7 +162,7 @@ describe("rooms view (§7.1)", () => {
       expect(root.querySelector("form.new-room")).toBeNull();
       expect(document.activeElement).toBe(toggle());
 
-      expect(openForm().value).toBe(""); // closing discards the draft
+      expect((await openForm()).value).toBe(""); // closing discards the draft
       toggle().click();
       expect(root.querySelector("form.new-room")).toBeNull();
     });
@@ -169,7 +170,7 @@ describe("rooms view (§7.1)", () => {
     it("creates a room, shows it, opens it, and closes the form", async () => {
       await mount();
       const name = `new-${uniq()}`;
-      const input = openForm();
+      const input = await openForm();
       input.value = name;
       root.querySelector<HTMLFormElement>("form")!.requestSubmit();
       await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/r\/[a-z0-9]{15}$/)));
@@ -183,20 +184,46 @@ describe("rooms view (§7.1)", () => {
     it("shows a duplicate-name error inline and keeps the input", async () => {
       const taken = await room(`taken-${uniq()}`);
       await mount();
-      const input = openForm();
+      const input = await openForm();
       input.value = taken.name.toUpperCase();
       root.querySelector<HTMLFormElement>("form")!.requestSubmit();
       const err = () => document.getElementById(input.getAttribute("aria-describedby")!)!;
-      await vi.waitFor(() => expect(err().textContent).toBe("A room with this name already exists."));
+      await vi.waitFor(() => expect(err().textContent).toBe(`#${taken.name} already exists. Pick another name.`));
       expect(input.getAttribute("aria-invalid")).toBe("true");
       expect(input.value).toBe(taken.name.toUpperCase());
       expect(navigate).not.toHaveBeenCalled();
     });
 
+    it("says a name is taken as it is typed (ignoring case and a leading #), with Create disabled until it changes", async () => {
+      const taken = await room(`taken-${uniq()}`);
+      await mount();
+      const input = await openForm();
+      const form = root.querySelector<HTMLFormElement>("form.new-room")!;
+      const create = button(form, "Create room")!;
+      const err = () => document.getElementById(input.getAttribute("aria-describedby")!)!;
+      const type = (v: string) => {
+        input.value = v;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+      // Private chosen first: the field's icon follows the type, and the choice outlives the error.
+      form.querySelector<HTMLInputElement>('input[value="private"]')!.click();
+      expect(form.querySelector(".name-field .type-icon")!.classList.contains("i-lock")).toBe(true);
+      type(`#${taken.name.toUpperCase()}`);
+      expect(err().textContent).toBe(`#${taken.name} already exists. Pick another name.`);
+      expect(err().getAttribute("role")).toBe("alert");
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(create.disabled).toBe(true);
+      type(`${taken.name}-2`);
+      expect(err().textContent).toBe("");
+      expect(input.hasAttribute("aria-invalid")).toBe(false);
+      expect(create.disabled).toBe(false);
+      expect(form.querySelector<HTMLInputElement>('input[value="private"]')!.checked).toBe(true);
+    });
+
     it("the name must be 1–48 characters, counted as the server counts them (an emoji is one)", async () => {
       const ctl = instrument(me.api);
       await mount();
-      const input = openForm();
+      const input = await openForm();
       const err = () => document.getElementById(input.getAttribute("aria-describedby")!)!;
       expect(input.required).toBe(true);
       // No maxlength: the browser would count UTF-16 units and stop at 24 emoji.
@@ -662,7 +689,7 @@ describe("rooms view (§7.1)", () => {
       expect(document.activeElement).toBe(searchInput());
       searchFor("Bob");
       searchFor(`Bobby ${tag}`);
-      await vi.waitFor(() => expect(results().map((b) => b.querySelector("span:not(.avatar)")!.textContent)).toEqual([bob.user.name]));
+      await vi.waitFor(() => expect(results().map((b) => b.querySelector(".name")!.textContent)).toEqual([bob.user.name]));
       expect(ctl.calls("searchUsers")).toBe(1); // the first keystroke was debounced away
       results()[0]!.click();
       await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/r\//)));
@@ -681,22 +708,90 @@ describe("rooms view (§7.1)", () => {
       expect(document.activeElement).toBe(newDmButton());
     });
 
-    it("arrow keys move between the input and the results", async () => {
+    it("as a card: a hint while empty; results with the match in bold, ↑ ↓ move the highlight (the focus stays), Enter opens it", async () => {
       const tag = uniq();
       await signedUp(`Arrow ${tag} 1`);
-      await signedUp(`Arrow ${tag} 2`);
+      const second = await signedUp(`Arrow ${tag} 2`);
       await mount();
       await openSearch();
-      searchFor(`Arrow ${tag}`);
+      const card = root.querySelector(".user-search.card")!;
+      expect(card.querySelector(".search-hint")!.textContent).toBe("Type a name or @handle · Esc to close");
+      expect(card.querySelector(".search-results")!.children).toHaveLength(0);
+      searchFor(`arrow ${tag}`);
       await vi.waitFor(() => expect(results()).toHaveLength(2));
-      const down = (el: Element, key = "ArrowDown") => el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-      down(searchInput()!);
-      expect(document.activeElement).toBe(results()[0]);
-      down(results()[0]!);
-      expect(document.activeElement).toBe(results()[1]);
-      down(results()[1]!, "ArrowUp");
-      down(results()[0]!, "ArrowUp");
+      expect(results()[0]!.querySelector(".name b")!.textContent).toBe(`Arrow ${tag}`);
+      expect(card.querySelector(".search-hint")!.textContent).toBe("↑ ↓ to move · Enter to open · Esc to close");
+      const selected = () => results().map((b) => b.getAttribute("aria-selected"));
+      expect(selected()).toEqual(["true", "false"]);
+      expect(searchInput()!.getAttribute("aria-activedescendant")).toBe(results()[0]!.id);
+      const key = (k: string) => searchInput()!.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+      key("ArrowDown");
+      key("ArrowDown"); // stays on the last
+      expect(selected()).toEqual(["false", "true"]);
+      expect(results()[1]!.querySelector("kbd")!.textContent).toBe("Enter");
       expect(document.activeElement).toBe(searchInput());
+      key("ArrowUp");
+      key("ArrowDown");
+      key("Enter");
+      await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/r\//)));
+      const dm = store.get().rooms.get(navigate.mock.calls[0]![0].slice(3))!;
+      expect(dm.members).toContain(second.user.id);
+    });
+
+    it("as a card, nobody found says for what, with a tip", async () => {
+      await mount();
+      await openSearch();
+      const q = `zoe-${uniq()}`;
+      searchFor(q);
+      const none = () => root.querySelector<HTMLElement>(".search-none")!;
+      await vi.waitFor(() => expect(none().hidden).toBe(false));
+      expect(none().textContent).toBe(`No one found for “${q}”Check the spelling or try their @handle.`);
+      expect(root.querySelector(".search-hint")!.textContent).toBe("Esc to close");
+    });
+  });
+
+  describe("new collection (§31)", () => {
+    const toggle = () => root.querySelector<HTMLButtonElement>("button.new-coll")!;
+    const form = () => root.querySelector<HTMLFormElement>("form.new-coll");
+
+    it("is a form in place under Collections' heading, public unless chosen otherwise; Create opens the new one", async () => {
+      await mount();
+      expect(form()).toBeNull();
+      toggle().click();
+      await vi.waitFor(() => expect(form()).not.toBeNull());
+      expect(toggle().getAttribute("aria-expanded")).toBe("true");
+      expect(form()!.closest("[data-section]")).toBe(section("collections" as Section));
+      const input = form()!.querySelector<HTMLInputElement>('input[name="name"]')!;
+      expect(document.activeElement).toBe(input);
+      expect(form()!.querySelector<HTMLInputElement>('input[value="public"]')!.checked).toBe(true);
+      expect(form()!.querySelector(".hint")!.textContent).toBe("Anyone can see it and subscribe.");
+      form()!.querySelector<HTMLInputElement>('input[value="private"]')!.click();
+      expect(form()!.querySelector(".hint")!.textContent).toBe("Only you can see it.");
+      const name = `Pets ${uniq()}`;
+      input.value = name;
+      form()!.requestSubmit();
+      await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.stringMatching(/^\/c\/[a-z0-9]{15}$/)));
+      expect(form()).toBeNull();
+      expect(document.activeElement).toBe(toggle());
+      const { mine } = await me.api.request<{ mine: { name: string; public: boolean }[] }>("/api/chat/collections");
+      expect(mine.find((c) => c.name === name)?.public).toBe(false);
+    });
+
+    it("says a name of yours is taken as it is typed; Escape closes it", async () => {
+      const name = `Moodboard ${uniq()}`;
+      await me.api.request("/api/collections/collections/records", { method: "POST", body: { owner: me.user.id, name, public: true } });
+      store.set({ collections: { mine: [{ id: "x", name, public: true, items: 0, last_added: "" }], subs: [] } });
+      await mount();
+      toggle().click();
+      await vi.waitFor(() => expect(form()).not.toBeNull());
+      const input = form()!.querySelector<HTMLInputElement>('input[name="name"]')!;
+      input.value = name.toLowerCase();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      expect(form()!.querySelector(".field-error")!.textContent).toBe(`A collection called ${name} already exists.`);
+      expect(button(form()!, "Create collection")!.disabled).toBe(true);
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(form()).toBeNull();
+      expect(document.activeElement).toBe(toggle());
     });
   });
 

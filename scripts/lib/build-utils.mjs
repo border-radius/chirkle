@@ -43,6 +43,12 @@ export const EMOJI = Object.freeze({ js: "web/src/ui/emoji-picker.ts", css: "web
 /** "Mentions & replies" (§41): the page, a lazy chunk with a stylesheet it links (`INBOX_CSS`). */
 export const INBOX = Object.freeze({ js: "web/src/views/inbox.ts", css: "web/styles/inbox.css" });
 
+/**
+ * The sidebar's new-room and new-collection forms (§23.1, §31), a lazy chunk with a stylesheet it links (`FORMS_CSS`),
+ * which New message's search card uses too.
+ */
+export const FORMS = Object.freeze({ js: "web/src/views/rooms-forms.ts", css: "web/styles/sidebar-forms.css" });
+
 /** The composer's "@" suggestions (§41): a lazy chunk; its list is styled by the emoji picker's stylesheet, which it links. */
 export const MENTION = Object.freeze({ js: "web/src/ui/mention-suggest.ts" });
 
@@ -81,6 +87,7 @@ export const FEATURES = Object.freeze({
   people: PEOPLE,
   jump: JUMP,
   invite: INVITE,
+  forms: FORMS,
 });
 
 /**
@@ -131,8 +138,18 @@ export const STATIC_DIR = "web/public";
  * @param {string} emojiCssPath the emoji picker's (§20.4)
  * @param {string} inboxCssPath the inbox's (§41)
  * @param {string} accountCssPath Settings' "Your data" and "Delete account" cards' (§43)
+ * @param {string} formsCssPath the sidebar's creation cards' (§23.1, §31)
  */
-export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, emojiCssPath, inboxCssPath, accountCssPath) => ({
+export const viewerDefine = (
+  cssPath,
+  mediaCssPath,
+  collCssPath,
+  accessCssPath,
+  emojiCssPath,
+  inboxCssPath,
+  accountCssPath,
+  formsCssPath,
+) => ({
   VIEWER_CSS: JSON.stringify(`/${cssPath}`),
   MEDIA_CSS: JSON.stringify(`/${mediaCssPath}`),
   COLLECTIONS_CSS: JSON.stringify(`/${collCssPath}`),
@@ -140,6 +157,7 @@ export const viewerDefine = (cssPath, mediaCssPath, collCssPath, accessCssPath, 
   EMOJI_CSS: JSON.stringify(`/${emojiCssPath}`),
   INBOX_CSS: JSON.stringify(`/${inboxCssPath}`),
   ACCOUNT_CSS: JSON.stringify(`/${accountCssPath}`),
+  FORMS_CSS: JSON.stringify(`/${formsCssPath}`),
 });
 
 /**

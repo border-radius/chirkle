@@ -35,7 +35,7 @@ test("a private room: only the people its creator adds see it; someone taken out
   const name = `secret-${tag}`;
   await a.getByRole("button", { name: "New room" }).click();
   await a.getByLabel("Room name").fill(name);
-  await a.locator("form.new-room .seg label", { hasText: "Private" }).click();
+  await a.locator("form.new-room .tiles label", { hasText: "Private" }).click();
   await a.getByRole("button", { name: "Create" }).click();
   await expect(a.locator("header.room-header h1")).toContainText("Private");
   await expect(row(a, name).locator(".vis")).toHaveText(" (Private)");

@@ -10,6 +10,7 @@ import {
   BASE_OPTIONS,
   COLLECTIONS,
   EMOJI,
+  FORMS,
   INBOX,
   injectAssets,
   inlineStringsPlugin,
@@ -57,6 +58,7 @@ const ctx = await esbuild.context({
     { in: EMOJI.css, out: "emoji" },
     { in: INBOX.css, out: "inbox" },
     { in: PROFILE.css, out: "account" },
+    { in: FORMS.css, out: "sidebar-forms" },
   ],
   define: viewerDefine(
     "assets/viewer.css",
@@ -66,6 +68,7 @@ const ctx = await esbuild.context({
     "assets/emoji.css",
     "assets/inbox.css",
     "assets/account.css",
+    "assets/sidebar-forms.css",
   ),
   sourcemap: "inline",
   entryNames: "assets/[name]",
