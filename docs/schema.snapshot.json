@@ -3608,7 +3608,7 @@
         },
         {
           "help": "",
-          "hidden": true,
+          "hidden": false,
           "maxSelect": 1,
           "name": "kind",
           "presentable": false,
