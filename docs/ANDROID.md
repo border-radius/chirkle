@@ -1434,6 +1434,10 @@ Tests: `VideoPrepTest` (the plan: 1080p and portrait at 720p/2 Mbit/s, small one
 that fits and 480p, too long refused, MP4 names). Transformer itself doesn't run on Robolectric, so the export hasn't
 been tried on the emulator yet.
 
+**Fix (2026-11-25):** on a device the compressed video joined the tray, but its "Compressing 81%" chip stayed, so Send
+stayed disabled and × did nothing. `Preparing` is a data class and each progress update replaces it with a copy, so
+`preparing - p` (the original, progress -1) matched nothing. The chip is now removed by id, and × removes it too.
+
 **Version** 0.1.3 (`versionCode` 4), changelog `4.txt` (video compression and moderators), F-Droid recipe updated.
 
 ## 47. Shared files, no file tokens; 0.1.4 (2026-11-04)

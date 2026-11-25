@@ -13,7 +13,7 @@
   padding: 0 0.75rem 0 3px;
   border: 0;
   border-radius: var(--pill);
-  background: var(--quote);
+  background: var(--row-hover);
   color: var(--dim);
   /* Two pixels under the message text (12px to its 14, 13 to 15 on a phone), as the reply redesign has it. */
   font-size: calc(1em - 2px);

@@ -394,7 +394,7 @@ class RoomViewModel(
                     VideoPrep.Result.Failed -> withContext(Dispatchers.IO) { copy(v, dir) }
                     VideoPrep.Result.TooLong -> null
                 }
-                preparing = preparing - p
+                preparing = preparing.filter { it.id != p.id }
                 if (file == null) {
                     composerError = app.getString(R.string.room_wasnt_added_too_long_to, v.name, VideoPrep.maxMinutes())
                     return@launch
@@ -404,7 +404,7 @@ class RoomViewModel(
                 attachments = attachments + check.accepted
                 composerError = check.rejected.joinToString(" ") { (name, why) -> app.getString(R.string.room_wasnt_added, name, why) }
             } finally {
-                preparing = preparing - p
+                preparing = preparing.filter { it.id != p.id }
                 preparingJobs.remove(p.id)
             }
         }
@@ -413,6 +413,8 @@ class RoomViewModel(
     /** × on a video being compressed: it stops and leaves the tray. */
     fun cancelPreparing(p: Preparing) {
         preparingJobs[p.id]?.cancel()
+        // By id: the tray holds a copy of [p] with newer progress (data-class equality would miss it).
+        preparing = preparing.filter { it.id != p.id }
     }
 
     /** How many more files the message takes. */

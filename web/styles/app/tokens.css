@@ -28,7 +28,6 @@
   --row-on-icon: var(--on-fill);
   --row-on-badge: var(--on-fill);
   --row-on-badge-fg: var(--fill);
-  --quote: var(--hover);
   --quote-hover: color-mix(in srgb, var(--fg) 10%, var(--bg));
   --quote-mine: var(--fill);
   --quote-mine-hover: color-mix(in srgb, var(--fill) 88%, #000);
@@ -90,7 +89,6 @@
     --row-on-icon: var(--accent);
     --row-on-badge: var(--fill);
     --row-on-badge-fg: var(--on-fill);
-    --quote: rgb(0 0 0 / 25%);
     --quote-hover: rgb(0 0 0 / 40%);
     --quote-mine: color-mix(in srgb, var(--fill) 18%, var(--bg));
     --quote-mine-hover: color-mix(in srgb, var(--fill) 26%, var(--bg));
@@ -130,7 +128,6 @@
   --row-on-icon: var(--accent);
   --row-on-badge: var(--fill);
   --row-on-badge-fg: var(--on-fill);
-  --quote: rgb(0 0 0 / 25%);
   --quote-hover: rgb(0 0 0 / 40%);
   --quote-mine: color-mix(in srgb, var(--fill) 18%, var(--bg));
   --quote-mine-hover: color-mix(in srgb, var(--fill) 26%, var(--bg));

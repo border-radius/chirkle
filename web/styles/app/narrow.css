@@ -77,6 +77,7 @@
 
   .section-head .icon-button,
   .fold,
+  .room-section .section-title,
   .room-section > summary {
     height: 2.75rem;
   }
