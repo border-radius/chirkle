@@ -16,7 +16,7 @@ link to the download, instead of a screen that might break.
 
 A release's version code is `versionCode` in
 [`android/app/build.gradle.kts`](https://github.com/border-radius/chirkle/blob/master/android/app/build.gradle.kts) at
-its tag. It goes up by one with every release: version 0.4.1, for example, is 11.
+its tag. It goes up by one with every release: version 0.5.0, for example, is 12.
 
 ## Build the app for your own server
 

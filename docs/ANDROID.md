@@ -2051,3 +2051,5 @@ DM too, with no Ban in its menu".
 (`shared/contract.json`); `User.kind` carries it ("" from a server before). The message sheet offers no *Ban* on a
 stand-in (`kind` other than `person`: a Telegram sender's, a deleted account), which the server refuses. On the web the
 name of such an author is plain text instead of a menu with *Ban…* alone (§36.4).
+
+**Version** 0.5.0 (`versionCode` 12, with §77–§93 and §46's fix), changelog `12.txt`, F-Droid recipe updated.
