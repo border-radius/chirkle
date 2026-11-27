@@ -263,7 +263,7 @@ describe("room view", () => {
       expect(pickerOpen()).toBe(true);
     });
 
-    it("the composer's emoji button inserts at the caret, replacing a selection", async () => {
+    it("the composer's emoji button inserts at the caret, replacing a selection, and stays open for more", async () => {
       const room = await newRoom();
       await mount(room);
       type("hello world");
@@ -274,13 +274,17 @@ describe("room view", () => {
       expect(picker().getAttribute("aria-label")).toBe("Insert emoji");
       pick("🌎");
       expect(composer()!.value).toBe("hello 🌎");
-      expect(document.activeElement).toBe(composer());
       expect(composer()!.selectionStart).toBe("hello 🌎".length);
       expect(sendButton().disabled).toBe(false);
-      await open(emoji);
+      expect(pickerOpen()).toBe(true);
+      expect(picker().contains(document.activeElement)).toBe(true);
+      pick("🎉");
+      expect(composer()!.value).toBe("hello 🌎🎉");
       key(document.activeElement!, "Escape");
+      expect(pickerOpen()).toBe(false);
       expect(document.activeElement).toBe(composer());
-      expect(composer()!.value).toBe("hello 🌎");
+      expect(composer()!.selectionStart).toBe("hello 🌎🎉".length);
+      expect(composer()!.value).toBe("hello 🌎🎉");
     });
 
     it("typing :name offers emoji by name (§20.6); Enter puts one in rather than sending", async () => {

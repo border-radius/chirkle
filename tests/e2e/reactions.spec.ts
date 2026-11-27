@@ -32,8 +32,16 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expect(picker.getByRole("button", { name: "🚀" })).toBeVisible();
     await expect(picker.getByRole("button", { name: "🍕" })).toBeHidden();
     await picker.getByRole("searchbox", { name: "Search emoji" }).press("Enter");
-    await expect(picker).toBeHidden();
     await expect(composer(a)).toHaveValue("ship it 🚀");
+    // It stays open for more; Escape empties the search, then closes it.
+    await expect(picker).toBeVisible();
+    await picker.getByRole("searchbox", { name: "Search emoji" }).press("Escape");
+    await picker.getByRole("button", { name: "🔥" }).first().click();
+    await expect(composer(a)).toHaveValue("ship it 🚀🔥");
+    await a.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(composer(a)).toBeFocused();
+    await composer(a).fill("ship it 🚀");
     await composer(a).press("Enter");
 
     // Emoji by name while typing (§20.6): ":tad" offers 🎉, and Enter puts it in rather than sending.

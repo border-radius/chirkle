@@ -66,7 +66,8 @@ older copies in `merge` (§7.5), and is picked up by the reconnect refetch of ch
 ## 20.4 Emoji picker (`ui/emoji-picker.ts`)
 
 One popover per room view, used by the composer's emoji button (it inserts at the caret, replacing a selection) and by
-reactions. A search box at its top finds emoji by name (§20.6). It is a `role="dialog"` named for what it does ("Insert emoji", "Add reaction"). It sits next to its button
+reactions. For the composer it stays open after a pick, with the focus where it was, so several emoji can be put in at
+once; Escape, the button again, or clicking elsewhere closes it. A reaction's closes on the pick. A search box at its top finds emoji by name (§20.6). It is a `role="dialog"` named for what it does ("Insert emoji", "Add reaction"). It sits next to its button
 (above it when there is room) and spans the screen width on phones.
 
 It is a lazy chunk with the emoji list (§7.7), loaded the first time a room view opens it and given `h` by the room

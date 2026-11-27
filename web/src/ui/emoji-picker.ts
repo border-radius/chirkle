@@ -45,6 +45,8 @@ export interface PickerRequest {
   chosen?: ReadonlySet<string>;
   /** Where focus goes once the picker closes without a pick; the opener by default (if it is still there). */
   restoreFocus?: () => void;
+  /** Picking leaves it open, with the focus where it was, so several can be picked in a row (the composer's). */
+  stayOpen?: boolean;
 }
 
 export interface EmojiPicker {
@@ -262,7 +264,7 @@ export function createEmojiPicker(opts: { signal: AbortSignal }): EmojiPicker {
 
   function pick(emoji: string) {
     const r = req;
-    close(false);
+    if (!r?.stayOpen) close(false);
     rememberEmoji(emoji);
     r?.onPick(emoji);
   }

@@ -102,7 +102,7 @@ export function createComposer(opts: {
   onStepReply?: (dir: -1 | 1) => boolean;
   /** The reply bar's × (or Escape in the textarea while replying). */
   onCancelReply: () => void;
-  /** The emoji button: open the picker next to it; `insert` puts the chosen emoji at the caret. */
+  /** The emoji button: open the picker next to it; `insert` puts a chosen emoji at the caret, leaving the focus alone. */
   onEmoji: (opener: HTMLElement, insert: (emoji: string) => void) => void;
   /** ":" and two letters typed before the caret: offer emoji by name (§20.6). Those follow the textarea from then on. */
   onEmojiName?: (textarea: HTMLTextAreaElement) => void;
@@ -197,9 +197,9 @@ export function createComposer(opts: {
   ]);
 
   /** Put `emoji` where the caret is (replacing any selection), and the caret after it. */
+  /** Without taking the focus: the picker stays open for more (§20.4) and gives the focus back when it closes. */
   function insertEmoji(emoji: string) {
     if (signal.aborted) return;
-    textarea.focus();
     textarea.setRangeText(emoji, textarea.selectionStart, textarea.selectionEnd, "end");
     onInput();
   }

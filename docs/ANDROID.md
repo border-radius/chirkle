@@ -2053,3 +2053,9 @@ stand-in (`kind` other than `person`: a Telegram sender's, a deleted account), w
 name of such an author is plain text instead of a menu with *Ban…* alone (§36.4).
 
 **Version** 0.5.0 (`versionCode` 12, with §77–§93 and §46's fix), changelog `12.txt`, F-Droid recipe updated.
+
+## 94. The composer's emoji sheet stays open (2026-11-27)
+
+As on the web (DESIGN.md §20.4), picking in the composer's emoji sheet puts the emoji in and leaves the sheet open, so
+several can be added at once; swiping it down or tapping outside closes it. The reaction sheet still closes on the
+pick. No test: Robolectric draws no emoji, so the grid is empty in `UiPortsTest`.

@@ -468,7 +468,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         MessageSheet(m, c.reactable(m), recent, items, onReact = { e -> sheetFor = null; vm.react(m, e) }, onMoreEmoji = { sheetFor = null; emojiFor = m }, onDismiss = { sheetFor = null })
     }
     emojiFor?.let { m -> EmojiSheet(stringResource(R.string.room_add_reaction), recent, onPick = { e -> emojiFor = null; vm.react(m, e) }, onDismiss = { emojiFor = null }) }
-    if (composerEmoji) EmojiSheet(stringResource(R.string.room_insert_emoji), recent, onPick = { e -> composerEmoji = false; vm.insert(e); services.recentEmoji.remember(e) }, onDismiss = { composerEmoji = false })
+    if (composerEmoji) EmojiSheet(stringResource(R.string.room_insert_emoji), recent, onPick = { e -> vm.insert(e); services.recentEmoji.remember(e) } /* stays open for more (§20.4) */, onDismiss = { composerEmoji = false })
     confirmDelete?.let { ids ->
         AlertDialog(
             onDismissRequest = { confirmDelete = null },

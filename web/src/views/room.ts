@@ -224,7 +224,8 @@ export function createRoomView({
     },
     onStepReply: (dir) => reply.step(dir),
     onCancelReply: () => reply.set(null),
-    onEmoji: (opener, insert) => void pickers.open(opener, { label: S.INSERT_EMOJI, onPick: insert, restoreFocus: () => composer.focus() }),
+    onEmoji: (opener, insert) =>
+      void pickers.open(opener, { label: S.INSERT_EMOJI, onPick: insert, restoreFocus: () => composer.focus(), stayOpen: true }),
     onEmojiName: (textarea) => pickers.suggestEmoji(textarea),
     onMention: (textarea) => pickers.suggestPeople(textarea),
     // Kept as you type, so a reload doesn't lose it (§22.3).

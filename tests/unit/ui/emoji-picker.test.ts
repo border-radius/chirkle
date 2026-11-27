@@ -85,6 +85,25 @@ describe("emoji picker (§20.4)", () => {
     expect(opener.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("with stayOpen, picking leaves it open, focus and all, to pick several in a row", () => {
+    const onPick = vi.fn();
+    picker.open(opener, { label: "Insert emoji", onPick, stayOpen: true });
+    emojiButton("🎉").click();
+    emojiButton("🔥").click();
+    expect(onPick.mock.calls).toEqual([["🎉"], ["🔥"]]);
+    expect(picker.isOpen).toBe(true);
+    expect(opener.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(emojiButton("😀"));
+    type("tada");
+    key(search(), "Enter");
+    expect(onPick).toHaveBeenLastCalledWith("🎉");
+    expect(picker.isOpen).toBe(true);
+    picker.close();
+    picker.open(opener, { label: "Insert emoji", onPick, stayOpen: true });
+    const recent = [...picker.el.querySelectorAll<HTMLButtonElement>(".emoji-section.recent button.emoji")].map((b) => b.dataset.emoji);
+    expect(recent).toEqual(["🎉", "🔥"]);
+  });
+
   it("puts recently picked emoji first", () => {
     picker.open(opener, { label: "x", onPick: () => {} });
     emojiButton("🎉").click();
