@@ -7,7 +7,7 @@
 
 const { isActive, jsonOf, peerHost } = require(`${__hooks}/federation/config.js`);
 const { call, errorOf, jsonBody } = require(`${__hooks}/federation/net.js`);
-const { applyMessage, MAX_FILES } = require(`${__hooks}/federation/messages.js`);
+const { applyFiles, applyMessage, MAX_FILES } = require(`${__hooks}/federation/messages.js`);
 const { setDown } = require(`${__hooks}/federation/rooms.js`);
 const { isLost } = require(`${__hooks}/lib/worker.js`);
 
@@ -226,7 +226,10 @@ function download(peer, path, max) {
  */
 function fetchMessage(app, peer, payload) {
   const ev = payload.event || {};
-  const listed = (Array.isArray(ev.message?.files) ? ev.message.files : []).slice(0, MAX_FILES);
+  // A message's, or (a `files` event) a message's new attachments.
+  const refiled = ev.type === "files";
+  const src = refiled ? ev.files : ev.message?.files;
+  const listed = (Array.isArray(src) ? src : []).slice(0, MAX_FILES);
   /** @type {string[]} */
   const temps = [];
   try {
@@ -245,7 +248,8 @@ function fetchMessage(app, peer, payload) {
       uploads.push(up);
     }
     app.runInTransaction((tx) => {
-      applyMessage(tx, peer, ev, uploads);
+      if (refiled) applyFiles(tx, peer, ev, uploads);
+      else applyMessage(tx, peer, ev, uploads);
     });
   } finally {
     for (const t of temps) {

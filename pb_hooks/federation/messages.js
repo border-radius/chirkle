@@ -141,7 +141,12 @@ function messageCreated(app, rec) {
  */
 function before(rec) {
   const orig = rec.original();
-  return { text: orig.getString("text"), deleted: orig.getBool("deleted"), reactions: reactionsOf(orig) };
+  return {
+    text: orig.getString("text"),
+    files: orig.getStringSlice("files"),
+    deleted: orig.getBool("deleted"),
+    reactions: reactionsOf(orig),
+  };
 }
 
 /**
@@ -152,7 +157,8 @@ function before(rec) {
  */
 function checkMirrorChange(app, rec) {
   const orig = rec.original();
-  if (rec.getString("text") === orig.getString("text") && rec.getBool("deleted") === orig.getBool("deleted")) return;
+  const sameFiles = rec.getStringSlice("files").join("/") === orig.getStringSlice("files").join("/");
+  if (rec.getString("text") === orig.getString("text") && sameFiles && rec.getBool("deleted") === orig.getBool("deleted")) return;
   if (originOf(app, rec.id)) return;
   let room;
   try {
@@ -201,6 +207,12 @@ function messageChanged(app, rec, was) {
             },
       );
     }
+  }
+  // Its attachments replaced (a Telegram media edit, §26.4): the new ones, which peers fetch from here (§33.8).
+  if (!rec.getBool("deleted") && rec.getStringSlice("files").join("/") !== was.files.join("/")) {
+    const names = jsonOf(rec, "file_names", {});
+    const files = rec.getStringSlice("files").map((f) => ({ path: `/api/fed/files/${rec.id}/${f}`, name: String(names[f] || f) }));
+    for (const peerId of audience(app, room, rec.id)) enqueue(app, peerId, { type: "files", room: rg, message: g, files });
   }
   const now = reactionsOf(rec);
   if (deleted || JSON.stringify(now) === JSON.stringify(was.reactions)) return;
@@ -397,6 +409,31 @@ function applyEdit(app, sender, ev) {
 }
 
 /**
+ * A `files` event: a message's attachments replaced where it came from (a Telegram media edit, §26.4). Like an edit,
+ * only from the author's own instance on the home, never our own people's on a mirror. The new files are fetched
+ * first (the worker, §33.8; `files`: the fetched ones, then); when none comes, the message keeps its own.
+ * @param {core.App} app
+ * @param {core.Record} sender
+ * @param {any} ev
+ * @param {any[]} [files] filesystem.File
+ */
+function applyFiles(app, sender, ev, files) {
+  const rec = target(app, sender, ev, true);
+  if (!rec || rec.getBool("deleted") || rec.getString("forwarded_from")) return;
+  if (isMine(gidOf(app, rec.getString("author")))) throw refusal(403, "People of this instance change their messages here.");
+  const listed = (Array.isArray(ev.files) ? ev.files : []).slice(0, MAX_FILES);
+  if (!listed.length) return;
+  if (!files) {
+    enqueueWork(app, sender.id, "fetch", { event: ev });
+    return;
+  }
+  if (!files.length) return;
+  const shared = require(`${__hooks}/lib/files.js`);
+  shared.replaceMessageFiles(app, rec, shared.fromUploads(app, files));
+  saveFor(app, rec, sender);
+}
+
+/**
  * A `delete` event. A message still being fetched is dropped from the queue.
  * @param {core.App} app
  * @param {core.Record} sender
@@ -461,6 +498,7 @@ module.exports = {
   messageChanged,
   applyMessage,
   applyEdit,
+  applyFiles,
   applyDelete,
   applyReact,
   applyReactions,

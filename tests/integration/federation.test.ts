@@ -11,6 +11,7 @@ import { PNG } from "../support/files.ts";
 import { uniq } from "../support/ids.ts";
 import { disableRateLimits, enableFederation, freePort, type PocketBaseServer, SUPERUSER, startPocketBase } from "../support/pocketbase.ts";
 import { runSql } from "../support/sql.ts";
+import { startTelegramStub } from "../support/telegram.ts";
 import { byName, sleep, status } from "./helpers.ts";
 
 interface Instance {
@@ -26,10 +27,10 @@ let C: Instance;
 
 const ENV = { FEDERATION_ALLOW_PRIVATE: "1" };
 
-async function start(port?: number, on = true): Promise<Instance> {
+async function start(port?: number, on = true, env: Record<string, string> = {}): Promise<Instance> {
   port ??= await freePort();
   const url = `http://127.0.0.1:${port}`;
-  const server = await startPocketBase({ port, fixtureRoute: true, env: ENV });
+  const server = await startPocketBase({ port, fixtureRoute: true, env: { ...ENV, ...env } });
   await disableRateLimits(server.url);
   if (on) await enableFederation(url);
   const admin = new PocketBase(server.url);
@@ -591,6 +592,79 @@ describe("a shared public room (§33.5)", () => {
     expect(res.status).toBe(200);
     expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(PNG))).toBe(true);
   }, 60_000);
+
+  it("passes on attachments replaced where they came from: a Telegram media edit (§26.4)", async () => {
+    const stub = await startTelegramStub();
+    const D = await start(undefined, true, {
+      TELEGRAM_BOT_TOKEN: stub.token,
+      TELEGRAM_API_BASE: stub.url,
+      TELEGRAM_WEBHOOK_URL: "https://chat.example/api/telegram/webhook",
+      TELEGRAM_WEBHOOK_SECRET: "fed-secret",
+    });
+    /** Tick D's workers (Telegram's and linked instances') and A's until `fn` passes. */
+    const until = async <T>(fn: () => T | Promise<T>, ms = 20_000): Promise<T> => {
+      const deadline = Date.now() + ms;
+      for (;;) {
+        try {
+          return await fn();
+        } catch (e) {
+          if (Date.now() > deadline) throw e;
+          await D.admin.send("/api/telegram/tick", { method: "POST" }).catch(() => {});
+          await Promise.all([tick(D), tick(A)]);
+          await sleep(100);
+        }
+      }
+    };
+    const deliver = (update: Record<string, unknown>) =>
+      fetch(`${D.url}/api/telegram/webhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "fed-secret" },
+        body: JSON.stringify({ update_id: Date.now(), ...update }),
+      });
+    try {
+      const { xPeer } = await pair(D, A, "A", "D");
+      const dan = await signUp(D);
+      const room = await dan.pb.collection("rooms").create({ name: `tg${uniq()}`, created_by: dan.user.id });
+      const chat = -1_000_000_000_777;
+      await D.admin.collection("tg_links").create({ chat_id: String(chat), title: "Group", room: room.id, enabled: true });
+      const offer = await D.admin.collection("fed_shares").create({ room: room.id, peer: xPeer.id });
+      const theirs = await until(() =>
+        A.admin.collection("fed_shares").getFirstListItem(A.admin.filter("remote_id = {:g}", { g: `${room.id}@${D.host}` })),
+      );
+      expect(offer.state).toBe("offered");
+      await A.admin.collection("fed_shares").update(theirs.id, { accepted: true });
+      const mirror = await until(() => mirrorOf(A, D, room.id));
+
+      stub.addFile("fed-old", PNG, "photos/fed-old.jpg");
+      stub.addFile("fed-new", PNG, "photos/fed-new.jpg");
+      const tg = {
+        message_id: 1,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: chat, type: "supergroup", title: "Group" },
+        from: { id: 77, is_bot: false, first_name: "Tia" },
+        caption: "harbour",
+        photo: [{ file_id: "fed-old", width: 90, height: 90 }],
+      };
+      await deliver({ message: tg });
+      const copy = await until(async () => {
+        const found = (await messagesIn(A, mirror.id)).find((m) => m.text === "harbour");
+        expect(found?.files).toHaveLength(1);
+        return found as RecordModel;
+      });
+      await deliver({ edited_message: { ...tg, photo: [{ file_id: "fed-new", width: 90, height: 90 }], edit_date: tg.date + 1 } });
+      const after = await until(async () => {
+        const m = await A.admin.collection("messages").getOne(copy.id);
+        expect(m.files).toHaveLength(1);
+        expect(m.files[0]).not.toBe(copy.files[0]);
+        return m;
+      });
+      expect(after.text).toBe("harbour");
+      expect(after.edited_at).not.toBe("");
+    } finally {
+      await D.server.stop();
+      await stub.close();
+    }
+  }, 90_000);
 
   it("backfills the newest 200 messages, each once", async () => {
     const ann = await signUp(A);

@@ -54,6 +54,8 @@ function apply(app, peer, ev) {
       return fedMessages.applyMessage(app, peer, ev);
     case "edit":
       return fedMessages.applyEdit(app, peer, ev);
+    case "files":
+      return fedMessages.applyFiles(app, peer, ev);
     case "delete":
       return fedMessages.applyDelete(app, peer, ev);
     case "react":

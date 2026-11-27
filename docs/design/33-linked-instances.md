@@ -184,6 +184,7 @@ carries:
 | `share` / `unshare` | home ↔ peer | the room's id; acceptance or refusal |
 | `message` | author's instance → home → mirrors | ids, room, author, text, `reply_to`, files (name, size, type, a signed fetch path), created |
 | `edit` / `delete` | author's instance (or the home, moderating) → home → mirrors | message id, the new text |
+| `files` | author's instance → home → mirrors | message id, its attachments replaced (a Telegram media edit, §26.4): name and fetch path of each; fetched like a message's, then they replace its own (none fetched: it keeps them) |
 | `react` | any instance → home | message id, emoji, add or remove |
 | `members` | mirror → home | the room; its own people to add and to remove (global ids). Answered by the next `room` |
 | `reactions` | home → mirrors | message id, the whole list |

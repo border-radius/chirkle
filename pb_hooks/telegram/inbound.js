@@ -78,20 +78,24 @@ function quoteLines(msg, known) {
 /**
  * A Telegram message's text (its caption, or a rich message's blocks as text), its files (that can be brought over),
  * and lines for what can't be: files over the download limit, and things that aren't files (a location, a poll…).
+ * `uids`: the file_unique_ids of all its files, brought over or not, which tell a media edit from a caption's.
  * @param {any} msg
- * @returns {{ text: string, files: { id: string, name: string, size: number }[], notes: string[] }}
+ * @returns {{ text: string, files: { id: string, name: string, size: number }[], notes: string[], uids: string[] }}
  */
 function partsOf(msg) {
   /** @type {{ id: string, name: string, size: number }[]} */
   const files = [];
   /** @type {string[]} */
   const notes = [];
+  /** @type {string[]} */
+  const uids = [];
   const n = msg.message_id;
   /**
    * @param {any} f
    * @param {string} name
    */
   const add = (f, name) => {
+    uids.push(String(f.file_unique_id || f.file_id));
     if (f.file_size && f.file_size > MAX_FILE) notes.push(`[${name}, ${mb(f.file_size)}: too large to bring over from Telegram]`);
     else files.push({ id: f.file_id, name, size: f.file_size || 0 });
   };
@@ -118,7 +122,7 @@ function partsOf(msg) {
   if (msg.dice) notes.push(`[${msg.dice.emoji} ${msg.dice.value}]`);
   // A rich message (Bot API 10.1) has neither text nor caption: without this it was taken for a service message.
   const text = msg.text || msg.caption || (msg.rich_message ? richText(msg.rich_message, n, add, notes) : "");
-  return { text, files, notes };
+  return { text, files, notes, uids };
 }
 
 /**
@@ -227,8 +231,10 @@ function forgetStale(tx, chatId, tgId) {
  * @param {number} tgId
  * @param {"text" | "media"} kind
  * @param {number} part
+ * @param {{ files: string[], ids: string[] }} [media] the first part's: the attachments it brought (stored names), and
+ *   the file_unique_ids of all its files (partsOf `uids`), which a media edit goes by (editOver)
  */
-function rememberIn(tx, messageId, chatId, tgId, kind, part) {
+function rememberIn(tx, messageId, chatId, tgId, kind, part, media) {
   const row = new Record(tx.findCollectionByNameOrId("tg_messages"));
   row.set("message", messageId);
   row.set("chat_id", chatId);
@@ -236,7 +242,26 @@ function rememberIn(tx, messageId, chatId, tgId, kind, part) {
   row.set("direction", "in");
   row.set("kind", kind);
   row.set("part", part);
+  if (media) {
+    row.set("files", media.files);
+    row.set("file_ids", media.ids);
+  }
   tx.save(row);
+}
+
+/**
+ * A JSON list of strings a tg_messages row keeps (`files`, `file_ids`), or null for a row from before it kept them.
+ * @param {core.Record} row
+ * @param {string} field
+ * @returns {string[] | null}
+ */
+function listOf(row, field) {
+  try {
+    const list = JSON.parse(row.getString(field) || "null");
+    return Array.isArray(list) ? list.map(String) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -308,13 +333,17 @@ function bringOver(app, link, room, msgs, mode = "live") {
   if (!notes.length && !parts.some((p) => p.files.length) && !parts.some((p) => p.text.trim())) return;
   /** @type {any[]} */
   const files = [];
-  for (const f of parts.flatMap((p) => p.files)) {
+  /** Which of `msgs` each of `files` came from. */
+  /** @type {number[]} */
+  const owners = [];
+  for (const [f, owner] of parts.flatMap((p, i) => p.files.map((f) => /** @type {const} */ ([f, i])))) {
     if (files.length >= MAX_FILES) {
       notes.push(`[${f.name}: more files than a message holds]`);
       continue;
     }
     try {
       files.push(download(f.id, f.name, f.size));
+      owners.push(owner);
     } catch (err) {
       const later = mode !== "last" && !!asTelegram(err)?.transient;
       app.logger().warn("telegram: download", "chat", chatId, "message", first.message_id, "later", later, "error", String(err));
@@ -351,9 +380,11 @@ function bringOver(app, link, room, msgs, mode = "live") {
       if (files.length) require(`${__hooks}/lib/files.js`).attachUploads(tx, rec, files);
       if (withReply && known && reply) rec.set("reply_to", reply.id);
       tx.save(rec);
+      const names = rec.getStringSlice("files"); // in the order of `files`
       msgs.forEach((m, i) => {
         forgetStale(tx, chatId, m.message_id);
-        rememberIn(tx, rec.id, chatId, m.message_id, i === 0 ? "text" : "media", 0);
+        const media = { files: names.filter((_, k) => owners[k] === i), ids: parts[i].uids };
+        rememberIn(tx, rec.id, chatId, m.message_id, i === 0 ? "text" : "media", 0, media);
       });
       for (let i = 1; i < pieces.length; i++) {
         const part = savePart(tx, room.id, author.id, pieces[i], ids[i]);
@@ -369,7 +400,107 @@ function bringOver(app, link, room, msgs, mode = "live") {
 }
 
 /**
- * A Telegram edit: the chat message gets the new text.
+ * Which of a chat message's attachments a Telegram message brought: where they start in its `files`, and their stored
+ * names; null when that can't be told. `album`: the message's Telegram messages (part 0), by tg_message_id. A row
+ * from before rows kept their files says nothing: a lone Telegram message brought them all, and an album's items
+ * one each when there are as many (each item is one photo, video or file).
+ * @param {core.Record} rec
+ * @param {core.Record} row the Telegram message's
+ * @param {core.Record[]} album
+ * @returns {{ pos: number, names: string[] } | null}
+ */
+function heldBy(rec, row, album) {
+  const files = rec.getStringSlice("files");
+  const i = album.findIndex((r) => r.id === row.id);
+  const lists = album.map((r) => listOf(r, "files"));
+  const own = lists[i];
+  if (own) {
+    if (own.length) {
+      const pos = files.indexOf(own[0]);
+      return pos >= 0 && own.every((n, k) => files[pos + k] === n) ? { pos, names: own } : null;
+    }
+    // It brought none (a file too large then): the new ones go after those of the items before it.
+    const before = lists.slice(0, i);
+    if (before.some((l) => !l)) return null;
+    return { pos: before.reduce((n, l) => n + (l?.length || 0), 0), names: [] };
+  }
+  if (album.length <= 1) return { pos: 0, names: files };
+  return files.length === album.length && i >= 0 ? { pos: i, names: [files[i]] } : null;
+}
+
+/**
+ * Stored size of a shared file (§37), -1 when unknown.
+ * @param {core.App} app
+ * @param {filesystem.System} fsys
+ * @param {string} name
+ */
+function storedSize(app, fsys, name) {
+  const shared = require(`${__hooks}/lib/files.js`);
+  const row = shared.byName(app, name);
+  if (!row) return -1;
+  try {
+    return fsys.attributes(shared.keyOf(row)).size;
+  } catch {
+    return -1;
+  }
+}
+
+/**
+ * Has the Telegram message's media been replaced (editMessageMedia), or is it only its caption that changed? By the
+ * file_unique_ids it brought; a row from before it kept them, by the files' sizes, when Telegram gives them.
+ * @param {core.App} app
+ * @param {core.Record} row
+ * @param {ReturnType<typeof partsOf>} parts
+ * @param {string[]} held
+ */
+function mediaReplaced(app, row, parts, held) {
+  const ids = listOf(row, "file_ids");
+  if (ids) return ids.join("\n") !== parts.uids.join("\n");
+  if (parts.files.length !== held.length) return parts.files.length > 0;
+  const fsys = app.newFilesystem();
+  try {
+    return parts.files.some((f, k) => {
+      const size = storedSize(app, fsys, held[k]);
+      return f.size > 0 && size >= 0 && f.size !== size;
+    });
+  } finally {
+    fsys.close();
+  }
+}
+
+/**
+ * A Telegram media edit's new files, downloaded (before any transaction: a download is slow), with what replaces what.
+ * Null when its media wasn't replaced, can't be placed, or its new files don't come for now (logged): the message
+ * then keeps the ones it has, and only its text changes.
+ * @param {core.App} app
+ * @param {string} chatId
+ * @param {any} msg
+ * @param {core.Record} rec
+ * @param {core.Record} row the Telegram message's
+ * @param {ReturnType<typeof partsOf>} parts
+ */
+function newMedia(app, chatId, msg, rec, row, parts) {
+  const album = app
+    .findRecordsByFilter("tg_messages", "message = {:m} && direction = 'in' && part = 0", "tg_message_id", 0, 0, { m: rec.id })
+    .filter((r) => !!r);
+  const held = heldBy(rec, row, album);
+  if (!held || !mediaReplaced(app, row, parts, held.names)) return null;
+  const room = MAX_FILES - (rec.getStringSlice("files").length - held.names.length);
+  /** @type {any[]} */
+  const uploads = [];
+  try {
+    for (const f of parts.files.slice(0, Math.max(0, room))) uploads.push(download(f.id, f.name, f.size));
+  } catch (err) {
+    app.logger().warn("telegram: media edit download", "chat", chatId, "message", msg.message_id, "error", String(err));
+    return null;
+  }
+  return { ...held, uploads, ids: parts.uids };
+}
+
+/**
+ * A Telegram edit: the chat message gets the new text, and the new media when they were replaced (§26.4): only those
+ * the Telegram message brought, an album's item its own. An album's item but its first, which holds no text, changes
+ * the text only when it has some (its caption added).
  * @param {core.App} app
  * @param {any} msg
  */
@@ -379,14 +510,20 @@ function editOver(app, msg) {
   const rec = rows[0]?.getInt("part") === 0 ? findMessage(app, rows[0].getString("message")) : null;
   if (!rec) return editWaiting(app, chatId, msg);
   if (rec.getBool("deleted") || rec.getString("forwarded_from")) return;
+  const item = rows[0].getString("kind") === "media";
   const quoted = quoteLines(msg, !!rec.getString("reply_to"));
-  const { text, notes } = partsOf(msg);
+  const parts = partsOf(msg);
+  const { text, notes } = parts;
+  const media = newMedia(app, chatId, msg, rec, rows[0], parts);
+  const files = media ? rec.getStringSlice("files").length - media.names.length + media.uploads.length : rec.getStringSlice("files").length;
   const lines = [forwardLine(msg), ...quoted, text, ...notes].filter(Boolean);
-  const pieces = split(lines.join("\n"));
-  if (!pieces[0] && !rec.getStringSlice("files").length) return;
+  // An item without a caption leaves the text as it is: the album's caption is its first item's.
+  const pieces = item && !text.trim() && !notes.length ? null : split(lines.join("\n"));
+  if (pieces && !pieces[0] && !files) return;
+  if (!pieces && !media) return;
   // The parts still in the room get the pieces in order: a shorter text deletes the parts left over, a longer one adds
   // parts (after what came since). A deleted message can't come back, so a part deleted meanwhile is passed over.
-  const parts = /** @type {core.Record[]} */ (
+  const later = /** @type {core.Record[]} */ (
     rows
       .slice(1)
       .map((r) => findMessage(app, r.getString("message")))
@@ -394,16 +531,45 @@ function editOver(app, msg) {
   );
   const next = rows.length ? rows[rows.length - 1].getInt("part") + 1 : 1;
   app.runInTransaction((tx) => {
-    [rec, ...parts].forEach((part, i) => {
-      if (i >= pieces.length) part.set("deleted", true);
-      else if (pieces[i] === part.getString("text")) return;
-      else part.set("text", pieces[i]);
+    const fresh = findMessage(tx, rec.id);
+    if (!fresh || fresh.getBool("deleted")) return;
+    let replaced = false;
+    if (media) {
+      const shared = require(`${__hooks}/lib/files.js`);
+      const names = fresh.getStringSlice("files");
+      // Changed meanwhile (another edit of it, saved while this one downloaded): this one's media are stale.
+      if (media.names.every((n, k) => names[media.pos + k] === n)) {
+        const added = shared.fromUploads(tx, media.uploads);
+        const kept = shared.byNames(tx, names);
+        const list = [
+          ...names.slice(0, media.pos).map((n) => kept.get(n)),
+          ...added,
+          ...names.slice(media.pos + media.names.length).map((n) => kept.get(n)),
+        ].filter((r) => !!r);
+        shared.replaceMessageFiles(tx, fresh, /** @type {core.Record[]} */ (list));
+        replaced = true;
+        const row = tx.findRecordById("tg_messages", rows[0].id);
+        row.set(
+          "files",
+          added.map((/** @type {core.Record} */ r) => r.getString("file")),
+        );
+        row.set("file_ids", media.ids);
+        tx.save(row);
+      }
+    }
+    if (pieces) fresh.set("text", pieces[0]);
+    if (replaced || fresh.getString("text") !== fresh.original().getString("text")) tx.save(fresh);
+    if (!pieces) return;
+    later.forEach((part, i) => {
+      if (i + 1 >= pieces.length) part.set("deleted", true);
+      else if (pieces[i + 1] === part.getString("text")) return;
+      else part.set("text", pieces[i + 1]);
       tx.save(part);
     });
     const ids = orderedIds(pieces.length);
-    for (let i = parts.length + 1; i < pieces.length; i++) {
+    for (let i = later.length + 1; i < pieces.length; i++) {
       const part = savePart(tx, rec.getString("room"), rec.getString("author"), pieces[i], ids[i]);
-      rememberIn(tx, part.id, chatId, msg.message_id, "text", next + i - parts.length - 1);
+      rememberIn(tx, part.id, chatId, msg.message_id, "text", next + i - later.length - 1);
     }
   });
 }

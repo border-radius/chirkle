@@ -365,18 +365,25 @@ function beforeMessageUpdate(e) {
     return;
   }
 
-  rec.set("file_names", orig.get("file_names")); // never changed by an edit
-  rec.set("file_sources", orig.get("file_sources")); // nor this (§31)
-  // Only the create hook and the media worker set these; the worker's may be newer than the loaded record's.
-  rec.set("file_dims", e.app.findRecordById("messages", rec.id).get("file_dims"));
+  // A replaceMessageFiles (the server's: a Telegram media edit, §26.4, or a linked instance's, §33.6) set them all.
+  const refiled = require(`${__hooks}/lib/files.js`).replacing(rec);
+  if (!refiled) {
+    rec.set("file_names", orig.get("file_names")); // never changed by an edit
+    rec.set("file_sources", orig.get("file_sources")); // nor this (§31)
+    // Only the create hook and the media worker set these; the worker's may be newer than the loaded record's.
+    rec.set("file_dims", e.app.findRecordById("messages", rec.id).get("file_dims"));
+  }
   // Reactions only change through POST /api/chat/reactions (§20.2). Any other save (an edit) keeps the ones stored
   // now, not the ones loaded with the record: a reaction added meanwhile would be lost. (Edits save in a transaction.)
   if (rec.getString("reactions") === orig.getString("reactions")) {
     rec.set("reactions", e.app.findRecordById("messages", rec.id).get("reactions"));
   }
-  // Attachments are immutable after sending (backs up the update rule, as above).
+  // Attachments are immutable after sending (backs up the update rule, as above), but for the server's own replacing.
   const files = fileNames(rec);
-  if (files.join("/") !== orig.getStringSlice("files").join("/")) throw fieldError("files", "Attachments can't be changed.");
+  const changed = files.join("/") !== orig.getStringSlice("files").join("/");
+  if (changed && !refiled) throw fieldError("files", "Attachments can't be changed.");
+  if (changed && orig.getString("forwarded_from") !== "") throw fieldError("files", "Forwarded messages can't be edited.");
+  if (changed) rec.set("edited_at", new DateTime());
   assertText(rec, files.length > 0 || isForward(rec));
   if (rec.getString("text") !== orig.getString("text")) {
     rec.set("previews", []); // the worker looks at the new text's links (§28)
@@ -398,6 +405,8 @@ function beforeMessageUpdate(e) {
  */
 function beforeMessageUpdateRequest(e) {
   const rec = recordOf(e);
+  // Only the server replaces attachments (lib/files.js replaceMessageFiles), never a request naming its key.
+  rec.set(require(`${__hooks}/lib/files.js`).REPLACING, null);
   // Uploads and modifiers aren't a file field's any more (§37), so the update rule doesn't see them all: refused
   // here, not dropped.
   const body = /** @type {Record<string, unknown>} */ (e.requestInfo().body ?? {});
@@ -427,6 +436,7 @@ function changesForwards(rec) {
   const orig = rec.original();
   return (
     rec.getString("text") !== orig.getString("text") ||
+    rec.getStringSlice("files").join("/") !== orig.getStringSlice("files").join("/") ||
     rec.getBool("deleted") !== orig.getBool("deleted") ||
     rec.getString("previews") !== orig.getString("previews")
   );

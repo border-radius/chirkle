@@ -271,6 +271,39 @@ function setMessageFiles(app, rec, rows, sources = {}, later = false) {
 const PENDING = "@link";
 
 /**
+ * A custom key (neither stored nor sent): this save replaces the message's attachments (replaceMessageFiles), which
+ * nothing else may change (§17.1). Never taken from a request (lib/messages.js beforeMessageUpdateRequest).
+ */
+const REPLACING = "@replace_files";
+
+/**
+ * Replace the attachments of a message about to be saved, the server's doing only: a Telegram message's media
+ * replaced (§26.4), or a linked instance passing that on (§33.6). `rows` in order, those it keeps among them; what it
+ * no longer names is unlinked once saved (main.pb.js), and the new ones linked in the save. A kept file stays from
+ * the collection it was attached from.
+ * @param {core.App} app
+ * @param {core.Record} rec
+ * @param {core.Record[]} rows
+ */
+function replaceMessageFiles(app, rec, rows) {
+  const was = /** @type {Record<string, string>} */ (parse(rec.original().getString("file_sources")) || {});
+  /** @type {Record<string, string>} */
+  const sources = {};
+  for (const row of rows) {
+    const name = row.getString("file");
+    if (was[name]) sources[name] = was[name];
+  }
+  setMessageFiles(app, rec, rows, sources, true);
+  rec.set(REPLACING, true);
+}
+
+/**
+ * Is this save of a message a replaceMessageFiles?
+ * @param {core.Record} rec
+ */
+const replacing = (rec) => rec.get(REPLACING) === true;
+
+/**
  * Link what setMessageFiles left to the save of `rec` (main.pb.js, in the save's transaction).
  * @param {core.App} app
  * @param {core.Record} rec
@@ -306,6 +339,9 @@ function attachUploads(app, rec, uploads) {
 module.exports = {
   discard,
   linkPending,
+  REPLACING,
+  replaceMessageFiles,
+  replacing,
   MAX_FILES,
   isImage,
   isVideo,

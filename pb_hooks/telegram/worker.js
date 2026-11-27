@@ -6,7 +6,7 @@
 
 const { asTelegram, call, config, UPDATES } = require(`${__hooks}/telegram/api.js`);
 const { fetchOver, flushAlbums, handleUpdate } = require(`${__hooks}/telegram/inbound.js`);
-const { edit, remove, send, tellUndelivered } = require(`${__hooks}/telegram/outbound.js`);
+const { edit, editMedia, remove, send, tellUndelivered } = require(`${__hooks}/telegram/outbound.js`);
 
 const LOCK = "telegram.worker";
 const OFFSET = "telegram.offset";
@@ -133,6 +133,7 @@ function drain(app, renew) {
           update(app, row.id, (r) => r.set("payload", payload));
         });
       } else if (op === "edit") edit(app, message, chat);
+      else if (op === "media") editMedia(app, message, chat, Array.isArray(payload.was) ? payload.was : []);
       else if (op === "delete") remove(app, message, chat);
       else if (op === "react") require(`${__hooks}/telegram/reactions.js`).react(app, message, chat);
       else if (op === "fetch") fetchOver(app, row, tries >= MAX_TRIES);

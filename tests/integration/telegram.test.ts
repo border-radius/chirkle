@@ -400,6 +400,132 @@ describe("Telegram bridge (§26)", () => {
     expect(list[1]!.reply_to).toBe(list[0]!.id);
   });
 
+  it("a Telegram message whose photo is replaced shows the new one; a caption's edit keeps the file it has (§26.4)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.addFile("old-photo", PNG, "photos/old.jpg");
+    stub.addFile("new-photo", PNG, "photos/new.jpg");
+    const tg = tgMessage(chat, { caption: "view", photo: [{ file_id: "old-photo", file_unique_id: "u-old", width: 90, height: 90 }] });
+    await deliver({ message: tg });
+    const [before] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      return l;
+    });
+    const was = before!.files[0];
+    // Only the caption changed: the same file stays, not downloaded again.
+    const gets = stub.callsOf("getFile").length;
+    await deliver({ edited_message: { ...tg, caption: "the view", edit_date: tg.date + 1 } });
+    await eventually(async () => expect((await messagesOf(room.id))[0]!.text).toBe("the view"));
+    expect((await messagesOf(room.id))[0]!.files).toEqual([was]);
+    expect(stub.callsOf("getFile").length).toBe(gets);
+    // The photo replaced (editMessageMedia in Telegram), the caption too.
+    await deliver({
+      edited_message: {
+        ...tg,
+        caption: "a better view",
+        photo: [{ file_id: "new-photo", file_unique_id: "u-new", width: 90, height: 90 }],
+        edit_date: tg.date + 2,
+      },
+    });
+    const [after] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l[0]!.files).toHaveLength(1);
+      expect(l[0]!.files[0]).not.toBe(was);
+      return l;
+    });
+    expect(after!.text).toBe("a better view");
+    expect(after!.edited_at).not.toBe("");
+    expect(Object.keys(after!.file_names)).toEqual(after!.files);
+    // The old file is named by nothing now: it is gone (§37).
+    expect(await admin.collection("files").getFullList({ filter: admin.filter("file = {:f}", { f: was }) })).toEqual([]);
+    // The media grid shows the new one (§30).
+    const grid = await owner.pb.send(`/api/chat/media/${room.id}`, {});
+    expect(JSON.stringify(grid)).toContain(after!.files[0]);
+    expect(JSON.stringify(grid)).not.toContain(was);
+  });
+
+  it("an album item whose media is replaced changes only its own file, and the album's caption stays", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    stub.addFile("al1", PNG, "photos/al1.jpg");
+    stub.addFile("al2", PNG, "photos/al2.jpg");
+    stub.addFile("al2b", PNG, "photos/al2b.jpg");
+    const album = `album-${uniq()}`;
+    const first = tgMessage(chat, { media_group_id: album, caption: "trip", photo: [{ file_id: "al1", width: 90, height: 90 }] });
+    const second = tgMessage(chat, { media_group_id: album, photo: [{ file_id: "al2", width: 90, height: 90 }] });
+    await deliver({ message: first });
+    await deliver({ message: second });
+    const [before] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l).toHaveLength(1);
+      expect(l[0]!.files).toHaveLength(2);
+      return l;
+    });
+    await deliver({ edited_message: { ...second, photo: [{ file_id: "al2b", width: 90, height: 90 }], edit_date: second.date + 1 } });
+    const [after] = await eventually(async () => {
+      const l = await messagesOf(room.id);
+      expect(l[0]!.files[1]).not.toBe(before!.files[1]);
+      return l;
+    });
+    expect(after!.files[0]).toBe(before!.files[0]);
+    expect(after!.files).toHaveLength(2);
+    expect(after!.text).toBe("trip");
+  });
+
+  it("a media edit from one group replaces the file in the room's other group, keeping its caption (§26.6)", async () => {
+    const owner = await signUp();
+    const { room, chat } = await linkedRoom(owner);
+    const other = newChat();
+    await admin.collection("tg_links").create({ chat_id: String(other), title: "Other", room: room.id, enabled: true });
+    stub.addFile("pass-old", PNG, "photos/pass-old.jpg");
+    stub.addFile("pass-new", PNG, "photos/pass-new.jpg");
+    const tg = tgMessage(chat, { caption: "look", photo: [{ file_id: "pass-old", width: 90, height: 90 }] });
+    await deliver({ message: tg });
+    const sent = await eventually(() => {
+      const c = stub.callsOf("sendPhoto").find((x) => x.params.chat_id === String(other));
+      expect(c).toBeDefined();
+      return c!;
+    });
+    expect(sent.params.caption).toBe("<b>Ann Lee (TG)</b>\nlook");
+    const [m] = await messagesOf(room.id);
+    const mapping = await admin
+      .collection("tg_messages")
+      .getFirstListItem(admin.filter("message = {:m} && chat_id = {:c} && direction = 'out'", { m: m!.id, c: String(other) }));
+    await deliver({ edited_message: { ...tg, photo: [{ file_id: "pass-new", width: 90, height: 90 }], edit_date: tg.date + 1 } });
+    const edit = await eventually(() => {
+      const c = stub.callsOf("editMessageMedia").find((x) => x.params.chat_id === String(other));
+      expect(c).toBeDefined();
+      return c!;
+    });
+    expect(Number(edit.params.message_id)).toBe(mapping.tg_message_id);
+    expect(edit.params.media).toEqual({
+      type: "photo",
+      media: "attach://file0",
+      caption: "<b>Ann Lee (TG)</b>\nlook",
+      parse_mode: "HTML",
+    });
+    expect(edit.files.file0).toBeDefined();
+    // Never back to the group it came from.
+    expect(stub.callsOf("editMessageMedia").filter((c) => c.params.chat_id === String(chat))).toEqual([]);
+  });
+
+  it("a request can't replace a message's attachments, even naming the server's key (§17.1)", async () => {
+    const owner = await signUp();
+    const { room } = await linkedRoom(owner);
+    const m = await owner.pb.collection("messages").create({
+      room: room.id,
+      author: owner.user.id,
+      text: "mine",
+      files: [new File([PNG], "a.png", { type: "image/png" })],
+    });
+    const change = { text: "mine!", "@replace_files": true, files: [] };
+    expect(await status(owner.pb.collection("messages").update(m.id, change))).not.toBe(200);
+    // Past the rules (a superuser), the hooks still refuse it.
+    expect(await status(admin.collection("messages").update(m.id, change))).toBe(400);
+    expect((await admin.collection("messages").getOne(m.id)).files).toEqual(m.files);
+  });
+
   it("a Telegram message too long for one chat message comes over as several, in order, split at line breaks", async () => {
     const owner = await signUp();
     const { room, chat } = await linkedRoom(owner);

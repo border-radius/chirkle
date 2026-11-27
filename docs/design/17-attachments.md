@@ -24,7 +24,11 @@ non-empty **or** at least one file is attached". A message with neither is still
 
 **Files are immutable after sending.** Edits change text only: the update rule adds `@request.body.files:isset =
 false`, and the update hook rejects any change to `files` (including the `files+` / `files-` modifiers) except the
-soft-delete wipe below.
+soft-delete wipe below. The one exception is the server's own: a Telegram message whose media are replaced (§26.4), or
+a linked instance passing that on (§33.6), replaces the chat message's attachments (`lib/files.js`
+`replaceMessageFiles`, a key no request can set). The new files get new stored names, so nothing cached under a name
+changes; the old ones are named once less (§37), the media grid and the message's forwards show the new ones, and
+`edited_at` is set.
 
 **Soft delete wipes the files.** When `deleted` becomes true, the hook also sets `files = []`. Each file nothing else
 names any more (§37.1) is deleted, and PocketBase deletes it from storage after the update commits, so the content is really gone (§5.3), and the old URLs return 404.

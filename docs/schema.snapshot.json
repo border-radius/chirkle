@@ -3064,6 +3064,26 @@
           "required": false,
           "system": false,
           "type": "number"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSize": 4000,
+          "name": "files",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "json"
+        },
+        {
+          "help": "",
+          "hidden": false,
+          "maxSize": 4000,
+          "name": "file_ids",
+          "presentable": false,
+          "required": false,
+          "system": false,
+          "type": "json"
         }
       ],
       "indexes": [
@@ -3236,7 +3256,8 @@
             "delete",
             "album",
             "react",
-            "fetch"
+            "fetch",
+            "media"
           ]
         },
         {

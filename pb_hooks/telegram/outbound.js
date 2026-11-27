@@ -25,12 +25,14 @@ const STREAM = { supports_streaming: true };
  * @param {string} op
  * @param {string} messageId
  * @param {string} chatId
+ * @param {Record<string, unknown>} [payload]
  */
-function enqueue(app, op, messageId, chatId) {
+function enqueue(app, op, messageId, chatId, payload) {
   const row = new Record(app.findCollectionByNameOrId("tg_queue"));
   row.set("op", op);
   row.set("message", messageId);
   row.set("chat_id", chatId);
+  if (payload) row.set("payload", payload);
   app.save(row);
 }
 
@@ -51,11 +53,13 @@ function queueCreate(app, rec) {
  * change (§26.9).
  * @param {core.App} app
  * @param {core.Record} rec
- * @returns {"" | "edit" | "delete" | "react"}
+ * "media" when its attachments were replaced (lib/files.js replaceMessageFiles), its text edited too or not.
+ * @returns {"" | "edit" | "delete" | "react" | "media"}
  */
 function changeOf(app, rec) {
   const orig = rec.original();
   if (rec.getBool("deleted") && !orig.getBool("deleted")) return "delete";
+  if (!rec.getBool("deleted") && rec.getStringSlice("files").join("/") !== orig.getStringSlice("files").join("/")) return "media";
   if (!rec.getBool("deleted") && rec.getString("text") !== orig.getString("text")) return "edit";
   if (rec.getString("reactions") !== orig.getString("reactions")) {
     const { botReaction } = require(`${__hooks}/telegram/reactions.js`);
@@ -69,14 +73,15 @@ function changeOf(app, rec) {
  * for a group isn't queued again: it sends the message's reactions as they are when it goes.
  * @param {core.App} app
  * @param {core.Record} rec
- * @param {"" | "edit" | "delete" | "react"} change
+ * @param {"" | "edit" | "delete" | "react" | "media"} change
+ * @param {string[]} [was] for "media": its attachments before (stored names)
  */
-function queueUpdate(app, rec, change) {
+function queueUpdate(app, rec, change, was = []) {
   if (!change || !rec.getString("author")) return; // a service message never went to Telegram
   for (const link of linksOfRoom(app, rec.getString("room"))) {
     const chatId = link.getString("chat_id");
     if (change === "react" && waiting(app, rec.id, chatId)) continue;
-    enqueue(app, change, rec.id, chatId);
+    enqueue(app, change, rec.id, chatId, change === "media" ? { was } : undefined);
   }
 }
 
@@ -193,8 +198,9 @@ function mappings(app, messageId, chatId, filter = "") {
  * @param {string} chatId
  * @param {any} sent Telegram's Message
  * @param {"text" | "caption" | "media"} kind
+ * @param {string[]} [files] the attachments it holds (stored names), which a media edit finds it by (editMedia)
  */
-function remember(app, messageId, chatId, sent, kind) {
+function remember(app, messageId, chatId, sent, kind, files = []) {
   try {
     app.runInTransaction((tx) => {
       for (const old of tx.findRecordsByFilter("tg_messages", "chat_id = {:chat} && tg_message_id = {:id}", "", 0, 0, {
@@ -209,6 +215,7 @@ function remember(app, messageId, chatId, sent, kind) {
       row.set("tg_message_id", sent.message_id);
       row.set("direction", "out");
       row.set("kind", kind);
+      if (files.length) row.set("files", files);
       tx.save(row);
     });
   } catch (err) {
@@ -238,7 +245,7 @@ function filesOf(app, fsys, source) {
     const kind = sticker ? "sticker" : PHOTO_EXT.has(ext) && size <= MAX_PHOTO ? "photo" : VIDEO_EXT.has(ext) ? "video" : "document";
     const file = fsys.getReuploadableFile(key, true);
     file.name = names[name] || name.replace(/_[a-z0-9]{10}(\.[^.]*)?$/i, "$1");
-    return { kind, file, size };
+    return { kind, file, size, name };
   });
 }
 
@@ -307,7 +314,7 @@ function send(app, messageId, chatId, done = 0, sent = () => {}) {
  * @param {core.App} app
  * @param {string} messageId
  * @param {string} chatId
- * @param {{ kind: string, file: any, size: number }[]} group
+ * @param {{ kind: string, file: any, size: number, name: string }[]} group
  * @param {Record<string, unknown> | null} caption
  * @param {Record<string, unknown>} reply
  */
@@ -321,7 +328,7 @@ function sendGroup(app, messageId, chatId, group, caption, reply) {
       { [f.kind]: f.file },
       timeout,
     );
-    remember(app, messageId, chatId, sent, caption ? "caption" : "media");
+    remember(app, messageId, chatId, sent, caption ? "caption" : "media", [f.name]);
     return;
   }
   /** @type {Record<string, any>} */
@@ -336,7 +343,9 @@ function sendGroup(app, messageId, chatId, group, caption, reply) {
     };
   });
   const sent = call("sendMediaGroup", { chat_id: chatId, media, ...reply }, attach, timeout);
-  for (let i = 0; i < sent.length; i++) remember(app, messageId, chatId, sent[i], i === 0 && caption ? "caption" : "media");
+  for (let i = 0; i < sent.length; i++) {
+    remember(app, messageId, chatId, sent[i], i === 0 && caption ? "caption" : "media", group[i] ? [group[i].name] : []);
+  }
 }
 
 /**
@@ -360,6 +369,84 @@ function edit(app, messageId, chatId) {
       if (!tg || tg.transient || !/not modified/i.test(tg.message)) throw err;
     }
   }
+}
+
+/**
+ * The attachment (stored name) each of a message's Telegram messages holding files holds, in their order, "" where
+ * it isn't known. Those sent before they said (remember's `files`) went in the order send() sent them, photos and
+ * videos first and documents after: `was` (the attachments then) in that order, when there are as many.
+ * @param {core.Record[]} rows tg_messages, by tg_message_id
+ * @param {string[]} was
+ */
+function heldFiles(rows, was) {
+  const recorded = rows.map((r) => {
+    try {
+      const list = JSON.parse(r.getString("files") || "null");
+      return Array.isArray(list) && typeof list[0] === "string" ? list[0] : "";
+    } catch {
+      return "";
+    }
+  });
+  if (recorded.every(Boolean)) return recorded;
+  const shown = (/** @type {string} */ n) => {
+    const ext = n.slice(n.lastIndexOf(".") + 1).toLowerCase();
+    return PHOTO_EXT.has(ext) || VIDEO_EXT.has(ext);
+  };
+  const order = [...was.filter(shown), ...was.filter((n) => !shown(n))];
+  return order.length === rows.length ? order : recorded;
+}
+
+/**
+ * Pass replaced attachments on (lib/files.js replaceMessageFiles: a Telegram media edit in another group, §26.4, or a
+ * linked instance's, §33.6): each Telegram message sent from here that holds one replaced gets the new one in its
+ * place (editMessageMedia), keeping its caption; then the text, as an edit. `was`: the attachments before, which
+ * the new ones replace position by position (a Telegram media edit keeps their number; when it changed, only the text
+ * goes). What Telegram refuses (a sticker, a document into an album of photos) keeps the old one, and is logged.
+ * @param {core.App} app
+ * @param {string} messageId
+ * @param {string} chatId
+ * @param {string[]} was
+ */
+function editMedia(app, messageId, chatId, was) {
+  const msg = findMessage(app, messageId);
+  if (!msg || msg.getBool("deleted")) return;
+  const content = contentOf(app, msg, !!linkOfChat(app, chatId)?.getBool("anonymous"));
+  const now = content.source.getStringSlice("files");
+  const rows = mappings(app, messageId, chatId, " && direction = 'out' && kind != 'text'");
+  if (rows.length && was.length === now.length) {
+    const held = heldFiles(rows, was);
+    const fsys = app.newFilesystem();
+    try {
+      const files = new Map(filesOf(app, fsys, content.source).map((f) => [f.name, f]));
+      rows.forEach((row, i) => {
+        const pos = held[i] ? was.indexOf(held[i]) : -1;
+        const name = pos >= 0 ? now[pos] : "";
+        const f = name && name !== held[i] ? files.get(name) : undefined;
+        if (!f) return; // the same, or done by an earlier try (it holds the new one now)
+        const type = f.kind === "sticker" ? "photo" : f.kind; // there is no sticker to edit into
+        const media = {
+          type,
+          media: "attach://file0",
+          ...(type === "video" ? STREAM : {}),
+          ...(row.getString("kind") === "caption" ? { caption: captionOf(content), parse_mode: "HTML" } : {}),
+        };
+        try {
+          const params = { chat_id: chatId, message_id: row.getInt("tg_message_id"), media };
+          call("editMessageMedia", params, { file0: f.file }, transferTimeout(f.size));
+        } catch (err) {
+          const tg = asTelegram(err);
+          if (!tg || tg.transient) throw err;
+          app.logger().warn("telegram: media edit refused", "message", messageId, "chat", chatId, "error", String(err));
+          return;
+        }
+        row.set("files", [name]);
+        app.save(row);
+      });
+    } finally {
+      fsys.close();
+    }
+  }
+  edit(app, messageId, chatId);
 }
 
 /**
@@ -444,4 +531,4 @@ function tellUndelivered(app, messageId, chatId, err, unsure, partly = false) {
   }
 }
 
-module.exports = { queueCreate, queueUpdate, changeOf, send, edit, remove, tellUndelivered };
+module.exports = { queueCreate, queueUpdate, changeOf, send, edit, editMedia, remove, tellUndelivered };

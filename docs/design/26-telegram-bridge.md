@@ -90,8 +90,13 @@ doesn't hold the next ones back) or polling hands each update to `inbound.js`:
 - **An album** comes as one update per item. The items wait in `tg_queue` and become **one message** (up to 10 files,
   the caption as its text) when the next update from that group comes, or when the album has been quiet for 1.5 s (the
   worker checks every second).
-- **An edit** edits the message's text. Telegram doesn't tell bots about **deletes**, so a message deleted in Telegram
-  stays in the room (a known limit).
+- **An edit** edits the message's text. **A media edit** (a photo, video or file replaced, Telegram's
+  `editMessageMedia`) replaces the attachment it brought: only that one, an album's item its own (`tg_messages.files`
+  says which; a row from before it did, a lone message's all, an album item's by its place). It is told from an edit of
+  the caption by the file_unique_ids the message brought (`tg_messages.file_ids`; for an older row, by the files'
+  sizes). An album item without a caption leaves the text as it is. A new file that doesn't download keeps the old one
+  (logged). Telegram doesn't tell bots about **deletes**, so a message deleted in Telegram stays in the room (a known
+  limit).
 - The same update delivered twice (a webhook retry) comes over once (`tg_messages` knows it).
 - The message and what it maps to are saved in one transaction, so the worker never sees a message from a group
   without knowing it came from there.
@@ -132,7 +137,12 @@ Telegram (`outbound.js`):
   text goes before it.
 - **A reply** replies to the Telegram message of what it answers, when that is in the group.
 - **Edits** edit the Telegram message holding the text (or the caption, its text cut to 1024 characters with "…" when
-  the edit made it longer: QA BUG-87). **Deletes** delete the Telegram messages;
+  the edit made it longer: QA BUG-87). **Replaced attachments** (a media edit from another group, §26.4, or from a
+  linked instance, §33.6) go as `media` (`tg_queue`, with the attachments before): each Telegram message that holds
+  one replaced gets the new one (`editMessageMedia`, keeping its caption; which file each holds is in
+  `tg_messages.files`, or for one sent before, by the order they were sent in), then the text as an edit. What Telegram
+  refuses (a sticker, a document into an album of photos) keeps the old one, and is logged. **Deletes** delete the
+  Telegram messages;
   bots can delete their own only for 48 hours, so an older one is edited to "*Message deleted*" instead.
 - A message from a group isn't sent back to it.
 - Not passed on: service messages (§5.3), and a forward's later changes when its original is edited. Reactions: §26.9.
@@ -175,7 +185,8 @@ timeout ("context deadline exceeded").
 (`tests/support/telegram.ts`: records calls, serves files, queues updates, fails on demand). The harness never passes
 the developer's own `TELEGRAM_*` variables to a test server. Covered: setWebhook and the secret; a new group's link
 and `/chatid`; links only for rooms; a stand-in (name, picture, `no_dms`); files, an album as one message (by the next
-update, and once quiet), files too large; replies, edits and a repeated delivery; a stand-in joining a private room; a
+update, and once quiet), files too large; replies, edits and a repeated delivery; media edits (a caption's keeping the
+file, a photo replaced, an album's item, passed on to another group with `editMessageMedia`), which a request can't do; a stand-in joining a private room; a
 message, reply, edit and delete going out; an anonymous link's (no header, a whole caption); service messages for a group connected, disconnected, moved, deleted and removing the bot; files going out as an album with a caption plus documents; a room linked to
 two groups; retries in order and dropping; downloads that fail for now (brought over later, edited meanwhile, or saying
 so on the last try); a send failed halfway sending the rest; a send whose answer was lost (`drop` in the stub) tried

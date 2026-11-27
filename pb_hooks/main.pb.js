@@ -335,17 +335,25 @@ onRecordUpdate((e) => {
   const touch = messages.changesForwards(rec);
   const edited = rec.getString("text") !== rec.original().getString("text");
   const deleted = rec.getBool("deleted") && !rec.original().getBool("deleted");
+  const shared = require(`${__hooks}/lib/files.js`);
+  // Its attachments replaced (lib/files.js replaceMessageFiles: a Telegram media edit, §26.4, a linked instance's, §33.6).
+  const refiled = !deleted && rec.getStringSlice("files").join("/") !== rec.original().getStringSlice("files").join("/");
   // As stored, not as loaded: another delete of it may have been committed since (QA BUG-223).
-  const files = deleted ? require(`${__hooks}/lib/files.js`).namedBy(e.app, "messages", rec.id) : [];
+  const files = deleted || refiled ? shared.namedBy(e.app, "messages", rec.id) : [];
   const tg = features.telegram();
   const change = tg ? tg.outbound.changeOf(e.app, rec) : "";
+  if (refiled) shared.linkPending(e.app, rec); // the new ones, in this save's transaction (the caller's)
   e.next();
+  rec.set(shared.REPLACING, null);
   // Saved: mentions, replies and reactions told or taken back (§41).
   inbox.messageChanged(e.app, rec, told);
-  if (tg) tg.outbound.queueUpdate(e.app, rec, change);
+  if (tg) tg.outbound.queueUpdate(e.app, rec, change, files);
   // Saved: a deleted message's media leave the grid, its forwards' too (§30.1), and its files are named once less (§37).
   if (deleted) require(`${__hooks}/lib/media.js`).drop(e.app, rec.id);
-  if (deleted) require(`${__hooks}/lib/files.js`).unlink(e.app, files);
+  if (deleted) shared.unlink(e.app, files);
+  // Saved with other attachments: the old ones are named once less, and the grid shows the new ones, its forwards' too.
+  if (refiled) shared.unlink(e.app, files);
+  if (refiled) require(`${__hooks}/lib/media.js`).refile(e.app, rec);
   // Saved: forwards of it tell their readers (§21.3).
   if (touch) messages.touchForwards(e.app, rec);
   if (edited) require(`${__hooks}/lib/previews.js`).queue(e.app, rec);

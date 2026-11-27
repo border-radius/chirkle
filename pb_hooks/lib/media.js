@@ -94,6 +94,19 @@ function drop(app, id) {
   app.db().newQuery("DELETE FROM media WHERE message = {:id} OR source = {:id}").bind({ id }).execute();
 }
 
+/**
+ * A message's attachments replaced (lib/files.js replaceMessageFiles): its rows and its forwards' are made again.
+ * @param {core.App} app
+ * @param {core.Record} rec
+ */
+function refile(app, rec) {
+  drop(app, rec.id);
+  add(app, rec);
+  for (const fwd of app.findRecordsByFilter("messages", "forward_of = {:id} && deleted = false", "", 0, 0, { id: rec.id })) {
+    if (fwd) add(app, fwd);
+  }
+}
+
 // ---------------------------------------------------------------- the grid's page
 
 /**
@@ -594,4 +607,4 @@ function tick(e) {
   return e.noContent(204);
 }
 
-module.exports = { add, drop, list, run, wake, tick };
+module.exports = { add, drop, refile, list, run, wake, tick };
