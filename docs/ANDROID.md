@@ -2066,3 +2066,13 @@ In the viewer, a video playing past the phone's screen timeout dimmed and turned
 now follows the player's `onIsPlayingChanged` and sets `keepScreenOn` on the view while it plays. Paused, ended or
 swiped away, the screen times out as usual again. The browser handles this for the web's `<video>`. No test:
 Robolectric doesn't play video. Check by hand on a device.
+
+## 96. A far reply's original on screen (2026-11-27)
+
+Tapping the quote of a reply whose original wasn't loaded opened the history around it with the original at the top
+edge or off screen (QA BUG-294). The list's scrolls (`Scroll.Target`, `Top`, `Bottom` in `RoomScreen`) now wait,
+up to 5 s, for the rows the list has been composed with (`composed`), not `vm.rows`, which is a frame ahead: an index
+into rows the list didn't have yet was measured on the old window. The quarter raise above the bottom (§18.5's rule for
+the target) is now up to that line, from where the target is: near the start of the history it no longer pushes the
+target to the top. The same scroll opens a room at its first unread message, which gains the same fix. Checked on the
+Android 9 emulator; `UiFeaturesTest` covers the end result.

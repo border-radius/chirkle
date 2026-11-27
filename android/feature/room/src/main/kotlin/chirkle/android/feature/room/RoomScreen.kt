@@ -180,9 +180,10 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     // Also on coming back: what arrived while the app was in the background (realtime stays up for a while) is read
     // once it is on screen again (QA BUG-157).
     LaunchedEffect(atBottom, shown?.id, placed, rows, app_.away) { vm.onScrolled(atBottom, shown, placed) }
-    // The newest row the list has been given (composed, so its next layout has it), for Scroll.Bottom to wait on.
-    val composedFirst = remember { kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
-    androidx.compose.runtime.SideEffect { composedFirst.value = (rows.firstOrNull() as? ListRow.Msg)?.m?.id }
+    // The rows the list has been given (composed, so its next layout has them), for the scrolls to wait on: vm.rows
+    // is a frame ahead of them, and an index into vm.rows scrolled the list it still had to another message.
+    val composed = remember { kotlinx.coroutines.flow.MutableStateFlow<List<ListRow>>(emptyList()) }
+    androidx.compose.runtime.SideEffect { composed.value = rows }
     // Shared into the app (§9.3): into the composer, as if typed and attached here.
     LaunchedEffect(incoming) {
         val (text, uris) = incoming ?: return@LaunchedEffect
@@ -220,17 +221,22 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         // Wait until the list has the newest row: scrolled before that, the list keeps the row that
                         // was at the bottom in place, and a message just sent lands below the composer.
                         val newest = c.state.value.items.lastOrNull()?.id
-                        if (newest != null) withTimeoutOrNull(1000) { composedFirst.first { it == newest } }
+                        if (newest != null) withTimeoutOrNull(COMPOSED_MS) { composed.first { (it.firstOrNull() as? ListRow.Msg)?.m?.id == newest } }
                         list.scrollToItem(0)
                     }
-                    Scroll.Top -> withTimeoutOrNull(1000) { vm.rows.first { it.isNotEmpty() } }?.let { list.scrollToItem(it.lastIndex) }
+                    Scroll.Top -> withTimeoutOrNull(COMPOSED_MS) { composed.first { it.isNotEmpty() && (it.last() is ListRow.Beginning || it === vm.rows.value) } }?.let { list.scrollToItem(it.lastIndex) }
                     Scroll.Target -> {
                         val key = c.state.value.targetId ?: c.state.value.unreadId ?: return@runCatching
-                        val rowsNow = withTimeoutOrNull(1000) { vm.rows.first { r -> r.any { it.key == key } } } ?: return@runCatching
+                        // The rows the list has, not vm.rows: they are composed a frame later, and an index into rows
+                        // the list doesn't have yet put another message there (it then kept that one in view when
+                        // the window around a far original replaced the one the reply was in: QA BUG-294).
+                        val rowsNow = withTimeoutOrNull(COMPOSED_MS) { composed.first { r -> r.any { it.key == key } } } ?: return@runCatching
                         // The list is laid out from the bottom: the target's bottom edge at the bottom, then raised a
                         // quarter of the list so what follows it shows too, as far as the target stays whole. (Two rows
                         // newer at the bottom put it off screen when they are tall: images, a keyboard open.)
-                        // Taller than the list, it opens at its start instead: its top edge at the top.
+                        // Taller than the list, it opens at its start instead: its top edge at the top. Near the start
+                        // of the history the list can't bring it down to the bottom: raised only up to that quarter
+                        // line, not by a quarter more (it ended at the top edge).
                         val i = rowsNow.indexOfFirst { it.key == key }
                         list.scrollToItem(i)
                         val info = list.layoutInfo
@@ -240,7 +246,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         val over = if (item == null) 0 else item.offset + size - info.viewportEndOffset
                         if (over > 0) list.scrollBy(over.toFloat())
                         else {
-                            val raise = minOf(viewport / 4, viewport - size).coerceAtLeast(0)
+                            val raise = minOf(viewport / 4, viewport - size).coerceAtLeast(0) - (item?.offset ?: 0)
                             if (raise > 0 && i > 0) list.scrollBy(-raise.toFloat())
                         }
                     }
@@ -502,6 +508,9 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
 }
 
 private const val NEW_LINE_FADE_MS = 700L
+
+/** How long a scroll waits for the list to be composed with the rows it is for: a frame, or seconds on a slow phone. */
+private const val COMPOSED_MS = 5000L
 
 private fun FocusRequester.requestFocusSafely() {
     runCatching { requestFocus() }

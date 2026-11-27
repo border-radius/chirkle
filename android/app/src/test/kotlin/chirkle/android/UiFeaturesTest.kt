@@ -99,6 +99,29 @@ class UiFeaturesTest {
         ui.waitFor(hasContentDescription("Quoting ${a.user.name}: the question", substring = true))
     }
 
+    @Test fun `a quote of an original outside the window shows the original (QA BUG-294)`() {
+        val a = newUser()
+        val room = runBlocking { a.api.createRoom("rf-${uniq()}") }
+        // 100 tall messages; the room opens at the latest page (51–100). The original, 30, is outside it, and the
+        // window around it (1–79) shares 51–79 with it: the case where the list kept another message in view.
+        runBlocking {
+            val ids = (1..99).map { a.api.send(NewMessage(newId(), room.id, "m%03d\nsecond line\nthird line".format(it))).id }
+            a.api.send(NewMessage(newId(), room.id, "the far reply", replyTo = ids[29]))
+        }
+        ui.signedIn(a)
+        ui.openRoom(room.name)
+        ui.waitFor("the far reply")
+        repeat(10) { ui.pump() }
+        compose.onNode(hasContentDescription("Quoting ${a.user.name}: m030", substring = true)).performClick()
+        ui.waitFor(hasContentDescription("Back to reply"))
+        repeat(20) { ui.pump() }
+        val list = compose.onNode(hasContentDescription("Messages")).fetchSemanticsNode().boundsInRoot
+        val shown = compose.onAllNodes(hasText("m030", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }.filter { it.top < list.bottom && it.bottom > list.top }
+        // The quote is gone (the reply is far below); only the original itself can show m030.
+        assertTrue("m030 isn't on screen (the list spans ${list.top}..${list.bottom})", shown.isNotEmpty())
+    }
+
     @Test fun `swiping the room to the right goes back to the rooms, a short swipe stays`() {
         val a = newUser()
         val room = runBlocking { a.api.createRoom("sb-${uniq()}") }

@@ -2538,6 +2538,7 @@ edges, screenshots read. Numbering continues from BUG-291.
 |---|---|---|---|---|---|
 | BUG-292 | Medium | Web, menus | At the Large text size on a phone, the room menu ran 39 px off the left edge (its icons cut off) and the attach menu off the right | web, app n/a (Compose's menus fit the screen) | Fixed |
 | BUG-293 | Low | Web, composer | At the Medium and Large text sizes on a phone, the composer's "@" and ":" lists ran past the right edge, the handles cut off | web, app n/a (its lists fill the composer's width) | Fixed |
+| BUG-294 | Medium | Android, room | Tapping the quote of a far original opened the history around it, but not with the original on screen: it sat at the top edge or off it, and you had to scroll to find it | app, web n/a (it scrolls the DOM row into view) | Fixed |
 
 ## BUG-292 — Menus off the screen at a larger text size (Medium)
 
@@ -2554,6 +2555,22 @@ screen. **Actual:** it started at the textarea's left edge (68–81 px, after th
 428–447 px: the handles were cut off. **Cause:** `.emoji-suggest`'s width was capped at the window's, but not its left
 edge. **Fix:** its `left` is moved left as far as it takes to end 0.5rem inside the window (`emoji.css`). Test: the same
 `mobile.spec.ts` test (fails without).
+
+## BUG-294 — A far original not on screen after tapping its quote (Medium, Android)
+
+**Steps:** in a room of 600 messages, at the bottom, tap the quote of a reply to message 3 (or any original outside
+the messages loaded). **Expected:** the original on screen, a quarter of the list above the bottom, highlighted.
+**Actual:** the history around it opened, but the original was at the top edge, cut off (or above it, out of view).
+An original already loaded was fine. **Cause:** `RoomScreen`'s `Scroll.Target` took the target's index from
+`vm.rows`, which has the new window at once, and scrolled the list before it was composed with it: `scrollToItem`
+and the quarter raise were measured on the old rows (other messages, other heights), and the new rows then came in
+under that position (logged on the emulator: index 33 + 56 px, the target at 1776 of 1832 px). Second, near the start
+of the history the list can't bring the target down to the bottom, and the raise still lifted it a quarter more.
+**Fix:** the scrolls wait for the rows the list was composed with (`composed`, set in a `SideEffect`; `Scroll.Bottom`
+already waited for its newest row), for up to 5 s (1 s timed out on the emulator, leaving the list unscrolled), and the
+raise only brings the target up to the quarter line. Checked on the emulator: originals 3, 20, 300 and 500 messages
+back from the bottom. Test: `UiFeaturesTest` "a quote of an original outside the window shows the original" (it passes
+without the fix too: Robolectric composes before the scroll runs, so the race shows only on a device).
 
 ## Checked and fine
 
