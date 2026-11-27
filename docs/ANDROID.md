@@ -2059,3 +2059,10 @@ name of such an author is plain text instead of a menu with *Ban…* alone (§36
 As on the web (DESIGN.md §20.4), picking in the composer's emoji sheet puts the emoji in and leaves the sheet open, so
 several can be added at once; swiping it down or tapping outside closes it. The reaction sheet still closes on the
 pick. No test: Robolectric draws no emoji, so the grid is empty in `UiPortsTest`.
+
+## 95. The screen stays on while a video plays (2026-11-27)
+
+In the viewer, a video playing past the phone's screen timeout dimmed and turned off the screen. `Video` (`ViewerScreen`)
+now follows the player's `onIsPlayingChanged` and sets `keepScreenOn` on the view while it plays. Paused, ended or
+swiped away, the screen times out as usual again. The browser handles this for the web's `<video>`. No test:
+Robolectric doesn't play video. Check by hand on a device.

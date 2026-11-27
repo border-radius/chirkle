@@ -62,6 +62,7 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -378,11 +379,16 @@ private fun Video(item: Item, active: Boolean, chrome: Boolean, onTap: () -> Uni
     val services = LocalServices.current
     val context = LocalContext.current
     var failed by remember { mutableStateOf(false) }
+    var playing by remember { mutableStateOf(false) }
     val player = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_OFF } }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 failed = true
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
             }
         }
         player.addListener(listener)
@@ -398,6 +404,12 @@ private fun Video(item: Item, active: Boolean, chrome: Boolean, onTap: () -> Uni
     }
     // The page in view plays; one swiped away pauses.
     LaunchedEffect(active) { player.playWhenReady = active }
+    // The screen stays awake while a video plays, and may sleep again once it pauses or ends.
+    val view = LocalView.current
+    DisposableEffect(view, playing) {
+        if (playing) view.keepScreenOn = true
+        onDispose { if (playing) view.keepScreenOn = false }
+    }
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }, contentAlignment = Alignment.Center) {
         ContentFrame(player, Modifier.fillMaxSize().semantics { contentDescription = item.name }, contentScale = ContentScale.Fit)
         if (failed) Text(stringResource(R.string.viewer_couldnt_play_this_video), color = Color.White)
