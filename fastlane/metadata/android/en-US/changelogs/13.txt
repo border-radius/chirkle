@@ -1,1 +1,1 @@
-Fixes.
+Redesigned room: a see-through header and composer, a single-box composer with square attachment tiles, one-line link previews. The room list shows a number only for mentions, replies and DMs, a dot otherwise. New rooms and collections warn when a name is taken. The emoji sheet stays open for several picks. Fixed: the screen turning off during a video, a reply's original opening off screen, the keyboard not opening after Reply or Edit, and empty circles for avatars that fail to load.

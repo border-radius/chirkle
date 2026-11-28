@@ -60,6 +60,38 @@ jobs:
           test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::gofmt: the files above need formatting"; exit 1; }
       - run: go test ./...
 
+  cli:
+    name: Console client (cli/)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - name: vet and gofmt
+        working-directory: cli
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)" || { gofmt -l .; echo "::error::gofmt: the files above need formatting"; exit 1; }
+      - name: Tests, against a fresh server (docs/CLI.md §6)
+        run: |
+          data=$(mktemp -d)
+          bin/chirkle-server superuser upsert admin@example.com adminpassword1 --dir="$data" --migrationsDir=pb_migrations
+          bin/chirkle-server serve --http=127.0.0.1:8099 --dir="$data" --migrationsDir=pb_migrations \
+            --hooksDir=pb_hooks --publicDir=pb_public > "$data/server.log" 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8099/api/health > /dev/null && break; sleep 0.5; done
+          cd cli
+          CHIRKLE_TEST_SERVER=http://127.0.0.1:8099 CHIRKLE_TEST_ADMIN=admin@example.com:adminpassword1 go test -count=1 ./...
+      - name: Cross-builds
+        working-directory: cli
+        run: |
+          for t in linux/amd64 linux/arm64 darwin/arm64 windows/amd64 freebsd/amd64; do
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} go build -trimpath -o /dev/null . || exit 1
+          done
+
   unit:
     name: Unit tests
     runs-on: ubuntu-24.04

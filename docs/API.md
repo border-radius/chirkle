@@ -1,6 +1,6 @@
 # The client API
 
-What the clients (web/, android/) rely on from the server. The Android app is installed and updated by its users, on
+What the clients (web/, android/, and the console client cli/, docs/CLI.md) rely on from the server. The Android app is installed and updated by its users, on
 their own schedule (F-Droid), so a release of the server has to keep working with the apps already out there.
 Anything listed here is a public interface. A change to it needs the compatibility check below, not just green
 tests.
