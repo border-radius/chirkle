@@ -98,3 +98,32 @@ describe("forward dialog: Enter forwards to the first match (QA BUG-272)", () =>
     document.body.replaceChildren();
   });
 });
+
+describe("forward dialog: each room's icon says who can see it (QA BUG-300)", () => {
+  it('"#" for a public room, the lock for a private one, the globe for Open Air', () => {
+    const ac = new AbortController();
+    const rooms = [
+      { id: "r1", name: "general", kind: "", visibility: "public" },
+      { id: "r2", name: "secret", kind: "", visibility: "private" },
+      { id: "r3", name: "outside", kind: "", visibility: "open" },
+    ] as unknown as Room[];
+    const d = createForwardDialog({
+      rooms: () => rooms,
+      me: () => null,
+      searchUsers: async () => [],
+      avatarUrl: () => "",
+      onPick: async () => null,
+      signal: ac.signal,
+    });
+    document.body.append(d.el);
+    d.open(1);
+    const icons = [...d.el.querySelectorAll(".forward-list .hash")];
+    expect(icons.map((i) => [i.textContent, i.classList.contains("i-lock"), i.classList.contains("i-globe")])).toEqual([
+      ["#", false, false],
+      ["", true, false],
+      ["", false, true],
+    ]);
+    ac.abort();
+    document.body.replaceChildren();
+  });
+});

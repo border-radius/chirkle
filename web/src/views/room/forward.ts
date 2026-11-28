@@ -4,7 +4,7 @@
 // A lazy chunk: the room view loads it when Forward is first chosen.
 
 import { h, uniqueId } from "../../dom.ts";
-import { otherMember, roomTitle } from "../../lib/rooms.ts";
+import { otherMember, roomTitle, visibilityOf } from "../../lib/rooms.ts";
 import type { Room, User } from "../../lib/types.ts";
 import * as S from "../../strings/room-forward.ts";
 import { type AvatarUrl, avatar } from "../../ui/avatar.ts";
@@ -69,10 +69,15 @@ export function createForwardDialog(opts: {
     const items = [
       ...rooms.map((r) => {
         const other = otherMember(r, me);
-        // A room's name after its "#" icon: its title, "#name", would say "#" twice.
-        return target(other ? roomTitle(r, me) : r.name, other ? avatar(other, 24, opts.avatarUrl) : h("span", { class: "hash" }, "#"), {
-          room: r,
-        });
+        // A room's name after its "#" icon: its title, "#name", would say "#" twice. A private or Open Air room has
+        // its lock or globe there, as in the sidebar and Jump to (§23, QA BUG-300).
+        const v = visibilityOf(r);
+        const icon = other
+          ? avatar(other, 24, opts.avatarUrl)
+          : v === "public"
+            ? h("span", { class: "hash" }, "#")
+            : h("span", { class: `hash ic ${v === "open" ? "i-globe" : "i-lock"}`, "aria-hidden": "true" });
+        return target(other ? roomTitle(r, me) : r.name, icon, { room: r });
       }),
       // (Found for an earlier query, until this one's answer comes: only those that still match.)
       ...(q ? people.filter((u) => !inDms.has(u.id) && u.name.toLowerCase().includes(q)) : []).map((u) =>

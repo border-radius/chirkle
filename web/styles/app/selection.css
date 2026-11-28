@@ -293,6 +293,12 @@ dialog.forward .hash {
   height: 1.875rem;
 }
 
+/* A lock or a globe on the tile (QA BUG-300): the switcher's size. */
+dialog.forward .hash.ic::before {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 dialog.forward .hash {
   display: flex;
   align-items: center;

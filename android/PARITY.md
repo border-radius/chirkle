@@ -19,7 +19,7 @@ decodes `shared/schema/answers.json`'s examples of each route's answer with the 
 | `accounts` | `UiFeaturesTest`: renaming yourself | Partial: password change |
 | Your data and deleting your account (DESIGN.md §43, 2026-11-15): `tests/component/views/profile.test.ts` "your data", `tests/integration/account_delete.test.ts` | `ChirkleApiTest`: the export's states, its link without the session, a wrong password, no sign-in after; `UiFeaturesTest`: Prepare my data → Preparing → Ready with Download; Delete account asks for a choice and the password, then logs out (ANDROID.md §73) | Partial: the download manager's fetch (by hand on the emulator, not yet tried) |
 | `password_reset` | `UiPasswordResetTest`: "Forgot password?" only with mail settings, the form sends the link and says where it went; setting the new password is the web page's (the link opens in the browser) | Covered |
-| `avatar` | — | Not yet (the photo picker can't be driven on Robolectric; changed by hand on the emulator, ANDROID.md §22.3) |
+| `avatar` | `UiFeaturesTest`: a picture that doesn't load shows the initials (QA BUG-302) | Partial: changing it (the photo picker can't be driven on Robolectric; changed by hand on the emulator, ANDROID.md §22.3) |
 | `realtime` | `UiFlowTest`: a live message; `ServicesTest`, `ChirkleApiTest`: realtime events | Covered |
 | `reconnect` | `ChirkleApiTest`: reconnect after a pause says events may have been missed | Partial: gap fill after it |
 | `history` | `ServicesTest`: opens around a message far back, jumps to the latest; `UiPortsTest`: Jump to beginning from the room menu (QA pass 32) | Partial: scrolling the edges |

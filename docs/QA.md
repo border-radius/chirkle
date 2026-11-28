@@ -2674,3 +2674,70 @@ loads first) took it to 66.12 KB: raised to 66.25 KB (docs/history/BUDGETS.md).
   Large scales the whole interface, buttons too, as on the web.
 - The emulator's helper `~/.local/bin/emu-pb.sh` starts plain `bin/pocketbase` (no Go routes), so the app talks to it as
   to an old server (no unread counts, the records API for pages); this pass used `bin/chirkle-server` on another port.
+
+# QA pass 45 — heavy testing, the parts pass 44 left, 2026-11-28
+
+The same server and people as pass 44, on what it didn't cover: selecting several messages, forwarding them to a DM
+and deleting them; collections (making one, uploading into it, a file that isn't an image, making it public, another
+person subscribing, "1 new" live); Jump to (recency, filtering, "Nothing found.", Escape); the profile page (a handle's
+rules and a taken one, an empty or long display name, markup as a name, the password's three errors, a picture of the
+wrong type, adding and removing one); a private room, its access dialog, an invite link copied, opened by someone
+signed in, by a guest, and revoked; Mentions & replies and opening an item at its message; hiding a room, archiving and
+unarchiving it as seen by someone else; the composer's keys (↑ to edit the last message, Esc, Ctrl+↑/↓ through replies,
+@ and : suggestions, Ctrl+/); sending while offline and Retry; every dialog at 360 px with touch. The Android app on the
+emulator: the forward sheet, switching between accounts on two servers, the room list's private rooms and collections.
+Numbering continues from BUG-299.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-300 | Low | Web, forward | The Forward dialog showed "#" for every room, a private or Open Air one too, where everything else shows its lock or globe (§23) | web, app n/a (its sheet shows them) | Fixed |
+| BUG-301 | Low | Web, sidebar | The open collection's item count was grey on the light theme's purple row: 1.2:1, hardly readable | web, app n/a (no open row in its list) | Fixed |
+| BUG-302 | Low | Android, avatars | A picture that failed to load left an empty coloured circle, not the initials (§15) | app, web n/a (it falls back on `error` already) | Fixed |
+
+## BUG-300 — "#" for every room in the Forward dialog (Low, Web)
+
+**Steps:** select a message, Forward. **Expected:** each room with the icon it has in the sidebar and Jump to: "#",
+the lock, the globe ("shown everywhere with the same names and icons", §23). **Actual:** "#" for all of them, an Open
+Air room and your private rooms too; the Android app's sheet shows them. **Fix:** a private or Open Air room's tile has
+the lock or globe (`forward.ts`), the switcher's size (`selection.css`). Test: `user-search.test.ts` "forward dialog:
+each room's icon says who can see it".
+
+## BUG-301 — The open collection's count unreadable (Low, Web)
+
+**Steps:** light theme, open a collection with items. **Expected:** its row's count readable, like the name.
+**Actual:** the count kept `--dim` on the row's accent fill: 1.24:1. **Fix:** on the open row it takes `--row-on-icon`
+(white on the light theme's accent, the accent on the dark theme's well) (`room-list.css`). Test: `collections.spec.ts`
+"make one, save from the chat…" measures it (4.5:1 at least; fails without). axe passed it before: it leaves out a text
+node that sits beside a visually hidden word.
+
+## BUG-302 — An empty circle for a picture that doesn't load (Low, Android)
+
+**Seen:** on the emulator's Accounts screen, the account on the other server had an empty teal circle where its
+picture should be; once that account was in use the picture showed, and then on the Accounts screen too (it couldn't
+be made to fail again). **Cause:** `Avatar` showed the initials only for someone without a picture; with one, it drew
+the picture on the coloured circle, so a picture that never came left the circle bare. The web swaps a failing picture
+for the initials (§15). **Fix:** `AsyncImage`'s `onError` shows the initials (`Avatar.kt`). Test: `UiFeaturesTest` "a
+picture that doesn't load shows the initials" (a file the server doesn't have; fails without).
+
+## Checked and fine
+
+- Selecting three messages, forwarding them to a DM (the other person's DM count goes up live), and deleting two with
+  the confirm step.
+- Collections: a text file refused by name, the rest uploaded; subscribing, "1 new" live in the subscriber's sidebar and
+  "1 new since your last visit" on the page.
+- The profile page's messages for every wrong handle, name and password; a video refused as a picture.
+- An invite link: the page for someone signed in, Join, the creator's member count live; a guest asked to log in; a
+  revoked link "doesn't work" (the 404s are the expected answers).
+- Archived: the other person loses the composer, Edit and reactions, and gets them back on unarchive.
+- Offline: "Not sent." with Retry and Discard; Retry sends it after the other person's newer message.
+
+## Noted, not changed
+
+- WebKit downloads the preloaded font twice (and warns it was "preloaded … but not used"): it fetches a same-origin
+  `@font-face` without CORS, so the preload (`crossorigin`, which Chromium and Firefox need to use it) never matches.
+  Without `crossorigin` WebKit matches and Chromium double-downloads; a 48 KB font, once per browser (it is cached as
+  immutable).
+- After a fresh install of the debug build, the emulator took about 30 s to show the room list (no baseline profile
+  yet, a debug build), with the emulator busy; not measured with a release build.
+- On the web, Jump to's "most recent first" is kept in memory: after a reload, rooms are ordered by their last message
+  until opened again (§32, as designed).

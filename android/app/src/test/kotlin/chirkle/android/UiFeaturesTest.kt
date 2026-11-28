@@ -1,5 +1,6 @@
 package chirkle.android
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
@@ -29,6 +30,7 @@ import chirkle.android.data.model.Visibility
 import chirkle.android.data.testing.TestServer
 import chirkle.android.data.testing.TestServer.newUser
 import chirkle.android.data.testing.TestServer.uniq
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -508,5 +510,26 @@ class UiFeaturesTest {
         ui.waitFor("Message forwarded.")
         val dm = runBlocking { a.api.listRooms() }.single { it.isDm && b.user.id in it.members }
         ui.until { a.api.page(Pages.latest(dm.id)).singleOrNull()?.forwardedFrom == a.user.id }
+    }
+
+    @Test fun `a picture that doesn't load shows the initials (QA BUG-302)`() {
+        val u = newUser()
+        val a = chirkle.android.data.repo.Accounts(
+            chirkle.android.data.testing.MemoryAccountEnv(listOf(TestServer.url to u.api.pb.authStore.session.value)),
+            okhttp3.OkHttpClient(), kotlinx.coroutines.Dispatchers.Main.immediate, TestServer.url, allowHttp = true,
+        )
+        a.scope.launch { a.start() }
+        // A file the server doesn't have: its thumbnail answers 404.
+        val gone = chirkle.android.data.model.User(id = u.user.id, name = "Zed Quill", avatar = "gone_0123456789.png")
+        compose.setContent {
+            val services = a.active.collectAsState().value
+            if (services != null) {
+                androidx.compose.runtime.CompositionLocalProvider(chirkle.android.ui.LocalServices provides services) {
+                    chirkle.android.ui.Avatar(gone, size = androidx.compose.ui.unit.Dp(48f))
+                }
+            }
+        }
+        ui.waitFor("ZQ")
+        a.scope.launch { a.close() }
     }
 }

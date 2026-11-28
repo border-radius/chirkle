@@ -90,6 +90,22 @@ test("collections: make one, save from the chat, follow, see what's new, attach 
   await expect(sidebarRow(b, "Pets").locator(".badge")).toHaveCount(0);
   const { violations } = await new AxeBuilder({ page: b }).include("section.collection").withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  // The open collection's row in the sidebar: its count on the accent (QA BUG-301).
+  // (axe leaves the count out: a text node beside a visually hidden word.)
+  await b.emulateMedia({ colorScheme: "light" });
+  const count = sidebarRow(b, "Pets").locator(".n");
+  await expect(count).toHaveText(/^2/);
+  const ratio = await count.evaluate((el) => {
+    const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: string) => {
+      const [r, g, b] = rgb(c).map((v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const [hi, lo] = [lum(getComputedStyle(el).color), lum(getComputedStyle(el.closest("li")!).backgroundColor)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  });
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
+  await b.emulateMedia({ colorScheme: null });
   await b.screenshot({ path: "test-results/collection-page.png" });
 
   // Bob attaches from the collection: the message shows it with a badge that links to it.

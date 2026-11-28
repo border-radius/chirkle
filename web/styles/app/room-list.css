@@ -258,6 +258,11 @@
   color: var(--row-on-icon);
 }
 
+/* The open collection's count: --dim was 1.4:1 on the light theme's accent (QA BUG-301). */
+.room-section li a[aria-current="page"] > .n {
+  color: var(--row-on-icon);
+}
+
 .room-section li a[aria-current="page"] > .dot {
   background: var(--row-on-icon);
 }

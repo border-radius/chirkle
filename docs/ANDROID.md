@@ -2087,3 +2087,12 @@ to have the focus again, then focuses the box and calls `LocalSoftwareKeyboardCo
 and not hidden); on a touch screen, where Enter makes a new line, the bar shows the message being edited, as the reply
 bar shows its quote (`Composer`). The web's side of it is BUG-299 (Save and Cancel under its edit box on a phone).
 Checked on the Android 9 emulator; `UiFeaturesTest` "edits show as edited" checks the focus and the hint.
+
+## 98. QA pass 45 (2026-11-28)
+
+**A picture that doesn't load** (QA BUG-302): `Avatar` drew its coloured circle and the picture over it, so a picture
+that failed (gone from the server, the server out of reach) left an empty circle. It now shows the initials then, as
+the web's avatar does on its `error` event (DESIGN.md §15): `AsyncImage`'s `onError` sets a flag kept per URL.
+`UiFeaturesTest` "a picture that doesn't load shows the initials" (a file the server doesn't have: 404). The pass's two
+web fixes had nothing to port: the app's forward sheet already shows each room's lock or globe (BUG-300), and its room
+list has no open-row highlight for a collection's count (BUG-301).
