@@ -22,6 +22,7 @@ cli/
   internal/config/      saved accounts, drafts
   internal/text/        "@handle" rules                                      mentions_test.go: shared/vectors/mentions.json
   internal/emoji/       emoji by name (names.txt: the web's list)           emoji_test.go: the same as web/src/lib/emoji-names.ts
+  internal/jump/        Jump to's ranking and order                       jump_test.go: shared/vectors/jump.json
   internal/ui/          the screens                                          app_test.go: signup → read → send → reply, edit, react, delete, keys only
 ```
 
@@ -44,6 +45,13 @@ Nothing the other clients don't use (docs/API.md):
 | React | `POST /api/chat/reactions { message, emoji, on }` |
 | "@" | `GET /api/chat/mentionable?room=&q=` |
 | Live | `GET /api/chat/live`, then `/api/realtime`: `chat/messages`, `rooms/*`, `room_reads/*`; `chat/keepalive` ignored |
+| Invite links | `GET /api/chat/invites/{token}` (where it goes; 404 for any link that doesn't work), `POST` to it joins |
+| New password | `users/confirm-password-reset { token, password, passwordConfirm }` (the emailed `/reset-password/<token>`) |
+| DMs | `GET /api/chat/users?q=`, `POST /api/chat/remote-users { address }` (`user@host`), `POST /api/chat/dms { user }` |
+| Search | `rooms/{id}/messages?kind=latest&q=` (a 429 says to wait) |
+| Mentions & replies | `GET /api/chat/inbox?before=<cursor>`, `POST /api/chat/inbox/seen` |
+| Hide, archive | `hidden_rooms` list / create / delete; `PATCH rooms/{id} { archived }` (its creator; a moderator for a public room) |
+| Go to a message | `messages/{id}`, then `older` and `newer` pages from it: a window that doesn't reach the latest |
 
 The User-Agent is `chirkle-cli/<version> (<os>/<arch>)`. `/stats` counts these connections as neither web nor
 Android until the server learns the name (optional).
@@ -61,6 +69,9 @@ again, and for each room loaded the messages after its last (`newer`) and the ed
   fields. An account made whose login then fails says to log in (not to sign up again).
 - Esc on the form reads as a guest: the Open Air rooms; L and S open the form later.
 - Scriptable: `chirk signup --server S --name N --email E [--invite CODE] [--password-stdin]`, `chirk login …`.
+- `chirk join <link>` joins a private room by its invite link (`https://host/invite/<token>`, or the token alone for the
+  saved server), with the account saved for that server. `chirk reset-password [--password-stdin] <link>` sets a new
+  password from the emailed link (asked twice); then `chirk login`.
 - Sessions: `$XDG_CONFIG_HOME/chirkle/accounts.json` (`CHIRKLE_CONFIG` overrides), mode 0600, written atomically.
   Several servers and accounts can be kept; the TUI uses the current one, or the one for `chirk <server>`. The token
   is renewed at start; a refused one removes the account and brings the form up.
@@ -76,12 +87,17 @@ Rooms on the left at 90 columns and more; below, one pane at a time. `?` lists t
 | Ctrl+/, i | | Write (as the web's Ctrl+/) |
 | ↑↓ j k, g G | rooms | Move; Enter opens (into the composer when you can post) |
 | n | | Next unread room |
+| D | | Direct message: a name or @handle (as you type), or `user@server` then Enter |
+| I | | Mentions & replies (and reactions to yours), new ones marked ●; Enter goes to the message, ↓ at the end loads more |
+| / | messages | Search in the room (Enter searches; the newest 50 hits); Enter on one goes there |
+| H, A | rooms (the highlighted) or messages (the open) | Hide / show for you; archive / restore for everyone (asks y/n) |
 | ↑↓ j k | messages | Select a message; at the top, older messages load |
 | PgUp PgDn, g G | messages | Scroll; first / latest |
 | o | messages | The selected message's links and files: 1–9 opens one (`xdg-open`/`open`), Alt+1–9 copies it (OSC 52, works over SSH) |
 | r | messages | Reply (a failed message: send it again) |
 | e, d, + | messages | Edit yours; delete (asks y/n); react: a name or 1–8 of the quick ones, again takes it back |
-| Enter, Backspace | messages | On a reply, go to the original (if loaded); back to the reply |
+| Enter, Backspace | messages | On a reply, go to the original (loaded around it if further back); back to the reply |
+| ↓, G | messages, gone further back | At the end, the next messages; the latest (also on sending) |
 | ↑ | empty composer | Edit your last message (Esc cancels; saving it empty asks to delete) |
 | @, : | composer | People who can see the room / emoji by name, at the end of the text; Tab or Enter picks. A whole `:fire:` becomes 🔥 |
 | Enter / Alt+Enter, Ctrl+J | composer | Send / new line |
@@ -120,7 +136,8 @@ fields are cleaned here all the same.)
     refused, the live event, unread, a read mark, paging order, a guest seeing only Open Air rooms.
   - `internal/ui`: the whole program driven by keys only: sign up on the form, the account saved, Jump to, read,
     send, a live message, the link picker, help; then "@" and ":" completion, a mention, a reply, ↑ to edit, a
-    reaction by name, a delete after its question, and a draft still there after a restart.
+    reaction by name, a delete after its question, and a draft still there after a restart; then search and going to
+    a message further back, a reply in Mentions & replies, a DM by name, hide and show, archive.
 
 CI's `cli` job builds the server, starts it on an empty data directory, runs all of them, checks gofmt and
 cross-builds. By hand:
@@ -151,9 +168,14 @@ has nothing more to set.
    empty composer edits your last message; drafts kept across runs (`drafts.json` beside the accounts, 0600); "(edited)"
    also on a message under another's header. Left for later: the lists follow the end of the text only, and a quote of a
    message further back than the window says so instead of going there (milestone 3's room controller).
-3. Invite links (`chirk join <link>`), setting a new password from the emailed link (`chirk reset-password <link>`),
-   DMs (also `user@host`), search in a room (`q`, its 429), Mentions & replies, hide and archive; Jump to by
-   `shared/vectors/jump.json`, the message window by `window.json`, `room.json` and `unread.json` replayed.
+3. **Done (2026-11-28):** `chirk join <link>`, `chirk reset-password <link>`; DMs by name, handle or `user@host` (D);
+   search in a room (`/`, not `q`, which quits; its 429 says to wait); Mentions & replies (I); hide and archive (H, A),
+   with a Hidden section in the list; going to any message (a search hit, an inbox row, a quote further back) loads a
+   window around it, which ↓ extends and G (or sending) leaves for the latest; Jump to ranked and ordered as the web
+   (`internal/jump`, `shared/vectors/jump.json`; "opened" kept for the run only). Left for later: replaying
+   `window.json`, `room.json` and `unread.json` (the window has no 300-message cap and no "New" line after going to a
+   message; the counts are the server's plus live increments), the live `hidden_rooms` topic (read again on reconnect),
+   and a successful reset in the tests (it needs the email's token; the refusal is checked by hand).
 4. File upload by path, terminal notifications (bell, OSC 9/777) of DMs and mentions, moderator actions, export and
    account deletion as commands, switching accounts in the TUI, `chirk update`.
 

@@ -28,6 +28,8 @@ const usage = `chirk: the Chirkle console client
   chirk [server]                     open the client (the saved account, or log in / sign up / read as a guest)
   chirk login  [--server S] [--email E] [--password-stdin]
   chirk signup [--server S] [--name N] [--email E] [--invite CODE] [--password-stdin]
+  chirk join <invite link>           join a private room by its invite link (logged in on that server)
+  chirk reset-password <link>        set a new password from the emailed link [--password-stdin]
   chirk logout
   chirk version
 
@@ -47,7 +49,7 @@ func run(args []string) error {
 	cmd := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
-		case "login", "signup", "logout", "version", "help":
+		case "login", "signup", "logout", "version", "help", "join", "reset-password":
 			cmd, args = args[0], args[1:]
 		}
 	}
@@ -77,6 +79,10 @@ func run(args []string) error {
 		return cfg.Save()
 	case "login", "signup":
 		return authCommand(cmd, args)
+	case "join":
+		return joinCommand(args)
+	case "reset-password":
+		return resetCommand(args)
 	}
 
 	fs := flag.NewFlagSet("chirk", flag.ContinueOnError)
@@ -248,4 +254,99 @@ func readPassword(fromStdin, confirm bool) (string, error) {
 		return "", errors.New("the passwords differ")
 	}
 	return p, nil
+}
+
+// linkClient takes a link's server (or the saved one, or asks), and the saved session there if any.
+func linkClient(link, segment string) (*api.Client, *config.Account, string, error) {
+	server, token, err := api.LinkToken(link, segment)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if server == "" {
+		if a := cfg.CurrentAccount(); a != nil {
+			server = a.Server
+		} else if server, err = prompt("Server address: "); err != nil {
+			return nil, nil, "", err
+		}
+	}
+	c, err := api.New(server)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	var acct *config.Account
+	for i := range cfg.Accounts {
+		if cfg.Accounts[i].Server == c.Base {
+			acct = &cfg.Accounts[i]
+		}
+	}
+	return c, acct, token, nil
+}
+
+var errBadInvite = errors.New("this invite link doesn't work (expired, revoked or not for you)")
+
+func joinCommand(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: chirk join <invite link>")
+	}
+	c, acct, token, err := linkClient(args[0], "invite")
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	if acct == nil {
+		return fmt.Errorf("log in to %s first (chirk login --server %s), then run this again", c.Base, c.Base)
+	}
+	c.SetSession(acct.Token, &acct.User)
+	inv, err := c.InviteInfo(ctx, token)
+	if api.IsStatus(err, 404) {
+		return errBadInvite
+	} else if err != nil {
+		return err
+	}
+	if inv.Member {
+		fmt.Printf("You're already in %s.\n", inv.Room.Name)
+		return nil
+	}
+	if _, err := c.Join(ctx, token); err != nil {
+		if api.IsStatus(err, 404) {
+			return errBadInvite
+		}
+		return err
+	}
+	fmt.Printf("Joined %s. Run chirk to open it.\n", inv.Room.Name)
+	return nil
+}
+
+func resetCommand(args []string) error {
+	fs := flag.NewFlagSet("chirk reset-password", flag.ContinueOnError)
+	stdin := fs.Bool("password-stdin", false, "read the new password from stdin")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: chirk reset-password [--password-stdin] <link from the email>")
+	}
+	c, _, token, err := linkClient(fs.Arg(0), "reset-password")
+	if err != nil {
+		return err
+	}
+	password, err := readPassword(*stdin, true)
+	if err != nil {
+		return err
+	}
+	if n := len(password); n < 8 || n > 71 {
+		return errors.New("the password needs 8 characters to 71 bytes")
+	}
+	if err := c.ConfirmPasswordReset(context.Background(), token, password); err != nil {
+		if api.IsStatus(err, 400) {
+			return fmt.Errorf("the link has expired or was used: ask for a new one (%w)", err)
+		}
+		return err
+	}
+	fmt.Println("Password set. Log in with it: chirk login --server", c.Base)
+	return nil
 }

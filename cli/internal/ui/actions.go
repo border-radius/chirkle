@@ -275,7 +275,8 @@ func (a *App) goToQuote(m *api.Message) tea.Cmd {
 			return nil
 		}
 	}
-	return a.say("The original is further back (going there comes with milestone 3)")
+	a.back = append(a.back, m.ID)
+	return a.goTo(a.open, m.ReplyToID, "")
 }
 
 func (a *App) goBack() tea.Cmd {

@@ -48,6 +48,7 @@ type roomState struct {
 	offset  int    // lines scrolled up from the bottom
 	atTop   bool   // the first line drawn is the window's first (set by View)
 	draft   string
+	newer   bool // the window doesn't reach the latest (gone to a message further back): ↓ loads more, G the latest
 }
 
 // App is the program's model.
@@ -91,6 +92,11 @@ type App struct {
 	suggStart int    // where the token being completed starts
 	suggQuery string // the "@an" last asked for
 	drafts    *config.Drafts
+
+	// more.go.
+	list   *listBox          // a DM, search or inbox list is up
+	hidden map[string]string // room → its hidden_rooms row
+	opened map[string]string // room → when it was last opened this run (Jump to's order)
 }
 
 // New makes the app for a client (logged in or a guest) and the accounts file.
@@ -106,7 +112,7 @@ func New(c *api.Client, cfg *config.File, site api.Site) *App {
 		c: c, cfg: cfg, site: site, st: render.NewStyles(true), state: map[string]*roomState{},
 		compose: ta, links: os.Getenv("TERM") != "dumb" && os.Getenv("CHIRKLE_NO_HYPERLINKS") == "",
 		events: make(chan api.Event, 256), conn: make(chan api.Status, 8),
-		drafts: config.LoadDrafts(),
+		drafts: config.LoadDrafts(), hidden: map[string]string{}, opened: map[string]string{},
 	}
 	if c.Token() == "" {
 		f := newAuthForm(site, modeLogin)
@@ -173,7 +179,7 @@ func (a *App) start() tea.Cmd {
 		}
 		c.Realtime(ctx, subs, a.events, a.conn)
 	}()
-	return tea.Batch(a.loadRooms(), a.loadUnread(), a.waitEvent(), a.waitStatus())
+	return tea.Batch(a.loadRooms(), a.loadUnread(), a.loadHidden(), a.waitEvent(), a.waitStatus())
 }
 
 func (a *App) waitEvent() tea.Cmd {
@@ -236,20 +242,36 @@ func (a *App) room(id string) *api.Room {
 	return nil
 }
 
-// order is the room list as drawn: rooms by name, then DMs, newest first. Hidden & archived rooms go last.
+// section is the room list's section a room is in.
+func (a *App) section(r *api.Room) string {
+	switch {
+	case r.Archived:
+		return "Archived"
+	case a.hidden[r.ID] != "":
+		return "Hidden"
+	case r.IsDM():
+		return "Direct messages"
+	}
+	return "Rooms"
+}
+
+// order is the room list as drawn: rooms by name, then DMs, newest first. Hidden, then archived rooms go last.
 func (a *App) order() []*api.Room {
-	var rooms, dms, archived []*api.Room
+	var rooms, dms, hidden, archived []*api.Room
 	for i := range a.rooms {
 		r := &a.rooms[i]
-		switch {
-		case r.Archived:
+		switch a.section(r) {
+		case "Archived":
 			archived = append(archived, r)
-		case r.IsDM():
+		case "Hidden":
+			hidden = append(hidden, r)
+		case "Direct messages":
 			dms = append(dms, r)
 		default:
 			rooms = append(rooms, r)
 		}
 	}
+	archived = append(hidden, archived...)
 	me := a.me()
 	sort.SliceStable(rooms, func(i, j int) bool {
 		return strings.ToLower(rooms[i].Title(me)) < strings.ToLower(rooms[j].Title(me))
@@ -293,6 +315,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateAuth(msg)
 	}
 
+	if cmd, ok := a.moreMsg(msg); ok {
+		return a, cmd
+	}
 	switch m := msg.(type) {
 	case roomsLoaded:
 		a.rooms = m.rooms
@@ -428,7 +453,11 @@ func (a *App) openRoom(id string, toComposer bool) tea.Cmd {
 		a.keepDraft()
 	}
 	a.replyTo, a.sugg, a.back = nil, nil, nil
+	if a.open != "" && a.open != id {
+		a.opened[a.open] = now() // left just now: Ctrl+K Enter goes back to it
+	}
 	a.open = id
+	a.opened[id] = now()
 	s := a.rs(id)
 	if !s.loaded && s.draft == "" {
 		s.draft = a.drafts.Get(a.c.Base, a.me(), id)
@@ -455,8 +484,12 @@ func (a *App) pageLoaded(m pageLoaded) tea.Cmd {
 	s.loading = false
 	switch m.kind {
 	case api.Latest:
+		keep := s.pendingOnly()
 		s.items = m.items
-		s.loaded = true
+		for _, p := range keep {
+			s.items = upsert(s.items, p)
+		}
+		s.loaded, s.newer = true, false
 		s.first = len(m.items) < pageSize && a.unread.Rooms[m.room] < pageSize
 		if n := a.unread.Rooms[m.room]; n > 0 && n <= len(s.items) {
 			s.newFrom = s.items[len(s.items)-n].ID
@@ -472,6 +505,10 @@ func (a *App) pageLoaded(m pageLoaded) tea.Cmd {
 	case api.Newer:
 		for _, x := range m.items {
 			s.items = upsert(s.items, x)
+		}
+		if s.newer {
+			s.newer = len(m.items) == pageSize
+			break
 		}
 		if len(m.items) == 200 {
 			last := s.items[len(s.items)-1]
@@ -505,7 +542,7 @@ func (a *App) markRead() tea.Cmd {
 		return nil
 	}
 	s := a.rs(a.open)
-	if s.offset > 0 || len(s.items) == 0 {
+	if s.offset > 0 || len(s.items) == 0 || s.newer {
 		return nil
 	}
 	last := ""
@@ -572,10 +609,13 @@ func (a *App) onEvent(e api.Event) tea.Cmd {
 			if ev.Action == "delete" {
 				m.Deleted = true
 			}
-			s.items = upsert(s.items, m)
+			has := slices.ContainsFunc(s.items, func(o api.Message) bool { return o.ID == m.ID })
+			if has || !s.newer { // a new message below a window that stops short comes with ↓
+				s.items = upsert(s.items, m)
+			}
 		}
 		if ev.Action == "create" && m.Author != a.me() && a.c.Token() != "" {
-			if m.Room != a.open || s == nil || s.offset > 0 {
+			if m.Room != a.open || s == nil || s.offset > 0 || s.newer {
 				if a.unread.Rooms == nil {
 					a.unread.Rooms = map[string]int{}
 				}
@@ -608,9 +648,9 @@ func (a *App) onStatus(s api.Status) tea.Cmd {
 	if !s.Reconnect {
 		return nil
 	}
-	cmds := []tea.Cmd{a.loadRooms(), a.loadUnread()}
+	cmds := []tea.Cmd{a.loadRooms(), a.loadUnread(), a.loadHidden()}
 	for room, st := range a.state {
-		if !st.loaded || len(st.items) == 0 {
+		if !st.loaded || len(st.items) == 0 || st.newer {
 			continue
 		}
 		var last *api.Message
@@ -695,6 +735,9 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 	if a.picker != nil {
 		return a.pickerKey(key)
 	}
+	if a.list != nil {
+		return a.listKey(k)
+	}
 	switch key {
 	case "ctrl+k":
 		in := textinput.New()
@@ -738,6 +781,16 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "n":
 		return a.nextUnread()
+	case "D":
+		return a.startDM()
+	case "/":
+		return a.startSearch()
+	case "I":
+		return a.startInbox()
+	case "H":
+		return a.toggleHidden()
+	case "A":
+		return a.toggleArchived()
 	case "i":
 		a.setFocus(focusComposer)
 		return nil
@@ -784,18 +837,27 @@ func (a *App) messagesKey(key string) tea.Cmd {
 			s.sel--
 		}
 	case "down", "j":
-		if s.sel >= 0 && s.sel < n-1 {
+		switch {
+		case s.sel >= 0 && s.sel < n-1:
 			s.sel++
-		} else {
+		case s.newer:
+			return a.loadNewer()
+		default:
 			s.sel, s.offset = -1, 0
 		}
 	case "pgup", "ctrl+u":
 		s.sel = -1
 		s.offset += max(1, a.msgHeight()-2)
 	case "pgdown", "ctrl+d":
+		if s.newer && s.offset == 0 {
+			return a.loadNewer()
+		}
 		s.sel = -1
 		s.offset = max(0, s.offset-max(1, a.msgHeight()-2))
 	case "G", "end":
+		if s.newer {
+			return a.toLatest()
+		}
 		s.sel, s.offset = -1, 0
 	case "g", "home":
 		if s.first {
@@ -919,6 +981,9 @@ func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
 		a.replyTo, a.sugg = nil, nil
 		a.compose.Reset()
 		a.drafts.Set(a.c.Base, a.me(), a.open, "")
+		if s.newer { // what you send goes at the end: show it there
+			return tea.Batch(a.sendCmd(id, a.open, text, replyTo), a.toLatest())
+		}
 		return a.sendCmd(id, a.open, text, replyTo)
 	}
 	var cmd tea.Cmd
@@ -943,17 +1008,6 @@ func (a *App) nextUnread() tea.Cmd {
 		}
 	}
 	return a.say("No unread rooms")
-}
-
-func (a *App) jumpMatches() []*api.Room {
-	q := strings.ToLower(strings.TrimSpace(a.jump.Value()))
-	var out []*api.Room
-	for _, r := range a.order() {
-		if q == "" || strings.Contains(strings.ToLower(r.Title(a.me())), q) {
-			out = append(out, r)
-		}
-	}
-	return out
 }
 
 func (a *App) jumpKey(k tea.KeyPressMsg) tea.Cmd {
@@ -1081,6 +1135,9 @@ func (a *App) mainView() string {
 	if a.picker != nil {
 		body = a.overlay(body, a.pickerView())
 	}
+	if a.list != nil {
+		body = a.overlay(body, a.listView())
+	}
 	if a.help {
 		body = a.overlay(body, a.helpView())
 	}
@@ -1100,13 +1157,7 @@ func (a *App) roomsView(w, h int) string {
 	me := a.me()
 	section := ""
 	for i, r := range rooms {
-		sec := "Rooms"
-		switch {
-		case r.Archived:
-			sec = "Archived"
-		case r.IsDM():
-			sec = "Direct messages"
-		}
+		sec := a.section(r)
 		if sec != section {
 			if section != "" {
 				lines = append(lines, "")
@@ -1139,7 +1190,7 @@ func (a *App) roomsView(w, h int) string {
 		if a.unread.Rooms[r.ID] > 0 {
 			style = a.st.Bold
 		}
-		if r.Archived {
+		if r.Archived || a.hidden[r.ID] != "" {
 			style = a.st.Muted
 		}
 		row = style.Render(row) + a.st.Accent.Render(mark)
@@ -1264,8 +1315,14 @@ func (a *App) roomView(w, h int) string {
 	for len(out) < mh {
 		out = append([]string{""}, out...)
 	}
-	if s.offset > 0 && len(out) > 0 {
-		out[len(out)-1] = a.st.Accent.Render(fmt.Sprintf("  ↓ more below · G latest"))
+	switch {
+	case len(out) == 0:
+	case s.offset > 0:
+		out[len(out)-1] = a.st.Accent.Render("  ↓ more below · G latest")
+	case s.newer && s.loading:
+		out[len(out)-1] = a.st.Muted.Render("  loading…")
+	case s.newer:
+		out[len(out)-1] = a.st.Accent.Render("  ↓ newer messages · G latest")
 	}
 	return strings.Join(append([]string{header}, append(out, rule, composer)...), "\n")
 }
@@ -1319,9 +1376,9 @@ func (a *App) statusView() string {
 	default:
 		switch a.focus {
 		case focusRooms:
-			left = "↑↓ move · enter open · n next unread · ctrl+k jump · tab focus · ? help"
+			left = "↑↓ move · enter open · n next unread · D message · I mentions · H hide · ctrl+k jump · ? help"
 		case focusMessages:
-			left = "↑↓ select · r reply · e edit · d delete · + react · o links · i write · ? help"
+			left = "↑↓ select · r reply · e edit · d delete · + react · o links · / search · i write · ? help"
 		case focusComposer:
 			left = "enter send · alt+enter new line · ↑ edit last · @ people · :emoji · esc back"
 		}
@@ -1376,6 +1433,10 @@ func (a *App) helpView() string {
 		{"tab / shift+tab", "Move between rooms, messages, composer"},
 		{"ctrl+/  i", "Write a message"},
 		{"n", "Next unread room"},
+		{"D", "Direct message: a name, @handle or user@server"},
+		{"I", "Mentions & replies (and reactions to yours)"},
+		{"/", "Search in the room"},
+		{"H  A", "Hide / show the room for you; archive / restore it"},
 		{"↑↓  j k", "Move; in messages, select one"},
 		{"pgup pgdn", "Scroll (older messages load at the top)"},
 		{"g  G", "First / latest"},
