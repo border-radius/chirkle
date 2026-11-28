@@ -29,6 +29,7 @@ export const DISCARD = "Discard";
 export const CONFIRM_DELETE = "Confirm delete";
 export const DELETE_THIS_MESSAGE = "Delete this message? ";
 export const CANCEL = "Cancel";
+export const SAVE = "Save";
 export const DELETE_MESSAGE = "Delete message";
 export const SHOW_THE_ORIGINAL_MESSAGE = "Show the original message";
 export const quotingShowTheOriginalMessage = (name: string, spoken: string | number) =>

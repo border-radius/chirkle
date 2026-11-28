@@ -2076,3 +2076,14 @@ into rows the list didn't have yet was measured on the old window. The quarter r
 the target) is now up to that line, from where the target is: near the start of the history it no longer pushes the
 target to the top. The same scroll opens a room at its first unread message, which gains the same fix. Checked on the
 Android 9 emulator; `UiFeaturesTest` covers the end result.
+
+## 97. QA pass 44 (2026-11-28)
+
+Two fixes in the room (docs/QA.md, QA pass 44). **The keyboard after Reply and Edit** (QA BUG-296): the message sheet's
+Reply and Edit asked the composer for focus while the sheet's window still had the focus, so the cursor went in but the
+keyboard stayed closed. They now count a request (`focusAsked` in `RoomScreen`), and an effect waits for the room's window
+to have the focus again, then focuses the box and calls `LocalSoftwareKeyboardController.show()`. **The edit bar's hint**
+(QA BUG-297): "Enter to save · Esc to cancel" only with a hardware keyboard (`Configuration.keyboard == KEYBOARD_QWERTY`
+and not hidden); on a touch screen, where Enter makes a new line, the bar shows the message being edited, as the reply
+bar shows its quote (`Composer`). The web's side of it is BUG-299 (Save and Cancel under its edit box on a phone).
+Checked on the Android 9 emulator; `UiFeaturesTest` "edits show as edited" checks the focus and the hint.

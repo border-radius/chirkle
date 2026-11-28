@@ -15,12 +15,14 @@ describe("room view", () => {
     const tiles = (id: string) => [...msgEl(id)!.querySelectorAll<HTMLElement>(".att-tile")];
     const chips = (id: string) => [...msgEl(id)!.querySelectorAll<HTMLAnchorElement>("a.att-file")];
     let revoked: string[];
+    let timers: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       let n = 0;
       revoked = [];
       vi.spyOn(URL, "createObjectURL").mockImplementation(() => `blob:local-${++n}`);
       vi.spyOn(URL, "revokeObjectURL").mockImplementation((u) => void revoked.push(u));
+      timers = vi.spyOn(globalThis, "setTimeout");
     });
 
     function paste(files: File[]) {
@@ -53,8 +55,10 @@ describe("room view", () => {
       // Takes the preview's shape before it loads, so the tile doesn't narrow and widen again.
       expect(img.style.aspectRatio).toBe("600 / 300");
       expect(chips(id).map((a) => a.textContent)).toEqual(["doc.pdf"]);
-      // The realtime echo can replace the pending copy before the send itself answers, which releases the previews.
-      await vi.waitFor(() => expect(revoked).toEqual(["blob:local-1"]));
+      // Sent, the previews are released a minute later: a video's still loading when it left the page would keep
+      // asking for its revoked blob (QA BUG-295).
+      await vi.waitFor(() => expect(timers).toHaveBeenCalledWith(URL.revokeObjectURL, 60_000, "blob:local-1"));
+      expect(revoked).toEqual([]);
     });
 
     it("an image the server shows as a file is a file while sending too", async () => {

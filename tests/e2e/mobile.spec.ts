@@ -207,3 +207,47 @@ test('on a phone at the Large text size, the room menu, the attach menu and the 
   await expect(page.locator(".emoji-suggest li").first()).toBeVisible();
   await onScreen(".emoji-suggest");
 });
+
+test('on a phone, "Beginning of #…" keeps a gutter when a long room name wraps (QA BUG-298)', async ({ page }) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada, `W${"W".repeat(38)}${uniq().slice(-6)}`);
+  await login(page, ada);
+  await page.getByRole("link", { name: room.name }).tap();
+  const box = await page.locator("li.beginning").boundingBox();
+  const text = await page.locator("li.beginning").evaluate((el) => {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    const b = r.getBoundingClientRect();
+    return { left: b.left, right: b.right };
+  });
+  expect(box).not.toBeNull();
+  // The text wraps inside the notice's padding, not against the screen's edges.
+  expect(text.left).toBeGreaterThanOrEqual(box!.x + 8);
+  expect(text.right).toBeLessThanOrEqual(box!.x + box!.width - 8);
+});
+
+test("on a phone, editing a message has Save and Cancel buttons, not the keys' hint (QA BUG-299)", async ({ page }) => {
+  const ada = await apiUser("Ada");
+  const room = await apiRoom(ada);
+  const sent = await apiSend(ada, room, "fix me");
+  await login(page, ada);
+  await page.getByRole("link", { name: room.name }).tap();
+  const mine = page.locator(`li.msg[data-id="${sent.id}"]`);
+  const edit = async () => {
+    await mine.locator(".body").tap();
+    await mine.getByRole("button", { name: "Edit" }).tap();
+    await expect(mine.getByRole("textbox", { name: "Edit message" })).toBeVisible();
+  };
+  await edit();
+  await expect(mine.getByText("Enter to save · Esc to cancel")).toHaveCount(0);
+  // There is no Esc on a phone's keyboard: Cancel closes the box.
+  await mine.getByRole("button", { name: "Cancel" }).tap();
+  await expect(mine.getByRole("textbox", { name: "Edit message" })).toHaveCount(0);
+  await expect(mine.locator(".body")).toHaveText("fix me");
+
+  await edit();
+  await mine.getByRole("textbox", { name: "Edit message" }).fill("fixed");
+  await mine.getByRole("button", { name: "Save" }).tap();
+  await expect(mine.locator(".body")).toHaveText("fixed");
+  await expect(mine.locator(".edited")).toBeVisible();
+});

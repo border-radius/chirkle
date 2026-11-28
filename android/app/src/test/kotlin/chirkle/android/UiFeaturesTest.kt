@@ -2,6 +2,7 @@ package chirkle.android
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -169,6 +170,10 @@ class UiFeaturesTest {
         longPress("frist")
         compose.onNodeWithText("Edit").performClick()
         ui.waitFor("Edit message")
+        // The box is focused once the sheet has gone (QA BUG-296); with no hardware keyboard the bar shows the message,
+        // not "Enter to save · Esc to cancel" (QA BUG-297).
+        compose.waitUntil(5_000) { runCatching { compose.onNode(hasContentDescription("Message")).assertIsFocused() }.isSuccess }
+        compose.onNodeWithText("Enter to save · Esc to cancel").assertDoesNotExist()
         compose.onNode(hasContentDescription("Message")).performTextClearance()
         type("first")
         compose.onNodeWithContentDescription("Save").performClick()

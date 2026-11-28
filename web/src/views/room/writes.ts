@@ -30,9 +30,13 @@ export function takeStrays(roomId: string): Message[] {
   return out;
 }
 
-/** Release a local message's preview URLs (sent, discarded, or the room is going away). */
-export const revokeLocal = (m: Message | undefined) => {
-  for (const f of m?.localFiles ?? []) if (f.url) URL.revokeObjectURL(f.url);
+/**
+ * Release a local message's preview URLs (sent, discarded, or the room is going away), `after` ms later. Once sent,
+ * a minute later: the server's copy takes the preview out of the page, and a video's preview still loading then keeps
+ * fetching its blob, which Chromium retries about 30 times with a growing delay once it is revoked (QA BUG-295).
+ */
+export const revokeLocal = (m: Message | undefined, after = 0) => {
+  for (const f of m?.localFiles ?? []) if (f.url) after ? setTimeout(URL.revokeObjectURL, after, f.url) : URL.revokeObjectURL(f.url);
 };
 
 /** What the writes use of the controller. */
@@ -153,7 +157,7 @@ export function createWrites(ctx: WriteCtx) {
     }
     // The server has the files now: the previews can go, even if the room was left meanwhile (its echo may already have
     // replaced the pending copy, whose previews nothing else would release; QA BUG-70).
-    if (saved) revokeLocal(msg);
+    if (saved) revokeLocal(msg, 6e4);
     if (!scope.active) {
       if (failed) stray(failed);
       return;

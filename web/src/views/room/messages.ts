@@ -408,8 +408,26 @@ export function createMessageList(opts: {
   }
 
   function editBox(m: Message): HTMLElement[] {
-    const hintText = S.ENTER_TO_SAVE_ESC_TO_CANCEL;
+    // A touch screen has no Esc (and no hint of Enter): Save and Cancel buttons instead (QA BUG-299).
+    const touch = matchMedia("(hover: none)").matches;
+    const hintText = touch ? "" : S.ENTER_TO_SAVE_ESC_TO_CANCEL;
     const hint = h("p", { class: "hint", "aria-live": "polite" }, hintText);
+    const save = (value: string) => {
+      const problem = editProblem(value, !!m.files?.length);
+      if (problem) {
+        // Say why nothing happens (an empty edit is not a delete; over-long text can't be saved).
+        hint.textContent = problem;
+        hint.classList.add("error");
+        return;
+      }
+      opts.onSaveEdit(m.id, value);
+    };
+    const cancel = () => {
+      editing = null;
+      editText = null;
+      render();
+      opts.onCancelEdit();
+    };
     const box = h("textarea", {
       class: "edit-input",
       rows: rowsFor(m.text),
@@ -425,27 +443,19 @@ export function createMessageList(opts: {
         keydown: (e) => {
           if (e.key === "Enter" && !e.shiftKey && !composing(e)) {
             e.preventDefault();
-            const value = (e.currentTarget as HTMLTextAreaElement).value;
-            const problem = editProblem(value, !!m.files?.length);
-            if (problem) {
-              // Say why nothing happens (an empty edit is not a delete; over-long text can't be saved).
-              hint.textContent = problem;
-              hint.classList.add("error");
-              return;
-            }
-            opts.onSaveEdit(m.id, value);
+            save((e.currentTarget as HTMLTextAreaElement).value);
           } else if (e.key === "Escape" && !composing(e)) {
             e.preventDefault();
-            editing = null;
-            editText = null;
-            render();
-            opts.onCancelEdit();
+            cancel();
           }
         },
       },
       signal,
     });
-    return [box, hint];
+    if (!touch) return [box, hint];
+    const press = (label: string, cls: string, run: () => void) =>
+      h("button", { type: "button", class: cls, on: { click: run }, signal }, label);
+    return [box, hint, h("div", { class: "confirm" }, [press(S.SAVE, "save", () => save(box.value)), press(S.CANCEL, "cancel", cancel)])];
   }
 
   /**

@@ -49,12 +49,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -73,6 +75,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -146,6 +150,18 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     val focus = remember { FocusRequester() }
     val clipboard = LocalClipboard.current
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val windowInfo = LocalWindowInfo.current
+    // Reply and Edit from the message sheet: the composer is focused once the sheet is gone. Focus asked from inside the
+    // sheet, whose window then has the focus, put the cursor in the box but left the keyboard closed (QA BUG-296).
+    var focusAsked by remember { mutableIntStateOf(0) }
+    LaunchedEffect(focusAsked) {
+        if (focusAsked == 0) return@LaunchedEffect
+        withFrameNanos {}
+        snapshotFlow { windowInfo.isWindowFocused }.first { it }
+        focus.requestFocusSafely()
+        keyboard?.show()
+    }
     var sheetFor by remember { mutableStateOf<Message?>(null) }
     var emojiFor by remember { mutableStateOf<Message?>(null) }
     var composerEmoji by remember { mutableStateOf(false) }
@@ -453,8 +469,8 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             value = if (bannable) runCatching { services.api.isBanned(m.author) }.getOrNull() else null
         }
         val items = buildList {
-            if (c.repliable(m)) add(MenuItem(stringResource(R.string.room_reply), ChirkleIcons.Reply) { sheetFor = null; vm.reply(m); focus.requestFocusSafely() })
-            if (c.editable(m)) add(MenuItem(stringResource(R.string.room_edit), ChirkleIcons.Edit) { sheetFor = null; vm.startEdit(m); focus.requestFocusSafely() })
+            if (c.repliable(m)) add(MenuItem(stringResource(R.string.room_reply), ChirkleIcons.Reply) { sheetFor = null; vm.reply(m); focusAsked++ })
+            if (c.editable(m)) add(MenuItem(stringResource(R.string.room_edit), ChirkleIcons.Edit) { sheetFor = null; vm.startEdit(m); focusAsked++ })
             if (m.text.isNotEmpty() && !m.deleted) add(MenuItem(stringResource(R.string.room_copy_text), ChirkleIcons.Copy) {
                 sheetFor = null
                 scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("message", m.text))) }

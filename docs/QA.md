@@ -2588,3 +2588,89 @@ without the fix too: Robolectric composes before the scroll runs, so the race sh
 
 - A HEAD of a message page has no `Content-Length` (net/http drops the body; clients don't HEAD pages).
 - Emoji show as boxes in headless Chromium without an emoji font (the machine's fonts, as before).
+
+# QA pass 44 — heavy testing, 2026-11-28
+
+Suites first, at nice 19: typecheck, lint and the sink guard; unit + component 928/928; Go; integration 582/582 (6
+skipped); Chromium e2e 95/95; the Android unit and Robolectric tests (`:core:data` 137, `:app` 99). All green before
+any change. Then, on a throwaway server with the production build and made-up people (400 messages in a room, mentions,
+replies, links): two people side by side in Chromium, Firefox and WebKit sending, editing, replying, reacting, deleting,
+searching, Jump to, Mentions & replies, DMs from an author's name, new rooms and their access dialog, attachments (two
+images, a video and a text file in one message), the viewer and the media grid; the web at 1100 px and 390 px (touch),
+light and dark, every screen's popups measured for anything past the window's edges; odd content (a 100-character word,
+a 200-character link, mixed RTL, Zalgo, markup as text, blank lines, a 45-character room name); a guest's home, an
+Open Air room, a public room, a missing room and collection. The Android app (debug build) on the Android 9 emulator
+against the same server: adding an account on a second server, the folded room list's unread rooms and live counts,
+a room at its first unread, sending, the message sheet's Edit and Reply, Settings (a taken name, Dark, Large), and the
+console of every page and the app's logcat throughout. Numbering continues from BUG-294.
+
+| # | Severity | Area | Summary | Fix in | Status |
+|---|---|---|---|---|---|
+| BUG-296 | Medium | Android, room | Reply or Edit from a message's sheet put the cursor in the message box but left the keyboard closed: you had to tap the box again | app, web n/a (its buttons focus the box itself, no sheet) | Fixed |
+| BUG-299 | Medium | Web, phone | Editing a message on a phone had no way to cancel: no Esc on a phone's keyboard, no button; the hint said "Enter to save · Esc to cancel" | web, app n/a (its bar has ✓ and ×) | Fixed |
+| BUG-295 | Low | Web, attachments | After sending a video with other files, the sender's tab asked for the video's revoked local preview about 30 times over 15 s (a console error each) | web, app n/a (no blob: previews) | Fixed |
+| BUG-297 | Low | Android, composer | The edit bar said "Enter to save · Esc to cancel" on a phone without a hardware keyboard, where Enter makes a new line and there is no Esc | app, web | Fixed |
+| BUG-298 | Low | Web, room | On a phone, "Beginning of #…" for a long room name, a load error or a service line ran from edge to edge of the screen: no gutter | web, app n/a (its notice has the list's padding) | Fixed |
+
+## BUG-296 — The keyboard stayed closed after Reply or Edit (Medium, Android)
+
+**Steps:** in a room, long-press a message, tap Reply (or Edit on your own). **Expected:** the message box focused,
+with the keyboard open, as after tapping the box. **Actual:** the cursor was in the box, but no keyboard: tapping the
+box once more opened it (`mInputShown=false` on the emulator). **Cause:** the sheet's items asked the box for focus
+straight away, while the sheet (a window of its own) still had the window focus: Compose moved its focus, but the
+keyboard is only shown for the focused window. **Fix:** the items count a request (`focusAsked`); an effect waits a frame
+and for the room's window to have the focus again, then focuses the box and shows the keyboard (`RoomScreen`). Checked on
+the emulator (`mInputShown=true` for both). Test: `UiFeaturesTest` "edits show as edited" checks the box is focused
+(Robolectric has no keyboard, so the keyboard itself is checked on the emulator only).
+
+## BUG-299 — No way to cancel an edit on a phone (Medium, Web)
+
+**Steps:** on a phone (390 px, touch), tap your message, Edit. **Expected:** a way to save and to cancel. **Actual:** the
+box and "Enter to save · Esc to cancel" under it: no buttons, and a phone's keyboard has no Esc, so the only ways out were
+saving or leaving the room. **Fix:** on a screen without hover (`(hover: none)`, as the key hints of BUG-266), the edit
+box has Save and Cancel buttons (the delete confirm's style, Save in the accent) and no key hint; a mouse and keyboard
+keep the hint (`messages.ts`, `composer.css`). Test: `mobile.spec.ts` "on a phone, editing a message has Save and Cancel
+buttons…" (fails without).
+
+## BUG-295 — A sent video's preview asked for again and again (Low, Web)
+
+**Steps:** attach two images, a video and a file, send. **Expected:** nothing in the console. **Actual:** 14–30
+`net::ERR_FILE_NOT_FOUND` for the video's `blob:` URL over about 15 s, with a growing gap (300 ms, 350 ms, …). One video
+alone mostly didn't. **Cause:** once the server has the files, the server's copy of the message replaces the pending one
+and its previews are revoked at once; the pending copy's `<video>` (its first frame, `preload=metadata`) was often still
+loading, and Chromium retries a failed media load about 30 times even out of the page. **Fix:** a sent message's previews
+are released a minute later (`revokeLocal(msg, 6e4)`, `writes.ts`); discarding a failed send and leaving the room still
+release them at once. Test: `attachments.test.ts` "a pending message shows local previews…" (the release is put off by a
+minute).
+
+## BUG-297, BUG-298 (Low)
+
+- **BUG-297:** Android's edit bar showed the web's key hint on a touch screen (the web's side is BUG-299). It shows it only with a hardware keyboard
+  (`keyboard == QWERTY`, not hidden), else the message being edited, as the reply bar shows its quote (`Composer`). The
+  emulator has a hardware keyboard, so it shows the hint there. Test: `UiFeaturesTest` "edits show as edited".
+- **BUG-298:** `.beginning`, `.load-error` and `.service` had no side padding (`room.css`): a long word wrapped against
+  the screen's edges (2.5 px from them on a phone). They have 1rem. Test: `mobile.spec.ts` "on a phone, "Beginning of #…"
+  keeps a gutter…" (fails without).
+
+The budget: the critical path was at exactly 66.00 KB, and BUG-295, BUG-298 and BUG-299 (all in the room view, which
+loads first) took it to 66.12 KB: raised to 66.25 KB (docs/history/BUDGETS.md).
+
+## Checked and fine
+
+- Two people live in all three engines: sends, edits, replies with their quote, reactions, deletes and their
+  placeholder, search highlighting each word, Jump to, Mentions & replies, a DM opened from an author's name.
+- Odd content shows as text and wraps: markup, an `onerror` attribute, RTL, Zalgo, blank lines and indents, a long link.
+- A guest sees the Open Air rooms, reads one with the "You're reading as a guest" line, and gets "This room doesn't
+  exist" for a public room, a missing one and a missing collection (their 404s are the expected answers).
+- Android: a second server's account beside the first, the folded Rooms section listing only unread rooms, live counts
+  and the "@" mark, the room opening at its first unread, sending, a taken display name explained under the field, Dark
+  and Large; the list's last row clears the navigation bar.
+
+## Noted, not changed
+
+- WebKit logged "Refused to apply a stylesheet…" (`style-src-elem`, inline) on every screenshot: Playwright's own style
+  for hiding the caret, not the app's (no screenshot, no error).
+- At the Large text size the Android room title has little room beside the three header buttons ("#ge…" for #general):
+  Large scales the whole interface, buttons too, as on the web.
+- The emulator's helper `~/.local/bin/emu-pb.sh` starts plain `bin/pocketbase` (no Go routes), so the app talks to it as
+  to an old server (no unread counts, the records API for pages); this pass used `bin/chirkle-server` on another port.

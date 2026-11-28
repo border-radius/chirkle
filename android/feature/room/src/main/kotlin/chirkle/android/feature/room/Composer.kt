@@ -4,6 +4,8 @@
 // offers emoji by name in a strip over the field (DESIGN.md §20.6).
 package chirkle.android.feature.room
 
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -85,7 +87,16 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
     Surface(color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxWidth()) {
             vm.editing?.let {
-                Bar(stringResource(R.string.room_edit_message), stringResource(R.string.room_enter_to_save_esc_to), stringResource(R.string.room_cancel_edit), vm::cancelEdit)
+                // "Enter to save · Esc to cancel" only with a hardware keyboard: on the screen's, Enter makes a new line
+                // and there is no Esc (QA BUG-297). Otherwise the message being edited, as the reply bar shows its quote.
+                val config = LocalConfiguration.current
+                val keys = config.keyboard == Configuration.KEYBOARD_QWERTY && config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
+                Bar(
+                    stringResource(R.string.room_edit_message),
+                    if (keys) stringResource(R.string.room_enter_to_save_esc_to) else it.quote().line(),
+                    stringResource(R.string.room_cancel_edit),
+                    vm::cancelEdit,
+                )
             }
             vm.replyTo?.let { r ->
                 Bar(stringResource(R.string.room_replying_to, r.expand?.author?.name ?: stringResource(R.string.room_unknown)), r.quote().line(), stringResource(R.string.room_cancel_reply), vm::cancelReply)

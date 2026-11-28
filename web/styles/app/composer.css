@@ -34,6 +34,11 @@
   color: var(--bg);
 }
 
+.confirm .save {
+  background: var(--fill);
+  color: var(--on-fill);
+}
+
 .edit-input {
   display: block;
   margin-top: 0.15rem;

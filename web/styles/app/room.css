@@ -212,7 +212,7 @@
 .beginning,
 .load-error,
 .service {
-  padding: 1.5rem 0 1rem;
+  padding: 1.5rem 1rem 1rem;
   color: var(--muted);
   text-align: center;
   overflow-wrap: anywhere;
