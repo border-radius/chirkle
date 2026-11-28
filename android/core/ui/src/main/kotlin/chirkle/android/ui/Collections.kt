@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
+import chirkle.android.data.lib.takenCollection
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -191,19 +193,24 @@ fun SaveToCollectionSheet(from: SaveFrom, onDismiss: () -> Unit) {
     }
 }
 
-/** A new collection (§31): a name, and whether anyone may see it. [onCreated] gets its id. */
+/**
+ * A new collection (§31): a name, and Public (the default, as on the web since 2026-11-24) or Private, each with what
+ * it means. A name you already have, compared as the server does, is said as you type. [onCreated] gets its id.
+ */
 @Composable
 fun NewCollectionDialog(onCreated: (String) -> Unit, onDismiss: () -> Unit) {
     val services = LocalServices.current
     val scope = rememberCoroutineScope()
     var name by rememberSaveable { mutableStateOf("") }
-    var public by rememberSaveable { mutableStateOf(false) }
+    var public by rememberSaveable { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val mine = services.store.flow.collectAsState().value.collections?.mine.orEmpty()
+    val taken = remember(name, mine) { if (name.isBlank()) null else takenCollection(mine, name) }
     fun create() {
-        if (busy || name.isBlank()) return
+        if (busy || name.isBlank() || taken != null) return
         busy = true
         error = ""
         scope.launch {
@@ -223,23 +230,37 @@ fun NewCollectionDialog(onCreated: (String) -> Unit, onDismiss: () -> Unit) {
                     name,
                     { name = it },
                     label = { Text(stringResource(R.string.ui_name)) },
+                    leadingIcon = { Icon(if (public) ChirkleIcons.Show else ChirkleIcons.Lock, contentDescription = null, tint = Chirkle.colors.muted) },
                     singleLine = true,
-                    isError = error.isNotEmpty(),
-                    supportingText = if (error.isNotEmpty()) ({ Text(error) }) else null,
+                    isError = error.isNotEmpty() || taken != null,
+                    supportingText = when {
+                        taken != null -> ({ Text(stringResource(R.string.ui_collection_taken, taken.name)) })
+                        error.isNotEmpty() -> ({ Text(error) })
+                        else -> null
+                    },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { create() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                Row(
-                    Modifier.fillMaxWidth().toggleable(public, role = Role.Checkbox) { public = it }.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(public, onCheckedChange = null)
-                    Text(stringResource(R.string.ui_public_anyone_can_see_it), Modifier.padding(start = 12.dp))
+                Text(stringResource(R.string.ui_privacy), style = MaterialTheme.typography.titleSmall)
+                for ((value, label, hint) in listOf(
+                    Triple(true, R.string.ui_public, R.string.ui_anyone_can_see_it_and_subscribe),
+                    Triple(false, R.string.ui_private, R.string.ui_only_you_can_see_it),
+                )) {
+                    Row(
+                        Modifier.fillMaxWidth().selectable(public == value, role = Role.RadioButton) { public = value }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(public == value, onClick = null)
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(stringResource(label))
+                            Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                        }
+                    }
                 }
             }
         },
-        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text(stringResource(R.string.ui_create)) } },
+        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank() && taken == null) { Text(stringResource(R.string.ui_create)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
     )
 }

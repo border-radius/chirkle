@@ -69,8 +69,7 @@ class UiCollectionsTest {
         ui.waitFor("Nothing here yet. Upload images and videos")
         compose.onNodeWithContentDescription("Back").performClick()
 
-        ui.showRoom(room.name)
-        compose.onNodeWithText(room.name).performClick()
+        ui.openRoom(room.name) // by its row's action: a row scrolled to can stop under the top bar
         ui.waitFor("a picture")
         compose.onNodeWithContentDescription("Save dot.png to collection").performClick()
         tapInList(name)

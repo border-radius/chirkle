@@ -132,3 +132,56 @@ fun unreadBadge(room: Room, unread: Map<String, Int>, hidden: Set<String>): Int 
     if (room.archived || room.id in hidden) return 0
     return unread[room.id] ?: 0
 }
+
+/**
+ * The listed room (not a DM) that [name] would clash with on create, as the server compares names
+ * ([listedNameKey]), or null: said as you type in New room (web/src/views/rooms-forms.ts `taken`).
+ */
+fun takenRoom(rooms: Collection<Room>, name: String): Room? {
+    val key = listedNameKey(name, room = true)
+    if (key.isEmpty()) return null
+    return rooms.firstOrNull { !it.isDm && listedNameKey(it.name, room = true) == key }
+}
+
+/** Your collection that [name] would clash with on create, or null (New collection's taken line). */
+fun takenCollection(mine: List<chirkle.android.data.model.MediaCollection>, name: String): chirkle.android.data.model.MediaCollection? {
+    val key = listedNameKey(name)
+    if (key.isEmpty()) return null
+    return mine.firstOrNull { listedNameKey(it.name) == key }
+}
+
+/**
+ * What a room's row shows for unread (web/src/views/rooms.ts `roomRow`, 2026-11-23): numbers only for what is addressed
+ * to you, a room's unread mentions of and replies to you, or a DM's unread messages; otherwise a dot.
+ */
+sealed interface UnreadMark {
+    data object None : UnreadMark
+    /** [unread]: how many, read out though not shown. */
+    data class Dot(val unread: Int) : UnreadMark
+    data class Count(val n: Int, val mentions: Boolean, val unread: Int) : UnreadMark
+}
+
+fun unreadMark(room: Room, unread: Int, mentions: Int): UnreadMark = when {
+    unread <= 0 -> UnreadMark.None
+    mentions > 0 -> UnreadMark.Count(mentions, mentions = true, unread = unread)
+    room.isDm -> UnreadMark.Count(unread, mentions = false, unread = unread)
+    else -> UnreadMark.Dot(unread)
+}
+
+/**
+ * Whose faces the scroll button shows (web/src/views/room.ts `renderPill`, the room view redesign): the newest three
+ * authors (not [me], each once, oldest of them first) of the messages after [seenLast], the newest one there was
+ * while nothing new was out of sight (when it is gone from [items], or null, all of [items] count).
+ */
+fun pillFaces(items: List<chirkle.android.data.model.Message>, seenLast: String?, me: String?): List<User> {
+    val since = if (seenLast == null) -1 else items.indexOfFirst { it.id == seenLast }
+    val who = ArrayDeque<User>()
+    val seen = HashSet<String>()
+    for (m in items.subList(since + 1, items.size).asReversed()) {
+        val a = m.expand?.author ?: continue
+        if (a.id == me || !seen.add(a.id)) continue
+        who.addFirst(a)
+        if (who.size == 3) break
+    }
+    return who.toList()
+}

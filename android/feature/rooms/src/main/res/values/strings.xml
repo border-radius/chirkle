@@ -39,7 +39,18 @@
     <string name="rooms_new_collection">New collection</string>
     <string name="rooms_collections">Collections</string>
     <string name="rooms_unread">%1$d unread</string>
-    <string name="rooms_mentions_you">Mentions you</string>
+    <!-- A room row's number: its unread mentions of and replies to you, then all its unread (99+ past 99). -->
+    <plurals name="rooms_mentions_you_of">
+        <item quantity="one">%1$d mention of you or reply, %2$s unread</item>
+        <item quantity="other">%1$d mentions of you or replies, %2$s unread</item>
+    </plurals>
+    <!-- A room row's dot: unread, none of it addressed to you. -->
+    <string name="rooms_unread_text">%1$s unread</string>
+    <!-- The inbox row's faces: "3 new, from Maya and Sam". -->
+    <string name="rooms_new_from">%1$s new, from %2$s</string>
+    <string name="rooms_names_and">%1$s and %2$s</string>
+    <!-- New room: a name already taken, said as you type. -->
+    <string name="rooms_room_taken">#%1$s already exists. Pick another name.</string>
     <string name="rooms_hide">Hide</string>
     <string name="rooms_couldnt_open_the_conversation_with">Couldn\'t open the conversation with “%1$s”. %2$s</string>
     <string name="rooms_new_message">New message</string>

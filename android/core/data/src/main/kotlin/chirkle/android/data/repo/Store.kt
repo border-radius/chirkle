@@ -24,6 +24,8 @@ data class AppState(
     val mentions: Map<String, Int> = emptyMap(),
     /** "Mentions & replies" rows not seen yet (at most 100). */
     val inbox: Int = 0,
+    /** Who the newest of them are from (at most 3, newest first): their faces on the inbox row. */
+    val inboxFrom: List<chirkle.android.data.model.User> = emptyList(),
     val roomsStatus: LoadStatus = LoadStatus.Idle,
     /** Room list requests out now (the rooms and hidden rows, the unread counts): a line shows over the list (§58). */
     val listLoads: Int = 0,

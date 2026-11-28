@@ -4,7 +4,12 @@
 <resources>
     <string name="ui_cancel">Cancel</string>
     <string name="ui_create">Create</string>
-    <string name="ui_public_anyone_can_see_it">Public: anyone can see it and subscribe</string>
+    <string name="ui_privacy">Privacy</string>
+    <string name="ui_public">Public</string>
+    <string name="ui_anyone_can_see_it_and_subscribe">Anyone can see it and subscribe.</string>
+    <string name="ui_only_you_can_see_it">Only you can see it.</string>
+    <!-- New collection: a name you already have, said as you type. -->
+    <string name="ui_collection_taken">A collection called %1$s already exists.</string>
     <string name="ui_name">Name</string>
     <string name="ui_new_collection">New collection</string>
     <string name="ui_you_have_no_collections_yet">You have no collections yet. Make one:</string>
@@ -25,6 +30,8 @@
     <string name="ui_on">On %1$s</string>
     <string name="ui_find_someone">Find someone…</string>
     <string name="ui_no_one_found">No one found.</string>
+    <string name="ui_no_one_found_for">No one found for “%1$s”</string>
+    <string name="ui_check_the_spelling">Check the spelling or try their @handle.</string>
     <string name="ui_couldnt_search_check_your_connection">Couldn\'t search. Check your connection.</string>
     <string name="ui_searching">Searching…</string>
     <string name="ui_type_a_name">Type a name.</string>

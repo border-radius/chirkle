@@ -2003,7 +2003,7 @@ Nothing to change in the app. The pass's two bugs were the web's at a larger tex
 and the composer's "@" list wider than a phone): the app's menus are Compose `DropdownMenu`s, which keep to the screen,
 and its "@" and ":" lists are rows across the composer's width, so a larger font scale wraps or cuts their text instead.
 
-## 89. Room view redesign (2026-11-23): web only so far
+## 89. Room view redesign (2026-11-23): ported in §99
 
 The web's room view redesign (DESIGN.md §7.7, the look; the "Room view redesign" canvas) is not in the app yet: the
 frosted header and composer over the list, the reply's header and square attachment tiles inside the composer's box,
@@ -2096,3 +2096,48 @@ the web's avatar does on its `error` event (DESIGN.md §15): `AsyncImage`'s `onE
 `UiFeaturesTest` "a picture that doesn't load shows the initials" (a file the server doesn't have: 404). The pass's two
 web fixes had nothing to port: the app's forward sheet already shows each room's lock or globe (BUG-300), and its room
 list has no open-row highlight for a collection's count (BUG-301).
+
+## 99. Parity pass: the sidebar, the creation cards, the room view redesign, the specs' gaps (2026-11-28)
+
+**The room list** (the web's sidebar improvements, 2026-11-23): a row shows a number only for what is addressed to you,
+a room's unread mentions of and replies to you or a DM's unread messages; otherwise unread is a dot, its count read out
+("3 unread"; a number reads "2 mentions of you or replies, 5 unread"). The rule is `unreadMark` (`lib/Rooms.kt`); the
+"@" badge is gone. Mentions & replies shows the faces of who the newest are from (`UnreadCounts.inboxFrom`, the server's
+`inbox_from`, kept in `AppState.inboxFrom` and cleared with the count) in place of its count, read as "4 new, from Maya
+and Sam". A followed collection's tile shows its owner's face before their name (`CollectionOwner.avatar`). Both fields
+are optional: from an older server the rows look as before. Not ported: the pinned blurred header, hover effects, small
+caps and the borderless you-row (PARITY.md says why).
+
+**Creating** (the web's creation cards, 2026-11-24): New room and New collection say a name already taken as you type
+and disable Create until it changes (`takenRoom`, `takenCollection`; `listedNameKey` compares as the server does: spaces
+tidied, invisible characters dropped, NFKC, case folded, a room's leading "#"s ignored). The name field's icon follows
+the chosen type. A new collection is Public or Private, each with what it means, public by default (it was a checkbox,
+private by default). The people search (New message, adding people) shows each person's @handle under their name, the
+matched letters in bold (`matchRange`), and "No one found for “…”" with "Check the spelling or try their @handle." They
+stay dialogs: a phone has no sidebar to open a card in.
+
+**The room** (§89, the web's room view redesign): the list runs under the header and the composer, which are the pane at
+72 % (`GLASS`; no backdrop blur before Android 12), and is padded by them. The scroll math (`RoomScreen`'s `Scroll.Target`
+and `shown`) measures the clear part: offsets start over the composer, and `afterContentPadding` (the header) is taken
+off the end. The header shows a private or Open Air room's lock or globe after its name (its word as the description),
+without the "Public" / members line. The composer is one filled box 8 dp in: the reply's or edit's header as its first
+row, the text, emoji · attach · send at its end (a bare arrow in the accent, faint while there is nothing to send), and
+the attachments as 72 dp square tiles with a corner × (files: an icon and the name; videos being compressed: a spinner
+and the progress). Once the text wraps, the buttons move to a row under it until the text is shorter than when it
+wrapped. A message to you is no longer a tinted card: your handle is highlighted in the text and a reply's pill has your
+name in the accent (§91). Link previews are a ghost line: the favicon (or the site's first letter on a tile), the site
+without "www." (`siteOf`), a dot, the title, which gives way first. The scroll button is glass and shows faces: whose
+reply "Back to reply" returns to, or the newest three authors (not you) of what came in out of sight (`pillFaces`).
+Checked on Robolectric screenshots (native graphics) of the room list, a room, and a reply with wrapped text.
+
+**Touch targets:** an attachment tile's × is touched anywhere in the 48 dp around it (it was 22 dp).
+
+**Tests:** `SidebarTest` and `RoomViewTest` (the helpers), `UiSidebarTest` (dots and numbers, taken names, a public
+collection by default, the handle and "No one found"), `UiMentionsTest` updated for the new descriptions. The web specs'
+cases PARITY.md had as not yet run: `UiGapsTest` (password change, the unread line, forwarding and deleting several,
+closing and reopening a DM, unhiding, who can post) and `EdgesTest` (reconnect's gap fill and the history's edges at the
+room controller). `UiA11yTest` checks that everything tappable on the login, rooms, room, archived room and profile
+screens has a label and a 48 dp touch target; contrast and a TalkBack pass are still by hand. Tests that counted the
+Hidden & archived fold ("(1)") now match its heading only: the suite's server is shared, and other tests' archived
+public rooms are listed there too. Still not run on the app: opening a room from its cache before the server answers,
+a room closing to guests while one reads it, and what the pickers and the download manager do (by hand on a device).

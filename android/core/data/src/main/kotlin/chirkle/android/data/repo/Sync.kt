@@ -196,7 +196,7 @@ class Unread(
                 unread.remove(it)
                 mentions.remove(it)
             }
-            store.update { it.copy(unread = unread, counted = true, mentions = mentions, inbox = res.inbox) }
+            store.update { it.copy(unread = unread, counted = true, mentions = mentions, inbox = res.inbox, inboxFrom = res.inboxFrom) }
             db.kv().put(KvEntity(Keys.UNREAD, PbJson.encodeToString(UnreadCounts.serializer(), UnreadCounts(res.at, unread))))
         } finally {
             store.update { it.copy(listLoads = it.listLoads - 1) }

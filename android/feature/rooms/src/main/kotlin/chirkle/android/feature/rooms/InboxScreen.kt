@@ -96,7 +96,7 @@ fun InboxScreen(onOpen: (room: String, message: String) -> Unit, onBack: () -> U
     fun seeAll() {
         val newest = items.firstOrNull()?.created ?: return
         if (newest > (seenAt ?: "") || services.store.get().inbox > 0) {
-            services.store.update { it.copy(inbox = 0) }
+            services.store.update { it.copy(inbox = 0, inboxFrom = emptyList()) }
             scope.launch { runCatching { services.api.inboxSeen(newest) } }
         }
     }

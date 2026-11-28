@@ -184,6 +184,8 @@ data class UnreadCounts(
     /** Inbox rows not seen yet (at most 100), and each room's unread mentions and replies (DESIGN.md §41); none from older servers. */
     val inbox: Int = 0,
     val mentions: Map<String, Int> = emptyMap(),
+    /** Who the newest unseen inbox rows are from, newest first, at most 3 (since 2026-11-23; none before). */
+    @SerialName("inbox_from") val inboxFrom: List<User> = emptyList(),
 )
 
 /** A row of the "Mentions & replies" inbox (DESIGN.md §41, GET /api/chat/inbox). */
@@ -268,7 +270,14 @@ data class MediaCollection(
 )
 
 @Serializable
-data class CollectionOwner(val id: String, val name: String = "")
+data class CollectionOwner(
+    val id: String,
+    val name: String = "",
+    /** Their avatar's filename, for their face on the collection's tile (since 2026-11-23; "" before). */
+    val avatar: String = "",
+) {
+    fun asUser() = User(id, name, avatar)
+}
 
 /** What GET /api/chat/collections answers: yours and those you follow, by name. */
 @Serializable

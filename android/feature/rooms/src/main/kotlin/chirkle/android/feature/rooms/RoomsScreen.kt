@@ -86,7 +86,11 @@ import chirkle.android.data.lib.roomSections
 import chirkle.android.data.lib.textLength
 import chirkle.android.data.lib.title
 import chirkle.android.data.lib.unreadBadge
-import chirkle.android.data.repo.mentioned
+import chirkle.android.data.lib.UnreadMark
+import chirkle.android.data.lib.unreadMark
+import chirkle.android.data.lib.takenRoom
+import chirkle.android.data.lib.bareRoomName
+import androidx.compose.ui.zIndex
 import chirkle.android.data.lib.visibilityOrDefault
 import chirkle.android.data.model.Room
 import chirkle.android.data.model.Visibility
@@ -276,7 +280,7 @@ fun RoomsScreen(onOpenRoom: (String) -> Unit, onProfile: () -> Unit, onLogIn: ()
                 if (section in folded) list.filter { unreadBadge(it, s.unread, s.hidden.keys) > 0 } else list
             val toggle = services.settings::toggleFolded
             // Mentions & replies (DESIGN.md §41): right after Jump to, with how many are new.
-            item(key = "inbox") { InboxRow(s.inbox, onInbox) }
+            item(key = "inbox") { InboxRow(s.inbox, s.inboxFrom, onInbox) }
             foldHeader("rooms", res.getString(R.string.rooms_rooms), "rooms" in folded, toggle, res.getString(R.string.rooms_new_room)) { newRoom = true }
             if (sections.rooms.isEmpty() && s.roomsStatus == LoadStatus.Ready) {
                 empty(if (sections.hidden.isNotEmpty() || sections.archived.isNotEmpty()) res.getString(R.string.rooms_no_other_rooms_hidden_and) else res.getString(R.string.rooms_no_rooms_yet_create_the))
@@ -370,17 +374,28 @@ private fun JumpRow(t: chirkle.android.data.lib.JumpTarget, s: AppState, me: Str
     }
 }
 
+/** Unread that isn't addressed to you: a dot in the accent (the web's `.dot`), its count read out. */
 @Composable
-private fun MentionBadge() {
-    val res = LocalContext.current.resources
-    Box(Modifier.size(24.dp).background(Chirkle.colors.fill, CircleShape), contentAlignment = Alignment.Center) {
-        Text("@", color = Chirkle.colors.onFill, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_mentions_you) })
+private fun UnreadDot(unread: Int) {
+    val label = stringResource(R.string.rooms_unread_text, if (unread > 99) "99+" else unread.toString())
+    Box(Modifier.size(24.dp).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(8.dp).background(Chirkle.colors.fill, CircleShape))
     }
 }
 
-/** The "Mentions & replies" row (DESIGN.md §41): an "@" where a room has its icon, and how many are new. */
+/** "Maya", "Maya and Sam", "Maya, Sam and Leo" (the web's `names`). */
+private fun names(res: Resources, list: List<String>): String = when (list.size) {
+    0 -> ""
+    1 -> list[0]
+    else -> res.getString(R.string.rooms_names_and, list.dropLast(1).joinToString(", "), list.last())
+}
+
+/**
+ * The "Mentions & replies" row (DESIGN.md §41): an "@" where a room has its icon, and how many are new; with the faces
+ * of who the newest are from ([from], at most 3: `inbox_from`, 2026-11-23) in place of the count, as on the web.
+ */
 @Composable
-private fun InboxRow(new: Int, onOpen: () -> Unit) {
+private fun InboxRow(new: Int, from: List<chirkle.android.data.model.User>, onOpen: () -> Unit) {
     val res = LocalContext.current.resources
     Row(
         Modifier
@@ -405,7 +420,17 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
             fontWeight = if (new > 0) FontWeight.SemiBold else FontWeight.Medium,
             color = if (new > 0) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
         )
-        if (new > 0) {
+        if (new > 0 && from.isNotEmpty()) {
+            val label = res.getString(R.string.rooms_new_from, if (new > 99) "99+" else new.toString(), names(res, from.map { it.name }))
+            // Overlapping faces, newest first on top, each ringed in the list's background.
+            Row(Modifier.semantics(mergeDescendants = true) { contentDescription = label }, horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                from.forEachIndexed { i, u ->
+                    Box(Modifier.zIndex((from.size - i).toFloat()).size(26.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape), contentAlignment = Alignment.Center) {
+                        Avatar(u, 22.dp)
+                    }
+                }
+            }
+        } else if (new > 0) {
             Box(
                 Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center,
@@ -417,7 +442,7 @@ private fun InboxRow(new: Int, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun UnreadBadge(badge: Int) {
+private fun UnreadBadge(badge: Int, label: String? = null) {
     val res = LocalContext.current.resources
     Box(
         Modifier.heightIn(min = 24.dp).widthIn(min = 24.dp).background(Chirkle.colors.fill, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp),
@@ -427,7 +452,7 @@ private fun UnreadBadge(badge: Int) {
             if (badge > 99) "99+" else badge.toString(),
             color = Chirkle.colors.onFill,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.semantics { contentDescription = res.getString(R.string.rooms_unread, badge) },
+            modifier = Modifier.semantics { contentDescription = label ?: res.getString(R.string.rooms_unread, badge) },
         )
     }
 }
@@ -555,15 +580,18 @@ private fun CollectionTile(c: chirkle.android.data.model.MediaCollection, onOpen
             )
             if (locked && c.preview.isNotEmpty()) Icon(ChirkleIcons.Lock, contentDescription = stringResource(R.string.rooms_private), tint = Chirkle.colors.muted, modifier = Modifier.size(12.dp))
         }
-        Text(
-            c.owner?.name ?: pluralStringResource(R.plurals.rooms_items, c.items, c.items),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            color = Chirkle.colors.muted,
-            modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 2.dp),
-        )
+        // A followed one's owner as a face before their name (the web's sidebar, `owner.avatar`, 2026-11-23).
+        Row(Modifier.padding(start = 2.dp, end = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            c.owner?.let { Avatar(it.asUser(), 14.dp) }
+            Text(
+                c.owner?.name ?: pluralStringResource(R.plurals.rooms_items, c.items, c.items),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                color = Chirkle.colors.muted,
+            )
+        }
     }
 }
 
@@ -653,9 +681,17 @@ private fun RoomRow(r: Room, s: AppState, me: String?, onOpen: (String) -> Unit,
                 fontWeight = if (badge > 0 || current) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (r.archived) Chirkle.colors.dim else if (badge > 0 || current) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted,
             )
-            // Unread messages that mention or reply to you (DESIGN.md §41): an "@" before the count, as on the web.
-            if (badge > 0 && s.mentioned(r.id)) MentionBadge()
-            if (badge > 0) UnreadBadge(badge)
+            // Numbers only for what is addressed to you (the web's sidebar, 2026-11-23): a room's unread mentions of and
+            // replies to you (DESIGN.md §41), a DM's unread messages; otherwise a dot. The count is still read out.
+            when (val mark = unreadMark(r, badge, s.mentions[r.id] ?: 0)) {
+                UnreadMark.None -> Unit
+                is UnreadMark.Dot -> UnreadDot(mark.unread)
+                is UnreadMark.Count -> UnreadBadge(
+                    mark.n,
+                    if (mark.mentions) pluralStringResource(R.plurals.rooms_mentions_you_of, mark.n, mark.n, if (mark.unread > 99) "99+" else mark.unread.toString())
+                    else stringResource(R.string.rooms_unread, mark.n),
+                )
+            }
             if (menu.isNotEmpty()) {
                 // The menu opens at the button (a long press on the row opens it there too).
                 Box {
@@ -692,8 +728,12 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     val nameFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { nameFocus.requestFocus() } }
+    // A name already listed, compared as the server does, is said as you type, and Create waits for another (the web's
+    // creation card, 2026-11-24).
+    val rooms = services.store.flow.collectAsStateWithLifecycle().value.rooms
+    val taken = remember(name, rooms) { if (name.isBlank()) null else takenRoom(rooms.values, name) }
     fun create() {
-        if (busy) return
+        if (busy || taken != null) return
         if (textLength(name.trim()) > Limits.ROOM_NAME) {
             error = res.getString(R.string.rooms_must_be_no_more_than, Limits.ROOM_NAME)
             return
@@ -717,9 +757,15 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
                     { name = it },
                     label = { Text(stringResource(R.string.rooms_room_name)) },
                     placeholder = { Text("room-name") },
+                    // The chosen type's icon, as the web's field has.
+                    leadingIcon = { Icon(visibility.icon(), contentDescription = null, tint = Chirkle.colors.muted) },
                     singleLine = true,
-                    isError = error.isNotEmpty(),
-                    supportingText = if (error.isNotEmpty()) ({ Text(error) }) else null,
+                    isError = error.isNotEmpty() || taken != null,
+                    supportingText = when {
+                        taken != null -> ({ Text(stringResource(R.string.rooms_room_taken, bareRoomName(taken.name))) })
+                        error.isNotEmpty() -> ({ Text(error) })
+                        else -> null
+                    },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (name.isNotBlank()) create() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(nameFocus),
@@ -740,7 +786,7 @@ private fun NewRoomDialog(onCreated: (Room) -> Unit, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank()) { Text(stringResource(R.string.rooms_create)) } },
+        confirmButton = { Button(onClick = ::create, enabled = !busy && name.isNotBlank() && taken == null) { Text(stringResource(R.string.rooms_create)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.rooms_cancel)) } },
     )
 }

@@ -361,7 +361,8 @@ class UiFeaturesTest {
         compose.onNode(hasText(room.name) and hasClickAction()).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnLongClick)
         ui.waitFor("Hide")
         compose.onNodeWithText("Hide").performClick()
-        ui.reveal(hasContentDescription("Hidden & archived (1)"))
+        // Not the count: archived public rooms of other tests on the shared server are listed there too.
+        ui.reveal(hasContentDescription("Hidden & archived (", substring = true))
         ui.until { a.api.listHidden().any { it.room == room.id } }
     }
 

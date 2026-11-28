@@ -84,110 +84,49 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
     val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(Limits.ATTACHMENTS)) { vm.attach(it) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.attach(it) }
     var attachMenu by remember { mutableStateOf(false) }
-    Surface(color = MaterialTheme.colorScheme.surface) {
+    // Wrapped onto a second line, the text gets the box's whole width and the buttons a row of their own under it (the
+    // web's room view redesign on a phone, 2026-11-23); back on one row once the text is shorter than when it wrapped,
+    // so they don't flip with every letter.
+    var wrappedAt by remember { mutableStateOf(-1) }
+    if (wrappedAt >= 0 && vm.text.text.length < wrappedAt) wrappedAt = -1
+    val wrapped = wrappedAt >= 0
+    // Frosted glass over the list (the list scrolls under it): the pane at 72 %; Compose has no backdrop blur before
+    // Android 12, so the tint alone.
+    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = GLASS)) {
         Column(Modifier.fillMaxWidth()) {
-            vm.editing?.let {
-                // "Enter to save · Esc to cancel" only with a hardware keyboard: on the screen's, Enter makes a new line
-                // and there is no Esc (QA BUG-297). Otherwise the message being edited, as the reply bar shows its quote.
-                val config = LocalConfiguration.current
-                val keys = config.keyboard == Configuration.KEYBOARD_QWERTY && config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
-                Bar(
-                    stringResource(R.string.room_edit_message),
-                    if (keys) stringResource(R.string.room_enter_to_save_esc_to) else it.quote().line(),
-                    stringResource(R.string.room_cancel_edit),
-                    vm::cancelEdit,
-                )
-            }
-            vm.replyTo?.let { r ->
-                Bar(stringResource(R.string.room_replying_to, r.expand?.author?.name ?: stringResource(R.string.room_unknown)), r.quote().line(), stringResource(R.string.room_cancel_reply), vm::cancelReply)
-            }
-            if (vm.attachments.isNotEmpty() || vm.items.isNotEmpty() || vm.preparing.isNotEmpty()) {
-                LazyRow(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    items(vm.attachments, key = { it.uri }) { f ->
-                        // An image shows itself; other files their name.
-                        if (f.type.startsWith("image/")) {
-                            Box(Modifier.size(64.dp)) {
-                                coil3.compose.AsyncImage(
-                                    java.io.File(f.uri),
-                                    contentDescription = f.name,
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                                )
-                                Box(
-                                    Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(3.dp)
-                                        .size(22.dp)
-                                        .clip(androidx.compose.foundation.shape.CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.6f))
-                                        .clickable { vm.removeAttachment(f) }
-                                        .semantics { contentDescription = res.getString(R.string.room_remove, f.name) },
-                                    contentAlignment = Alignment.Center,
-                                ) { Icon(ChirkleIcons.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) }
-                            }
-                            return@items
-                        }
-                        InputChip(
-                            selected = false,
-                            onClick = { vm.removeAttachment(f) },
-                            label = { Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(120.dp)) },
-                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_remove, f.name), modifier = Modifier.size(16.dp)) },
-                        )
-                    }
-                    // Videos being compressed (VideoPrep): × stops one.
-                    items(vm.preparing, key = { "prep-" + it.id }) { p ->
-                        InputChip(
-                            selected = false,
-                            onClick = { vm.cancelPreparing(p) },
-                            label = {
-                                Text(
-                                    if (p.progress < 0) stringResource(R.string.room_waiting, p.name) else stringResource(R.string.room_compressing, p.progress, p.name),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.width(160.dp),
-                                )
-                            },
-                            trailingIcon = { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_remove, p.name), modifier = Modifier.size(16.dp)) },
-                        )
-                    }
-                    // From a collection (§31.3): after the uploads, as the server attaches them.
-                    items(vm.items, key = { "item-" + it.id }) { it ->
-                        Box(Modifier.size(64.dp)) {
-                            chirkle.android.ui.ItemPicture(it, Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).semantics { contentDescription = it.name + res.getString(R.string.room_from_a_collection_2) })
-                            Box(
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(3.dp)
-                                    .size(22.dp)
-                                    .clip(androidx.compose.foundation.shape.CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.6f))
-                                    .clickable { vm.removeItem(it) }
-                                    .semantics { contentDescription = res.getString(R.string.room_remove, it.name) },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(ChirkleIcons.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) }
-                        }
-                    }
-                }
-            }
             val n = textLength(vm.text.text)
             val error = vm.composerError.ifEmpty { if (n > Limits.MESSAGE_TEXT) stringResource(R.string.room_too_long_characters_over_the, n - Limits.MESSAGE_TEXT, Limits.MESSAGE_TEXT) else "" }
             if (error.isNotEmpty()) {
                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
             }
             if (vm.people.isNotEmpty()) People(vm) else if (vm.suggestions.isNotEmpty()) Suggestions(vm)
-            // One rounded field with emoji at its start and attach at its end, both kept at the bottom as the text
-            // grows, then Send: the text gets the width, as in the messengers people know.
-            Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
-                Row(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .heightIn(min = 52.dp)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    IconButton(onClick = onEmoji) { Icon(ChirkleIcons.Emoji, contentDescription = stringResource(R.string.room_insert_emoji), tint = Chirkle.colors.muted) }
+            // One filled box 8 dp in from the sides: the reply's (or edit's) header as its first row, the text, emoji ·
+            // attach · send at its end, then the attachments as square tiles.
+            Column(
+                Modifier
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            ) {
+                vm.editing?.let {
+                    // "Enter to save · Esc to cancel" only with a hardware keyboard: on the screen's, Enter makes a new
+                    // line and there is no Esc (QA BUG-297). Otherwise the message being edited, as the reply bar shows its quote.
+                    val config = LocalConfiguration.current
+                    val keys = config.keyboard == Configuration.KEYBOARD_QWERTY && config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
+                    Bar(
+                        stringResource(R.string.room_edit_message),
+                        if (keys) stringResource(R.string.room_enter_to_save_esc_to) else it.quote().line(),
+                        stringResource(R.string.room_cancel_edit),
+                        vm::cancelEdit,
+                    )
+                }
+                vm.replyTo?.let { r ->
+                    Bar(stringResource(R.string.room_replying_to, r.expand?.author?.name ?: stringResource(R.string.room_unknown)), r.quote().line(), stringResource(R.string.room_cancel_reply), vm::cancelReply)
+                }
+                val canSend = (!isBlank(vm.text.text) || ((vm.attachments.isNotEmpty() || vm.items.isNotEmpty()) && vm.editing == null)) && n <= Limits.MESSAGE_TEXT && vm.preparing.isEmpty()
+                val field = @Composable { m: Modifier ->
                     val textColor = MaterialTheme.colorScheme.onSurface
                     BasicTextField(
                         value = vm.text,
@@ -196,9 +135,9 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = textColor, lineHeight = 22.sp),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 13.dp)
+                        onTextLayout = { if (it.lineCount > 1 && wrappedAt < 0) wrappedAt = vm.text.text.length },
+                        modifier = m
+                            .padding(start = 12.dp, end = 4.dp, top = 13.dp, bottom = 13.dp)
                             .focusRequester(focus)
                             .semantics { contentDescription = res.getString(R.string.room_message) }
                             .onPreviewKeyEvent { e ->
@@ -220,15 +159,18 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                                     else -> false
                                 }
                             },
-                        decorationBox = { field ->
+                        decorationBox = { inner ->
                             Box {
                                 if (vm.text.text.isEmpty()) {
                                     Text(placeholder, style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp), color = Chirkle.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                field()
+                                inner()
                             }
                         },
                     )
+                }
+                val buttons = @Composable {
+                    IconButton(onClick = onEmoji) { Icon(ChirkleIcons.Emoji, contentDescription = stringResource(R.string.room_insert_emoji), tint = Chirkle.colors.muted) }
                     if (vm.editing == null) {
                         Box {
                             IconButton(onClick = { attachMenu = true }) { Icon(ChirkleIcons.Attach, contentDescription = stringResource(R.string.room_attach_files), tint = Chirkle.colors.muted) }
@@ -247,26 +189,100 @@ fun Composer(vm: RoomViewModel, placeholder: String, focus: FocusRequester, onCo
                                 }
                             }
                         }
-                    } else {
-                        Spacer(Modifier.width(12.dp))
+                    }
+                    // A bare arrow in the accent, faint while there is nothing to send.
+                    val tint by androidx.compose.animation.animateColorAsState(if (canSend) MaterialTheme.colorScheme.primary else Chirkle.colors.dim.copy(alpha = 0.5f), label = "send")
+                    IconButton(onClick = vm::submit, enabled = canSend) {
+                        Icon(
+                            if (vm.editing != null) ChirkleIcons.Check else ChirkleIcons.Send,
+                            contentDescription = if (vm.editing != null) stringResource(R.string.room_save) else stringResource(R.string.room_send),
+                            tint = tint,
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                 }
-                val canSend = (!isBlank(vm.text.text) || ((vm.attachments.isNotEmpty() || vm.items.isNotEmpty()) && vm.editing == null)) && n <= Limits.MESSAGE_TEXT && vm.preparing.isEmpty()
-                Spacer(Modifier.width(8.dp))
-                // A rounded square in the accent fill; dimmed while there is nothing to send.
-                val bg by androidx.compose.animation.animateColorAsState(if (canSend) Chirkle.colors.fill else Chirkle.colors.fill.copy(alpha = 0.25f), label = "send")
-                val fg by androidx.compose.animation.animateColorAsState(if (canSend) Chirkle.colors.onFill else Color.White.copy(alpha = 0.55f), label = "sendIcon")
-                androidx.compose.material3.FilledIconButton(
-                    onClick = vm::submit,
-                    enabled = canSend,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = bg, contentColor = fg, disabledContainerColor = bg, disabledContentColor = fg),
-                    modifier = Modifier.size(52.dp),
-                ) {
-                    Icon(if (vm.editing != null) ChirkleIcons.Check else ChirkleIcons.Send, contentDescription = if (vm.editing != null) stringResource(R.string.room_save) else stringResource(R.string.room_send), modifier = Modifier.size(20.dp))
+                if (wrapped) {
+                    field(Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { buttons() }
+                } else {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.Bottom) {
+                        field(Modifier.weight(1f))
+                        buttons()
+                    }
+                }
+                if (vm.attachments.isNotEmpty() || vm.items.isNotEmpty() || vm.preparing.isNotEmpty()) {
+                    LazyRow(Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        items(vm.attachments, key = { it.uri }) { f ->
+                            // An image shows itself; other files their icon and name.
+                            Tile(res.getString(R.string.room_remove, f.name), { vm.removeAttachment(f) }) {
+                                if (f.type.startsWith("image/")) {
+                                    coil3.compose.AsyncImage(
+                                        java.io.File(f.uri),
+                                        contentDescription = f.name,
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    TileLabel(ChirkleIcons.File, f.name)
+                                }
+                            }
+                        }
+                        // Videos being compressed (VideoPrep): × stops one.
+                        items(vm.preparing, key = { "prep-" + it.id }) { p ->
+                            Tile(res.getString(R.string.room_remove, p.name), { vm.cancelPreparing(p) }) {
+                                TileLabel(
+                                    null,
+                                    if (p.progress < 0) stringResource(R.string.room_waiting, p.name) else stringResource(R.string.room_compressing, p.progress, p.name),
+                                    busy = true,
+                                )
+                            }
+                        }
+                        // From a collection (§31.3): after the uploads, as the server attaches them.
+                        items(vm.items, key = { "item-" + it.id }) { it ->
+                            Tile(res.getString(R.string.room_remove, it.name), { vm.removeItem(it) }) {
+                                chirkle.android.ui.ItemPicture(it, Modifier.fillMaxSize().semantics { contentDescription = it.name + res.getString(R.string.room_from_a_collection_2) })
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/** How opaque the room's glass is (the web's `--glass`: 72 % of the pane). */
+internal const val GLASS = 0.72f
+
+/** An attachment's 72 dp square tile with a corner × that takes it out ([remove]: what the × says). */
+@Composable
+private fun Tile(remove: String, onRemove: () -> Unit, content: @Composable () -> Unit) {
+    Box(Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
+        content()
+        // A 22 dp × in the corner, touched anywhere in the 48 dp around it (§13's touch targets).
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .size(48.dp)
+                .clickable(onClick = onRemove)
+                .semantics { contentDescription = remove },
+            contentAlignment = Alignment.TopEnd,
+        ) {
+            Box(
+                Modifier.padding(3.dp).size(22.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.Black.copy(alpha = 0.6f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(ChirkleIcons.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+        }
+    }
+}
+
+/** A tile without a picture: an icon (or a spinner while [busy]) over its name, small. */
+@Composable
+private fun TileLabel(icon: androidx.compose.ui.graphics.vector.ImageVector?, text: String, busy: Boolean = false) {
+    Column(Modifier.fillMaxSize().padding(6.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        else if (icon != null) Icon(icon, contentDescription = null, tint = Chirkle.colors.muted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.size(4.dp))
+        Text(text, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Chirkle.colors.muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -344,14 +360,12 @@ private val PEOPLE_MAX_HEIGHT = 200.dp
 
 @Composable
 private fun Bar(title: String, detail: String, cancel: String, onCancel: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.width(3.dp).heightIn(min = 32.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
-        Spacer(Modifier.width(8.dp))
+    // The box's first row (the room view redesign): who and the quote, two lines on a phone, and ×.
+    Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Chirkle.colors.muted)
         }
-        IconButton(onClick = onCancel) { Icon(ChirkleIcons.Close, contentDescription = cancel) }
+        IconButton(onClick = onCancel) { Icon(ChirkleIcons.Close, contentDescription = cancel, tint = Chirkle.colors.muted) }
     }
-    HorizontalDivider(color = Chirkle.colors.border)
 }

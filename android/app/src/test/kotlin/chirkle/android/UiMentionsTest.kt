@@ -65,9 +65,9 @@ class UiMentionsTest {
             b.api.send(NewMessage(newId(), room.id, "hey @${a.user.handle} look"))
             b.api.send(NewMessage(newId(), room.id, "an answer", replyTo = mine.id))
         }
-        // Live: the room's "@" and the inbox's count.
-        ui.waitFor(hasContentDescription("Mentions you"))
-        ui.waitFor(hasContentDescription("2 new"))
+        // Live: the room's count of what is addressed to you, and the inbox's faces of who it is from.
+        ui.waitFor(hasContentDescription("2 mentions of you or replies, 2 unread"))
+        ui.waitFor(hasContentDescription("2 new, from ${b.user.name}"))
 
         compose.onNodeWithText("Mentions & replies").performClick()
         ui.waitFor("${b.user.name} replied to you in #${room.name}")
@@ -87,7 +87,7 @@ class UiMentionsTest {
         val room = runBlocking { b.api.createRoom("rd-${uniq()}") }
         runBlocking { b.api.send(NewMessage(newId(), room.id, "read here @${a.user.handle}")) }
         ui.signedIn(a)
-        ui.waitFor(hasContentDescription("1 new"))
+        ui.waitFor(hasContentDescription("1 new, from ${b.user.name}"))
         ui.openRoom(room.name)
         ui.waitFor(hasContentDescription("Messages"))
         compose.onNodeWithContentDescription("Messages").performScrollToIndex(0)

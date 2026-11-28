@@ -8,7 +8,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -112,20 +111,19 @@ fun MessageRow(
     val highlight by animateColorAsState(if (target) Chirkle.colors.highlight else Color.Transparent, tween(if (target) 150 else 1200), label = "target")
     val author = m.expand?.author ?: User(m.author, stringResource(R.string.room_unknown))
     val accent = MaterialTheme.colorScheme.primary
-    // A reply to one of my messages or a mention of me (DESIGN.md §41), by someone else: a tinted card (the web's .to-me).
-    val toMe = me != null && m.author != me && ((m.replyTo.isNotEmpty() && m.expand?.replyTo?.author == me) || me in m.mentions)
+    // No tinted card for a message to you any more (the room view redesign, 2026-11-23): a mention of you is highlighted
+    // in the text, a reply to you told by its quote, the pill with your name in the accent (§91).
     Box {
         Row(
             Modifier
                 .fillMaxWidth()
-                .then(if (toMe) Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp).clip(RoundedCornerShape(16.dp)).background(Chirkle.colors.own) else Modifier)
                 .background(if (selected) Chirkle.colors.tint else highlight)
                 .combinedClickable(
                     onClick = { actions.onTap(m) },
                     onLongClick = { actions.onLongPress(m) },
                     onLongClickLabel = stringResource(R.string.room_message_actions),
                 )
-                .padding(start = if (toMe) 4.dp else 12.dp, end = if (toMe) 4.dp else 12.dp, top = if (first || toMe) 10.dp else 1.dp, bottom = if (toMe) 10.dp else 1.dp)
+                .padding(start = 12.dp, end = 12.dp, top = if (first) 10.dp else 1.dp, bottom = 1.dp)
                 .semantics { if (selecting) stateDescription = if (selected) res.getString(R.string.room_selected) else res.getString(R.string.room_not_selected) },
         ) {
             if (selecting) {
@@ -320,22 +318,34 @@ private fun ServiceRow(m: Message) {
 
 @Composable
 private fun LinkPreviewRow(url: String, title: String, icon: String) {
-    if (title.isEmpty()) return
+    // Only http(s) links (as on the web).
+    if (title.isEmpty() || !url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return
     val context = LocalContext.current
+    val site = chirkle.android.data.lib.siteOf(url)
+    // A ghost line (the room view redesign, §28): no box, the favicon (or the site's first letter on a tile), the site
+    // without "www.", a dot, the title; the title gives way first.
     Row(
         Modifier
-            .padding(top = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Chirkle.colors.border, RoundedCornerShape(8.dp))
+            .padding(top = 2.dp)
+            .heightIn(min = 32.dp)
+            .clip(RoundedCornerShape(6.dp))
             .clickable { openLink(context, url) }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .widthIn(max = 360.dp),
+            .padding(vertical = 4.dp)
+            .widthIn(max = 420.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon.startsWith("data:image/")) {
-            AsyncImage(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
+            AsyncImage(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+        } else if (site.isNotEmpty()) {
+            Box(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+                Text(site.take(1).uppercase(), fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold, color = Chirkle.colors.muted)
+            }
         }
-        Text(title, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.width(6.dp))
+        if (site.isNotEmpty()) {
+            Text(site, style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted, maxLines = 1, softWrap = false)
+            Box(Modifier.padding(horizontal = 6.dp).size(3.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Chirkle.colors.dim))
+        }
+        Text(title, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
     }
 }

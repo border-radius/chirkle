@@ -32,6 +32,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import chirkle.android.data.api.reasonOf
 import chirkle.android.data.lib.isAddress
+import chirkle.android.data.lib.matchRange
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import chirkle.android.data.model.User
 import kotlinx.coroutines.delay
 
@@ -39,6 +48,16 @@ import kotlinx.coroutines.delay
  * A dialog that finds people by name; [onPick] gets the one chosen. [exclude]: ids not to offer; [selected]: ids shown
  * checked. [remote]: an address is looked up on its instance; [room], to add them to that shared room (else for a DM).
  */
+/** [text] with where [query] first matches it (ignoring case) in bold. */
+internal fun marked(text: String, query: String): AnnotatedString {
+    val r = matchRange(text, query) ?: return AnnotatedString(text)
+    return buildAnnotatedString {
+        append(text.substring(0, r.first))
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(text.substring(r.first, r.last + 1)) }
+        append(text.substring(r.last + 1))
+    }
+}
+
 @Composable
 fun UserSearchDialog(
     title: String,
@@ -76,7 +95,7 @@ fun UserSearchDialog(
         status = when {
             refused.isNotEmpty() -> refused
             found == null -> res.getString(R.string.ui_couldnt_search_check_your_connection)
-            found!!.isEmpty() -> res.getString(R.string.ui_no_one_found)
+            found!!.isEmpty() -> res.getString(R.string.ui_no_one_found_for, q)
             else -> ""
         }
     }
@@ -97,7 +116,14 @@ fun UserSearchDialog(
                     }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                if (status.isNotEmpty()) Text(status, color = Chirkle.colors.muted, style = MaterialTheme.typography.bodyMedium)
+                if (status.isNotEmpty()) {
+                    val none = found?.isEmpty() == true && foundFor.isNotEmpty() && status == res.getString(R.string.ui_no_one_found_for, foundFor)
+                    Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                        Text(status, color = if (none) MaterialTheme.colorScheme.onSurface else Chirkle.colors.muted, style = MaterialTheme.typography.bodyMedium, fontWeight = if (none) FontWeight.SemiBold else null)
+                        // Nothing found: a tip, as the web's New message card gives (2026-11-24).
+                        if (none) Text(stringResource(R.string.ui_check_the_spelling), color = Chirkle.colors.muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 LazyColumn(Modifier.heightIn(max = 320.dp)) {
                     items(found.orEmpty(), key = { it.id }) { u ->
                         Row(
@@ -107,8 +133,11 @@ fun UserSearchDialog(
                         ) {
                             Avatar(u, 32.dp)
                             Column(Modifier.weight(1f)) {
-                                Text(u.name)
-                                if (u.instance.isNotEmpty()) Text(stringResource(R.string.ui_on, u.instance), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
+                                // The letters that matched in bold, and the @handle under the name (the web's card, 2026-11-24).
+                                Text(marked(u.name, foundFor))
+                                val on = if (u.instance.isNotEmpty()) stringResource(R.string.ui_on, u.instance) else ""
+                                val sub = listOf(if (u.handle.isNotEmpty()) "@${u.handle}" else "", on).filter { it.isNotEmpty() }.joinToString(" · ")
+                                if (sub.isNotEmpty()) Text(if (u.handle.isNotEmpty()) marked(sub, "@" + foundFor.removePrefix("@")) else AnnotatedString(sub), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                                 if (u.noDms && confirm == null) Text(stringResource(R.string.ui_doesnt_take_direct_messages), style = MaterialTheme.typography.bodySmall, color = Chirkle.colors.muted)
                             }
                             if (u.id in selected) Icon(ChirkleIcons.Check, contentDescription = stringResource(R.string.ui_added), tint = MaterialTheme.colorScheme.primary)

@@ -35,3 +35,36 @@ fun nameKey(s: String): String = Normalizer.normalize(s.replace(INVISIBLE, ""), 
 
 /** What message search matches (messages.text_key): folded as names are, and "İ" as "i" (QA BUG-113). */
 fun foldKey(s: String): String = nameKey(s).replace("i̇", "i")
+
+private val CONTROL = Regex("[\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]")
+private val SPACES = Regex("\\s+")
+private val LEADING_HASH = Regex("^[#\\s]+")
+
+/**
+ * A name as the server compares names on create (web/src/lib/rooms.ts `nameKey`; tidy() and nameKey() in
+ * pb_hooks/lib/text.js): invisible characters dropped, control characters as spaces, spaces tidied, then [nameKey].
+ * [room]: leading "#"s go too, as the server strips them from room names.
+ */
+fun listedNameKey(name: String, room: Boolean = false): String {
+    var s = name.replace(INVISIBLE, "").replace(CONTROL, " ").replace(SPACES, " ").trim()
+    if (room) s = s.replace(LEADING_HASH, "")
+    return nameKey(s)
+}
+
+/** A room name without its leading "#"s, as the room list shows it after its "#" (the taken line's "#design"). */
+fun bareRoomName(name: String): String = name.replace(LEADING_HASH, "")
+
+/**
+ * Where [query] first matches [text], ignoring case, for the bold letters in people's search results (web/src/ui/
+ * user-search.ts `marked`); null when it doesn't, or when lowercasing changes the text's length (no safe offsets).
+ */
+fun matchRange(text: String, query: String): IntRange? {
+    if (query.isEmpty()) return null
+    val lower = text.lowercase()
+    if (lower.length != text.length) return null
+    val i = lower.indexOf(query.lowercase())
+    return if (i < 0) null else i until i + query.length
+}
+
+/** A link's site as its preview line shows it (web/src/views/room/messages.ts `siteOf`): its host without "www.". */
+fun siteOf(url: String): String = runCatching { java.net.URI(url).host.orEmpty().lowercase().removePrefix("www.") }.getOrDefault("")

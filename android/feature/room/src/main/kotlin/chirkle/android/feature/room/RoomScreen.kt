@@ -107,6 +107,7 @@ import chirkle.android.data.repo.Phase
 import chirkle.android.data.repo.Pill
 import chirkle.android.data.repo.Scroll
 import chirkle.android.ui.Chirkle
+import chirkle.android.ui.icon
 import chirkle.android.ui.ChirkleIcons
 import chirkle.android.ui.Formats
 import chirkle.android.ui.LocalServices
@@ -180,12 +181,19 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
     androidx.activity.compose.BackHandler(enabled = !vm.selecting && !vm.searching && vm.editing != null, onBack = vm::cancelEdit)
 
     val atBottom by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 64 } }
-    // The newest saved message shown whole (§18.3). The list is laid out from the bottom: an item's offset is from there.
+    // The newest message there was while nothing new was out of sight: the scroll button's faces are of those after it.
+    // Not state: it follows the room's state, read in the same composition.
+    val seenLastHolder = remember { arrayOfNulls<String>(1) }
+    if (state.pill != chirkle.android.data.repo.Pill.Below) seenLastHolder[0] = state.items.lastOrNull()?.id
+    val seenLast = seenLastHolder[0]
+    // The newest saved message shown whole (§18.3). The list is laid out from the bottom: an item's offset is from there,
+    // past the composer's padding (the list runs under the composer: §89), and up to 8 dp of the gap over it counts.
+    val gap = with(androidx.compose.ui.platform.LocalDensity.current) { 8.dp.roundToPx() }
     val shown by remember {
         derivedStateOf {
             val info = list.layoutInfo
             info.visibleItemsInfo.firstNotNullOfOrNull { item ->
-                if (item.offset < info.viewportStartOffset) null else (rows.getOrNull(item.index) as? ListRow.Msg)?.m?.takeIf { it.status == null }
+                if (item.offset < -gap) null else (rows.getOrNull(item.index) as? ListRow.Msg)?.m?.takeIf { it.status == null }
             }
         }
     }
@@ -255,11 +263,14 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                         // line, not by a quarter more (it ended at the top edge).
                         val i = rowsNow.indexOfFirst { it.key == key }
                         list.scrollToItem(i)
+                        // Offsets from the content's start, over the composer; the clear part ends under the header
+                        // (the list runs under both: §89).
                         val info = list.layoutInfo
                         val item = info.visibleItemsInfo.firstOrNull { it.index == i }
                         val size = item?.size ?: 0
-                        val viewport = info.viewportEndOffset - info.viewportStartOffset
-                        val over = if (item == null) 0 else item.offset + size - info.viewportEndOffset
+                        val end = info.viewportEndOffset - info.afterContentPadding
+                        val viewport = end
+                        val over = if (item == null) 0 else item.offset + size - end
                         if (over > 0) list.scrollBy(over.toFloat())
                         else {
                             val raise = minOf(viewport / 4, viewport - size).coerceAtLeast(0) - (item?.offset ?: 0)
@@ -318,6 +329,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
         topBar = {
             when {
                 vm.selecting -> TopAppBar(
+                    colors = glassBar(),
                     navigationIcon = { IconButton(onClick = vm::clearSelection) { Icon(ChirkleIcons.Close, contentDescription = stringResource(R.string.room_cancel)) } },
                     title = { Text(stringResource(R.string.room_selected_2, vm.selected.size), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) },
                     actions = {
@@ -326,6 +338,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     },
                 )
                 vm.searching -> TopAppBar(
+                    colors = glassBar(),
                     navigationIcon = { IconButton(onClick = vm::closeSearch) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_close_search)) } },
                     title = {
                         val searchFocus = remember { FocusRequester() }
@@ -347,6 +360,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     },
                 )
                 else -> TopAppBar(
+                    colors = glassBar(),
                     navigationIcon = { IconButton(onClick = nav.back) { Icon(ChirkleIcons.Back, contentDescription = stringResource(R.string.room_back_to_rooms)) } },
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -356,20 +370,22 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                                 // A room's "#" quieter than its name.
                                 val t = room?.title(me?.id) ?: ""
                                 val dim = Chirkle.colors.dim
-                                Text(
-                                    if (room != null && !room.isDm && t.startsWith("#")) androidx.compose.ui.text.buildAnnotatedString {
-                                        pushStyle(androidx.compose.ui.text.SpanStyle(color = dim, fontWeight = FontWeight.SemiBold)); append("#"); pop(); append(t.drop(1))
-                                    } else androidx.compose.ui.text.AnnotatedString(t),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                if (room != null && !room.isDm) {
+                                // The room view redesign (2026-11-23): a private or Open Air room's lock or globe right
+                                // after its name, its word said, not shown; no members line on a phone.
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        room.visibilityOrDefault.label + if (room.visibilityOrDefault == Visibility.Private) " · ${room.members.size} ${if (room.members.size == 1) "member" else "members"}" else "",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Chirkle.colors.muted,
+                                        if (room != null && !room.isDm && t.startsWith("#")) androidx.compose.ui.text.buildAnnotatedString {
+                                            pushStyle(androidx.compose.ui.text.SpanStyle(color = dim, fontWeight = FontWeight.SemiBold)); append("#"); pop(); append(t.drop(1))
+                                        } else androidx.compose.ui.text.AnnotatedString(t),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f, fill = false),
                                     )
+                                    val v = room?.takeIf { !it.isDm }?.visibilityOrDefault
+                                    if (v != null && v != Visibility.Public) {
+                                        Icon(v.icon(), contentDescription = v.label, tint = Chirkle.colors.muted, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+                                    }
                                 }
                                 // Where else a shared room is held, and whether its home answers (§33.9, §33.7).
                                 val shared = room?.sharedNote().orEmpty()
@@ -408,6 +424,26 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             }
         },
     ) { padding ->
+        // The list runs under the frosted header and composer (the room view redesign), padded by them so its ends
+        // and what is scrolled to stay clear; everything else keeps to the space between them.
+        Box(Modifier.fillMaxSize()) {
+            if (state.phase == Phase.Ready) {
+                LazyColumn(
+                    state = list,
+                    reverseLayout = true,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 8.dp),
+                    modifier = Modifier.fillMaxSize().semantics { contentDescription = res.getString(R.string.room_messages) },
+                ) {
+                    items(rows, key = { it.key }, contentType = { it::class }) { row ->
+                        when (row) {
+                            is ListRow.Msg -> MessageRow(row.m, row.first, row.target, me?.id, vm.selecting, row.m.id in vm.selected, actions)
+                            is ListRow.Day -> DayHeader(row.label)
+                            ListRow.NewLine -> NewLine()
+                            is ListRow.Beginning -> Beginning(row.text, room, me?.id)
+                        }
+                    }
+                }
+            }
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.phase) {
                 Phase.Loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -417,16 +453,6 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     TextButton(onClick = c::retry) { Text(stringResource(R.string.room_retry)) }
                 }
                 Phase.Ready -> {
-                    LazyColumn(state = list, reverseLayout = true, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp), modifier = Modifier.fillMaxSize().semantics { contentDescription = res.getString(R.string.room_messages) }) {
-                        items(rows, key = { it.key }, contentType = { it::class }) { row ->
-                            when (row) {
-                                is ListRow.Msg -> MessageRow(row.m, row.first, row.target, me?.id, vm.selecting, row.m.id in vm.selected, actions)
-                                is ListRow.Day -> DayHeader(row.label)
-                                ListRow.NewLine -> NewLine()
-                                is ListRow.Beginning -> Beginning(row.text, room, me?.id)
-                            }
-                        }
-                    }
                     if (state.notice.isNotEmpty()) {
                         Surface(Modifier.align(Alignment.TopCenter).padding(8.dp), tonalElevation = 4.dp, shape = MaterialTheme.shapes.medium) {
                             Text(state.notice, modifier = Modifier.padding(12.dp).semantics { liveRegion = LiveRegionMode.Polite })
@@ -436,15 +462,28 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
                     val back = state.back != null
                     if (back || state.pill != null || !atBottom || state.hasNewer) {
                         val label = if (back) stringResource(R.string.room_back_to_reply) else if (state.pill != null) stringResource(R.string.room_new_messages_jump_to_latest) else stringResource(R.string.room_jump_to_latest)
+                        // Who it is about (the room view redesign): whose reply you came from, or the newest three
+                        // authors of what came out of sight (not you).
+                        val who = if (back) listOfNotNull(c.find(state.back!!)?.expand?.author)
+                            else if (state.pill == chirkle.android.data.repo.Pill.Below) chirkle.android.data.lib.pillFaces(state.items, seenLast, me?.id)
+                            else emptyList()
                         SmallFloatingActionButton(
                             onClick = {
                                 if (back) return@SmallFloatingActionButton c.goBack()
                                 if (state.hasNewer) c.jump(PageKind.Latest) else scope.launch { list.animateScrollToItem(0) }
                                 c.dismissPill()
                             },
+                            // The same glass as the bars.
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+                            contentColor = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = label },
                         ) {
                             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (who.isNotEmpty()) {
+                                    Row(Modifier.padding(end = 6.dp), horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
+                                        who.forEach { chirkle.android.ui.Avatar(it, 22.dp) }
+                                    }
+                                }
                                 if (back) Text(stringResource(R.string.room_back), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
                                 else if (state.pill != null) Text(stringResource(R.string.room_new_2), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 4.dp))
                                 Icon(ChirkleIcons.Down, contentDescription = null)
@@ -457,6 +496,7 @@ fun RoomScreen(roomId: String, msgId: String?, nav: RoomNav, incoming: Pair<Stri
             if (vm.searching) SearchResults(vm) { focusManager.clearFocus(); vm.pick(it) }
             // A fetch that takes a while (§58); not over the first load's spinner.
             else chirkle.android.ui.LoadingLine(busy && state.phase != Phase.Loading, Modifier.align(Alignment.TopCenter))
+        }
         }
     }
 
@@ -730,3 +770,11 @@ private suspend fun download(context: Context, services: chirkle.android.data.re
     val token = runCatching { services.tokens.ensure() }.getOrDefault("")
     chirkle.android.ui.download(context, services.api.fileUrl(m, file, token = token).toString(), m.attachmentName(file))
 }
+
+/** The header's frosted glass (the room view redesign): the pane at [GLASS], over the list that scrolls under it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun glassBar() = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GLASS),
+    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = GLASS),
+)
