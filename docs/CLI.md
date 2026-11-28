@@ -52,6 +52,10 @@ Nothing the other clients don't use (docs/API.md):
 | Mentions & replies | `GET /api/chat/inbox?before=<cursor>`, `POST /api/chat/inbox/seen` |
 | Hide, archive | `hidden_rooms` list / create / delete; `PATCH rooms/{id} { archived }` (its creator; a moderator for a public room) |
 | Go to a message | `messages/{id}`, then `older` and `newer` pages from it: a window that doesn't reach the latest |
+| Files | the send as multipart, `files` parts named by the file's name (the server keeps them in `file_names`) |
+| Ban | `POST /api/chat/ban { user, banned }` (moderators) |
+| Export | `POST` / `GET /api/chat/export`, then `GET /api/chat/export/file` |
+| Delete the account | `POST /api/chat/account/delete { password, messages: keep \| delete }` |
 
 The User-Agent is `chirkle-cli/<version> (<os>/<arch>)`. `/stats` counts these connections as neither web nor
 Android until the server learns the name (optional).
@@ -72,6 +76,11 @@ again, and for each room loaded the messages after its last (`newer`) and the ed
 - `chirk join <link>` joins a private room by its invite link (`https://host/invite/<token>`, or the token alone for the
   saved server), with the account saved for that server. `chirk reset-password [--password-stdin] <link>` sets a new
   password from the emailed link (asked twice); then `chirk login`.
+- `chirk export [-o FILE]` asks for your data, waits while the server makes it and saves it (0600).
+  `chirk delete-account --messages keep|delete [--password-stdin] [--yes]` asks you to type the server's name, then
+  the password; the account, its drafts and the saved session go.
+- U in the TUI lists the saved accounts (Enter switches; drafts are kept per account), and logs in or signs up on this
+  server or another.
 - Sessions: `$XDG_CONFIG_HOME/chirkle/accounts.json` (`CHIRKLE_CONFIG` overrides), mode 0600, written atomically.
   Several servers and accounts can be kept; the TUI uses the current one, or the one for `chirk <server>`. The token
   is renewed at start; a refused one removes the account and brings the form up.
@@ -101,6 +110,10 @@ Rooms on the left at 90 columns and more; below, one pane at a time. `?` lists t
 | ↑ | empty composer | Edit your last message (Esc cancels; saving it empty asks to delete) |
 | @, : | composer | People who can see the room / emoji by name, at the end of the text; Tab or Enter picks. A whole `:fire:` becomes 🔥 |
 | Enter / Alt+Enter, Ctrl+J | composer | Send / new line |
+| Ctrl+O | | Files to send: a path (Tab completes), Enter adds, Enter on a listed one takes it off; a dropped file too |
+| b, B | messages | Ban / unban the selected message's author (moderators; asks y/n) |
+| U | | Accounts: switch, log in or sign up here or on another server |
+| N | | Notifications on / off |
 | Esc | | Back |
 | q, Ctrl+C | | Quit |
 
@@ -137,7 +150,12 @@ fields are cleaned here all the same.)
   - `internal/ui`: the whole program driven by keys only: sign up on the form, the account saved, Jump to, read,
     send, a live message, the link picker, help; then "@" and ":" completion, a mention, a reply, ↑ to edit, a
     reaction by name, a delete after its question, and a draft still there after a restart; then search and going to
-    a message further back, a reply in Mentions & replies, a DM by name, hide and show, archive.
+    a message further back, a reply in Mentions & replies, a DM by name, hide and show, archive; then a file from
+    disk (Tab-completed, and dropped), a DM's notification while unfocused (none for a plain message), a ban, and
+    switching accounts.
+  - `internal/api` also: files from disk and their limits, banning (a moderator only; the session ends), an export
+    made and downloaded, deleting the account (a wrong password refused).
+- `chirk update` against a fake Release: --check, a dev build refused, the binary replaced, a bad checksum refused.
 
 CI's `cli` job builds the server, starts it on an empty data directory, runs all of them, checks gofmt and
 cross-builds. By hand:
@@ -156,6 +174,11 @@ and freebsd, amd64 and arm64, `-trimpath -ldflags "-s -w -X main.version=<versio
 `chirk_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) with `chirk_<version>_checksums.txt` and build provenance
 (`gh attestation verify <file> --repo border-radius/chirkle`). The version comes from the tag: `npm run release`
 has nothing more to set.
+
+`chirk update [--check] [--force]` reads the latest Release (GitHub's API; `CHIRK_RELEASE_URL` overrides it), takes
+the archive for its OS and architecture, checks its SHA-256 against the Release's checksums file, and renames the new
+binary over the running one (on Windows the old one is moved aside to `chirk.exe.old`). A dev build is replaced only
+with `--force`.
 
 ## 8. Milestones
 
@@ -176,7 +199,14 @@ has nothing more to set.
    `window.json`, `room.json` and `unread.json` (the window has no 300-message cap and no "New" line after going to a
    message; the counts are the server's plus live increments), the live `hidden_rooms` topic (read again on reconnect),
    and a successful reset in the tests (it needs the email's token; the refusal is checked by hand).
-4. File upload by path, terminal notifications (bell, OSC 9/777) of DMs and mentions, moderator actions, export and
-   account deletion as commands, switching accounts in the TUI, `chirk update`.
+4. **Done (2026-11-28):** files from disk (Ctrl+O: a path, Tab completes it; or a file dropped on the terminal, its
+   pasted path), checked against the contract's limits before sending; notifications of DMs, mentions and replies to
+   you not on screen (terminal focus reports; OSC 777 on VTE, foot and rxvt, OSC 9 on iTerm2, WezTerm, Ghostty, kitty
+   and Warp, else the bell; passed through tmux; `CHIRKLE_NOTIFY=off|bell|osc9|osc777`, N toggles), and read marks wait
+   for the focus too; moderators ban and unban a message's author (b, B; deleting anyone's and archiving public rooms
+   came before); `chirk export`, `chirk delete-account`; switching accounts and servers in the TUI (U); `chirk update`.
+   Left for later: what a load started just before switching accounts answers is not told apart from the new
+   account's (the realtime is, by generation); `update` doesn't check the build provenance (it needs `gh`), only the
+   checksums from the same Release.
 
 Left out on purpose: collections, the media grid, avatars (names only), `/stats`.

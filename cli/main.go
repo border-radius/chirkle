@@ -30,6 +30,9 @@ const usage = `chirk: the Chirkle console client
   chirk signup [--server S] [--name N] [--email E] [--invite CODE] [--password-stdin]
   chirk join <invite link>           join a private room by its invite link (logged in on that server)
   chirk reset-password <link>        set a new password from the emailed link [--password-stdin]
+  chirk export [-o FILE]             download your data (asks the server to make it, then waits)
+  chirk delete-account --messages keep|delete [--password-stdin]
+  chirk update [--check]             replace this binary with the latest release (checksum-verified)
   chirk logout
   chirk version
 
@@ -49,7 +52,7 @@ func run(args []string) error {
 	cmd := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
-		case "login", "signup", "logout", "version", "help", "join", "reset-password":
+		case "login", "signup", "logout", "version", "help", "join", "reset-password", "export", "delete-account", "update":
 			cmd, args = args[0], args[1:]
 		}
 	}
@@ -83,6 +86,12 @@ func run(args []string) error {
 		return joinCommand(args)
 	case "reset-password":
 		return resetCommand(args)
+	case "export":
+		return exportCommand(args)
+	case "delete-account":
+		return deleteAccountCommand(args)
+	case "update":
+		return updateCommand(args)
 	}
 
 	fs := flag.NewFlagSet("chirk", flag.ContinueOnError)

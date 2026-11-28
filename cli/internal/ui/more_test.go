@@ -36,8 +36,8 @@ func TestFindingThings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The needle, then more than a page after it: it isn't in the window opening the room loads.
-	for i, text := range append([]string{"needle in the haystack"}, make([]string, 79)...) {
+	// The needle, then more than the most opening the room loads (200, with its unread): it isn't in that window.
+	for i, text := range append([]string{"needle in the haystack"}, make([]string, 229)...) {
 		if text == "" {
 			text = fmt.Sprintf("hay %d", i)
 		}
@@ -53,24 +53,24 @@ func TestFindingThings(t *testing.T) {
 	site, _ := bob.Site(ctx)
 	cfg, _ := config.Load()
 	d := newDriver(t, New(bob, cfg, site))
-	d.until("far-" + tag)
+	d.listed(room.ID)
 
 	// Search, and go to a message further back than the window.
 	d.key('k', tea.ModCtrl)
 	d.keys("far-" + tag)
 	d.key(tea.KeyEnter, 0)
-	d.until("hay 79")
+	d.until("hay 229")
 	d.key(tea.KeyEscape, 0) // out of the composer
 	d.keys("/needle")
 	d.key(tea.KeyEnter, 0)
 	d.until("› ")
 	d.key(tea.KeyEnter, 0)
 	screen := d.until("▌ needle in the haystack")
-	if strings.Contains(screen, "hay 79") || !d.app.rs(room.ID).newer {
+	if strings.Contains(screen, "hay 229") || !d.app.rs(room.ID).newer {
 		t.Fatalf("not a window around the needle:\n%s", screen)
 	}
 	d.keys("G")
-	d.until("hay 79")
+	d.until("hay 229")
 	if d.app.rs(room.ID).newer {
 		t.Fatal("G didn't go to the latest")
 	}

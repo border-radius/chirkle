@@ -24,6 +24,7 @@ type listItem struct {
 	label string
 	dim   bool
 	do    func() tea.Cmd
+	keep  bool // the box stays up after it
 }
 
 type listBox struct {
@@ -36,6 +37,8 @@ type listBox struct {
 	onInput func(string) tea.Cmd // the text changed
 	onEnter func(string) tea.Cmd // Enter with nothing listed
 	more    func() tea.Cmd       // ↓ at the end: the next page
+	typed   bool                 // Enter with something typed goes to onEnter even with items listed
+	onTab   func(string) string  // Tab completes the text
 }
 
 func (a *App) openList(b *listBox) {
@@ -63,9 +66,20 @@ func (a *App) listKey(k tea.KeyPressMsg) tea.Cmd {
 			return m()
 		}
 		return nil
+	case "tab":
+		if b.onTab != nil && b.in != nil {
+			b.in.SetValue(b.onTab(b.in.Value()))
+			b.in.CursorEnd()
+		}
+		return nil
 	case "enter":
+		if b.typed && b.in != nil && strings.TrimSpace(b.in.Value()) != "" {
+			return b.onEnter(strings.TrimSpace(b.in.Value()))
+		}
 		if b.sel < len(b.items) && b.items[b.sel].do != nil {
-			a.list = nil
+			if !b.items[b.sel].keep {
+				a.list = nil
+			}
 			return b.items[b.sel].do()
 		}
 		if b.onEnter != nil && b.in != nil {

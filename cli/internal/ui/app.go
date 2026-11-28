@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sort"
@@ -97,6 +98,12 @@ type App struct {
 	list   *listBox          // a DM, search or inbox list is up
 	hidden map[string]string // room → its hidden_rooms row
 	opened map[string]string // room → when it was last opened this run (Jump to's order)
+
+	// m4.go.
+	attach     []string // files from disk going with the next message
+	focused    bool     // the terminal has the focus (as far as it reports)
+	notifyMode string   // off | bell | osc9 | osc777
+	gen        int      // which account's realtime the events are from
 }
 
 // New makes the app for a client (logged in or a guest) and the accounts file.
@@ -113,6 +120,7 @@ func New(c *api.Client, cfg *config.File, site api.Site) *App {
 		compose: ta, links: os.Getenv("TERM") != "dumb" && os.Getenv("CHIRKLE_NO_HYPERLINKS") == "",
 		events: make(chan api.Event, 256), conn: make(chan api.Status, 8),
 		drafts: config.LoadDrafts(), hidden: map[string]string{}, opened: map[string]string{},
+		focused: true, notifyMode: notifyMode(),
 	}
 	if c.Token() == "" {
 		f := newAuthForm(site, modeLogin)
@@ -140,9 +148,15 @@ type (
 		m   api.Message
 		err error
 	}
-	rtEvent  api.Event
-	rtStatus api.Status
-	failed   struct {
+	rtEvent struct {
+		gen int
+		e   api.Event
+	}
+	rtStatus struct {
+		gen int
+		s   api.Status
+	}
+	failed struct {
 		what string
 		err  error
 	}
@@ -183,11 +197,13 @@ func (a *App) start() tea.Cmd {
 }
 
 func (a *App) waitEvent() tea.Cmd {
-	return func() tea.Msg { return rtEvent(<-a.events) }
+	ch, gen := a.events, a.gen // a switch of account starts new ones: the old ones' stragglers are dropped
+	return func() tea.Msg { return rtEvent{gen, <-ch} }
 }
 
 func (a *App) waitStatus() tea.Cmd {
-	return func() tea.Msg { return rtStatus(<-a.conn) }
+	ch, gen := a.conn, a.gen
+	return func() tea.Msg { return rtStatus{gen, <-ch} }
 }
 
 func (a *App) loadRooms() tea.Cmd {
@@ -318,6 +334,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, ok := a.moreMsg(msg); ok {
 		return a, cmd
 	}
+	if cmd, ok := a.m4Msg(msg); ok {
+		return a, cmd
+	}
 	switch m := msg.(type) {
 	case roomsLoaded:
 		a.rooms = m.rooms
@@ -356,10 +375,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.gotMentionable(m)
 		return a, nil
 	case rtEvent:
-		return a, tea.Batch(a.onEvent(api.Event(m)), a.waitEvent())
+		if m.gen != a.gen {
+			return a, nil
+		}
+		return a, tea.Batch(a.onEvent(m.e), a.waitEvent())
 	case rtStatus:
-		return a, tea.Batch(a.onStatus(api.Status(m)), a.waitStatus())
+		if m.gen != a.gen {
+			return a, nil
+		}
+		return a, tea.Batch(a.onStatus(m.s), a.waitStatus())
 	case tea.PasteMsg:
+		if b := a.list; b != nil {
+			if b.in != nil {
+				in, cmd := b.in.Update(msg)
+				b.in = &in
+				if b.onInput != nil {
+					cmd = tea.Batch(cmd, b.onInput(strings.TrimSpace(in.Value())))
+				}
+				return a, cmd
+			}
+			return a, nil
+		}
+		if p := pastedFile(m.Content); p != "" && a.focus != focusRooms && a.open != "" {
+			if r := a.room(a.open); r != nil && r.CanPost(a.me()) {
+				if err := api.CheckFiles(append(slices.Clone(a.attach), p)); err != nil {
+					return a, a.say(render.OneLine(err.Error()))
+				}
+				if !slices.Contains(a.attach, p) {
+					a.attach = append(a.attach, p)
+				}
+				a.setFocus(focusComposer)
+				return a, a.say("Attached " + render.OneLine(filepath.Base(p)) + " (ctrl+o lists them)")
+			}
+		}
 		if a.focus == focusComposer {
 			var cmd tea.Cmd
 			a.compose, cmd = a.compose.Update(msg)
@@ -542,7 +590,7 @@ func (a *App) markRead() tea.Cmd {
 		return nil
 	}
 	s := a.rs(a.open)
-	if s.offset > 0 || len(s.items) == 0 || s.newer {
+	if s.offset > 0 || len(s.items) == 0 || s.newer || !a.focused { // not looked at: marked when the terminal has the focus again
 		return nil
 	}
 	last := ""
@@ -615,6 +663,7 @@ func (a *App) onEvent(e api.Event) tea.Cmd {
 			}
 		}
 		if ev.Action == "create" && m.Author != a.me() && a.c.Token() != "" {
+			bell := a.notify(m)
 			if m.Room != a.open || s == nil || s.offset > 0 || s.newer {
 				if a.unread.Rooms == nil {
 					a.unread.Rooms = map[string]int{}
@@ -626,8 +675,9 @@ func (a *App) onEvent(e api.Event) tea.Cmd {
 					}
 					a.unread.Mentions[m.Room]++
 				}
-				return nil
+				return bell
 			}
+			return tea.Batch(bell, a.markRead())
 		}
 		return a.markRead()
 	}
@@ -739,6 +789,8 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 		return a.listKey(k)
 	}
 	switch key {
+	case "ctrl+o":
+		return a.startAttach()
 	case "ctrl+k":
 		in := textinput.New()
 		in.Prompt = "Jump to: "
@@ -791,6 +843,10 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 		return a.toggleHidden()
 	case "A":
 		return a.toggleArchived()
+	case "U":
+		return a.startAccounts()
+	case "N":
+		return a.toggleNotify()
 	case "i":
 		a.setFocus(focusComposer)
 		return nil
@@ -892,7 +948,7 @@ func (a *App) messagesKey(key string) tea.Cmd {
 		case sel != nil && sel.Failed != nil:
 			m := *sel
 			sel.Failed, sel.Pending = nil, true
-			cmd = a.sendCmd(m.ID, m.Room, m.Text, m.ReplyToID)
+			cmd = a.sendCmd(m.ID, m.Room, m.Text, m.ReplyToID, m.Local)
 		case sel != nil:
 			return a.startReply(sel)
 		}
@@ -907,6 +963,10 @@ func (a *App) messagesKey(key string) tea.Cmd {
 	case "+", "=":
 		if sel != nil {
 			return a.startReact(sel)
+		}
+	case "b", "B":
+		if sel != nil {
+			return a.askBan(sel, key == "b")
 		}
 	}
 	if s.atTop && !s.first && !s.loading && len(s.items) > 0 && (s.offset > 0 || s.sel == 0) {
@@ -954,7 +1014,7 @@ func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
 			return a.saveEdit()
 		}
 		text := strings.TrimSpace(a.compose.Value())
-		if text == "" || a.open == "" {
+		if (text == "" && len(a.attach) == 0) || a.open == "" {
 			return nil
 		}
 		r := a.room(a.open)
@@ -968,6 +1028,8 @@ func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
 		pending := api.Message{ID: id, Room: a.open, Text: text, Author: a.me(), Pending: true,
 			Created: time.Now().UTC().Format("2006-01-02 15:04:05.000Z")}
 		pending.Expand.Author = a.c.Me()
+		files := a.attach
+		pending.Local, a.attach = files, nil
 		replyTo := ""
 		if q := a.replyTo; q != nil {
 			replyTo = q.ID
@@ -982,19 +1044,25 @@ func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
 		a.compose.Reset()
 		a.drafts.Set(a.c.Base, a.me(), a.open, "")
 		if s.newer { // what you send goes at the end: show it there
-			return tea.Batch(a.sendCmd(id, a.open, text, replyTo), a.toLatest())
+			return tea.Batch(a.sendCmd(id, a.open, text, replyTo, files), a.toLatest())
 		}
-		return a.sendCmd(id, a.open, text, replyTo)
+		return a.sendCmd(id, a.open, text, replyTo, files)
 	}
 	var cmd tea.Cmd
 	a.compose, cmd = a.compose.Update(k)
 	return tea.Batch(cmd, a.composed())
 }
 
-func (a *App) sendCmd(id, room, text, replyTo string) tea.Cmd {
+func (a *App) sendCmd(id, room, text, replyTo string, files []string) tea.Cmd {
 	c := a.c
 	return func() tea.Msg {
-		m, err := c.Send(context.Background(), id, room, text, replyTo)
+		ctx := context.Background()
+		if len(files) > 0 { // a file can take a while
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, 10*time.Minute)
+			defer cancel()
+		}
+		m, err := c.SendFiles(ctx, id, room, text, replyTo, files)
 		return sent{id, m, err}
 	}
 }
@@ -1109,6 +1177,7 @@ func (a *App) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.ReportFocus = true // notifications wait for the terminal not to be looked at
 	v.WindowTitle = render.OneLine(a.site.Title)
 	return v
 }
@@ -1380,7 +1449,7 @@ func (a *App) statusView() string {
 		case focusMessages:
 			left = "↑↓ select · r reply · e edit · d delete · + react · o links · / search · i write · ? help"
 		case focusComposer:
-			left = "enter send · alt+enter new line · ↑ edit last · @ people · :emoji · esc back"
+			left = "enter send · alt+enter new line · ctrl+o files · ↑ edit last · @ people · :emoji · esc back"
 		}
 	}
 	right := "guest"
@@ -1452,6 +1521,10 @@ func (a *App) helpView() string {
 		{"enter", "Send (in the composer)"},
 		{"alt+enter  ctrl+j", "New line"},
 		{"esc", "Back"},
+		{"ctrl+o", "Send files: a path (tab completes), or drop a file on the terminal"},
+		{"b  B", "Ban / unban the author (moderators)"},
+		{"U", "Accounts: switch, add, another server"},
+		{"N", "Notifications of DMs, mentions and replies on / off"},
 		{"L  S", "Log in / sign up (as a guest)"},
 		{"q  ctrl+c", "Quit"},
 	}

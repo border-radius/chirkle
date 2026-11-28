@@ -127,8 +127,9 @@ type Message struct {
 	} `json:"expand"`
 
 	// Pending is set on a message being sent, Failed when the send was refused (never from the server).
-	Pending bool  `json:"-"`
-	Failed  error `json:"-"`
+	Pending bool     `json:"-"`
+	Failed  error    `json:"-"`
+	Local   []string `json:"-"` // the files from disk it is being sent with
 }
 
 // AuthorName is the author's name, or a placeholder for a profile not expanded.

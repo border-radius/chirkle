@@ -394,9 +394,13 @@ func (a *App) composerBar(w int) string {
 		if q == "" && len(a.replyTo.Files) > 0 {
 			q = "[file]"
 		}
-		return a.st.Accent.Render(ansi.Truncate("↳ Replying to "+render.OneLine(a.replyTo.AuthorName())+": "+q+" · esc cancel", w, "…"))
+		bar := a.st.Accent.Render(ansi.Truncate("↳ Replying to "+render.OneLine(a.replyTo.AuthorName())+": "+q+" · esc cancel", w, "…"))
+		if f := a.attachBar(w); f != "" {
+			bar = f + "\n" + bar
+		}
+		return bar
 	}
-	return ""
+	return a.attachBar(w)
 }
 
 // confirmBox is a yes/no question in the status line.

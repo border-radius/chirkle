@@ -22,6 +22,7 @@ type driver struct {
 	t    *testing.T
 	app  *App
 	msgs chan tea.Msg
+	raw  []string // what was written to the terminal raw (notifications)
 }
 
 func newDriver(t *testing.T, app *App) *driver {
@@ -44,6 +45,10 @@ func (d *driver) run(cmd tea.Cmd) {
 }
 
 func (d *driver) send(msg tea.Msg) {
+	if r, ok := msg.(tea.RawMsg); ok {
+		d.raw = append(d.raw, fmt.Sprint(r.Msg))
+		return
+	}
 	if b, ok := msg.(tea.BatchMsg); ok {
 		for _, c := range b {
 			d.run(c)
@@ -115,7 +120,7 @@ func TestSignUpReadAndSend(t *testing.T) {
 		d.keys(v)
 		d.key(tea.KeyEnter, 0)
 	}
-	d.until("tui-" + tag) // the room list is up: logged in
+	d.listed(room.ID) // logged in, the rooms loaded
 
 	// Saved for next time.
 	saved, _ := config.Load()
@@ -236,7 +241,7 @@ func TestTakingPart(t *testing.T) {
 	cfg, _ := config.Load()
 	open := func() *driver {
 		d := newDriver(t, New(bob, cfg, site))
-		d.until("part-" + tag)
+		d.listed(room.ID)
 		d.key('k', tea.ModCtrl)
 		d.keys("part-" + tag)
 		d.key(tea.KeyEnter, 0)
@@ -318,4 +323,10 @@ func TestTakingPart(t *testing.T) {
 	if v := d2.app.compose.Value(); v != "unsent words" {
 		t.Fatalf("draft after a restart: %q", v)
 	}
+}
+
+// listed waits for a room in the list (its name may be off screen when the server has many).
+func (d *driver) listed(room string) {
+	d.t.Helper()
+	d.poll("the room "+room+" listed", func() bool { return d.app.room(room) != nil })
 }

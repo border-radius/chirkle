@@ -202,9 +202,12 @@ func containsRoom(rs []Room, id string) bool {
 
 // TestMain turns the server's rate limits off, as the web's tests do (tests/support/pocketbase.ts), with the
 // superuser in CHIRKLE_TEST_ADMIN ("email:password"). Without it, PocketBase's 2 logins per 3 s fail the tests.
+// admin is a superuser's client, when CHIRKLE_TEST_ADMIN is set.
+var admin *Client
+
 func TestMain(m *testing.M) {
-	if base, admin := os.Getenv("CHIRKLE_TEST_SERVER"), os.Getenv("CHIRKLE_TEST_ADMIN"); base != "" && admin != "" {
-		email, pw, _ := strings.Cut(admin, ":")
+	if base, cred := os.Getenv("CHIRKLE_TEST_SERVER"), os.Getenv("CHIRKLE_TEST_ADMIN"); base != "" && cred != "" {
+		email, pw, _ := strings.Cut(cred, ":")
 		c, err := New(base)
 		if err == nil {
 			var a struct {
@@ -214,6 +217,7 @@ func TestMain(m *testing.M) {
 			err = c.do(ctx, "POST", "/api/collections/_superusers/auth-with-password", nil, map[string]string{"identity": email, "password": pw}, &a)
 			if err == nil {
 				c.SetSession(a.Token, nil)
+				admin = c
 				err = c.do(ctx, "PATCH", "/api/settings", nil, map[string]any{"rateLimits": map[string]any{"enabled": false}}, nil)
 			}
 		}

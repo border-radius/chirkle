@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -225,6 +226,10 @@ func Lines(o Options, m api.Message) []string {
 			parts = append(parts, s)
 		}
 		wrap(strings.Join(parts, "  "))
+	}
+	for _, p := range m.Local {
+		name := OneLine(filepath.Base(p))
+		out = append(out, st.Muted.Render(ansi.Truncate("["+Kind(name)+"] "+name, w, "…")))
 	}
 	if m.Pending {
 		out = append(out, st.Muted.Render("sending…"))
