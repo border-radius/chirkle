@@ -12,11 +12,12 @@ import (
 
 	"github.com/border-radius/chirkle/cli/internal/api"
 	"github.com/border-radius/chirkle/cli/internal/contract"
+	"github.com/border-radius/chirkle/cli/internal/text"
 )
 
 // Styles are the colours, made for the terminal's background.
 type Styles struct {
-	Name, Mine, Time, Muted, Link, Mention, Quote, Deleted, Error, Selected, Accent, Bold lipgloss.Style
+	Name, Mine, Time, Muted, Link, Mention, MentionMe, Quote, Deleted, Error, Selected, Accent, Bold lipgloss.Style
 }
 
 // NewStyles picks colours that read on a dark or a light background (the web's Radix violet accent).
@@ -25,24 +26,26 @@ func NewStyles(dark bool) Styles {
 	accent := ld(lipgloss.Color("#5536d0"), lipgloss.Color("#baa7ff"))
 	muted := ld(lipgloss.Color("#62626e"), lipgloss.Color("#8b8b96"))
 	return Styles{
-		Name:     lipgloss.NewStyle().Bold(true),
-		Mine:     lipgloss.NewStyle().Bold(true).Foreground(accent),
-		Time:     lipgloss.NewStyle().Foreground(muted),
-		Muted:    lipgloss.NewStyle().Foreground(muted),
-		Link:     lipgloss.NewStyle().Foreground(accent).Underline(true),
-		Mention:  lipgloss.NewStyle().Foreground(accent).Bold(true),
-		Quote:    lipgloss.NewStyle().Foreground(muted).Italic(true),
-		Deleted:  lipgloss.NewStyle().Foreground(muted).Italic(true),
-		Error:    lipgloss.NewStyle().Foreground(lipgloss.Color("#e5484d")),
-		Selected: lipgloss.NewStyle().Foreground(accent).Bold(true),
-		Accent:   lipgloss.NewStyle().Foreground(accent),
-		Bold:     lipgloss.NewStyle().Bold(true),
+		Name:      lipgloss.NewStyle().Bold(true),
+		Mine:      lipgloss.NewStyle().Bold(true).Foreground(accent),
+		Time:      lipgloss.NewStyle().Foreground(muted),
+		Muted:     lipgloss.NewStyle().Foreground(muted),
+		Link:      lipgloss.NewStyle().Foreground(accent).Underline(true),
+		Mention:   lipgloss.NewStyle().Foreground(accent),
+		MentionMe: lipgloss.NewStyle().Foreground(accent).Bold(true).Reverse(true),
+		Quote:     lipgloss.NewStyle().Foreground(muted).Italic(true),
+		Deleted:   lipgloss.NewStyle().Foreground(muted).Italic(true),
+		Error:     lipgloss.NewStyle().Foreground(lipgloss.Color("#e5484d")),
+		Selected:  lipgloss.NewStyle().Foreground(accent).Bold(true),
+		Accent:    lipgloss.NewStyle().Foreground(accent),
+		Bold:      lipgloss.NewStyle().Bold(true),
 	}
 }
 
 // Options say how to draw: for whom, how wide, and how to make file links.
 type Options struct {
 	Me         string
+	MyHandle   string
 	Width      int
 	Hyperlinks bool // OSC 8, where the terminal supports it
 	FileURL    func(message, file string) string
@@ -113,16 +116,22 @@ func Text(o Options, m api.Message) string {
 	return b.String()
 }
 
-var mentionRe = regexp.MustCompile(`(^|[^\pL\pN_])(@[\pL\pN_.-]+)`)
-
+// mentions marks the "@handle"s (shared/vectors/mentions.json); yours more, when the server says the message
+// mentions you (its `mentions`, not the text: QA BUG-265).
 func mentions(o Options, m api.Message, s string) string {
-	if len(m.Mentions) == 0 {
-		return s
+	var b strings.Builder
+	mine := o.MyHandle != "" && slices.Contains(m.Mentions, o.Me)
+	for _, p := range text.SplitMentions(s) {
+		switch {
+		case p.Handle == "":
+			b.WriteString(p.Text)
+		case mine && p.Handle == strings.ToLower(o.MyHandle):
+			b.WriteString(o.Styles.MentionMe.Render(p.Text))
+		default:
+			b.WriteString(o.Styles.Mention.Render(p.Text))
+		}
 	}
-	return mentionRe.ReplaceAllStringFunc(s, func(x string) string {
-		sub := mentionRe.FindStringSubmatch(x)
-		return sub[1] + o.Styles.Mention.Render(sub[2])
-	})
+	return b.String()
 }
 
 // Lines draws one message as terminal lines of at most o.Width cells:
@@ -180,6 +189,14 @@ func Lines(o Options, m api.Message) []string {
 	if strings.TrimSpace(m.Text) != "" {
 		for _, para := range strings.Split(Text(o, m), "\n") {
 			wrap(para)
+		}
+		if m.EditedAt != "" && !o.Header && len(out) > 0 {
+			// A message under another's header says it was edited after its text.
+			if l := out[len(out)-1]; ansi.StringWidth(l)+9 <= w {
+				out[len(out)-1] = l + st.Muted.Render(" (edited)")
+			} else {
+				out = append(out, st.Muted.Render("(edited)"))
+			}
 		}
 	}
 	for _, f := range m.Files {

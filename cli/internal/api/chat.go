@@ -119,3 +119,38 @@ func (c *Client) CreateRoom(ctx context.Context, name, visibility string) (Room,
 	q := url.Values{"expand": {"members,writers"}, "fields": {RoomFields}}
 	return out, c.do(ctx, "POST", "/api/collections/rooms/records", q, body, &out)
 }
+
+// Edit changes a message's text (its author only).
+func (c *Client) Edit(ctx context.Context, id, text string) (Message, error) {
+	var out Message
+	q := url.Values{"expand": {messageExpand}, "fields": {MessageFields}}
+	return out, c.do(ctx, "PATCH", "/api/collections/messages/records/"+url.PathEscape(id), q, map[string]any{"text": text}, &out)
+}
+
+// Delete deletes messages: yours, or anyone's for a moderator (POST /api/chat/delete). They stay as "Message deleted".
+func (c *Client) Delete(ctx context.Context, ids ...string) ([]Message, error) {
+	var out []Message
+	q := url.Values{"expand": {messageExpand}, "fields": {MessageFields}}
+	return out, c.do(ctx, "POST", "/api/chat/delete", q, map[string]any{"messages": ids}, &out)
+}
+
+// React puts (on) or takes away an emoji on a message, answering the message as it is now.
+func (c *Client) React(ctx context.Context, id, emoji string, on bool) (Message, error) {
+	var out Message
+	q := url.Values{"expand": {messageExpand}, "fields": {MessageFields}}
+	return out, c.do(ctx, "POST", "/api/chat/reactions", q, map[string]any{"message": id, "emoji": emoji, "on": on}, &out)
+}
+
+// Mentionable is whom "@" offers in a room: those whose handle or name starts with (or contains) q; an empty q gives
+// those who wrote there lately.
+func (c *Client) Mentionable(ctx context.Context, room, q string) ([]User, error) {
+	var out []User
+	return out, c.do(ctx, "GET", "/api/chat/mentionable", url.Values{"room": {room}, "q": {q}}, nil, &out)
+}
+
+// Message reads one message.
+func (c *Client) Message(ctx context.Context, id string) (Message, error) {
+	var out Message
+	q := url.Values{"expand": {messageExpand}, "fields": {MessageFields}}
+	return out, c.do(ctx, "GET", "/api/collections/messages/records/"+url.PathEscape(id), q, nil, &out)
+}

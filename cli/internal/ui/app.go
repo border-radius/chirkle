@@ -79,6 +79,18 @@ type App struct {
 	conn    chan api.Status
 	stopRT  context.CancelFunc
 	started bool
+
+	// Taking part (actions.go).
+	replyTo   *api.Message // the message the composer answers
+	editing   *api.Message // the message the composer edits
+	back      []string     // replies left by going to their quotes (Backspace returns)
+	react     *reactPicker
+	confirm   *confirmBox
+	sugg      []suggestion // the composer's "@" or ":" list
+	suggSel   int
+	suggStart int    // where the token being completed starts
+	suggQuery string // the "@an" last asked for
+	drafts    *config.Drafts
 }
 
 // New makes the app for a client (logged in or a guest) and the accounts file.
@@ -94,6 +106,7 @@ func New(c *api.Client, cfg *config.File, site api.Site) *App {
 		c: c, cfg: cfg, site: site, st: render.NewStyles(true), state: map[string]*roomState{},
 		compose: ta, links: os.Getenv("TERM") != "dumb" && os.Getenv("CHIRKLE_NO_HYPERLINKS") == "",
 		events: make(chan api.Event, 256), conn: make(chan api.Status, 8),
+		drafts: config.LoadDrafts(),
 	}
 	if c.Token() == "" {
 		f := newAuthForm(site, modeLogin)
@@ -312,6 +325,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, a.markRead()
+	case changed:
+		return a, a.applyChanged(m)
+	case mentionable:
+		a.gotMentionable(m)
+		return a, nil
 	case rtEvent:
 		return a, tea.Batch(a.onEvent(api.Event(m)), a.waitEvent())
 	case rtStatus:
@@ -320,7 +338,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.focus == focusComposer {
 			var cmd tea.Cmd
 			a.compose, cmd = a.compose.Update(msg)
-			return a, cmd
+			return a, tea.Batch(cmd, a.composed())
 		}
 		return a, nil
 	case tea.KeyPressMsg:
@@ -404,10 +422,17 @@ func (a *App) roomOfPending(id string) string {
 // openRoom shows a room, loading it the first time (with its unread messages, under the "New" line).
 func (a *App) openRoom(id string, toComposer bool) tea.Cmd {
 	if a.open != "" {
-		a.rs(a.open).draft = a.compose.Value()
+		if a.editing != nil {
+			a.stopEdit()
+		}
+		a.keepDraft()
 	}
+	a.replyTo, a.sugg, a.back = nil, nil, nil
 	a.open = id
 	s := a.rs(id)
+	if !s.loaded && s.draft == "" {
+		s.draft = a.drafts.Get(a.c.Base, a.me(), id)
+	}
 	a.compose.SetValue(s.draft)
 	for i, r := range a.order() {
 		if r.ID == id {
@@ -623,14 +648,46 @@ func (a *App) setFocus(f focus) {
 	}
 }
 
+// quit keeps the drafts, then ends the program.
+func (a *App) quit() tea.Cmd {
+	if a.open != "" {
+		if a.editing != nil {
+			a.stopEdit()
+		}
+		a.keepDraft()
+	}
+	_ = a.drafts.Save()
+	return tea.Quit
+}
+
+// keepDraft remembers what is in the composer for the open room, here and across runs.
+func (a *App) keepDraft() {
+	v := a.compose.Value()
+	a.rs(a.open).draft = v
+	if a.me() != "" {
+		a.drafts.Set(a.c.Base, a.me(), a.open, strings.TrimSpace(v))
+	}
+}
+
 func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 	key := k.String()
 	if key == "ctrl+c" {
-		return tea.Quit
+		return a.quit()
 	}
 	if a.help {
 		a.help = false
 		return nil
+	}
+	if a.confirm != nil {
+		c := a.confirm
+		a.confirm = nil
+		if key == "y" || key == "Y" {
+			return c.yes()
+		}
+		return nil
+	}
+	if a.react != nil {
+		return a.reactKey(k)
 	}
 	if a.jump != nil {
 		return a.jumpKey(k)
@@ -649,6 +706,9 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 		a.setFocus(focusComposer)
 		return nil
 	case "tab":
+		if a.focus == focusComposer && len(a.sugg) > 0 {
+			break
+		}
 		a.setFocus((a.focus + 1) % 3)
 		return nil
 	case "shift+tab":
@@ -663,7 +723,7 @@ func (a *App) key(k tea.KeyPressMsg) tea.Cmd {
 		a.help = true
 		return nil
 	case "q":
-		return tea.Quit
+		return a.quit()
 	case "L":
 		if a.c.Token() == "" {
 			f := newAuthForm(a.site, modeLogin)
@@ -715,6 +775,7 @@ func (a *App) messagesKey(key string) tea.Cmd {
 	s := a.rs(a.open)
 	n := len(s.items)
 	var cmd tea.Cmd
+	sel := a.selected()
 	switch key {
 	case "up", "k":
 		if s.sel < 0 {
@@ -749,19 +810,41 @@ func (a *App) messagesKey(key string) tea.Cmd {
 		} else {
 			a.setFocus(focusRooms)
 		}
-	case "o", "enter":
-		if s.sel >= 0 {
-			links := render.Links(s.items[s.sel], a.c.FileURL)
+	case "enter":
+		if sel != nil && sel.ReplyToID != "" && !sel.Deleted {
+			return a.goToQuote(sel)
+		}
+		fallthrough
+	case "o":
+		if sel != nil {
+			links := render.Links(*sel, a.c.FileURL)
 			if len(links) == 0 {
 				return a.say("No links in this message")
 			}
 			a.picker = links
 		}
+	case "backspace":
+		return a.goBack()
 	case "r":
-		if s.sel >= 0 && s.items[s.sel].Failed != nil {
-			m := s.items[s.sel]
-			s.items[s.sel].Failed, s.items[s.sel].Pending = nil, true
-			cmd = a.sendCmd(m.ID, m.Room, m.Text)
+		switch {
+		case sel != nil && sel.Failed != nil:
+			m := *sel
+			sel.Failed, sel.Pending = nil, true
+			cmd = a.sendCmd(m.ID, m.Room, m.Text, m.ReplyToID)
+		case sel != nil:
+			return a.startReply(sel)
+		}
+	case "e":
+		if sel != nil {
+			return a.startEdit(sel)
+		}
+	case "d", "delete":
+		if sel != nil {
+			return a.askDelete(sel)
+		}
+	case "+", "=":
+		if sel != nil {
+			return a.startReact(sel)
 		}
 	}
 	if s.atTop && !s.first && !s.loading && len(s.items) > 0 && (s.offset > 0 || s.sel == 0) {
@@ -773,11 +856,41 @@ func (a *App) messagesKey(key string) tea.Cmd {
 }
 
 func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
+	if len(a.sugg) > 0 {
+		switch k.String() {
+		case "up", "ctrl+p":
+			a.suggSel = (a.suggSel + len(a.sugg) - 1) % len(a.sugg)
+			return nil
+		case "down", "ctrl+n":
+			a.suggSel = (a.suggSel + 1) % len(a.sugg)
+			return nil
+		case "tab", "enter":
+			a.pick()
+			return nil
+		case "esc":
+			a.sugg = nil
+			return nil
+		}
+	}
 	switch k.String() {
 	case "esc":
-		a.setFocus(focusMessages)
+		switch {
+		case a.editing != nil:
+			a.stopEdit()
+		case a.replyTo != nil:
+			a.replyTo = nil
+		default:
+			a.setFocus(focusMessages)
+		}
 		return nil
+	case "up":
+		if strings.TrimSpace(a.compose.Value()) == "" && a.editing == nil {
+			return a.editLast()
+		}
 	case "enter":
+		if a.editing != nil {
+			return a.saveEdit()
+		}
 		text := strings.TrimSpace(a.compose.Value())
 		if text == "" || a.open == "" {
 			return nil
@@ -793,21 +906,30 @@ func (a *App) composerKey(k tea.KeyPressMsg) tea.Cmd {
 		pending := api.Message{ID: id, Room: a.open, Text: text, Author: a.me(), Pending: true,
 			Created: time.Now().UTC().Format("2006-01-02 15:04:05.000Z")}
 		pending.Expand.Author = a.c.Me()
+		replyTo := ""
+		if q := a.replyTo; q != nil {
+			replyTo = q.ID
+			pending.ReplyToID = q.ID
+			pending.Expand.ReplyTo = &api.ReplyTo{ID: q.ID, Author: q.Author, Text: q.Text, Files: q.Files}
+			pending.Expand.ReplyTo.Expand.Author = q.Expand.Author
+		}
 		s := a.rs(a.open)
 		s.items = append(s.items, pending)
 		s.sel, s.offset, s.draft = -1, 0, ""
+		a.replyTo, a.sugg = nil, nil
 		a.compose.Reset()
-		return a.sendCmd(id, a.open, text)
+		a.drafts.Set(a.c.Base, a.me(), a.open, "")
+		return a.sendCmd(id, a.open, text, replyTo)
 	}
 	var cmd tea.Cmd
 	a.compose, cmd = a.compose.Update(k)
-	return cmd
+	return tea.Batch(cmd, a.composed())
 }
 
-func (a *App) sendCmd(id, room, text string) tea.Cmd {
+func (a *App) sendCmd(id, room, text, replyTo string) tea.Cmd {
 	c := a.c
 	return func() tea.Msg {
-		m, err := c.Send(context.Background(), id, room, text, "")
+		m, err := c.Send(context.Background(), id, room, text, replyTo)
 		return sent{id, m, err}
 	}
 }
@@ -953,6 +1075,9 @@ func (a *App) mainView() string {
 	if a.jump != nil {
 		body = a.overlay(body, a.jumpView())
 	}
+	if a.react != nil {
+		body = a.overlay(body, a.reactView())
+	}
 	if a.picker != nil {
 		body = a.overlay(body, a.pickerView())
 	}
@@ -1078,7 +1203,14 @@ func (a *App) roomView(w, h int) string {
 	case r != nil && !r.CanPost(me):
 		composer = a.st.Muted.Render("You can read this room but not post in it")
 	default:
-		composer = a.compose.View()
+		var top []string
+		if a.focus == focusComposer {
+			top = a.suggestView(w)
+		}
+		if bar := a.composerBar(w); bar != "" {
+			top = append(top, bar)
+		}
+		composer = strings.Join(append(top, a.compose.View()), "\n")
 	}
 	rule := a.st.Muted.Render(strings.Repeat("─", w))
 	mh := max(1, h-1-1-lipgloss.Height(composer))
@@ -1158,7 +1290,7 @@ func (a *App) messageLines(s *roomState, w int, me string) []msgLine {
 		if header && prev != nil {
 			lines = append(lines, msgLine{"", -1})
 		}
-		o := render.Options{Me: me, Width: w, Hyperlinks: a.links, FileURL: a.c.FileURL, Styles: a.st, Header: header}
+		o := render.Options{Me: me, MyHandle: a.myHandle(), Width: w, Hyperlinks: a.links, FileURL: a.c.FileURL, Styles: a.st, Header: header}
 		for _, l := range render.Lines(o, *m) {
 			lines = append(lines, msgLine{l, i})
 		}
@@ -1178,6 +1310,8 @@ func centre(s string, w int) string {
 func (a *App) statusView() string {
 	var left string
 	switch {
+	case a.confirm != nil:
+		left = a.confirm.text
 	case a.status != "":
 		left = a.status
 	case !a.online && a.started:
@@ -1187,9 +1321,9 @@ func (a *App) statusView() string {
 		case focusRooms:
 			left = "↑↓ move · enter open · n next unread · ctrl+k jump · tab focus · ? help"
 		case focusMessages:
-			left = "↑↓ select · o open link · pgup/pgdn scroll · G latest · i write · esc back · ? help"
+			left = "↑↓ select · r reply · e edit · d delete · + react · o links · i write · ? help"
 		case focusComposer:
-			left = "enter send · alt+enter new line · esc messages · ctrl+k jump"
+			left = "enter send · alt+enter new line · ↑ edit last · @ people · :emoji · esc back"
 		}
 	}
 	right := "guest"
@@ -1245,8 +1379,15 @@ func (a *App) helpView() string {
 		{"↑↓  j k", "Move; in messages, select one"},
 		{"pgup pgdn", "Scroll (older messages load at the top)"},
 		{"g  G", "First / latest"},
-		{"o  enter", "Open the selected message's links and files"},
-		{"r", "Send a failed message again"},
+		{"o", "Open the selected message's links and files"},
+		{"r", "Reply (to a failed message: send it again)"},
+		{"e", "Edit your message"},
+		{"d", "Delete (asks first)"},
+		{"+", "React: by name or 1–8; again takes it back"},
+		{"enter", "On a reply: go to the original"},
+		{"backspace", "Back to the reply"},
+		{"↑ (composer empty)", "Edit your last message"},
+		{"@  :", "Offer people / emoji: tab or enter picks"},
 		{"enter", "Send (in the composer)"},
 		{"alt+enter  ctrl+j", "New line"},
 		{"esc", "Back"},

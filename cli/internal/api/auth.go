@@ -39,7 +39,7 @@ func (c *Client) Site(ctx context.Context) (Site, error) {
 func (c *Client) LogIn(ctx context.Context, email, password string) (*User, error) {
 	var a authAnswer
 	body := map[string]string{"identity": strings.TrimSpace(email), "password": password}
-	q := url.Values{"fields": {"token,record." + strings.ReplaceAll(UserFields, ",", ",record.")}}
+	q := url.Values{"fields": {"token,record." + strings.ReplaceAll(UserFields+",moderator", ",", ",record.")}}
 	if err := c.do(ctx, "POST", "/api/collections/users/auth-with-password", q, body, &a); err != nil {
 		return nil, err
 	}

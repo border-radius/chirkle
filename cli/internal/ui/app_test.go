@@ -178,3 +178,144 @@ func (d *driver) while(s string) {
 		}
 	}
 }
+
+// poll asks the server until ok, feeding the program meanwhile.
+func (d *driver) poll(what string, ok func() bool) {
+	d.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			d.t.Fatalf("the server never had %s; the screen:\n%s", what, ansi.Strip(d.app.View().Content))
+		}
+		select {
+		case m := <-d.msgs:
+			d.send(m)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// Milestone 2 (docs/CLI.md §8): "@" and ":" completion, reply, edit with ↑, react, delete, drafts kept across runs.
+func TestTakingPart(t *testing.T) {
+	base := os.Getenv("CHIRKLE_TEST_SERVER")
+	if base == "" {
+		t.Skip("CHIRKLE_TEST_SERVER not set")
+	}
+	t.Setenv("CHIRKLE_CONFIG", filepath.Join(t.TempDir(), "accounts.json"))
+	ctx := context.Background()
+	tag := fmt.Sprint(time.Now().UnixNano() % 1e9)
+	ada, _ := api.New(base)
+	if _, err := ada.SignUp(ctx, api.SignUpInput{Name: "Ada" + tag, Email: "ada" + tag + "@example.com", Password: "correct horse"}); err != nil {
+		t.Fatal(err)
+	}
+	room, err := ada.CreateRoom(ctx, "part-"+tag, "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := ada.Send(ctx, api.NewID(), room.ID, "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := func() []api.Message {
+		ms, _ := ada.Page(ctx, room.ID, api.Latest, nil, "", 20)
+		return ms
+	}
+	last := func() api.Message {
+		ms := latest()
+		if len(ms) == 0 {
+			return api.Message{}
+		}
+		return ms[len(ms)-1]
+	}
+
+	bob, _ := api.New(base)
+	if _, err := bob.SignUp(ctx, api.SignUpInput{Name: "Bob" + tag, Email: "bob" + tag + "@example.com", Password: "correct horse"}); err != nil {
+		t.Fatal(err)
+	}
+	site, _ := bob.Site(ctx)
+	cfg, _ := config.Load()
+	open := func() *driver {
+		d := newDriver(t, New(bob, cfg, site))
+		d.until("part-" + tag)
+		d.key('k', tea.ModCtrl)
+		d.keys("part-" + tag)
+		d.key(tea.KeyEnter, 0)
+		d.until("first")
+		return d
+	}
+	d := open()
+	handle := ada.Me().Handle
+
+	// "@" offers Ada, tab puts her handle in; ":fire:" becomes 🔥.
+	d.keys("hey @" + handle[:3])
+	d.until("@" + handle)
+	d.key(tea.KeyTab, 0)
+	d.keys(":fire:")
+	if v := d.app.compose.Value(); v != "hey @"+handle+" 🔥" {
+		t.Fatalf("composer: %q", v)
+	}
+	d.key(tea.KeyEnter, 0)
+	d.poll("the mention", func() bool {
+		m := last()
+		return m.Text == "hey @"+handle+" 🔥" && len(m.Mentions) == 1 && m.Mentions[0] == ada.Me().ID
+	})
+
+	// Reply to Ada's first message.
+	d.key(tea.KeyEscape, 0)
+	d.key(tea.KeyUp, 0)
+	d.key(tea.KeyUp, 0)
+	d.keys("r")
+	d.until("Replying to Ada" + tag)
+	d.keys("re")
+	d.key(tea.KeyEnter, 0)
+	d.poll("the reply", func() bool { m := last(); return m.Text == "re" && m.ReplyToID == first.ID })
+	d.until("↳ Ada" + tag + ": first")
+	d.while("sending…")
+
+	// ↑ in the empty composer edits the last one.
+	d.key(tea.KeyUp, 0)
+	d.until("Editing")
+	d.key('u', tea.ModCtrl) // clear the line
+	d.keys("re, edited")
+	d.key(tea.KeyEnter, 0)
+	d.poll("the edit", func() bool { m := last(); return m.Text == "re, edited" && m.EditedAt != "" })
+	d.until("(edited)")
+
+	// React with the first quick reaction, on Ada's message.
+	d.key(tea.KeyEscape, 0)
+	for range 3 {
+		d.key(tea.KeyUp, 0)
+	}
+	d.keys("+")
+	d.until("React:")
+	d.keys("fire")
+	d.key(tea.KeyEnter, 0)
+	d.poll("the reaction", func() bool {
+		ms := latest()
+		return len(ms) > 0 && len(ms[0].Reactions) == 1 && ms[0].Reactions[0].Emoji == "🔥"
+	})
+	d.until("🔥 1")
+
+	// Delete my last message: asks first.
+	d.keys("G")
+	d.key(tea.KeyUp, 0)
+	d.keys("d")
+	d.until("Delete this message?")
+	d.keys("n")
+	d.keys("d")
+	d.keys("y")
+	d.poll("the delete", func() bool { return last().Deleted })
+	d.until("Message deleted")
+
+	// A draft is there next time.
+	d.key(tea.KeyTab, 0)
+	for d.app.focus != focusComposer {
+		d.key(tea.KeyTab, 0)
+	}
+	d.keys("unsent words")
+	d.app.quit()
+	d2 := open()
+	if v := d2.app.compose.Value(); v != "unsent words" {
+		t.Fatalf("draft after a restart: %q", v)
+	}
+}

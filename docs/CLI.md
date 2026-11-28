@@ -19,8 +19,10 @@ cli/
   internal/api/         REST client, sessions, SSE realtime, models          server_test.go: against a real server
   internal/contract/    copy of shared/contract.json's fields and limits     contract_test.go: compared with it
   internal/render/      messages → terminal lines; Clean (§5); links
-  internal/config/      saved accounts
-  internal/ui/          the screens                                          app_test.go: signup → read → send, keys only
+  internal/config/      saved accounts, drafts
+  internal/text/        "@handle" rules                                      mentions_test.go: shared/vectors/mentions.json
+  internal/emoji/       emoji by name (names.txt: the web's list)           emoji_test.go: the same as web/src/lib/emoji-names.ts
+  internal/ui/          the screens                                          app_test.go: signup → read → send → reply, edit, react, delete, keys only
 ```
 
 ## 2. The API it uses
@@ -37,6 +39,10 @@ Nothing the other clients don't use (docs/API.md):
 | Messages | `GET /api/chat/rooms/{id}/messages?kind=latest\|older\|newer\|changed` (`fields.message`) |
 | Send | `POST /api/collections/messages/records` with a client-made `id`, so a retry can't post twice |
 | Read marks | `POST /api/chat/reads { room, at }`, only once the newest message is on screen |
+| Edit | `PATCH /api/collections/messages/records/{id}` `{ text }` (the author only) |
+| Delete | `POST /api/chat/delete { messages }` (yours; anyone's for a moderator, `moderator` read at login) |
+| React | `POST /api/chat/reactions { message, emoji, on }` |
+| "@" | `GET /api/chat/mentionable?room=&q=` |
 | Live | `GET /api/chat/live`, then `/api/realtime`: `chat/messages`, `rooms/*`, `room_reads/*`; `chat/keepalive` ignored |
 
 The User-Agent is `chirkle-cli/<version> (<os>/<arch>)`. `/stats` counts these connections as neither web nor
@@ -72,8 +78,12 @@ Rooms on the left at 90 columns and more; below, one pane at a time. `?` lists t
 | n | | Next unread room |
 | ↑↓ j k | messages | Select a message; at the top, older messages load |
 | PgUp PgDn, g G | messages | Scroll; first / latest |
-| o, Enter | messages | The selected message's links and files: 1–9 opens one (`xdg-open`/`open`), Alt+1–9 copies it (OSC 52, works over SSH) |
-| r | messages | Send a failed message again |
+| o | messages | The selected message's links and files: 1–9 opens one (`xdg-open`/`open`), Alt+1–9 copies it (OSC 52, works over SSH) |
+| r | messages | Reply (a failed message: send it again) |
+| e, d, + | messages | Edit yours; delete (asks y/n); react: a name or 1–8 of the quick ones, again takes it back |
+| Enter, Backspace | messages | On a reply, go to the original (if loaded); back to the reply |
+| ↑ | empty composer | Edit your last message (Esc cancels; saving it empty asks to delete) |
+| @, : | composer | People who can see the room / emoji by name, at the end of the text; Tab or Enter picks. A whole `:fire:` becomes 🔥 |
 | Enter / Alt+Enter, Ctrl+J | composer | Send / new line |
 | Esc | | Back |
 | q, Ctrl+C | | Quit |
@@ -103,12 +113,14 @@ fields are cleaned here all the same.)
 
 - `internal/contract`: the copy equals `shared/contract.json`.
 - `internal/render`: Clean, files as links, wrapping within the width, links found in text.
+- `internal/text`, `internal/emoji`: the shared mention vectors; the web's emoji list, and finding by name as it does.
 - Against a real server, with `CHIRKLE_TEST_SERVER` (and `CHIRKLE_TEST_ADMIN=email:password` to turn PocketBase's
   rate limits off, as `tests/support/pocketbase.ts` does); skipped without it:
   - `internal/api`: signup (and its refusals), login, refresh, a bad token's 401, a room, a send and the same id
     refused, the live event, unread, a read mark, paging order, a guest seeing only Open Air rooms.
   - `internal/ui`: the whole program driven by keys only: sign up on the form, the account saved, Jump to, read,
-    send, a live message, the link picker, help.
+    send, a live message, the link picker, help; then "@" and ":" completion, a mention, a reply, ↑ to edit, a
+    reaction by name, a delete after its question, and a draft still there after a restart.
 
 CI's `cli` job builds the server, starts it on an empty data directory, runs all of them, checks gofmt and
 cross-builds. By hand:
@@ -134,8 +146,11 @@ has nothing more to set.
    reading, the room list with unread counts and mentions, reading with paging, live messages and reconnect with
    gap-fill, sending with retry, read marks, Jump to (by substring), links and files as links, the release and CI
    jobs.
-2. Reply, edit, delete and react on the selected message (r, e, d, +); `@` and `:` completion (`mentionable`, emoji names);
-   ↑ in an empty composer edits your last message; drafts kept across runs.
+2. **Done (2026-11-28):** reply, edit, delete and react on the selected message (r, e, d, +), going to a reply's original
+   and back; `@` and `:` completion (`mentionable`, the web's emoji names), `:name:` turned into its emoji; ↑ in an
+   empty composer edits your last message; drafts kept across runs (`drafts.json` beside the accounts, 0600); "(edited)"
+   also on a message under another's header. Left for later: the lists follow the end of the text only, and a quote of a
+   message further back than the window says so instead of going there (milestone 3's room controller).
 3. Invite links (`chirk join <link>`), setting a new password from the emailed link (`chirk reset-password <link>`),
    DMs (also `user@host`), search in a room (`q`, its 429), Mentions & replies, hide and archive; Jump to by
    `shared/vectors/jump.json`, the message window by `window.json`, `room.json` and `unread.json` replayed.

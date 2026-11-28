@@ -224,3 +224,58 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+func TestEditDeleteReactMentionable(t *testing.T) {
+	base := server(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	ada, bob := signUp(t, base, "ada"), signUp(t, base, "bob")
+	room, err := ada.CreateRoom(ctx, fmt.Sprintf("acts-%d", time.Now().UnixNano()%1e9), "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := ada.Send(ctx, NewID(), room.ID, "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bob writes in the room, so "@" offers him; a reply to Ada's message, mentioning her by handle.
+	reply, err := bob.Send(ctx, NewID(), room.ID, "hey @"+ada.Me().Handle, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply.Expand.ReplyTo == nil || reply.Expand.ReplyTo.Text != "first" || reply.Expand.ReplyTo.Expand.Author == nil {
+		t.Fatalf("reply quote: %+v", reply.Expand.ReplyTo)
+	}
+	if len(reply.Mentions) != 1 || reply.Mentions[0] != ada.Me().ID {
+		t.Fatalf("mentions %v, want Ada (handle %q)", reply.Mentions, ada.Me().Handle)
+	}
+	people, err := ada.Mentionable(ctx, room.ID, bob.Me().Handle[:3])
+	if err != nil || len(people) == 0 || people[0].ID != bob.Me().ID || people[0].Handle == "" {
+		t.Fatalf("mentionable %+v %v", people, err)
+	}
+
+	edited, err := ada.Edit(ctx, first.ID, "first, edited")
+	if err != nil || edited.Text != "first, edited" || edited.EditedAt == "" {
+		t.Fatalf("edit %+v %v", edited, err)
+	}
+	if _, err := bob.Edit(ctx, first.ID, "not yours"); err == nil {
+		t.Fatal("Bob edited Ada's message")
+	}
+
+	m, err := bob.React(ctx, first.ID, "🔥", true)
+	if err != nil || len(m.Reactions) != 1 || m.Reactions[0].Emoji != "🔥" || m.Reactions[0].Users[0] != bob.Me().ID {
+		t.Fatalf("react %+v %v", m.Reactions, err)
+	}
+	m, err = bob.React(ctx, first.ID, "🔥", false)
+	if err != nil || len(m.Reactions) != 0 {
+		t.Fatalf("unreact %+v %v", m.Reactions, err)
+	}
+
+	if _, err := bob.Delete(ctx, first.ID); err == nil {
+		t.Fatal("Bob deleted Ada's message")
+	}
+	gone, err := ada.Delete(ctx, first.ID)
+	if err != nil || len(gone) != 1 || !gone[0].Deleted || gone[0].Text != "" {
+		t.Fatalf("delete %+v %v", gone, err)
+	}
+}

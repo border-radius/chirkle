@@ -17,6 +17,8 @@ type User struct {
 	Handle   string `json:"handle,omitempty"`
 	NoDMs    bool   `json:"no_dms,omitempty"`
 	Kind     string `json:"kind,omitempty"`
+	// Moderator: only on your own record (DESIGN.md §36): may delete anyone's messages.
+	Moderator bool `json:"moderator,omitempty"`
 }
 
 // Room is a room or DM (contract fields.room).

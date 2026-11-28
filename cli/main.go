@@ -70,6 +70,9 @@ func run(args []string) error {
 			return nil
 		}
 		fmt.Printf("Logged out of %s as %s.\n", a.Server, a.User.Name)
+		drafts := config.LoadDrafts()
+		drafts.Forget(a.Server, a.User.ID)
+		_ = drafts.Save()
 		cfg.Remove()
 		return cfg.Save()
 	case "login", "signup":

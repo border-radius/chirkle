@@ -10,3 +10,4 @@ fixes that the app lacks should be ported, and server/API changes should keep th
 
 A third client of the API (docs/CLI.md): server/API changes must keep it working too (its tests run against a real
 server in CI's `cli` job). Its copy of the contract lives in `cli/internal/contract`; update it with the other two.
+A change to `web/src/lib/emoji-names.ts` needs `go generate ./internal/emoji` in `cli/` (its test fails until then).
